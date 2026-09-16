@@ -13,3 +13,8 @@ html = html.replace(/<link rel="modulepreload"[^>]*>/g, '');
 mkdirSync('play', { recursive: true });
 writeFileSync(join('play', 'index.html'), html);
 console.log('play/index.html written:', (html.length / 1024).toFixed(0), 'KB');
+// Artifact variant: no doctype/html/head/body (the host wraps it), title + meta + style + app + script only.
+const inner = html.replace(/^[\s\S]*?<head>/, '').replace(/<\/head>\s*<body>/, '').replace(/<\/body>\s*<\/html>\s*$/, '')
+  .replace(/<meta charset="utf-8" \/>\s*/, '').replace(/<link rel="icon" href="[^"]*"\s*\/>\s*/, '').replace(/<title>[^<]*<\/title>/, '<title>대박수비대</title>');
+writeFileSync(join('play', 'artifact.html'), inner.trim() + '\n');
+console.log('play/artifact.html written:', (inner.length / 1024).toFixed(0), 'KB');

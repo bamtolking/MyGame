@@ -47,7 +47,7 @@ export function summonPanel(s: GameState, act: (a: any) => void): HTMLElement {
 }
 
 // ---------- Merge ----------
-export function mergePanel(s: GameState, act: (a: any) => any, sel: Set<number>, rerender: () => void, tab: { g: Grade }): HTMLElement {
+export function mergePanel(s: GameState, act: (a: any) => any, sel: Set<number>, rerender: () => void, tab: { g: Grade }, ask: (m: string, ok?: string) => Promise<boolean>): HTMLElement {
   const box = h('div');
   const tabs = h('div', { class: 'tabs' }, ...([0, 1, 2] as Grade[]).map(g => { const n = s.units.filter(u => !u.mythic && u.grade === g).length; return h('button', { class: tab.g === g ? 'on' : '', onclick: () => { tab.g = g; sel.clear(); rerender(); } }, `${GRADE_NAMES[g]} (${n})`); }));
   box.append(tabs);
@@ -71,7 +71,7 @@ export function mergePanel(s: GameState, act: (a: any) => any, sel: Set<number>,
   const warn = pv && pv.ok && pv.warnLocked && pv.warnLocked.length ? h('div', { class: 'desc', style: 'color:#ffab40' }, `⚠ 잠금(신화 재료) 유닛 포함: ${pv.warnLocked.join(', ')}`) : null;
   box.append(h('div', { class: 'card' }, h('div', { style: 'font-weight:700' }, previewText), warn,
     h('div', { class: 'desc' }, '같은 등급 3개 → 한 단계 위 1개. 세 종류가 같으면 그 종류로 확정, 섞이면 무작위. 전설은 승급 불가(신화는 조합창). 결과는 전장에 있던 첫 재료 자리에 놓입니다.'),
-    h('button', { class: 'primary', disabled: !(pv && pv.ok), onclick: () => { if (pv && pv.ok && pv.warnLocked!.length && !confirm(`잠긴 유닛(${pv.warnLocked!.join(', ')})을 소모합니다. 계속할까요?`)) return; const r = act({ type: 'merge', ids }); if (r.ok) { sel.clear(); } rerender(); } }, '합성 실행')));
+    h('button', { class: 'primary', disabled: !(pv && pv.ok), onclick: async () => { if (pv && pv.ok && pv.warnLocked!.length && !(await ask(`잠긴 유닛(${pv.warnLocked!.join(', ')})을 소모합니다. 신화 재료일 수 있습니다. 계속할까요?`, '소모하고 합성'))) return; const r = act({ type: 'merge', ids }); if (r.ok) { sel.clear(); } rerender(); } }, '합성 실행')));
   return box;
 }
 

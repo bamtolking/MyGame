@@ -128,6 +128,10 @@ textarea { width: 100%; min-height: 80px; font: 11px monospace; background: #101
 .bar > div { height: 100%; background: var(--accent); }
 .saveinfo { font-size: 11px; color: var(--muted); }
 
+#dialog { position: absolute; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); padding: 20px; }
+.dialog-body { background: var(--panel); border-radius: 16px; padding: 16px; width: min(360px, 100%); display: flex; flex-direction: column; gap: 12px; }
+.dialog-text { font-size: 14px; line-height: 1.4; }
+
 /* ---- Landscape ---- */
 @media (orientation: landscape) and (max-height: 520px) {
   #game { flex-direction: row; }

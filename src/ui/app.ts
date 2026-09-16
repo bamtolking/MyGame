@@ -38,7 +38,7 @@ export class App {
   constructor(root: HTMLElement) {
     this.root = root;
     const l = store.load(); this.blob = l.blob;
-    if (l.error) setTimeout(() => alert(l.error), 100);
+    if (l.error) setTimeout(() => this.notify(l.error!), 100);
     this.showTitle();
     document.addEventListener('visibilitychange', () => { if (document.hidden && this.state && !this.paused && this.state.phase !== 'won' && this.state.phase !== 'lost') this.setPaused(true, true); });
     window.addEventListener('resize', () => this.layout());
@@ -83,7 +83,7 @@ export class App {
       if (s.phase === 'prep') { s.prepT = s.prepMax; }
       this.state = s; this.startGame();
       this.toast(`웨이브 ${s.wave} 시작 시점에서 이어합니다`, 'good');
-    } catch (e) { alert('이어하기 실패: ' + (e as Error).message); this.blob.run = null; this.saveAll(); this.showTitle(); }
+    } catch (e) { this.notify('이어하기 실패: ' + (e as Error).message); this.blob.run = null; this.saveAll(); this.showTitle(); }
   }
   retryRun(sameSeed: boolean): void {
     const seed = sameSeed && this.state ? this.state.seed : ((Math.random() * 2 ** 32) >>> 0);
@@ -360,7 +360,7 @@ export class App {
       h('button', { title: '잠금(합성 자동 선택 제외)', onclick: () => { this.act({ type: 'lock', id: u.id }); this.renderUnitPanel(); } }, u.locked ? '🔓 잠금 해제' : '🔒 잠금'),
       h('button', { title: '즐겨찾기', onclick: () => { this.act({ type: 'fav', id: u.id }); this.renderUnitPanel(); } }, u.fav ? '★ 즐겨찾기' : '☆ 즐겨찾기'),
       benchBtn,
-      h('button', { class: 'danger', title: '판매', onclick: () => { if (confirm(`${name}을(를) ${sellValue(u)} 골드에 판매할까요?`)) { this.act({ type: 'sell', id: u.id }); this.select(null); } } }, `판매 ${sellValue(u)}`)));
+      h('button', { class: 'danger', title: '판매', onclick: async () => { if (await this.ask(`${name}을(를) ${sellValue(u)} 골드에 판매할까요?`, '판매')) { this.act({ type: 'sell', id: u.id }); this.select(null); } } }, `판매 ${sellValue(u)}`)));
   }
   renderUnitPanelStatsOnly(): void { const s = this.state!; const u = this.selected != null ? unitById(s, this.selected) : null; const el = document.getElementById('unit-stats'); if (u && el) { clear(el); el.append(unitInfo(s, u)); } }
 
@@ -386,7 +386,7 @@ export class App {
     const s = this.state; const act = (a: Action) => this.act(a);
     switch (kind) {
       case 'summon': return summonPanel(s!, a => { act(a); rerender(); });
-      case 'merge': return mergePanel(s!, act, this.mergeSel, rerender, this.mergeTab);
+      case 'merge': return mergePanel(s!, act, this.mergeSel, rerender, this.mergeTab, (m, ok) => this.ask(m, ok));
       case 'mythic': return mythicPanel(s!, act, rerender);
       case 'upgrade': return upgradePanel(s!, act, rerender);
       case 'codex': return codexPanel(this.blob.meta);
@@ -402,6 +402,15 @@ export class App {
     modal.append(h('div', { class: 'modal-body' }, h('div', { class: 'sheet-head' }, h('h3', {}, title), closable ? h('button', { class: 'close', onclick: () => { onClose?.(); } }, '✕') : null), h('div', { class: 'sheet-content' }, content)));
   }
   hideModal(): void { const m = $('modal'); m.classList.add('hidden'); clear(m); }
+  /** In-page confirm (window.confirm may be blocked in sandboxed iframes). */
+  ask(message: string, okLabel = '확인'): Promise<boolean> {
+    return new Promise(res => {
+      const dlg = h('div', { id: 'dialog' }, h('div', { class: 'dialog-body' }, h('div', { class: 'dialog-text' }, message),
+        h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => { dlg.remove(); res(true); } }, okLabel), h('button', { onclick: () => { dlg.remove(); res(false); } }, '취소'))));
+      this.root.append(dlg);
+    });
+  }
+  notify(message: string): void { const dlg = h('div', { id: 'dialog' }, h('div', { class: 'dialog-body' }, h('div', { class: 'dialog-text' }, message), h('button', { class: 'primary', style: 'width:100%', onclick: () => dlg.remove() }, '확인'))); this.root.append(dlg); }
 
   pausePanel(auto: boolean): HTMLElement {
     const s = this.state!;
@@ -412,7 +421,7 @@ export class App {
       h('div', { style: 'height:8px' }),
       this.settingsPanel(() => { }),
       h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { onclick: () => { this.hideModal(); this.openSheet('guide'); } }, '적 도감'), h('button', { onclick: () => { this.hideModal(); this.openSheet('export'); } }, '내보내기')),
-      h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'danger', onclick: () => { if (confirm('이 판을 포기하고 타이틀로 갈까요? (최근 웨이브 시작 시점의 저장은 유지됩니다)')) { this.paused = false; this.hideModal(); this.showTitle(); } } }, '타이틀로')),
+      h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'danger', onclick: async () => { if (await this.ask('이 판을 포기하고 타이틀로 갈까요? (최근 웨이브 시작 시점의 저장은 유지됩니다)', '타이틀로')) { this.paused = false; this.hideModal(); this.showTitle(); } } }, '타이틀로')),
     );
   }
   settingsPanel(rerender: () => void): HTMLElement {
@@ -430,7 +439,7 @@ export class App {
       h('div', { class: 'desc' }, '설정·도감·기록·진행 중인 판을 문자열로 내보내거나 불러옵니다. 다른 기기로 옮길 때 사용하세요.'),
       h('div', { class: 'row', style: 'margin:8px 0' },
         h('button', { onclick: async () => { if (this.state) this.saveRun(); const str = store.exportString(this.blob); ta.value = str; try { await navigator.clipboard.writeText(str); status.textContent = '클립보드에 복사했습니다'; } catch { status.textContent = '아래 텍스트를 직접 복사하세요'; } } }, '내보내기(복사)'),
-        h('button', { class: 'danger', onclick: () => { const r = store.importString(ta.value); if (!r.blob) { status.textContent = r.error!; return; } if (!confirm('현재 저장을 덮어씁니다. 계속할까요?')) return; this.blob = r.blob; const sv = store.save(this.blob); status.textContent = sv.ok ? '불러오기 완료 (저장 검증됨)' : '불러왔지만 저장 실패: ' + sv.error; if (!this.state) this.showTitle(); } }, '불러오기'),
+        h('button', { class: 'danger', onclick: async () => { const r = store.importString(ta.value); if (!r.blob) { status.textContent = r.error!; return; } if (!(await this.ask('현재 저장을 덮어씁니다. 계속할까요?', '덮어쓰기'))) return; this.blob = r.blob; const sv = store.save(this.blob); status.textContent = sv.ok ? '불러오기 완료 (저장 검증됨)' : '불러왔지만 저장 실패: ' + sv.error; if (!this.state) this.showTitle(); } }, '불러오기'),
       ), ta, status);
   }
 
