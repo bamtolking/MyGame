@@ -1,0 +1,17 @@
+{
+  "name": "라인워즈: 군단의 충돌",
+  "short_name": "라인워즈",
+  "description": "병력을 편성하고 주기적으로 출격시켜 적 기지를 파괴하는 모바일 전략 게임 (오프라인 AI 대전)",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

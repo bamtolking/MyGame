@@ -57,9 +57,9 @@ export const MATCH = {
   teamInterval: 45,
   overtimeStart: 12 * 60,
   overtimeStep: 30,
-  overtimeDmgStep: 0.3,
+  overtimeDmgStep: 0.5,
   timeLimit: 15 * 60,
-  coreHp: 4500,
+  coreHp: 4000,
   coreArmor: 12, // small arms scratch buildings; siege units (anti-armor/artillery) matter
   outpostHp: 3000,
   outpostArmor: 10,

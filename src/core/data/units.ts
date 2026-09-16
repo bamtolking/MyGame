@@ -91,7 +91,7 @@ export const UNIT_DEFS: Record<string, UnitDef> = {
     id: 'glider', faction: 'gale', name: '활공사수', short: '사수', cost: 65, pop: 1, tier: 1,
     hp: 105, armor: 0, speed: 112, radius: 9, layer: 'ground',
     armorTags: ['light', 'biological'], roles: ['ranged'], behavior: 'ranged', kite: true,
-    weapon: { kind: 'hitscan', targets: 'both', dmg: 18, cycle: 0.9, windup: 0.1, recover: 0.1, range: 165 },
+    weapon: { kind: 'hitscan', targets: 'both', dmg: 17, cycle: 0.9, windup: 0.1, recover: 0.1, range: 165 },
     strengths: '기동성 높은 원거리 화력, 대공 가능. 근접 병력에게서 거리를 벌리며 사격(치고 빠지기)',
     weaknesses: '전열이 무너지면 생존력 낮음',
     desc: '활공 날개를 단 사수.',

@@ -16,6 +16,7 @@ interface AiMem {
   scriptStep: number;
   lastEconAt: number;
   plan: string;
+  saveFor: string | null;
 }
 
 interface Threat {
@@ -23,6 +24,8 @@ interface Threat {
   armored: number;
   lightCount: number;
   lightValue: number;
+  lightMelee: number; // count of light melee units (swarm that cone AoE handles)
+  lightRanged: number; // value of light ranged units (needs ranged AoE / artillery)
   aoe: number;
   artillery: number;
   flank: number;
@@ -38,7 +41,7 @@ const LEVEL = {
 };
 
 function emptyThreat(): Threat {
-  return { air: 0, armored: 0, lightCount: 0, lightValue: 0, aoe: 0, artillery: 0, flank: 0, antiair: 0, antiarmor: 0, total: 0 };
+  return { air: 0, armored: 0, lightCount: 0, lightValue: 0, lightMelee: 0, lightRanged: 0, aoe: 0, artillery: 0, flank: 0, antiair: 0, antiarmor: 0, total: 0 };
 }
 
 function addUnitToThreat(t: Threat, d: UnitDef, n: number) {
@@ -46,7 +49,7 @@ function addUnitToThreat(t: Threat, d: UnitDef, n: number) {
   t.total += v;
   if (d.layer === 'air') t.air += v;
   if (d.armorTags.includes('armored')) t.armored += v;
-  if (d.armorTags.includes('light')) { t.lightCount += n; t.lightValue += v; }
+  if (d.armorTags.includes('light')) { t.lightCount += n; t.lightValue += v; if (d.weapon && d.weapon.range <= 40) t.lightMelee += n; else if (d.weapon && d.layer === 'ground') t.lightRanged += v; }
   if (d.roles.includes('aoe')) t.aoe += v;
   if (d.roles.includes('artillery')) t.artillery += v;
   if (d.roles.includes('flanker')) t.flank += v;
@@ -104,7 +107,7 @@ function tankShare(p: Player): number {
   return total === 0 ? 0 : tank / total;
 }
 
-type Need = 'antiair' | 'aoe' | 'antiarmor' | 'tank' | 'rearguard' | 'fill' | 'air' | 'support' | 'artillery';
+type Need = 'antiair' | 'aoe' | 'antiarmor' | 'tank' | 'rearguard' | 'fill' | 'air' | 'support' | 'artillery' | 'ranged';
 
 function pickUnitForNeed(p: Player, need: Need, rng: () => number): string | null {
   const f = FACTIONS[p.faction];
@@ -120,6 +123,7 @@ function pickUnitForNeed(p: Player, need: Need, rng: () => number): string | nul
     case 'air': pool = by((d) => d.layer === 'air' && !d.roles.includes('antiair')); break;
     case 'support': pool = by((d) => d.roles.includes('support')); break;
     case 'artillery': pool = by((d) => d.roles.includes('artillery')); break;
+    case 'ranged': pool = by((d) => d.behavior === 'ranged' && d.layer === 'ground' && d.tier === 1); break;
     case 'fill': {
       // weighted core composition per faction
       const w: Record<string, number> = p.faction === 'iron'
@@ -182,7 +186,7 @@ function rearGuardNeeded(p: Player): boolean {
 export function runAi(m: Match, p: Player) {
   const s = m.s;
   const mem = p.aiState as unknown as AiMem;
-  if (mem.clock === undefined) { mem.clock = 0; mem.nextThink = 0.5 + p.slot * 0.7; mem.scriptStep = 0; mem.lastEconAt = -999; mem.plan = ''; }
+  if (mem.clock === undefined) { mem.clock = 0; mem.nextThink = 0.5 + p.slot * 0.7; mem.scriptStep = 0; mem.lastEconAt = -999; mem.plan = ''; mem.saveFor = null; }
   mem.clock += DT;
   if (mem.clock < mem.nextThink) return;
   const rng = () => m.rng.next();
@@ -217,6 +221,20 @@ export function runAi(m: Match, p: Player) {
   if (tc !== null && (wantT2 || wantT3)) reserve = tc;
   else if (canEcon) reserve = econCost(p.econLevel);
   else if (winning && level === 'hard' && p.econLevel < ECON.econMaxLevel && t < 480) reserve = econCost(p.econLevel);
+  // save up for one expensive higher-tier unit once the roster has a base (otherwise T2/T3 units never get bought)
+  if (level !== 'easy' && s.phase === 'battle' && p.tech >= 2 && rosterPop(p) >= 16 && reserve === 0 && !mem.saveFor && rng() < 0.5) {
+    const cands = FACTIONS[p.faction].units.map(unitDef).filter((d) => d.tier >= 2 && d.tier <= p.tech && d.cost >= 150 && rosterPop(p) + d.pop <= ROSTER.popCap);
+    if (cands.length) mem.saveFor = cands[Math.floor(rng() * cands.length)].id;
+  }
+  if (mem.saveFor) {
+    const d = unitDef(mem.saveFor);
+    if (rosterPop(p) + d.pop > ROSTER.popCap || press > 0.35) mem.saveFor = null;
+    else if (p.credits >= d.cost) {
+      const cell = chooseCell(p, d, enemy.aoe > 200, rng);
+      if (cell >= 0) cmd({ type: 'buy', player: p.index, unitId: mem.saveFor, cell });
+      mem.saveFor = null;
+    } else reserve = Math.max(reserve, d.cost);
+  }
   if (press > 0.3) reserve = 0;
 
   if (tc !== null && (wantT2 || wantT3) && p.credits >= tc) { if (cmd({ type: 'tech', player: p.index })) reserve = 0; }
@@ -242,11 +260,12 @@ export function runAi(m: Match, p: Player) {
   if (request === 'frontline') needs.push('tank');
   if (react) {
     if (enemy.air > 0 && own.antiair < enemy.air * 0.7 * teamAAmul) needs.push('antiair');
-    if (enemy.lightCount >= 5 && own.aoe < enemy.lightValue * 0.45) needs.push('aoe');
+    if (enemy.lightMelee >= 5 && own.aoe < enemy.lightValue * 0.45) needs.push('aoe');
+    if (enemy.lightRanged >= 400 && own.artillery < enemy.lightRanged * 0.35) needs.push(p.tech >= 2 ? 'artillery' : 'ranged');
     if (enemy.armored > 200 && own.antiarmor < enemy.armored * 0.5) needs.push('antiarmor');
     if (enemy.flank > 0 && rearGuardNeeded(p) && level !== 'easy') needs.push('rearguard');
   }
-  const tankTarget = s.mode === '3v3' && p.slot === 0 ? 0.45 : 0.3;
+  const tankTarget = (s.mode === '3v3' && p.slot === 0 ? 0.42 : 0.3) * (p.faction === 'iron' ? 0.75 : 1);
   if (tankShare(p) < tankTarget) needs.push('tank');
   if (level === 'hard') {
     if (enemy.antiair < 150 && p.tech >= 2 && t > 180 && own.air < 400 && rng() < 0.5) needs.push('air');
@@ -283,24 +302,27 @@ export function runAi(m: Match, p: Player) {
     if (need !== 'fill' && needs.length === 0) needs.push('fill');
   }
   // ── composition upgrade: when near the pop cap with spare credits, sell the cheapest
-  //    low-tier unit and buy a higher-tier one (same 70% refund rule as the human) ──
-  if (level !== 'easy' && p.tech >= 2 && rosterPop(p) >= ROSTER.popCap - 3 && p.credits > 350 + reserve && s.phase === 'battle') {
-    let worst = -1, worstCost = Infinity;
-    for (let i = 0; i < p.roster.length; i++) {
-      const e = p.roster[i];
-      if (!e) continue;
-      const d = unitDef(e.unitId);
-      if (d.tier < p.tech && d.cost < worstCost && e.dispatched) { worst = i; worstCost = d.cost; }
-    }
-    if (worst >= 0) {
-      const highTier = FACTIONS[p.faction].units.map(unitDef).filter((d) => d.tier === p.tech && d.cost <= p.credits + worstCost * ECON.sellRefund - 50);
-      if (highTier.length) {
-        const pick = highTier[Math.floor(rng() * highTier.length)];
-        const soldPop = unitDef(p.roster[worst]!.unitId).pop;
-        if (rosterPop(p) - soldPop + pick.pop <= ROSTER.popCap && cmd({ type: 'sell', player: p.index, cell: worst })) {
-          const cell = chooseCell(p, pick, spread, rng);
-          if (cell >= 0) cmd({ type: 'buy', player: p.index, unitId: pick.id, cell });
-        }
+  //    low-tier units (70% refund, same rule as the human) to fit one higher-tier unit ──
+  if (level !== 'easy' && p.tech >= 2 && rosterPop(p) >= ROSTER.popCap - 4 && p.credits > 250 && s.phase === 'battle' && press < 0.3) {
+    const highTier = FACTIONS[p.faction].units.map(unitDef).filter((d) => d.tier === p.tech);
+    const pick = highTier.length ? highTier[Math.floor(rng() * highTier.length)] : null;
+    if (pick) {
+      // candidate sells: dispatched, lower tier, cheapest first
+      const sells: number[] = [];
+      for (let i = 0; i < p.roster.length; i++) { const e = p.roster[i]; if (e && e.dispatched && unitDef(e.unitId).tier < p.tech) sells.push(i); }
+      sells.sort((a, b) => unitDef(p.roster[a]!.unitId).cost - unitDef(p.roster[b]!.unitId).cost);
+      let pop = rosterPop(p), credits = p.credits;
+      const chosen: number[] = [];
+      for (const i of sells) {
+        if (pop + pick.pop <= ROSTER.popCap && credits >= pick.cost) break;
+        const d = unitDef(p.roster[i]!.unitId);
+        chosen.push(i); pop -= d.pop; credits += Math.floor(d.cost * ECON.sellRefund);
+        if (chosen.length >= 4) break;
+      }
+      if (pop + pick.pop <= ROSTER.popCap && credits >= pick.cost) {
+        for (const i of chosen) cmd({ type: 'sell', player: p.index, cell: i });
+        const cell = chooseCell(p, pick, spread, rng);
+        if (cell >= 0) cmd({ type: 'buy', player: p.index, unitId: pick.id, cell });
       }
     }
   }
