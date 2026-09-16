@@ -1,0 +1,60 @@
+
+ RUN  v5.0.1 /home/user/MyGame
+
+stdout | tests/balance.test.ts > balance sweep > runs all policies over seeds and writes docs/balance-results.md
+attack 11 WIN life=10 24.5m summons=100 legends=2 mythic@10 storm,colossus,sun {"ogre":6,"tortoise":4}
+attack 22 WIN life=18 23.6m summons=103 legends=2 mythic@10 colossus,sun,storm {"ogre":2}
+attack 33 WIN life=16 24.1m summons=98 legends=4 mythic@22 sun,colossus,storm {"ogre":4}
+attack 44 WIN life=6 21.2m summons=100 legends=3 mythic@21 storm,chrono {"slimelet":4,"fox":2,"wisp":3,"boss_flag":5}
+attack 55 WIN life=20 19.8m summons=98 legends=2 mythic@11 storm,colossus,sun {}
+attack 66 WIN life=20 17.6m summons=95 legends=2 mythic@11 sun,storm,colossus {}
+control 11 WIN life=20 24.0m summons=84 legends=0 mythic@11 colossus,chrono,sun {}
+control 22 WIN life=20 21.5m summons=90 legends=0 mythic@15 chrono,storm,sun {}
+control 33 W40 life=0 29.2m summons=85 legends=1 mythic@14 chrono,colossus,sun {"ogre":6,"fox":1,"boss_king":20}
+control 44 WIN life=20 19.8m summons=86 legends=1 mythic@11 sun,storm,chrono {}
+control 55 W39 life=0 26.1m summons=79 legends=0 mythic@12 storm,colossus,sun {"tortoise":6,"ogre":8,"slimelet":4,"ghost":2}
+control 66 WIN life=20 21.3m summons=110 legends=1 mythic@18 storm,sun,colossus,chrono {}
+economy 11 WIN life=20 19.8m summons=110 legends=1 mythic@11 storm,colossus,chrono,sun {}
+economy 22 W38 life=0 22.5m summons=99 legends=1 mythic@16 storm,sun,chrono {"ogre":20}
+economy 33 WIN life=20 20.4m summons=99 legends=2 mythic@16 sun,storm,chrono {}
+economy 44 WIN life=20 17.0m summons=101 legends=2 mythic@20 chrono,storm,sun {}
+economy 55 WIN life=20 20.0m summons=105 legends=2 mythic@12 chrono,colossus,storm {}
+economy 66 WIN life=16 21.5m summons=126 legends=2 mythic@11 storm,chrono,colossus {"ogre":4}
+fastmerge 11 WIN life=14 24.1m summons=98 legends=7 mythic@37 colossus {"ogre":4,"tortoise":2}
+fastmerge 22 W35 life=0 23.9m summons=81 legends=5 mythic@34 sun {"boss_cart":6,"slimelet":4,"ghost":3,"tortoise":3,"ogre":4}
+fastmerge 33 WIN life=4 18.2m summons=98 legends=7 mythic@25 colossus {"wisp":3,"boss_flag":5,"boss_thief":8}
+fastmerge 44 W20 life=0 12.1m summons=37 legends=2 mythic@0  {"wisp":3,"boss_flag":5,"fox":4,"slimelet":1,"slime":1,"troll":1,"tortoise":4,"boss_cart":6}
+fastmerge 55 W35 life=0 30.2m summons=73 legends=5 mythic@20 sun {"wisp":1,"slimelet":2,"tortoise":3,"ogre":6,"boss_thief":8}
+fastmerge 66 WIN life=20 24.9m summons=111 legends=7 mythic@16 storm,sun {}
+confirmwait 11 W40 life=0 20.9m summons=100 legends=0 mythic@16 storm,sun,colossus {"ogre":2,"fox":4,"boss_king":20}
+confirmwait 22 WIN life=20 21.1m summons=110 legends=1 mythic@14 storm,colossus,chrono {}
+confirmwait 33 WIN life=20 18.0m summons=99 legends=0 mythic@13 chrono,sun,storm {}
+confirmwait 44 WIN life=20 17.3m summons=103 legends=0 mythic@13 colossus,sun,storm {}
+confirmwait 55 WIN life=20 14.4m summons=95 legends=0 mythic@19 sun,chrono,colossus {}
+confirmwait 66 W40 life=0 20.7m summons=77 legends=0 mythic@11 storm,colossus {"ogre":10,"fox":4,"boss_king":20}
+
+ × tests/balance.test.ts > balance sweep > runs all policies over seeds and writes docs/balance-results.md 134184ms
+   → Test timed out in 120000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/balance.test.ts > balance sweep > runs all policies over seeds and writes docs/balance-results.md
+Error: Test timed out in 120000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/balance.test.ts:9:3
+      7|
+      8| describe('balance sweep', () => {
+      9|   it('runs all policies over seeds and writes docs/balance-results.md'…
+       |   ^
+     10|     const rows: string[] = [];
+     11|     const summary: Record<string, { waves: number[]; wins: number; tim…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:33:36
+   Duration  134.80s (tests 100%)
+
