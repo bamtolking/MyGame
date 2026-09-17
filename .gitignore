@@ -1,4 +1,6 @@
 node_modules
 dist
+dist-legacy
 .vite
 e2e-out
+game/e2e-out

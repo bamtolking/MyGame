@@ -1,15 +1,19 @@
 {
-  "name": "daebak-defense",
+  "name": "combo-rush-defense",
   "version": "0.1.0-beta.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host",
-    "build": "tsc --noEmit -p tsconfig.json && vite build && node scripts/singlefile.mjs",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && node game/scripts/singlefile.mjs",
     "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "balance": "vitest run tests/balance.test.ts --reporter=verbose",
-    "e2e": "node scripts/e2e.mjs"
+    "test:rules": "vitest run game/tests/rules.test.ts game/tests/combos.test.ts game/tests/save.test.ts",
+    "balance": "vitest run game/tests/balance.test.ts --reporter=verbose",
+    "e2e": "node game/scripts/e2e.mjs",
+    "legacy:dev": "vite --config vite.legacy.config.ts --host",
+    "legacy:build": "vite build --config vite.legacy.config.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",
