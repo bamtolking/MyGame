@@ -1,0 +1,42 @@
+phone-390x844: after 2 grill taps board=....................grill1grill1...
+phone-390x844: after merge board=.....................grill2...
+phone-390x844: order ready card present=true
+phone-390x844: practice delivered sales=18 tips=2 serviceWait=2.23s
+phone-390x844: coins after practice=0 (expected 0)
+phone-390x844: blocking layout status="놓을 수 없어요: 배식구와 출입구 사이 통로가 막혔어요.취소" confirmVisible=false
+phone-390x844: paths before=["좌석1: 2칸 · 편도 1.0초","좌석2: 3칸 · 편도 1.5초"] near=["좌석1: 0칸 · 편도 0.0초","좌석2: 3칸 · 편도 1.5초"] far=["좌석1: 5칸 · 편도 2.5초","좌석2: 3칸 · 편도 1.5초"] layout=seat@4,2 seat@3,1
+phone-390x844: long-press drinks=6 after release=6 (should be equal)
+phone-390x844: paused time frozen=true (5.33 → 5.33)
+phone-390x844: resumed time advancing=true
+phone-390x844: day1 result served=8 sales=116 tips=15 coins=131 unlocked=2 settled=true
+phone-390x844: coins after reload=131 (same as 131: true)
+phone-390x844: after purchases coins=311 seats=4 decors=1 speed=0
+phone-390x844: resume button present=true
+phone-390x844: resumed paused=true t=66.5 foods=14 day=4
+phone-390x844: errors=0
+small-360x800: after 2 grill taps board=....................grill1grill1...
+small-360x800: after merge board=.....................grill2...
+small-360x800: order ready card present=true
+small-360x800: practice delivered sales=18 tips=2 serviceWait=2.23s
+small-360x800: coins after practice=0 (expected 0)
+small-360x800: blocking layout status="놓을 수 없어요: 배식구와 출입구 사이 통로가 막혔어요.취소" confirmVisible=false
+small-360x800: paths before=["좌석1: 2칸 · 편도 1.0초","좌석2: 3칸 · 편도 1.5초"] near=["좌석1: 0칸 · 편도 0.0초","좌석2: 3칸 · 편도 1.5초"] far=["좌석1: 5칸 · 편도 2.5초","좌석2: 3칸 · 편도 1.5초"] layout=seat@4,2 seat@3,1
+small-360x800: long-press drinks=6 after release=6 (should be equal)
+small-360x800: paused time frozen=true (5.30 → 5.30)
+small-360x800: resumed time advancing=true
+small-360x800: day1 result served=8 sales=82 tips=11 coins=93 unlocked=2 settled=true
+small-360x800: coins after reload=93 (same as 93: true)
+small-360x800: errors=0
+large-430x932: after 2 grill taps board=....................grill1grill1...
+large-430x932: after merge board=.....................grill2...
+large-430x932: order ready card present=true
+large-430x932: practice delivered sales=18 tips=2 serviceWait=2.23s
+large-430x932: coins after practice=0 (expected 0)
+large-430x932: blocking layout status="놓을 수 없어요: 배식구와 출입구 사이 통로가 막혔어요.취소" confirmVisible=false
+large-430x932: paths before=["좌석1: 2칸 · 편도 1.0초","좌석2: 3칸 · 편도 1.5초"] near=["좌석1: 0칸 · 편도 0.0초","좌석2: 3칸 · 편도 1.5초"] far=["좌석1: 5칸 · 편도 2.5초","좌석2: 3칸 · 편도 1.5초"] layout=seat@4,2 seat@3,1
+large-430x932: long-press drinks=6 after release=6 (should be equal)
+large-430x932: paused time frozen=true (5.30 → 5.30)
+large-430x932: resumed time advancing=true
+large-430x932: day1 result served=8 sales=100 tips=13 coins=113 unlocked=2 settled=true
+large-430x932: coins after reload=113 (same as 113: true)
+large-430x932: errors=0

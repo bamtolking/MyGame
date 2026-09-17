@@ -57,3 +57,17 @@ npm run e2e       # 헤드리스 Chromium으로 휴대폰 뷰포트 3종 실기�
 ```
 
 자세한 수치는 `docs/BALANCE.md`, 구현/미구현 목록은 `docs/STATUS.md`, 테스트 결과는 `docs/TEST_RESULTS.md`를 보세요.
+
+---
+
+## 두 번째 게임: 괴물 포장마차: 합치고 팔자! (`monster-stall/`)
+
+같은 저장소의 `monster-stall/` 폴더에 별개의 게임이 있습니다. 합성 퍼즐 + 주문 처리 + 소규모 가게 운영(모바일 웹 베타)이며 위의 대박수비대와 파일·의존성을 공유하지 않습니다.
+
+```bash
+cd monster-stall
+npm install
+npm run dev        # http://localhost:5174/ (휴대폰은 터미널의 Network 주소)
+```
+
+자세한 실행·조작·저장 설명은 `monster-stall/README.md`, 테스트·밸런스·개발 상태는 같은 폴더의 `TEST_REPORT.md`, `BALANCE_REPORT.md`, `DEVELOPMENT_NOTES.md`를 보세요.
