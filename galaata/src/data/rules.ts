@@ -18,6 +18,9 @@ export const RULES = {
   volleyCapRatio: 0.25,
   /** 적 발사 간격 배율(AI는 같은 무기를 더 느리게 씀) */
   enemyFireIntervalMul: 1.5,
+  /** 어려움 모드 배율 */
+  hardDamageMul: 1.35,
+  hardDecayMul: 1.3,
   /** 적 사격 산포(rad). 움직이면 피할 수 있게 */
   enemySpread: 0.09,
   /** 안정도 0 이후 초당 최대체력 대비 손실 비율 */

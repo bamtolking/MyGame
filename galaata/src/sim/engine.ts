@@ -106,7 +106,7 @@ function updatePlayer(w: World, p: Entity, input: Input, pressed: { skill: boole
   if (input.attack && p.attackCd <= 0 && p.windup <= 0 && p.burstLeft <= 0 && p.stunUntil <= w.time && !dashing) fireWeapon(w, p, aim);
   // 안정도
   if (p.stability != null && p.stabilityMax != null) {
-    p.stability = Math.max(0, p.stability - d.stabilityDecay * ds);
+    p.stability = Math.max(0, p.stability - d.stabilityDecay * (w.hard ? RULES.hardDecayMul : 1) * ds);
     if (!p.stabWarned && p.stability <= p.stabilityMax * RULES.stabilityWarnRatio) { p.stabWarned = true; w.emit({ type: 'collapseWarn', x: p.x, y: p.y }); w.say('안정도 낮음 — 곧 붕괴한다. 다음 몸을 준비하라', 3, 'warn'); }
     if (p.stability > p.stabilityMax * RULES.stabilityWarnRatio) p.stabWarned = false;
     if (p.stability <= 0 && !p.collapsing) { p.collapsing = true; w.emit({ type: 'collapseStart', x: p.x, y: p.y }); w.say('붕괴 시작! 체력이 빠르게 줄어든다', 3, 'warn'); }

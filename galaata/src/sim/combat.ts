@@ -9,7 +9,7 @@ export const angleDiff = (a: number, b: number): number => { let d = a - b; whil
 export const dist = (a: Vec, b: Vec): number => Math.hypot(a.x - b.x, a.y - b.y);
 
 function makeProjectile(w: World, kind: ProjectileKind, owner: Entity, x: number, y: number, dir: number, wp: WeaponDef, volley: number, damage = wp.damage): Projectile {
-  const dmg = owner.team === 'enemy' ? damage * RULES.enemyDamageMul : damage;
+  const dmg = owner.team === 'enemy' ? damage * RULES.enemyDamageMul * (w.hard ? RULES.hardDamageMul : 1) : damage;
   const p: Projectile = {
     id: w.nextId++, kind, team: owner.team, ownerId: owner.id, ownerBody: owner.body,
     x, y, vx: Math.cos(dir) * wp.speed, vy: Math.sin(dir) * wp.speed,
@@ -200,7 +200,7 @@ export function explode(w: World, x: number, y: number, radius: number, damage: 
     const dd = Math.hypot(e.x - x, e.y - y) - e.radius * 0.6;
     if (dd > radius) continue;
     const fall = dd < radius * 0.5 ? 1 : 1 - ((dd - radius * 0.5) / (radius * 0.5)) * 0.4;
-    let amt = damage * fall * (team === 'enemy' && !isOwner ? RULES.enemyDamageMul : 1);
+    let amt = damage * fall * (team === 'enemy' && !isOwner ? RULES.enemyDamageMul * (w.hard ? RULES.hardDamageMul : 1) : 1);
     if (isOwner) amt *= 0.5;
     applyDamage(w, e, amt, { x, y, ownerId, volley });
     if (dd > 1 && e.body !== 'boss' && e.body !== 'turret' && e.body !== 'node') {

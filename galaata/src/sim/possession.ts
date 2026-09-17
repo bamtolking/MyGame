@@ -4,6 +4,9 @@ import { RULES } from '../data/rules';
 import type { Entity } from './types';
 import { World } from './world';
 
+/** 한국어 조사 '(으)로' */
+export function roJosa(word: string): string { const c = word.charCodeAt(word.length - 1); if (c < 0xac00 || c > 0xd7a3) return '로'; const jong = (c - 0xac00) % 28; return jong === 0 || jong === 8 ? '로' : '으로'; }
+
 /** 빙의 가능: 살아있는 적 + 빙의 가능한 몸 + (체력 35% 이하 또는 기절) */
 export function isPossessable(w: World, e: Entity): boolean {
   if (!e.alive || e.controlled || e.team !== 'enemy') return false;
@@ -75,5 +78,5 @@ export function possess(w: World, p: Entity, target: Entity): void {
   if (target.body === 'shield') w.stats.usedShield = true;
   // 주변 적 경계
   for (const e of w.entities) if (e.alive && e.team === 'enemy' && Math.hypot(e.x - target.x, e.y - target.y) < 220 && e.ai.state === 'idle') { e.ai.state = 'alert'; e.ai.alertedAt = w.time; }
-  w.say(`${d.name}로 갈아탐 — ${d.swapHint}`, 3.2, 'hint');
+  w.say(`${d.name}${roJosa(d.name)} 갈아탐 — ${d.swapHint}`, 3.2, 'hint');
 }

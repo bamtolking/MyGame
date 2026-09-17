@@ -61,6 +61,8 @@ export class World {
   aimTargetId = 0;
   /** 마지막 기회로 살아난 직후 표시 */
   savedFlash = 0;
+  /** 어려움 모드(적 피해·안정도 감소 증가) */
+  hard = false;
   /** 진단용: 플레이어가 받은 피해 기록 */
   damageLog: { t: number; amount: number; from: string; body: string }[] = [];
   constructor(zoneIndex: number, seed: number, stats?: RunStats) {
