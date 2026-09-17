@@ -25,14 +25,14 @@ export const ENEMIES: Record<EnemyType, EnemyDef> = {
   swarm:   { type: 'swarm', name: '나사벌레', hp: 6, speed: 72, damage: 2, attackInterval: 0.7, radius: 7, armor: 0, knockbackResist: 0, color: '#9ccc65', accent: '#33691e', hint: '작은 적이 다수 등장' },
   armored: { type: 'armored', name: '장갑 궤도', hp: 95, speed: 27, damage: 12, attackInterval: 1.4, radius: 17, armor: 4, knockbackResist: 0.6, color: '#546e7a', accent: '#b0bec5', hint: '느리지만 튼튼 · 피격당 피해 4 감소' },
   bomber:  { type: 'bomber', name: '폭주 연료통', hp: 20, speed: 82, damage: 22, attackInterval: 99, radius: 12, armor: 0, knockbackResist: 0, color: '#d32f2f', accent: '#ffeb3b', fuse: 0.9, blastRadius: 52, hint: '접근 후 짧게 예고하고 폭발' },
-  boss:    { type: 'boss', name: '거대 고철 수거기', hp: 4200, speed: 22, damage: 12, attackInterval: 2.0, radius: 36, armor: 2, knockbackResist: 1, color: '#5d4037', accent: '#ff8f00', hint: '부하 소환 · 예고 있는 압축 공격 · 체력 구간마다 변화' },
+  boss:    { type: 'boss', name: '거대 고철 수거기', hp: 3200, speed: 22, damage: 7, attackInterval: 2.4, radius: 36, armor: 2, knockbackResist: 1, color: '#5d4037', accent: '#ff8f00', hint: '부하 소환 · 예고 있는 압축 공격 · 체력 구간마다 변화' },
 };
 
 export const BOSS = {
   summonInterval: [9, 7.5, 6] as const,     // 단계별(체력 100~66 / 66~33 / 33~0)
-  crushInterval: 12,
+  crushInterval: 14,
   crushTelegraph: 1.5,
-  crushDamage: 22,
+  crushDamage: 20,
   phaseThresholds: [0.66, 0.33] as const,
   phaseDamageTaken: [1, 1.15, 1.3] as const, // 장갑판이 떨어져 피해를 더 받음
   phaseSpeed: [1, 1.25, 1.5] as const,
