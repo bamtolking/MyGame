@@ -1,0 +1,22 @@
+{
+  "name": "dayhunger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "데이헝거 — 벽짓살(벽 짓고 살아남기) 협동 생존 게임, 모바일 브라우저용",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test tests/*.test.js",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}
