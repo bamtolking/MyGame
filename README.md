@@ -57,3 +57,17 @@ npm run e2e       # 헤드리스 Chromium으로 휴대폰 뷰포트 3종 실기�
 ```
 
 자세한 수치는 `docs/BALANCE.md`, 구현/미구현 목록은 `docs/STATUS.md`, 테스트 결과는 `docs/TEST_RESULTS.md`를 보세요.
+
+---
+
+## 같은 저장소의 다른 게임: 갈아타!: 바디 하이재킹 (`galaata/`)
+
+죽기 직전 적의 몸을 빼앗아 살아남는 세로 화면 탑다운 액션 웹 베타. 별도 프로젝트로 `galaata/` 폴더에 있습니다.
+
+```bash
+cd galaata
+npm install
+npm run dev      # 또는 galaata/play/index.html 단일 파일을 휴대폰 브라우저로 열기
+```
+
+자세한 내용은 `galaata/README.md`, 검증 결과는 `galaata/TEST_REPORT.md`, 구조·다음 작업은 `galaata/DEVELOPMENT_NOTES.md`.

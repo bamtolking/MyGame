@@ -259,6 +259,8 @@ export function updateProjectiles(w: World, dt: number): void {
         if (isBlockedByShield(w, e, { x: px, y: py })) {
           w.emit({ type: 'block', x: p.x, y: p.y, dir: Math.atan2(py - e.y, px - e.x), id: e.id });
           if (e.controlled) e.guardHits++;
+          // 막아도 밀치기는 절반 적용(방패끼리 밀어내기)
+          if (p.knockback > 0 && e.body !== 'boss' && e.body !== 'turret' && e.body !== 'node') { const a = Math.atan2(p.vy, p.vx); e.vx += Math.cos(a) * p.knockback * 0.5; e.vy += Math.sin(a) * p.knockback * 0.5; }
           alive = false; break;
         }
         const ok = applyDamage(w, e, p.damage, { x: px, y: py, ownerId: p.ownerId, volley: p.volley });
@@ -291,6 +293,7 @@ export function resolveAim(w: World, e: Entity, moveDir: Vec | null): { point: V
     const ang = Math.atan2(t.y - e.y, t.x - e.x);
     if (Math.abs(angleDiff(ang, mAng)) > 1.22) score += 140;
     if (!wp.overWalls && isBlockedByShield(w, t, e)) score += 260;
+    if (t.ai.state === 'idle' && t.body !== 'turret' && t.body !== 'node' && t.body !== 'boss') score += 120; // 나를 공격 중인 적 우선
     if (score < bs) { bs = score; best = t; }
   }
   if (best) {

@@ -82,7 +82,7 @@ const BODY_LIST: BodyDef[] = [
     stability: null, stabilityDecay: 0, stabilityDamageFactor: 0,
     weapon: { kind: 'turret', name: '포탑 사격', damage: 7, rate: 0.62, burst: 3, burstGap: 0.12, range: 215, speed: 330, color: '#ff5f5f' },
     skill: null, possessable: false, blockArc: 0, guardArc: 0,
-    ai: { preferRange: 0, tooClose: 0, turnRate: 3.5, sight: 215, strafe: false },
+    ai: { preferRange: 0, tooClose: 0, turnRate: 6.5, sight: 215, strafe: false },
     color: '#9aa3ad', accent: '#ff3b3b',
   },
   {

@@ -37,6 +37,7 @@ export class Bot {
         let n = path[0]; if (path.length > 1 && Math.hypot(n.tx * S + S / 2 - p.x, n.ty * S + S / 2 - p.y) < 6) n = path[1];
         gx = n.tx * S + S / 2; gy = n.ty * S + S / 2;
       }
+      const av = this.avoidance(); if (av) { this.tick({ ...av, attack: false }); continue; }
       const l = Math.hypot(gx - p.x, gy - p.y) || 1;
       this.tick({ mx: (gx - p.x) / l, my: (gy - p.y) / l, attack: !!opts.attack });
     }
@@ -55,14 +56,23 @@ export class Bot {
       // 원하는 위치: 방패면 등 뒤(궤도 접근), 아니면 사거리 70% 지점
       let gx: number, gy: number;
       if (hasBlock && !wp.overWalls) { const g = this.flankGoal(target); gx = g.x; gy = g.y; }
-      else { const a = Math.atan2(p.y - target.y, p.x - target.x) + this.strafeDir * 0.5; const r = Math.min(wp.range * 0.7, 150); gx = target.x + Math.cos(a) * r; gy = target.y + Math.sin(a) * r; }
-      this.strafeT -= RULES.fixedDt; if (this.strafeT <= 0 || this.w.map.boxBlocked(gx, gy, p.radius)) { this.strafeT = 0.9 + this.w.rng.next() * 0.8; this.strafeDir = -this.strafeDir; }
+      else {
+        const base = Math.atan2(p.y - target.y, p.x - target.x); const r = Math.min(wp.range * (wp.kind === 'lob' ? 0.8 : 0.7), 200);
+        this.strafeT -= RULES.fixedDt; if (this.strafeT <= 0) { this.strafeT = 0.9 + this.w.rng.next() * 0.8; this.strafeDir = -this.strafeDir; }
+        const tries = [this.strafeDir * 0.35, 0, -this.strafeDir * 0.35, this.strafeDir * 1.2, -this.strafeDir * 1.2];
+        gx = p.x; gy = p.y;
+        const others = this.w.entities.filter((e) => e.alive && e.team === 'enemy' && e !== target && e.ai.state === 'alert' && e.body !== 'turret');
+        let found = false;
+        for (const off of tries) { const cx = target.x + Math.cos(base + off) * r, cy = target.y + Math.sin(base + off) * r; if (!this.w.map.boxBlocked(cx, cy, p.radius) && this.w.map.lineOfSight(p.x, p.y, cx, cy) && !others.some((o) => Math.hypot(o.x - cx, o.y - cy) < 150)) { gx = cx; gy = cy; found = true; break; } }
+        if (!found) for (const off of tries) { const cx = target.x + Math.cos(base + off) * r, cy = target.y + Math.sin(base + off) * r; if (!this.w.map.boxBlocked(cx, cy, p.radius)) { gx = cx; gy = cy; break; } }
+      }
       const dx = gx - p.x, dy = gy - p.y; const l = Math.hypot(dx, dy);
       const k = this.kite(hasBlock ? target : undefined);
       let mvx = (l > 8 ? dx / l : 0) + k.x * 1.5, mvy = (l > 8 ? dy / l : 0) + k.y * 1.5; const ml = Math.hypot(mvx, mvy); if (ml > 1) { mvx /= ml; mvy /= ml; }
       if (ml > 0.05 && this.w.map.boxBlocked(p.x + mvx * 14, p.y + mvy * 14, p.radius * 0.82)) { const t2 = { x: -mvy, y: mvx }; mvx = t2.x; mvy = t2.y; }
       const inRange = Math.hypot(target.x - p.x, target.y - p.y) <= wp.range + 10 && (wp.overWalls || this.w.map.lineOfSight(p.x, p.y, target.x, target.y));
-      this.tick({ mx: mvx, my: mvy, attack: inRange });
+      const aimOk = wp.kind === 'arc' || this.w.aimTargetId === target.id || this.w.aimTargetId === 0;
+      this.tick({ mx: mvx, my: mvy, attack: inRange && aimOk });
     }
     this.note('weaken timeout'); return false;
   }
@@ -104,11 +114,29 @@ export class Bot {
     const p = this.p; let kx = 0, ky = 0;
     for (const e of this.w.entities) {
       if (!e.alive || e.team !== 'enemy' || e === except || e.ai.state !== 'alert') continue;
-      const wp = BODIES[e.body].weapon; if (wp.range > 140 || e.body === 'turret' || e.body === 'boss') continue;
+      if (e.body === 'turret' || e.body === 'node') continue;
+      const wp = BODIES[e.body].weapon; const near = e.body === 'boss' ? 150 : wp.range > 140 ? 110 : 140;
       const dx = p.x - e.x, dy = p.y - e.y; const d = Math.hypot(dx, dy) || 1;
-      if (d < 130 && BODIES[p.body].speed > BODIES[e.body].speed) { const f = (130 - d) / 130; kx += (dx / d) * f; ky += (dy / d) * f; }
+      if (d < near && (e.body === 'boss' || BODIES[p.body].speed >= BODIES[e.body].speed)) { const f = (near - d) / near; kx += (dx / d) * f; ky += (dy / d) * f; }
     }
     return { x: kx, y: ky };
+  }
+  /** 표적이 보이고 사거리 안이며 걸어갈 수 있는 가장 가까운 타일 중심(사격 위치). 없으면 null */
+  firingSpot(target: Entity, range: number): { x: number; y: number } | null {
+    const w = this.w; const p = this.p; const m = w.map; const blocked = w.staticBlocked();
+    const ptx = Math.floor(p.x / S), pty = Math.floor(p.y / S); const field = m.flowField(ptx, pty, blocked);
+    let best: { x: number; y: number } | null = null; let bd = Infinity;
+    const r = Math.ceil(range / S);
+    const ttx = Math.floor(target.x / S), tty = Math.floor(target.y / S);
+    for (let ty = tty - r; ty <= tty + r; ty++) for (let tx = ttx - r; tx <= ttx + r; tx++) {
+      if (tx < 0 || ty < 0 || tx >= m.w || ty >= m.h) continue;
+      const idx = ty * m.w + tx; if (field[idx] < 0) continue;
+      const cx = tx * S + S / 2, cy = ty * S + S / 2; const dd = Math.hypot(cx - target.x, cy - target.y);
+      if (dd > range * 0.9 || dd < 40) continue;
+      if (!m.lineOfSight(cx, cy, target.x, target.y)) continue;
+      const cost = field[idx] * S + dd * 0.3; if (cost < bd) { bd = cost; best = { x: cx, y: cy }; }
+    }
+    return best;
   }
   /** 방패 상대 자리: 정면 호 안에 있으면 궤도를 돌아 등 뒤로, 아니면 등 뒤 지점 */
   flankGoal(target: Entity): { x: number; y: number } {
@@ -170,7 +198,8 @@ export function autoplay(bot: Bot, o: AutoOpts): void {
     const av = bot.avoidance(); if (av && !w.lastChance) { bot.tick({ ...av, attack: false }); continue; }
     // 1) 위험하면 빙의(후보가 있으면 접근)
     if (danger) {
-      const cands = w.candidates.filter((c) => !(o.keepAlive ?? []).includes(c.body) || hpr < 0.2 || !!w.lastChance).sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y));
+      const score = (c: Entity) => Math.hypot(c.x - p.x, c.y - p.y) - (c.stunUntil > w.time ? 200 : 0) - (c.body === 'scout' ? -60 : 0) - c.hp;
+      const cands = w.candidates.filter((c) => !(o.keepAlive ?? []).includes(c.body) || hpr < 0.2 || !!w.lastChance).sort((a, b) => score(a) - score(b));
       const c = cands[0];
       if (c) {
         if (w.possessTarget && w.possessCd <= 0 && (w.possessTarget === c || w.lastChance)) { bot.tick({ possess: true }); bot.release(); continue; }
@@ -178,6 +207,13 @@ export function autoplay(bot: Bot, o: AutoOpts): void {
         bot.tick({ mx: dx / l, my: dy / l, attack: false, skill: (d.skill?.id === 'dash' || d.skill?.id === 'sprint') && p.skillCd <= 0 });
         continue;
       }
+    }
+    // 1.5) 보스전 몸 선호: 더 유리한 몸이 후보면 갈아탐(저격>폭탄>정비>방패>정찰)
+    if (o.boss && w.possessTarget && w.possessCd <= 0) {
+      const rank: Record<string, number> = { sniper: 5, bomber: 4, mechanic: 3, shield: 2, scout: 1, intruder: 0 };
+      const boss = w.entities.find((e) => e.alive && e.body === 'boss');
+      const want = boss && boss.ai.shielded ? { sniper: 5, bomber: 4, shield: 3, mechanic: 2, scout: 1, intruder: 0 } as Record<string, number> : rank;
+      if ((want[w.possessTarget.body] ?? 0) > (want[p.body] ?? 0) && w.possessTarget.hp / w.possessTarget.hpMax >= 0.25) { bot.tick({ possess: true }); bot.release(); continue; }
     }
     // 2) 표적 선택: 보스전은 노드/보스, 아니면 경계 중인 적 → 가까운 적. 남겨둘 몸·못 뚫는 방패는 제외
     const enemies = w.entities.filter((e) => e.alive && e.team === 'enemy');
@@ -216,10 +252,11 @@ export function autoplay(bot: Bot, o: AutoOpts): void {
       if (w.map.boxBlocked(gx, gy, p.radius * 0.82)) { strafe = -strafe; const a2 = Math.atan2(-tdy, -tdx) + strafe * 0.55; gx = target.x + Math.cos(a2) * desired; gy = target.y + Math.sin(a2) * desired; }
     }
     const los = w.map.lineOfSight(p.x, p.y, target.x, target.y);
-    if (w.map.boxBlocked(gx, gy, p.radius * 0.82) || (!los && !wp.overWalls)) {
-      const ptx = Math.floor(p.x / S), pty = Math.floor(p.y / S); const ttx = Math.floor(target.x / S), tty = Math.floor(target.y / S);
-      const path = w.map.path(ptx, pty, ttx, tty, w.staticBlocked());
-      if (path && path.length) { const n = path[0]; gx = n.tx * S + S / 2; gy = n.ty * S + S / 2; }
+    if (target.body === 'boss' && w.map.boxBlocked(gx, gy, p.radius * 0.82)) { for (const off of [0, 1.0, -1.0, 1.6, -1.6, 2.4, -2.4]) { const a2 = Math.atan2(-tdy, -tdx) + off; const cx = target.x + Math.cos(a2) * desired, cy = target.y + Math.sin(a2) * desired; if (!w.map.boxBlocked(cx, cy, p.radius * 0.82)) { gx = cx; gy = cy; break; } } }
+    else if (w.map.boxBlocked(gx, gy, p.radius * 0.82) || (!los && !wp.overWalls)) {
+      const spot = bot.firingSpot(target, wp.range + (wp.splash ?? 0) * 0.5);
+      if (spot) { const ptx = Math.floor(p.x / S), pty = Math.floor(p.y / S); const path = w.map.path(ptx, pty, Math.floor(spot.x / S), Math.floor(spot.y / S), w.staticBlocked()); if (path && path.length) { const n = path[0]; gx = n.tx * S + S / 2; gy = n.ty * S + S / 2; } else { gx = spot.x; gy = spot.y; } }
+      else { const ptx = Math.floor(p.x / S), pty = Math.floor(p.y / S); const path = w.map.path(ptx, pty, Math.floor(target.x / S), Math.floor(target.y / S), w.staticBlocked()); if (path && path.length) { const n = path[0]; gx = n.tx * S + S / 2; gy = n.ty * S + S / 2; } }
     }
     const mdx = gx - p.x, mdy = gy - p.y; const ml = Math.hypot(mdx, mdy);
     const k = bot.kite(hasBlock ? target : undefined);

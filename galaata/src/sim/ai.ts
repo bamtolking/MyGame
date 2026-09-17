@@ -67,7 +67,7 @@ function updateTurret(w: World, e: Entity, dt: number, p: Entity): void {
   const lp = leadPoint(e, p, wp.speed, 0.85);
   const want = Math.atan2(lp.y - e.y, lp.x - e.x);
   turnToward(e, want, d.ai.turnRate, dt);
-  if (e.attackCd <= 0 && e.burstLeft <= 0 && Math.abs(angleDiff(want, e.facing)) < 0.2) fireWeapon(w, e, lp);
+  if (e.attackCd <= 0 && e.burstLeft <= 0 && Math.abs(angleDiff(want, e.facing)) < 0.32) fireWeapon(w, e, lp);
 }
 
 function updateSoldier(w: World, e: Entity, dt: number, p: Entity): void {

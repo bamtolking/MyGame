@@ -77,6 +77,6 @@ export function possess(w: World, p: Entity, target: Entity): void {
   if (!w.stats.bodiesUsed.includes(target.body)) w.stats.bodiesUsed.push(target.body);
   if (target.body === 'shield') w.stats.usedShield = true;
   // 주변 적 경계
-  for (const e of w.entities) if (e.alive && e.team === 'enemy' && Math.hypot(e.x - target.x, e.y - target.y) < 220 && e.ai.state === 'idle') { e.ai.state = 'alert'; e.ai.alertedAt = w.time; }
+  for (const e of w.entities) if (e.alive && e.team === 'enemy' && Math.hypot(e.x - target.x, e.y - target.y) < 140 && e.ai.state === 'idle') { e.ai.state = 'alert'; e.ai.alertedAt = w.time; }
   w.say(`${d.name}${roJosa(d.name)} 갈아탐 — ${d.swapHint}`, 3.2, 'hint');
 }

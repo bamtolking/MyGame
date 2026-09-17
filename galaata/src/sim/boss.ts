@@ -37,7 +37,7 @@ export function updateBoss(w: World, b: Entity, dt: number, p: Entity): void {
     ai.phase = 2; ai.shielded = true; ai.ringT = 3;
     for (const n of w.nodeSpots) makeEntity(w, 'node', 'enemy', n.x, n.y, 0, 'node');
     for (const t of w.turretSpots) { const tu = makeEntity(w, 'turret', 'enemy', t.x, t.y, t.facing, 'bossturret'); tu.attackCd = 1.2; }
-    summon(w, 'shield', 'v2', 1.0); summon(w, 'sniper', 'v0', 1.6);
+    summon(w, 'bomber', 'v2', 1.0); summon(w, 'sniper', 'v0', 1.6);
     w.emit({ type: 'bossPhase', x: b.x, y: b.y, text: '보호막 가동' });
     w.say('보호막 가동! 좌우 노드를 부숴야 코어가 다시 열린다. (폭탄·저격·방패 돌파)', 5, 'warn');
   }
@@ -86,9 +86,11 @@ export function updateBoss(w: World, b: Entity, dt: number, p: Entity): void {
     p.vx += (dx / dd) * 240; p.vy += (dy / dd) * 240; b.contactCd = 0.6;
   }
   if (p.hp <= 0) return;
+  // 보호막 중에는 코어가 방어에 집중: 탄막·레이저 없음(노드 파괴에 집중하는 퍼즐 구간)
+  if (ai.shielded) { ai.patternT = Math.max(ai.patternT, 1.5); ai.ringT = Math.max(ai.ringT, 2); ai.laserT = Math.max(ai.laserT, 3); }
   // 3연발
   ai.patternT -= dt;
-  if (ai.patternT <= 0) {
+  if (ai.patternT <= 0 && !ai.shielded) {
     ai.patternT = ai.phase === 1 ? 2.6 : ai.phase === 2 ? 4.0 : 3.0;
     if (w.map.lineOfSight(b.x, b.y, p.x, p.y)) {
       const lead = Math.atan2(p.y + p.mvy * 0.5 - b.y, p.x + p.mvx * 0.5 - b.x);
@@ -97,7 +99,7 @@ export function updateBoss(w: World, b: Entity, dt: number, p: Entity): void {
     }
   }
   // 원형 탄막(2·3단계)
-  if (ai.phase >= 2) {
+  if (ai.phase >= 2 && !ai.shielded) {
     ai.ringT -= dt;
     if (ai.ringT <= 0) {
       ai.ringT = ai.phase === 2 ? 6.5 : 4.5;
@@ -107,7 +109,7 @@ export function updateBoss(w: World, b: Entity, dt: number, p: Entity): void {
     }
   }
   // 레이저(1·2단계): 1초 예고 후 0.35초 발사
-  if (ai.phase <= 2) {
+  if (ai.phase <= 2 && !ai.shielded) {
     if (ai.laserAge < 0) {
       ai.laserT -= dt;
       if (ai.laserT <= 0) { ai.laserAge = 0; ai.laserTarget = { x: p.x, y: p.y }; w.emit({ type: 'laser', x: b.x, y: b.y, text: 'warn' }); }
