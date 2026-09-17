@@ -21,6 +21,7 @@ GitHub Pages 로 `https://bamtolking.github.io/MyGame/` 에 배포됩니다. 허
   2. Private 저장소에 `templates/publish-to-hub.yml` 을 넣고, 토큰은 그 저장소의 Actions Secret(`HUB_PUSH_TOKEN`)으로만 보관한다.
   3. 허브의 `games.json` 항목을 `"build": { "prebuilt": true }` 로 바꾸고 `games/<slug>/` 에는 **빌드 결과물만** 둔다.
   4. 허브에 남아 있던 소스 사본은 사용자 지시가 있을 때만 제거하며, 과거 커밋에는 그대로 남는다는 점을 알린다.
+- 원본 브랜치가 갱신되면 허브 복사본은 자동으로 따라오지 않는다. 갱신은 `git rm -r games/<slug> && git read-tree --prefix=games/<slug>/ -u origin/<branch>:<dir>` (같은 게임의 새 버전으로 교체하는 것이며, 게임 삭제가 아니다).
 - 새 게임은 기존 게임과 **분리**해서 관리한다(폴더·package.json·저장 키·SW 캐시 이름을 공유하지 않는다).
 
 ## 작업 후 확인 절차

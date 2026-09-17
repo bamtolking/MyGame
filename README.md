@@ -1,6 +1,6 @@
 # MyGame — 게임 허브 (GitHub Pages)
 
-Claude Code로 만든 HTML5 게임 9개를 **한 사이트**에서 각각 다른 주소로 실행하는 허브입니다.
+Claude Code로 만든 HTML5 게임 10개를 **한 사이트**에서 각각 다른 주소로 실행하는 허브입니다.
 휴대폰 브라우저(Chrome / Safari)에서 바로 플레이할 수 있고, 로그인·서버·결제·광고가 없습니다.
 
 - 허브 첫 화면: `https://bamtolking.github.io/MyGame/` — 게임 목록과 **플레이** 버튼
@@ -19,6 +19,7 @@ Claude Code로 만든 HTML5 게임 9개를 **한 사이트**에서 각각 다른
 | 7 | 괴물 포장마차: 합치고 팔자! | `/MyGame/foodtruck/` | `claude/monster-food-truck-game-thu1lj` | `monster-stall/` 폴더 | `games/foodtruck/` |
 | 8 | 나 혼자 도둑단: 25초의 공범 | `/MyGame/thief/` | `claude/heist-game-25sec-xwnluz` | `heist/` 폴더 | `games/thief/` |
 | 9 | 와르르! 철거왕: 한 발의 기적 | `/MyGame/demolition/` | `claude/waruru-demolition-physics-puzzle-38dmbu` | `waruru/` 폴더 | `games/demolition/` |
+| 10 | 갈아타!: 바디 하이재킹 | `/MyGame/hijack/` | `claude/galaata-body-hijacking-game-xju67u` | `galaata/` 폴더 | `games/hijack/` |
 
 **원본 브랜치는 하나도 수정·삭제하지 않았습니다.** 이 브랜치의 `games/` 폴더는 각 브랜치에서 가져온 복사본이며,
 허브에서 동작하도록 필요한 최소한의 경로만 손봤습니다(아래 "허브용으로 바꾼 것" 참고).
@@ -42,12 +43,12 @@ _site/index.html            ← /MyGame/
 _site/daebak-defense/       ← /MyGame/daebak-defense/
 _site/line-wars/            ← /MyGame/line-wars/      (manifest.webmanifest + sw.js 포함, 홈 화면 설치 가능)
 _site/crimson-exile/        ← /MyGame/crimson-exile/  (manifest.json + sw.js 포함, 홈 화면 설치 가능)
-_site/combo-rush/  _site/pack-and-blast/  _site/last-exit/  _site/foodtruck/  _site/thief/  _site/demolition/
+_site/combo-rush/  _site/pack-and-blast/  _site/last-exit/  _site/foodtruck/  _site/thief/  _site/demolition/  _site/hijack/
 ```
 
 ## GitHub Pages 배포 (처음 한 번만 설정)
 
-이 브랜치를 push 하면 워크플로 "Deploy game hub to GitHub Pages" 가 자동으로 돌아 9개 게임을 모두 빌드합니다.
+이 브랜치를 push 하면 워크플로 "Deploy game hub to GitHub Pages" 가 자동으로 돌아 10개 게임을 모두 빌드합니다.
 첫 실행에서 **빌드는 성공**했고 Pages 도 Actions 방식으로 켜졌지만, 마지막 배포 단계가 다음 이유로 거부되었습니다.
 
 > Branch "claude/game-hub-github-pages-09xp38" is not allowed to deploy to github-pages due to environment protection rules.
@@ -77,6 +78,17 @@ SKIP_INSTALL=1 node scripts/build-site.mjs     # npm ci 생략 (이미 설치돼
 
 게임 하나만 개발할 때는 그 폴더로 들어가 원래대로 작업하면 됩니다: `cd games/last-exit && npm install && npm run dev`
 
+## 원본 브랜치가 바뀌었을 때 허브 복사본 갱신
+
+`games/<slug>/` 는 원본 브랜치의 **복사본**이라 원본 브랜치에 새 커밋이 생겨도 자동으로 따라오지 않습니다. 다시 가져오려면:
+
+```bash
+git rm -r -q games/<slug> && git read-tree --prefix=games/<slug>/ -u origin/<원본 브랜치>:<원본 폴더>
+# 예) git rm -r -q games/hijack && git read-tree --prefix=games/hijack/ -u origin/claude/galaata-body-hijacking-game-xju67u:galaata
+```
+
+콤보 러시·팩 앤 블래스트는 허브용 설정 파일이 따로 있으므로(아래 표) `src/` 등 내용 폴더만 바꿔 넣으세요.
+
 ## 새 게임 추가하는 방법
 
 1. `games/<새-폴더>/` 에 독립 프로젝트로 넣습니다 (Vite 프로젝트라면 `vite.config.ts` 의 `base: './'` 필수).
@@ -99,7 +111,7 @@ SKIP_INSTALL=1 node scripts/build-site.mjs     # npm ci 생략 (이미 설치돼
 - 외부 API 에 비밀키가 필요하면 프론트엔드에 키를 넣지 말고 서버 측 구조(별도 백엔드/서버리스 함수)를 씁니다.
 - push 전에 `npm run check-secrets` 를 실행합니다. 모든 브랜치의 모든 커밋을 검사하며, 의심 항목이 있으면 종료 코드 1 로 멈춥니다. 배포 워크플로도 빌드 전에 작업 트리를 검사합니다.
 - 오탐은 `.secrets-allowlist` 에 정규식으로 등록합니다. 과거 커밋에서 발견된 항목은 임의로 처리하지 않고 저장소 소유자가 판단합니다.
-- 마지막 전체 검사: 이 문서를 갱신한 시점에 9개 게임 브랜치를 포함한 모든 커밋에서 민감정보 없음.
+- 마지막 전체 검사: 이 문서를 갱신한 시점에 10개 게임 브랜치를 포함한 모든 커밋(27개)에서 민감정보 없음.
 
 ## 허브용으로 바꾼 것 (원본 브랜치와 다른 점)
 
@@ -110,11 +122,11 @@ SKIP_INSTALL=1 node scripts/build-site.mjs     # npm ci 생략 (이미 설치돼
 | 팩 앤 블래스트 | `src/packblast/` → `src/`, `tests/packblast/` → `tests/`, `packblast/index.html` → `index.html`, 전용 `package.json`·`vite.config.ts` 추가, `scripts/*.mjs` 경로 정리 | 원본은 대박수비대와 한 프로젝트를 공유(두 번째 진입점) |
 | 크림슨 엑자일 | `sw.js` 의 오래된 캐시 삭제를 `crimson-exile-` 접두어 캐시로 한정. 브랜치의 `.github/workflows/pages.yml` 은 복사하지 않음(허브 워크플로가 대신함) | 같은 도메인의 다른 게임 오프라인 캐시를 지우지 않도록 |
 | 라인워즈 | `public/sw.js`(및 `docs/sw.js`)의 캐시 삭제를 `linewars-` 접두어로 한정 | 위와 같음 |
-| 라스트 엑시트 · 괴물 포장마차 · 나 혼자 도둑단 · 와르르! 철거왕 | 변경 없음 (폴더 그대로 복사, 폴더 이름만 주소에 맞춤) | 이미 독립 프로젝트 |
+| 라스트 엑시트 · 괴물 포장마차 · 나 혼자 도둑단 · 와르르! 철거왕 · 갈아타! | 변경 없음 (폴더 그대로 복사, 폴더 이름만 주소에 맞춤) | 이미 독립 프로젝트 |
 
 ## 세이브·PWA가 안 깨지는 이유
 
 - 모든 게임이 `base: './'` (상대 경로) 로 빌드되어 CSS·JS·아이콘 경로가 `/MyGame/<게임>/` 아래에서 그대로 맞습니다.
-- 저장 키(localStorage)가 게임마다 다릅니다: `daebak_defense_v1`, `combo_rush_*`, `crimson_exile_save_v1`, `lw.*`, `packblast_save_v1`, `last_exit_v1`, `monster-stall.save.v1`, `solo_heist_25s_v1`, `waruru.save.v1`. 같은 도메인이라도 서로 덮어쓰지 않습니다.
+- 저장 키(localStorage)가 게임마다 다릅니다: `daebak_defense_v1`, `combo_rush_*`, `crimson_exile_save_v1`, `lw.*`, `packblast_save_v1`, `last_exit_v1`, `monster-stall.save.v1`, `solo_heist_25s_v1`, `waruru.save.v1`, `galaata_v1`. 같은 도메인이라도 서로 덮어쓰지 않습니다.
 - 서비스 워커는 각각 `/MyGame/crimson-exile/sw.js`, `/MyGame/line-wars/sw.js` 로 등록되어 범위(scope)가 자기 게임 폴더로 한정됩니다. manifest 의 `start_url`·`scope` 도 `./` 라 같은 폴더를 가리킵니다.
-- 나머지 7개 게임은 서비스 워커 없이 동작하며(원본과 동일), 그래픽·사운드를 코드로 생성하므로 외부 파일 경로가 없습니다. 크림슨 엑자일만 Google Fonts 를 인터넷에서 불러옵니다.
+- 나머지 8개 게임은 서비스 워커 없이 동작하며(원본과 동일), 그래픽·사운드를 코드로 생성하므로 외부 파일 경로가 없습니다. 크림슨 엑자일만 Google Fonts 를 인터넷에서 불러옵니다.

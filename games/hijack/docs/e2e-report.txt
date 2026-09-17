@@ -1,0 +1,33 @@
+phone-360x800: game started {"screen":"game","zone":0,"body":"intruder","hp":50,"enemies":4,"fps":0}
+phone-360x800: joystick moved player dy=-134 (expect negative) stickReleased=true
+phone-360x800: attack button held → shots fired=8 releasedAfterTouchEnd=true
+phone-360x800: after autopilot {"body":"scout","hp":19,"stab":59.369333333333316,"poss":1,"hudName":"정찰병","hudSkill":"질주","phase":"playing"}
+phone-360x800: pause freezes time=true
+phone-360x800: resumed time advances=true
+phone-360x800: help=true settings=true back to game=game
+phone-360x800: resume button after reload=true
+phone-360x800: resumed {"zone":0,"body":"intruder","hp":50}
+phone-360x800: buttons overlap=none inside=true minSize=40px
+phone-360x800: errors=0
+phone-390x844: game started {"screen":"game","zone":0,"body":"intruder","hp":50,"enemies":4,"fps":0}
+phone-390x844: joystick moved player dy=-134 (expect negative) stickReleased=true
+phone-390x844: attack button held → shots fired=9 releasedAfterTouchEnd=true
+phone-390x844: after autopilot {"body":"scout","hp":19,"stab":58.81933333333328,"poss":1,"hudName":"정찰병","hudSkill":"질주","phase":"playing"}
+phone-390x844: pause freezes time=true
+phone-390x844: resumed time advances=true
+phone-390x844: help=true settings=true back to game=game
+phone-390x844: resume button after reload=true
+phone-390x844: resumed {"zone":0,"body":"intruder","hp":50}
+phone-390x844: buttons overlap=none inside=true minSize=40px
+phone-390x844: errors=0
+phone-430x932: game started {"screen":"game","zone":0,"body":"intruder","hp":50,"enemies":4,"fps":0}
+phone-430x932: joystick moved player dy=-133 (expect negative) stickReleased=true
+phone-430x932: attack button held → shots fired=8 releasedAfterTouchEnd=true
+phone-430x932: after autopilot {"body":"scout","hp":19,"stab":59.44266666666665,"poss":1,"hudName":"정찰병","hudSkill":"질주","phase":"playing"}
+phone-430x932: pause freezes time=true
+phone-430x932: resumed time advances=true
+phone-430x932: help=true settings=true back to game=game
+phone-430x932: resume button after reload=true
+phone-430x932: resumed {"zone":0,"body":"intruder","hp":50}
+phone-430x932: buttons overlap=none inside=true minSize=40px
+phone-430x932: errors=0

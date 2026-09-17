@@ -140,6 +140,21 @@
         "command": "npm run build",
         "outDir": "dist"
       }
+    },
+    {
+      "slug": "hijack",
+      "title": "갈아타!: 바디 하이재킹",
+      "tagline": "죽기 직전 적의 몸을 빼앗아 살아남고, 상황에 맞는 몸으로 갈아타며 보안 시설을 돌파하는 세로 화면 탑다운 액션.",
+      "emoji": "⚡",
+      "orientation": "portrait",
+      "pwa": false,
+      "branch": "claude/galaata-body-hijacking-game-xju67u",
+      "sourcePath": "galaata/ 폴더",
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
     }
   ]
 }

@@ -1,0 +1,77 @@
+ RUN  v5.0.1 /home/user/MyGame/galaata
+ ✓ tests/possession.test.ts > 빙의 조건 > 체력 35% 이하일 때만 빙의 가능 상태가 된다 2ms
+ ✓ tests/possession.test.ts > 빙의 조건 > 기절 상태면 체력과 무관하게 빙의 가능 0ms
+ ✓ tests/possession.test.ts > 빙의 조건 > 보스·포탑·노드는 체력이 낮아도 빙의 불가 0ms
+ ✓ tests/possession.test.ts > 빙의 조건 > 빙의 불가 적에게 버튼을 눌러도 아무 일도 없고 이유가 안내된다 6ms
+ ✓ tests/possession.test.ts > 빙의 조건 > 가까운 여러 후보 중 가장 가까운 대상을 일관되게 고른다 1ms
+ ✓ tests/possession.test.ts > 빙의 실행 > 몸이 교체되고 체력은 남은 값(최소 45%로 이식 회복), 안정도는 새 몸 최대치, 무기와 스킬이 바뀐다 5ms
+ ✓ tests/possession.test.ts > 빙의 실행 > 남은 체력이 45%보다 높으면(기절 빙의 등) 그 체력을 그대로 이어받는다 1ms
+ ✓ tests/possession.test.ts > 빙의 실행 > 빙의 직후 쿨다운 동안 다시 빙의할 수 없고, 지나면 가능하다 10ms
+ ✓ tests/possession.test.ts > 빙의 실행 > 안정도는 시간에 따라 감소하고 피해로 더 크게 줄며, 0이면 붕괴가 시작되고 붕괴 중에도 빙의로 살아난다 3ms
+ ✓ tests/possession.test.ts > 빙의 실행 > 체력 0이 되어도 근처에 후보가 있으면 마지막 기회 동안 빙의로 생존, 없으면 패배 2ms
+ ✓ tests/possession.test.ts > 빙의 실행 > 빙의한 몸이 날린 투사체는 플레이어 편이 되고, 적 AI는 새 몸을 표적으로 삼는다 11ms
+ ✓ tests/combat.test.ts > 피해 규칙 > 죽은 적에게는 추가 피해가 들어가지 않는다 3ms
+ ✓ tests/combat.test.ts > 피해 규칙 > 플레이어는 피격 무적 동안 다른 사격을 맞지 않지만 같은 볼리(산탄)는 전부 맞고, 한 스텝 피해는 최대체력 40%로 제한된다 7ms
+ ✓ tests/combat.test.ts > 투사체와 벽 > 직선 탄은 벽에 막히고, 폭탄은 벽을 넘어가 금이 간 벽을 부순다 9ms
+ ✓ tests/combat.test.ts > 투사체와 벽 > 과부하 폭탄은 금이 간 벽을 한 번에 부수고 범위 안의 자신에게도 피해를 준다 8ms
+ ✓ tests/combat.test.ts > 투사체와 벽 > 저격병 관통탄은 여러 적을 관통하고 원거리 스위치를 작동시켜 문을 연다 3ms
+ ✓ tests/combat.test.ts > 투사체와 벽 > 침입자 사거리로는 스위치에 닿지 않는다(몸 차이) 2ms
+ ✓ tests/combat.test.ts > 방패병 전방 방어 > 정면에서 오는 포탑 탄은 막고, 뒤에서 오는 탄은 맞는다. 방어 자세는 옆까지 막는다 2ms
+ ✓ tests/combat.test.ts > 방패병 전방 방어 > 적 방패병은 정면 사격을 막으므로 뒤에서 쏴야 약화된다 10ms
+ ✓ tests/combat.test.ts > 방패병 전방 방어 > 폭탄 폭발은 방패로 막히지 않는다 1ms
+ ✓ tests/combat.test.ts > 정비병 > 전기 아크는 감전을 누적시켜 기절시키고, 수복 펄스는 체력과 안정도를 회복한다 3ms
+ ✓ tests/combat.test.ts > 몸별 무기 차이 > 여섯 몸의 무기는 종류·투사체 수·사거리·속도가 실제로 다르다 0ms
+ ✓ tests/combat.test.ts > 몸별 무기 차이 > 봇이 각 몸으로 공격하면 서로 다른 종류의 투사체/이벤트가 발생한다 24ms
+stdout | tests/zones.test.ts > 1구역 침입 구역 (핵심 장면) > B안: 정찰병→방패병 갈아타기로 포탑 통로를 지나 패널로 문을 연다
+zone0 B(scout→shield, turret+panel route) {"phase":"zoneclear","time":20.3,"body":"shield","hp":35,"stab":99,"possessions":2,"kills":0,"dmg":32,"chain":"intruder>scout>shield","log":[],"blocks":7}
+ ✓ tests/zones.test.ts > 1구역 침입 구역 (핵심 장면) > B안: 정찰병→방패병 갈아타기로 포탑 통로를 지나 패널로 문을 연다 108ms
+stdout | tests/zones.test.ts > 1구역 침입 구역 (핵심 장면) > B2안: 폭탄병으로 갈아타 금이 간 벽을 부수고 지름길로 나간다(방패병은 남겨둠)
+zone0 B2(bomber wall route) {"phase":"zoneclear","time":17.5,"body":"bomber","hp":32,"stab":61,"possessions":1,"kills":1,"dmg":15,"chain":"intruder>bomber","log":["2.42:target scout died"]}
+stdout | tests/zones.test.ts > 1구역 침입 구역 (핵심 장면) > A안 비교: 기본 몸으로 만나는 적을 전부 처치하는 플레이는 갈아타기보다 느리거나 실패한다
+zone0 A(kill all as intruder) {"phase":"defeat","time":17.3,"body":"intruder","hp":0,"stab":null,"possessions":0,"kills":2,"dmg":50,"chain":"intruder","log":["2.42:target scout died","6.47:target bomber died","17.33:killAll: could not kill shield"],"killedAll":false}
+stdout | tests/zones.test.ts > 2구역 포탑 통로 > 방패병은 정면 돌파로 통과한다(입구 방 적은 대기 상태라 바로 통로로 갈 수 있다)
+zone1 shield walk {"phase":"zoneclear","time":9.1,"body":"shield","hp":39,"stab":73,"possessions":0,"kills":0,"dmg":31,"chain":"intruder","log":[],"corridorDamage":31,"blocks":4}
+stdout | tests/zones.test.ts > 2구역 포탑 통로 > 폭탄병으로 들어오면 달려드는 적을 정리하고 방패병을 폭탄으로 약화시켜 갈아탄 뒤 통로를 지난다(연속 갈아타기)
+zone1 bomber→shield {"phase":"zoneclear","time":21.5,"body":"shield","hp":1,"stab":71,"possessions":1,"kills":2,"dmg":66,"chain":"intruder>shield","log":[]}
+ ✓ tests/zones.test.ts > 1구역 침입 구역 (핵심 장면) > B2안: 폭탄병으로 갈아타 금이 간 벽을 부수고 지름길로 나간다(방패병은 남겨둠) 47ms
+ ✓ tests/zones.test.ts > 1구역 침입 구역 (핵심 장면) > A안 비교: 기본 몸으로 만나는 적을 전부 처치하는 플레이는 갈아타기보다 느리거나 실패한다 17ms
+ ✓ tests/zones.test.ts > 2구역 포탑 통로 > 방패병은 정면 돌파로 통과한다(입구 방 적은 대기 상태라 바로 통로로 갈 수 있다) 31ms
+ ✓ tests/zones.test.ts > 2구역 포탑 통로 > 폭탄병으로 들어오면 달려드는 적을 정리하고 방패병을 폭탄으로 약화시켜 갈아탄 뒤 통로를 지난다(연속 갈아타기) 57ms
+stdout | tests/zones.test.ts > 2구역 포탑 통로 > 정찰병 질주 강행은 통과 가능하지만 큰 피해를 입는다(대비 실험)
+zone1 scout sprint seed31: zoneclear hp 42→34 | seed32: zoneclear hp 42→34 | seed33: zoneclear hp 42→34
+stdout | tests/zones.test.ts > 3구역 균열 벽과 스위치 > 폭탄병은 금이 간 벽을 부수고 나간다
+zone2 bomber {"phase":"zoneclear","time":11.4,"body":"bomber","hp":60,"stab":60,"possessions":0,"kills":0,"dmg":0,"chain":"intruder","log":[]}
+stdout | tests/zones.test.ts > 3구역 균열 벽과 스위치 > 저격병은 구덩이 건너 스위치를 쏴 문 B로 나간다
+zone2 sniper {"phase":"zoneclear","time":16.1,"body":"sniper","hp":50,"stab":41,"possessions":0,"kills":0,"dmg":0,"chain":"intruder","log":[]}
+ ✓ tests/zones.test.ts > 2구역 포탑 통로 > 정찰병 질주 강행은 통과 가능하지만 큰 피해를 입는다(대비 실험) 33ms
+ ✓ tests/zones.test.ts > 2구역 포탑 통로 > 정비병은 과부하 단자로 포탑을 끄고 무피해로 통과한다 25ms
+ ✓ tests/zones.test.ts > 3구역 균열 벽과 스위치 > 폭탄병은 금이 간 벽을 부수고 나간다 18ms
+ ✓ tests/zones.test.ts > 3구역 균열 벽과 스위치 > 저격병은 구덩이 건너 스위치를 쏴 문 B로 나간다 33ms
+stdout | tests/zones.test.ts > 3구역 균열 벽과 스위치 > 실전(자동 정책): 방패병으로 들어와 폭탄병·저격병을 남겨두고 싸우다 그중 하나를 빼앗는 판단이 성립한다
+zone2 auto(keep bomber/sniper, then take one) seed51: took=true {"phase":"playing","time":13.3,"body":"bomber","hp":32,"stab":80,"possessions":1,"kills":1,"dmg":12,"chain":"intruder>bomber","log":[]}
+seed52: took=true {"phase":"playing","time":11.3,"body":"bomber","hp":32,"stab":80,"possessions":1,"kills":1,"dmg":18,"chain":"intruder>bomber","log":[]}
+seed53: took=false {"phase":"playing","time":28.2,"body":"shield","hp":88,"stab":70,"possessions":0,"kills":1,"dmg":2,"chain":"intruder","log":["28.18:weaken timeout"]}
+stdout | tests/zones.test.ts > 4구역 연속 갈아타기 > 자동 정책 봇의 생존·갈아타기 기록(참고용: 사람 플레이 대체 아님)
+zone3 auto: cleared 1/5
+seed61: {"phase":"defeat","time":20.3,"body":"scout","hp":0,"stab":34,"possessions":1,"kills":0,"dmg":65,"chain":"intruder>scout","log":["4:moveTo 8,1 timeout"]} waveIdx=2 waveDone=false
+seed62: {"phase":"zoneclear","time":29,"body":"sniper","hp":21,"stab":62,"possessions":3,"kills":1,"dmg":123,"chain":"intruder>bomber>mechanic>sniper","log":["4:moveTo 8,1 timeout"]} waveIdx=3 waveDone=false
+seed63: {"phase":"defeat","time":29,"body":"mechanic","hp":0,"stab":45,"possessions":2,"kills":1,"dmg":142,"chain":"intruder>bomber>mechanic","log":["4:moveTo 8,1 timeout"]} waveIdx=2 waveDone=false
+seed64: {"phase":"defeat","time":31.1,"body":"mechanic","hp":0,"stab":40,"possessions":1,"kills":1,"dmg":152,"chain":"intruder>mechanic","log":["4:moveTo 8,1 timeout"]} waveIdx=2 waveDone=false
+seed65: {"phase":"defeat","time":36.3,"body":"sniper","hp":0,"stab":46,"possessions":3,"kills":1,"dmg":190,"chain":"intruder>bomber>mechanic>sniper","log":["4:moveTo 8,1 timeout"]} waveIdx=3 waveDone=false
+ ✓ tests/zones.test.ts > 3구역 균열 벽과 스위치 > 침입자만으로는 출구를 열 수 없다(몸이 필요한 구조) — 벽도 스위치도 반응 없음 12ms
+ ✓ tests/zones.test.ts > 3구역 균열 벽과 스위치 > 실전(자동 정책): 방패병으로 들어와 폭탄병·저격병을 남겨두고 싸우다 그중 하나를 빼앗는 판단이 성립한다 55ms
+ ✓ tests/zones.test.ts > 4구역 연속 갈아타기 > 웨이브가 순서대로 소환되고, 3차까지 온 뒤 경비가 1명 이하로 줄면 봉쇄가 풀려 출구로 나갈 수 있다(구조 검증) 30ms
+ ✓ tests/zones.test.ts > 4구역 연속 갈아타기 > 자동 정책 봇의 생존·갈아타기 기록(참고용: 사람 플레이 대체 아님) 274ms
+stdout | tests/zones.test.ts > 5구역 보스 > 자동 정책 봇의 보스전 기록(참고용: 사람 플레이 대체 아님)
+zone4 boss auto: wins 0/5
+seed71: {"phase":"defeat","time":50.5,"body":"scout","hp":0,"stab":0,"possessions":1,"kills":6,"dmg":83,"chain":"intruder>scout","log":[]} bossHp=588 phase=2
+seed72: {"phase":"defeat","time":29.7,"body":"shield","hp":0,"stab":28,"possessions":0,"kills":3,"dmg":113,"chain":"intruder","log":[]} bossHp=588 phase=2
+seed73: {"phase":"defeat","time":28.8,"body":"shield","hp":0,"stab":28,"possessions":0,"kills":4,"dmg":116,"chain":"intruder","log":[]} bossHp=588 phase=2
+seed74: {"phase":"defeat","time":35.6,"body":"shield","hp":0,"stab":18,"possessions":0,"kills":5,"dmg":116,"chain":"intruder","log":[]} bossHp=594 phase=2
+seed75: {"phase":"defeat","time":56.2,"body":"bomber","hp":0,"stab":36,"possessions":2,"kills":5,"dmg":135,"chain":"intruder>scout>bomber","log":[]} bossHp=588 phase=2
+ ✓ tests/zones.test.ts > 5구역 보스 > 보스는 빙의 불가, 66%에서 보호막·노드·포탑·소환, 노드 파괴로 보호막 해제, 33%에서 돌진·노출, 처치 시 승리(구조 검증) 27ms
+ ✓ tests/zones.test.ts > 5구역 보스 > 자동 정책 봇의 보스전 기록(참고용: 사람 플레이 대체 아님) 301ms
+ Test Files  3 passed (3)
+      Tests  38 passed (38)
+   Start at  08:02:00
+   Duration  1.44s (tests 61%, transform 34%, import 5%, worker 1%)
