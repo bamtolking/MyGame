@@ -41,6 +41,8 @@ export function startServer(port = PORT, staticDir = ROOT) {
     try {
       const st = await stat(file); if (!st.isFile()) throw new Error('nf');
       res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
+      // 이 서버가 내보내는 HTML에는 표식을 넣어, 클라이언트가 같은 주소의 /ws 방 서버를 쓰도록 함 (정적 호스팅에서는 표식이 없어 P2P)
+      if (extname(file) === '.html') { const html = (await readFile(file, 'utf8')).replace('<head>', '<head>\n  <meta name="nrd-server" content="ws" />'); res.end(html); return; }
       res.end(await readFile(file));
     } catch { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('not found (먼저 npm run build)'); }
   });

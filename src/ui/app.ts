@@ -102,14 +102,11 @@ export class App {
     if (!/\/ws\/?$/.test(u)) u = u.replace(/\/+$/, '') + '/ws';
     return u;
   }
+  /** 전용 서버 주소: 설정값 > 전용 서버가 넣어 준 표식(meta nrd-server) > 없음(P2P) */
   private async detectServer(): Promise<string | null> {
     const cfg = this.wsUrl(); if (cfg) return cfg;
     if (!/^https?:$/.test(location.protocol)) return null;
-    try {
-      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 1500);
-      const r = await fetch('./api/ping', { signal: ctl.signal }); clearTimeout(t);
-      if (r.ok) { const j = await r.json(); if (j && j.ok) return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'; }
-    } catch { /* 정적 호스팅 */ }
+    if (document.querySelector('meta[name="nrd-server"]')) return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
     return null;
   }
   private attachOnHello(conn: Conn): void {

@@ -22,6 +22,13 @@ describe('WebSocket 서버', () => {
     const r = await fetch(`http://127.0.0.1:${PORT}/api/ping`); expect(r.ok).toBe(true); expect(((await r.json()) as { ok: boolean }).ok).toBe(true);
     const n = await fetch(`http://127.0.0.1:${PORT}/`); expect(n.status).toBe(404);
   });
+  it('서버가 내보내는 HTML에는 nrd-server 표식이 들어간다', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'nrd-')); writeFileSync(join(dir, 'index.html'), '<!doctype html><html><head><title>x</title></head><body></body></html>');
+    const s2 = startServer(PORT + 1, dir);
+    try { const html = await (await fetch(`http://127.0.0.1:${PORT + 1}/`)).text(); expect(html).toContain('<meta name="nrd-server" content="ws" />'); expect(html).toContain('<title>x</title>'); }
+    finally { await s2.close(); }
+  });
   it('방 만들기 → 코드로 참가 → 시작 → 라운드/골드 중계 → 나가기', async () => {
     const a = new RoomClient(await wsConn(`ws://127.0.0.1:${PORT}/ws`), '방장', 'tokA'); a.hello({ create: true }); await tick();
     expect(a.room).not.toBeNull(); const code = a.room!.code; expect(rooms.has(code)).toBe(true);
