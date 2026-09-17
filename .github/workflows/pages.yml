@@ -1,0 +1,61 @@
+# GitHub Pages 자동 배포: main 에 push(또는 PR 병합)될 때마다 games/ 아래 게임을 모두 빌드해 한 사이트(/MyGame/<게임>/)로 올립니다.
+# 처음 한 번 확인: Settings → Pages → Source = "GitHub Actions",
+#                 Settings → Environments → github-pages → Deployment branches 에 main 허용.
+name: Deploy game hub to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build all games
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: games/*/package-lock.json
+
+      - name: Check for secrets in the checked-out tree
+        run: node scripts/check-secrets.mjs
+
+      - name: Build every game and the hub page (→ _site/)
+        run: node scripts/build-site.mjs
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
