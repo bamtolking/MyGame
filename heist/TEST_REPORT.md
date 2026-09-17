@@ -48,7 +48,7 @@
 
 ## 2. 브라우저 실기동 (Playwright + 내장 Chromium) — `npm run e2e`
 
-`play/index.html`(단일 파일 빌드)을 file:// 로 열어 터치 이벤트로 실행. 결과 `e2e-out/report.txt`, 스크린샷 `e2e-out/*.png` (git에는 포함하지 않음; 명령으로 재생성).
+`play/index.html`(단일 파일 빌드)을 file:// 로 열어 터치 이벤트로 실행. 결과 `e2e-out/report.txt`, 스크린샷 `e2e-out/*.png` (명령으로 재생성). 대표 스크린샷 9장과 보고서 사본은 `docs/screenshots/`, `docs/e2e-report.txt`에 저장.
 
 | 뷰포트 | 결과 |
 |---|---|

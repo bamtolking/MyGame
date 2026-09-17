@@ -1,0 +1,25 @@
+phone-390x844: joystick active=true dy=-1.00 moved up=87px, stopped after release=true
+phone-390x844: dash button recorded a dash=true
+phone-390x844: paused tick frozen=true
+phone-390x844: resumed without a burst=true
+phone-390x844: attempt A outcome=timeout generatorAlive=false laser=off hadCore=false shots=36
+phone-390x844: attempt B outcome=escape at 18.7s generatorDestroyedBy=ghost0 ghosts=1 ownShots=0 fps=60
+phone-390x844: persisted slots=1 clears=1 best=1122 unlocked=2
+phone-390x844: errors=0
+small-360x800: joystick active=true dy=-1.00 moved up=87px, stopped after release=true
+small-360x800: dash button recorded a dash=true
+small-360x800: paused tick frozen=true
+small-360x800: resumed without a burst=true
+small-360x800: attempt A outcome=timeout generatorAlive=false laser=off hadCore=false shots=36
+small-360x800: attempt B outcome=escape at 18.7s generatorDestroyedBy=ghost0 ghosts=1 ownShots=0 fps=60
+small-360x800: persisted slots=1 clears=1 best=1122 unlocked=2
+small-360x800: errors=0
+large-430x932: joystick active=true dy=-1.00 moved up=87px, stopped after release=true
+large-430x932: dash button recorded a dash=true
+large-430x932: paused tick frozen=true
+large-430x932: resumed without a burst=true
+large-430x932: attempt A outcome=timeout generatorAlive=false laser=off hadCore=false shots=36
+large-430x932: attempt B outcome=escape at 18.7s generatorDestroyedBy=ghost0 ghosts=1 ownShots=0 fps=60
+large-430x932: persisted slots=1 clears=1 best=1122 unlocked=2
+large-430x932: errors=0
+landscape-844x390: smoke ok errors=0
