@@ -1,0 +1,57 @@
+phone-390x844: empty start mode=empty money=25000 staff=2 zoom=12.0
+phone-390x844: tool=struct:wall
+phone-390x844: after wall drag jobs=28 money=24664
+phone-390x844: after jail door tap jobs=28 tool=struct:jaildoor
+phone-390x844: planned jobs=33 objects=5 rooms=1 money=24356
+phone-390x844: after 9s@4x jobs=11 guards=1 room={"valid":false,"issues":["벽으로 밀폐되지 않음 (외부와 연결됨)","변기 1개 부족","벤치 2개 부족"],"secure":false,"tiles":35} chapter=0 fps=60
+phone-390x844: infocard="대기실✕35칸 · 물건 없음 · 수감자 0명 · 외부와 연결⚠ 벽으로 밀폐되지 않음 (외부와 연결됨) · 변기 1개 부족 · 벤치 2개 부족감방이 없는 수감자가 머무는 큰 방. 변기 1, 벤치 2, 12칸 이상."
+phone-390x844: sheet 목표 open=true closed=true
+phone-390x844: sheet 일과표 open=true closed=true
+phone-390x844: sheet 직원 open=true closed=true
+phone-390x844: sheet 수감 open=true closed=true
+phone-390x844: sheet 보고서 open=true closed=true
+phone-390x844: sheet 설정 open=true closed=true
+phone-390x844: sheet 도움말 open=true closed=true
+phone-390x844: quick after 15s@4x day=1 prisoners=0 money=27500 escapes=0 fights=0 chapter=1 fps=60 modal=true save="저장됨 10:37:45 AM"
+phone-390x844: paused time frozen=true
+phone-390x844: resume button present=true
+phone-390x844: resumed day=1 prisoners=0 money=27500
+phone-390x844: errors=0
+small-360x640: empty start mode=empty money=25000 staff=2 zoom=12.0
+small-360x640: tool=struct:wall
+small-360x640: after wall drag jobs=28 money=24664
+small-360x640: after jail door tap jobs=28 tool=struct:jaildoor
+small-360x640: planned jobs=33 objects=5 rooms=1 money=24356
+small-360x640: after 9s@4x jobs=11 guards=1 room={"valid":false,"issues":["벽으로 밀폐되지 않음 (외부와 연결됨)","변기 1개 부족","벤치 2개 부족"],"secure":false,"tiles":35} chapter=0 fps=60
+small-360x640: infocard="대기실✕35칸 · 물건 없음 · 수감자 0명 · 외부와 연결⚠ 벽으로 밀폐되지 않음 (외부와 연결됨) · 변기 1개 부족 · 벤치 2개 부족감방이 없는 수감자가 머무는 큰 방. 변기 1, 벤치 2, 12칸 이상."
+small-360x640: sheet 목표 open=true closed=true
+small-360x640: sheet 일과표 open=true closed=true
+small-360x640: sheet 직원 open=true closed=true
+small-360x640: sheet 수감 open=true closed=true
+small-360x640: sheet 보고서 open=true closed=true
+small-360x640: sheet 설정 open=true closed=true
+small-360x640: sheet 도움말 open=true closed=true
+small-360x640: quick after 15s@4x day=1 prisoners=0 money=27500 escapes=0 fights=0 chapter=1 fps=60 modal=true save="저장됨 10:38:19 AM"
+small-360x640: paused time frozen=true
+small-360x640: resume button present=true
+small-360x640: resumed day=1 prisoners=0 money=27500
+small-360x640: errors=0
+landscape-844x390: empty start mode=empty money=25000 staff=2 zoom=12.0
+landscape-844x390: tool=struct:wall
+landscape-844x390: after wall drag jobs=28 money=24664
+landscape-844x390: after jail door tap jobs=28 tool=struct:jaildoor
+landscape-844x390: planned jobs=33 objects=5 rooms=1 money=24356
+landscape-844x390: after 9s@4x jobs=11 guards=1 room={"valid":false,"issues":["벽으로 밀폐되지 않음 (외부와 연결됨)","변기 1개 부족","벤치 2개 부족"],"secure":false,"tiles":35} chapter=0 fps=60
+landscape-844x390: infocard="대기실✕35칸 · 물건 없음 · 수감자 0명 · 외부와 연결⚠ 벽으로 밀폐되지 않음 (외부와 연결됨) · 변기 1개 부족 · 벤치 2개 부족감방이 없는 수감자가 머무는 큰 방. 변기 1, 벤치 2, 12칸 이상."
+landscape-844x390: sheet 목표 open=true closed=true
+landscape-844x390: sheet 일과표 open=true closed=true
+landscape-844x390: sheet 직원 open=true closed=true
+landscape-844x390: sheet 수감 open=true closed=true
+landscape-844x390: sheet 보고서 open=true closed=true
+landscape-844x390: sheet 설정 open=true closed=true
+landscape-844x390: sheet 도움말 open=true closed=true
+landscape-844x390: quick after 15s@4x day=1 prisoners=0 money=27500 escapes=0 fights=0 chapter=1 fps=60 modal=true save="저장됨 10:38:53 AM"
+landscape-844x390: paused time frozen=true
+landscape-844x390: resume button present=true
+landscape-844x390: resumed day=1 prisoners=0 money=27500
+landscape-844x390: errors=0
