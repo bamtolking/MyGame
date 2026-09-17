@@ -31,6 +31,9 @@ jobs:
           cache: npm
           cache-dependency-path: games/*/package-lock.json
 
+      - name: Check for secrets in the checked-out tree
+        run: node scripts/check-secrets.mjs
+
       - name: Build every game and the hub page (→ _site/)
         run: node scripts/build-site.mjs
 

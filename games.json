@@ -97,7 +97,7 @@
       }
     },
     {
-      "slug": "monster-stall",
+      "slug": "foodtruck",
       "title": "괴물 포장마차: 합치고 팔자!",
       "tagline": "합성 퍼즐 + 주문 처리 + 소규모 가게 운영. 밤마다 찾아오는 작은 괴물 손님들의 3분짜리 영업.",
       "emoji": "🍢",
@@ -112,7 +112,7 @@
       }
     },
     {
-      "slug": "heist",
+      "slug": "thief",
       "title": "나 혼자 도둑단: 25초의 공범",
       "tagline": "25초 안에 에너지 코어를 훔쳐 나오는 탑다운 액션. 실패한 시도의 내 행동이 다음 시도에서 분신으로 재생되어 함께 싸웁니다.",
       "emoji": "⏱️",
@@ -120,6 +120,21 @@
       "pwa": false,
       "branch": "claude/heist-game-25sec-xwnluz",
       "sourcePath": "heist/ 폴더",
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
+    },
+    {
+      "slug": "demolition",
+      "title": "와르르! 철거왕: 한 발의 기적",
+      "tagline": "한 발의 커터볼로 밧줄을 끊고 추를 떨어뜨리고 시소를 돌려 구조물을 무너뜨리는 물리 퍼즐. 20개 스테이지.",
+      "emoji": "🏗️",
+      "orientation": "portrait",
+      "pwa": false,
+      "branch": "claude/waruru-demolition-physics-puzzle-38dmbu",
+      "sourcePath": "waruru/ 폴더",
       "build": {
         "install": true,
         "command": "npm run build",

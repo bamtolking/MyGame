@@ -1,6 +1,6 @@
 # MyGame — 게임 허브 (GitHub Pages)
 
-Claude Code로 만든 HTML5 게임 8개를 **한 사이트**에서 각각 다른 주소로 실행하는 허브입니다.
+Claude Code로 만든 HTML5 게임 9개를 **한 사이트**에서 각각 다른 주소로 실행하는 허브입니다.
 휴대폰 브라우저(Chrome / Safari)에서 바로 플레이할 수 있고, 로그인·서버·결제·광고가 없습니다.
 
 - 허브 첫 화면: `https://bamtolking.github.io/MyGame/` — 게임 목록과 **플레이** 버튼
@@ -16,8 +16,9 @@ Claude Code로 만든 HTML5 게임 8개를 **한 사이트**에서 각각 다른
 | 4 | 합체방어대: 콤보 러시 | `/MyGame/combo-rush/` | `claude/combo-rush-tower-defense-c3edcg` | `game/` 폴더 | `games/combo-rush/` |
 | 5 | 가방이 무기다: 팩 앤 블래스트 | `/MyGame/pack-and-blast/` | `claude/pack-and-blast-game-5ox2gz` | `src/packblast/` + `packblast/index.html` | `games/pack-and-blast/` |
 | 6 | 털고 튀어!: 라스트 엑시트 | `/MyGame/last-exit/` | `claude/last-exit-game-dev-7unvj9` | `last-exit/` 폴더 | `games/last-exit/` |
-| 7 | 괴물 포장마차: 합치고 팔자! | `/MyGame/monster-stall/` | `claude/monster-food-truck-game-thu1lj` | `monster-stall/` 폴더 | `games/monster-stall/` |
-| 8 | 나 혼자 도둑단: 25초의 공범 | `/MyGame/heist/` | `claude/heist-game-25sec-xwnluz` | `heist/` 폴더 | `games/heist/` |
+| 7 | 괴물 포장마차: 합치고 팔자! | `/MyGame/foodtruck/` | `claude/monster-food-truck-game-thu1lj` | `monster-stall/` 폴더 | `games/foodtruck/` |
+| 8 | 나 혼자 도둑단: 25초의 공범 | `/MyGame/thief/` | `claude/heist-game-25sec-xwnluz` | `heist/` 폴더 | `games/thief/` |
+| 9 | 와르르! 철거왕: 한 발의 기적 | `/MyGame/demolition/` | `claude/waruru-demolition-physics-puzzle-38dmbu` | `waruru/` 폴더 | `games/demolition/` |
 
 **원본 브랜치는 하나도 수정·삭제하지 않았습니다.** 이 브랜치의 `games/` 폴더는 각 브랜치에서 가져온 복사본이며,
 허브에서 동작하도록 필요한 최소한의 경로만 손봤습니다(아래 "허브용으로 바꾼 것" 참고).
@@ -41,12 +42,12 @@ _site/index.html            ← /MyGame/
 _site/daebak-defense/       ← /MyGame/daebak-defense/
 _site/line-wars/            ← /MyGame/line-wars/      (manifest.webmanifest + sw.js 포함, 홈 화면 설치 가능)
 _site/crimson-exile/        ← /MyGame/crimson-exile/  (manifest.json + sw.js 포함, 홈 화면 설치 가능)
-_site/combo-rush/ ...
+_site/combo-rush/  _site/pack-and-blast/  _site/last-exit/  _site/foodtruck/  _site/thief/  _site/demolition/
 ```
 
 ## GitHub Pages 배포 (처음 한 번만 설정)
 
-이 브랜치를 push 하면 워크플로 "Deploy game hub to GitHub Pages" 가 자동으로 돌아 8개 게임을 모두 빌드합니다.
+이 브랜치를 push 하면 워크플로 "Deploy game hub to GitHub Pages" 가 자동으로 돌아 9개 게임을 모두 빌드합니다.
 첫 실행에서 **빌드는 성공**했고 Pages 도 Actions 방식으로 켜졌지만, 마지막 배포 단계가 다음 이유로 거부되었습니다.
 
 > Branch "claude/game-hub-github-pages-09xp38" is not allowed to deploy to github-pages due to environment protection rules.
@@ -82,6 +83,24 @@ SKIP_INSTALL=1 node scripts/build-site.mjs     # npm ci 생략 (이미 설치돼
 2. `games.json` 의 `games` 배열에 항목을 추가합니다 (`slug` = 폴더 이름 = 주소, `build.outDir` = 빌드 결과 폴더).
 3. push 하면 허브 첫 화면과 배포에 자동 반영됩니다.
 
+## 운영 원칙 (프로토타입 → 정식 개발)
+
+- **프로토타입**: `games/<slug>/` 에 소스째 넣고 `games.json` 에 등록하면 허브에서 바로 휴대폰 테스트가 됩니다. 이 저장소는 공개이므로 프로토타입 소스도 공개됩니다.
+- **정식 개발 대상으로 지정한 게임**: 원본 소스를 **Private 저장소**(예: `bamtolking/<slug>-dev`)로 옮겨 개발하고, 허브에는 **빌드 결과물만** 올립니다.
+  - Private 저장소에 `templates/publish-to-hub.yml` 을 넣으면 push 때마다 빌드해 이 허브의 `games/<slug>/` 에 결과물만 커밋합니다(토큰은 Private 저장소의 Actions Secret 에만 보관).
+  - 허브의 `games.json` 에서 그 게임을 `"build": { "prebuilt": true }` 로 바꾸면 허브는 빌드 없이 폴더를 그대로 배포합니다.
+  - 허브에 남아 있던 소스 사본은 지시가 있을 때 제거합니다. 과거 커밋에는 남으므로 완전히 숨기려면 히스토리 정리가 필요합니다.
+  - 브라우저 게임의 **빌드된 JS 는 누구나 내려받을 수 있습니다**(난독화는 암호화가 아님). 숨겨야 할 로직·비밀키는 서버 측에 둡니다.
+- **새 게임은 기존 게임과 분리**: 폴더·package.json·localStorage 키·service worker 캐시 이름을 공유하지 않습니다.
+
+## 보안 규칙
+
+- API Key · Secret · Access Token · 비밀번호 · 인증서 · 관리자 키 · `.env` 를 저장소나 클라이언트 코드에 넣지 않습니다. `.env*` 는 `.gitignore` 로 제외되어 있습니다(`.env.example` 만 허용).
+- 외부 API 에 비밀키가 필요하면 프론트엔드에 키를 넣지 말고 서버 측 구조(별도 백엔드/서버리스 함수)를 씁니다.
+- push 전에 `npm run check-secrets` 를 실행합니다. 모든 브랜치의 모든 커밋을 검사하며, 의심 항목이 있으면 종료 코드 1 로 멈춥니다. 배포 워크플로도 빌드 전에 작업 트리를 검사합니다.
+- 오탐은 `.secrets-allowlist` 에 정규식으로 등록합니다. 과거 커밋에서 발견된 항목은 임의로 처리하지 않고 저장소 소유자가 판단합니다.
+- 마지막 전체 검사: 이 문서를 갱신한 시점에 9개 게임 브랜치를 포함한 모든 커밋에서 민감정보 없음.
+
 ## 허브용으로 바꾼 것 (원본 브랜치와 다른 점)
 
 | 게임 | 변경 | 이유 |
@@ -91,11 +110,11 @@ SKIP_INSTALL=1 node scripts/build-site.mjs     # npm ci 생략 (이미 설치돼
 | 팩 앤 블래스트 | `src/packblast/` → `src/`, `tests/packblast/` → `tests/`, `packblast/index.html` → `index.html`, 전용 `package.json`·`vite.config.ts` 추가, `scripts/*.mjs` 경로 정리 | 원본은 대박수비대와 한 프로젝트를 공유(두 번째 진입점) |
 | 크림슨 엑자일 | `sw.js` 의 오래된 캐시 삭제를 `crimson-exile-` 접두어 캐시로 한정. 브랜치의 `.github/workflows/pages.yml` 은 복사하지 않음(허브 워크플로가 대신함) | 같은 도메인의 다른 게임 오프라인 캐시를 지우지 않도록 |
 | 라인워즈 | `public/sw.js`(및 `docs/sw.js`)의 캐시 삭제를 `linewars-` 접두어로 한정 | 위와 같음 |
-| 라스트 엑시트 · 괴물 포장마차 · 나 혼자 도둑단 | 변경 없음 (폴더 그대로 복사) | 이미 독립 프로젝트 |
+| 라스트 엑시트 · 괴물 포장마차 · 나 혼자 도둑단 · 와르르! 철거왕 | 변경 없음 (폴더 그대로 복사, 폴더 이름만 주소에 맞춤) | 이미 독립 프로젝트 |
 
 ## 세이브·PWA가 안 깨지는 이유
 
 - 모든 게임이 `base: './'` (상대 경로) 로 빌드되어 CSS·JS·아이콘 경로가 `/MyGame/<게임>/` 아래에서 그대로 맞습니다.
-- 저장 키(localStorage)가 게임마다 다릅니다: `daebak_defense_v1`, `combo_rush_*`, `crimson_exile_save_v1`, `lw.*`, `packblast_save_v1`, `last_exit_v1`, `monster-stall.save.v1`, `solo_heist_25s_v1`. 같은 도메인이라도 서로 덮어쓰지 않습니다.
+- 저장 키(localStorage)가 게임마다 다릅니다: `daebak_defense_v1`, `combo_rush_*`, `crimson_exile_save_v1`, `lw.*`, `packblast_save_v1`, `last_exit_v1`, `monster-stall.save.v1`, `solo_heist_25s_v1`, `waruru.save.v1`. 같은 도메인이라도 서로 덮어쓰지 않습니다.
 - 서비스 워커는 각각 `/MyGame/crimson-exile/sw.js`, `/MyGame/line-wars/sw.js` 로 등록되어 범위(scope)가 자기 게임 폴더로 한정됩니다. manifest 의 `start_url`·`scope` 도 `./` 라 같은 폴더를 가리킵니다.
-- 나머지 6개 게임은 서비스 워커 없이 동작하며(원본과 동일), 그래픽·사운드를 코드로 생성하므로 외부 파일 경로가 없습니다. 크림슨 엑자일만 Google Fonts 를 인터넷에서 불러옵니다.
+- 나머지 7개 게임은 서비스 워커 없이 동작하며(원본과 동일), 그래픽·사운드를 코드로 생성하므로 외부 파일 경로가 없습니다. 크림슨 엑자일만 Google Fonts 를 인터넷에서 불러옵니다.

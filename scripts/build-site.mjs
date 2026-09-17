@@ -28,13 +28,20 @@ for (const g of cfg.games) {
   if (!existsSync(dir)) fail(`${g.slug}: 폴더가 없습니다 (${dir})`);
   console.log(`\n=== [${g.slug}] ${g.title} ===`);
   const t0 = Date.now();
-  if (g.build.install && !skipInstall) run('npm ci --no-audit --no-fund', dir);
-  run(g.build.command, dir);
-  const built = join(dir, g.build.outDir);
-  if (!existsSync(join(built, 'index.html'))) fail(`${g.slug}: ${g.build.outDir}/index.html 이 생성되지 않았습니다`);
+  let built;
+  if (g.build.prebuilt) {
+    // 정식 개발 게임: Private 저장소에서 빌드된 결과물만 이 폴더에 들어 있음 → 그대로 복사
+    console.log('(prebuilt) 빌드 없이 폴더를 그대로 복사');
+    built = dir;
+  } else {
+    if (g.build.install && !skipInstall) run('npm ci --no-audit --no-fund', dir);
+    run(g.build.command, dir);
+    built = join(dir, g.build.outDir);
+  }
+  if (!existsSync(join(built, 'index.html'))) fail(`${g.slug}: ${g.build.prebuilt ? '' : g.build.outDir + '/'}index.html 이 없습니다`);
   const dest = join(out, g.slug);
   rmSync(dest, { recursive: true, force: true });
-  cpSync(built, dest, { recursive: true, filter: (src) => !/[\\/]node_modules([\\/]|$)/.test(src) });
+  cpSync(built, dest, { recursive: true, filter: (src) => !/[\\/](node_modules|\.git)([\\/]|$)/.test(src) });
   results.push({ slug: g.slug, seconds: ((Date.now() - t0) / 1000).toFixed(1) });
 }
 

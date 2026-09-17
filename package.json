@@ -6,7 +6,11 @@
   "description": "MyGame 게임 허브 — games/ 아래 각 게임을 빌드해 GitHub Pages 한 사이트(/MyGame/<게임>/)로 배포",
   "scripts": {
     "build": "node scripts/build-site.mjs",
-    "preview": "node scripts/serve-site.mjs"
+    "preview": "node scripts/serve-site.mjs",
+    "check-secrets": "node scripts/check-secrets.mjs --history",
+    "check-secrets:tree": "node scripts/check-secrets.mjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }
