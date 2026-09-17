@@ -155,6 +155,21 @@
         "command": "npm run build",
         "outDir": "dist"
       }
+    },
+    {
+      "slug": "ninja-random-defense",
+      "title": "닌자 랜덤 디펜스",
+      "tagline": "고리를 도는 몬스터가 80마리 되기 전에 막는 랜덤 소환·합성·조합 디펜스. 방 코드로 친구와 최대 4명 협동(P2P, 서버 없음).",
+      "emoji": "🥷",
+      "orientation": "portrait",
+      "pwa": false,
+      "branch": "claude/naruto-random-defense-mobile-h3lssi",
+      "sourcePath": "저장소 루트 (index.html, src/, server/, tests/) — legacy/ 폴더(대박수비대 사본)는 허브에 복사하지 않음",
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
     }
   ]
 }

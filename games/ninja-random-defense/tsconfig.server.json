@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["server", "src/sim", "src/data", "src/net/protocol.ts", "src/net/room.ts", "src/net/client.ts", "src/net/loopback.ts", "tests", "scripts/balance.ts"]
+}

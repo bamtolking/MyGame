@@ -1,6 +1,6 @@
 # MyGame — 게임 허브 (GitHub Pages)
 
-Claude Code로 만든 HTML5 게임 10개를 **한 사이트**에서 각각 다른 주소로 실행하는 허브입니다.
+Claude Code로 만든 HTML5 게임 11개를 **한 사이트**에서 각각 다른 주소로 실행하는 허브입니다.
 휴대폰 브라우저(Chrome / Safari)에서 바로 플레이할 수 있고, 로그인·서버·결제·광고가 없습니다.
 
 - 허브 첫 화면: `https://bamtolking.github.io/MyGame/` — 게임 목록과 **플레이** 버튼
@@ -20,6 +20,7 @@ Claude Code로 만든 HTML5 게임 10개를 **한 사이트**에서 각각 다�
 | 8 | 나 혼자 도둑단: 25초의 공범 | `/MyGame/thief/` | `claude/heist-game-25sec-xwnluz` | `heist/` 폴더 | `games/thief/` |
 | 9 | 와르르! 철거왕: 한 발의 기적 | `/MyGame/demolition/` | `claude/waruru-demolition-physics-puzzle-38dmbu` | `waruru/` 폴더 | `games/demolition/` |
 | 10 | 갈아타!: 바디 하이재킹 | `/MyGame/hijack/` | `claude/galaata-body-hijacking-game-xju67u` | `galaata/` 폴더 | `games/hijack/` |
+| 11 | 닌자 랜덤 디펜스 (친구와 협동) | `/MyGame/ninja-random-defense/` | `claude/naruto-random-defense-mobile-h3lssi` | 저장소 루트 (`legacy/` 제외) | `games/ninja-random-defense/` |
 
 **원본 브랜치는 하나도 수정·삭제하지 않았습니다.** 이 브랜치의 `games/` 폴더는 각 브랜치에서 가져온 복사본이며,
 허브에서 동작하도록 필요한 최소한의 경로만 손봤습니다(아래 "허브용으로 바꾼 것" 참고).
@@ -44,12 +45,13 @@ _site/daebak-defense/       ← /MyGame/daebak-defense/
 _site/line-wars/            ← /MyGame/line-wars/      (manifest.webmanifest + sw.js 포함, 홈 화면 설치 가능)
 _site/crimson-exile/        ← /MyGame/crimson-exile/  (manifest.json + sw.js 포함, 홈 화면 설치 가능)
 _site/combo-rush/  _site/pack-and-blast/  _site/last-exit/  _site/foodtruck/  _site/thief/  _site/demolition/  _site/hijack/
+_site/ninja-random-defense/ ← /MyGame/ninja-random-defense/ (manifest.webmanifest 포함, 서비스 워커 없음, P2P 협동은 공용 PeerJS 서버 이용)
 ```
 
 ## GitHub Pages 배포
 
 배포는 **`main` 브랜치** 기준입니다. `main` 에 push(또는 Pull Request 병합)될 때마다 워크플로 "Deploy game hub to GitHub Pages" 가 자동으로 실행되어
-10개 게임을 모두 빌드하고 `https://bamtolking.github.io/MyGame/` 에 배포합니다. 작업은 `claude/*` 브랜치에서 하고 `main` 으로 PR 을 만들어 병합합니다.
+11개 게임을 모두 빌드하고 `https://bamtolking.github.io/MyGame/` 에 배포합니다. 작업은 `claude/*` 브랜치에서 하고 `main` 으로 PR 을 만들어 병합합니다.
 
 처음 한 번만 확인할 설정 (저장소 → Settings):
 1. **Pages** → *Source* 가 **GitHub Actions** 인지 확인
@@ -119,10 +121,11 @@ git rm -r -q games/<slug> && git read-tree --prefix=games/<slug>/ -u origin/<원
 | 크림슨 엑자일 | `sw.js` 의 오래된 캐시 삭제를 `crimson-exile-` 접두어 캐시로 한정. 브랜치의 `.github/workflows/pages.yml` 은 복사하지 않음(허브 워크플로가 대신함) | 같은 도메인의 다른 게임 오프라인 캐시를 지우지 않도록 |
 | 라인워즈 | `public/sw.js`(및 `docs/sw.js`)의 캐시 삭제를 `linewars-` 접두어로 한정 | 위와 같음 |
 | 라스트 엑시트 · 괴물 포장마차 · 나 혼자 도둑단 · 와르르! 철거왕 · 갈아타! | 변경 없음 (폴더 그대로 복사, 폴더 이름만 주소에 맞춤) | 이미 독립 프로젝트 |
+| 닌자 랜덤 디펜스 | `legacy/`(대박수비대 사본)와 브랜치 전용 `.github/workflows/pages.yml` 을 복사하지 않고, `vite.config.ts`·`tsconfig.json`·`package.json` 에서 legacy 진입점·스크립트만 제거 | 대박수비대는 `games/daebak-defense/` 에 이미 있고, 배포는 허브 워크플로가 담당 |
 
 ## 세이브·PWA가 안 깨지는 이유
 
 - 모든 게임이 `base: './'` (상대 경로) 로 빌드되어 CSS·JS·아이콘 경로가 `/MyGame/<게임>/` 아래에서 그대로 맞습니다.
-- 저장 키(localStorage)가 게임마다 다릅니다: `daebak_defense_v1`, `combo_rush_*`, `crimson_exile_save_v1`, `lw.*`, `packblast_save_v1`, `last_exit_v1`, `monster-stall.save.v1`, `solo_heist_25s_v1`, `waruru.save.v1`, `galaata_v1`. 같은 도메인이라도 서로 덮어쓰지 않습니다.
+- 저장 키(localStorage)가 게임마다 다릅니다: `daebak_defense_v1`, `combo_rush_*`, `crimson_exile_save_v1`, `lw.*`, `packblast_save_v1`, `last_exit_v1`, `monster-stall.save.v1`, `solo_heist_25s_v1`, `waruru.save.v1`, `galaata_v1`, `nrd.v1`(닌자 랜덤 디펜스). 같은 도메인이라도 서로 덮어쓰지 않습니다.
 - 서비스 워커는 각각 `/MyGame/crimson-exile/sw.js`, `/MyGame/line-wars/sw.js` 로 등록되어 범위(scope)가 자기 게임 폴더로 한정됩니다. manifest 의 `start_url`·`scope` 도 `./` 라 같은 폴더를 가리킵니다.
-- 나머지 8개 게임은 서비스 워커 없이 동작하며(원본과 동일), 그래픽·사운드를 코드로 생성하므로 외부 파일 경로가 없습니다. 크림슨 엑자일만 Google Fonts 를 인터넷에서 불러옵니다.
+- 나머지 9개 게임은 서비스 워커 없이 동작하며(원본과 동일), 그래픽·사운드를 코드로 생성하므로 외부 파일 경로가 없습니다. 크림슨 엑자일만 Google Fonts 를 인터넷에서 불러오고, 닌자 랜덤 디펜스의 협동 모드는 공용 PeerJS 시그널 서버(0.peerjs.com)와 WebRTC 를 씁니다(혼자 하기는 완전 오프라인 동작).
