@@ -79,16 +79,34 @@ cd dayhunger && npm install --omit=dev && PORT=80 npm start
 
 HTTPS 뒤(리버스 프록시)에 두면 클라이언트가 자동으로 `wss://`로 접속합니다. WebSocket 경로는 `/ws`, 상태 확인은 `/health`.
 
-## 앱(APK/IPA)으로 만들려면
+## 앱으로 설치하기
 
-HTML5 게임이므로 [Capacitor](https://capacitorjs.com)로 감싸면 스토어용 앱이 됩니다.
+### 안드로이드 APK (자동 빌드)
+
+GitHub Actions가 `dayhunger/` 아래가 바뀔 때마다 APK를 만들어 릴리스에 올립니다.
+
+1. 저장소의 **Releases → "데이헝거 안드로이드 (최신 빌드)"**(태그 `dayhunger-latest`)에서 `dayhunger.apk`를 휴대폰으로 내려받습니다.
+   직접 링크: `https://github.com/bamtolking/MyGame/releases/download/dayhunger-latest/dayhunger.apk`
+2. 설치할 때 "출처를 알 수 없는 앱" 허용을 켭니다(디버그 서명이라 스토어 밖 설치용입니다).
+3. 앱을 열면 "혼자 하기"는 서버 없이 바로 됩니다. 협동은 메뉴의 **협동 서버 주소**에 서버를 적으면 됩니다
+   (같은 Wi-Fi면 `192.168.0.10:8080` 같은 PC 주소, 인터넷이면 배포한 `https://…` 주소).
+   앱을 배포하기 전에 `client/js/config.js`의 `DEFAULT_SERVER`에 서버 주소를 적어 두면 사용자가 입력하지 않아도 됩니다.
+
+수동으로 빌드하려면(Android Studio 또는 JDK 21 + Android SDK 필요):
 
 ```bash
-npm i -D @capacitor/core @capacitor/cli @capacitor/android
-npx cap init 데이헝거 com.example.dayhunger --web-dir client
-# capacitor.config.json 에 "server": { "url": "https://<배포한 서버 주소>" } 를 넣으면 협동 서버에 그대로 접속
-npx cap add android && npx cap open android
+npm install
+npm run android:apk        # www/ 생성 → Capacitor 동기화 → android/app/build/outputs/apk/debug/app-debug.apk
+npm run android:open       # Android Studio에서 열기 (스토어용 release 서명은 여기서 Build → Generate Signed Bundle)
 ```
+
+- 앱 이름·패키지: `capacitor.config.json` (`com.bamtolking.dayhunger`). 아이콘: `npm run icons` (SVG를 PNG로 다시 그림).
+- 안드로이드 뒤로가기: 패널 닫기 → 건설 취소 → 두 번 누르면 메뉴로 → 메뉴에서 누르면 종료.
+
+### 아이폰 / 홈 화면 앱 (PWA)
+
+서버 주소를 Safari로 연 뒤 **공유 → 홈 화면에 추가**하면 전체 화면 앱처럼 실행되고, 한 번 연 뒤에는 오프라인에서도 "혼자 하기"가 됩니다(서비스 워커 캐시).
+스토어용 iOS 앱은 macOS의 Xcode가 필요합니다: `npx cap add ios && npx cap open ios`.
 
 ## 구조
 

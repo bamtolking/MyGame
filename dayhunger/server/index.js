@@ -18,11 +18,12 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 
 function serveStatic(req, res) {
   let url = decodeURIComponent((req.url || '/').split('?')[0]);
-  if (url === '/') url = '/client/index.html';
+  if (url === '/' || url === '/index.html') url = '/index.html';
   if (url === '/health') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, rooms: rooms.size })); return; }
   const file = path.normalize(path.join(ROOT, url));
-  const allowed = [path.join(ROOT, 'client'), path.join(ROOT, 'shared')];
-  if (!allowed.some((d) => file.startsWith(d + path.sep))) { res.writeHead(403); res.end('forbidden'); return; }
+  const allowedDirs = ['client', 'shared', 'icons'].map((d) => path.join(ROOT, d) + path.sep);
+  const allowedFiles = ['index.html', 'manifest.webmanifest', 'sw.js'].map((f) => path.join(ROOT, f));
+  if (!allowedDirs.some((d) => file.startsWith(d)) && !allowedFiles.includes(file)) { res.writeHead(403); res.end('forbidden'); return; }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); res.end('not found'); return; }
     res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });

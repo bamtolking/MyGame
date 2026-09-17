@@ -10,7 +10,9 @@
   <meta name="description" content="데이헝거 — 벽 짓고 살아남기. 낮에는 채집·건설, 밤에는 습격. 친구와 협동 생존." />
   <title>데이헝거</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>" />
-  <link rel="stylesheet" href="/client/css/style.css" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="stylesheet" href="./client/css/style.css" />
 </head>
 <body>
   <!-- 메뉴 -->
@@ -26,6 +28,10 @@
         <button id="btn-join">참가</button>
       </div>
       <p id="menu-msg" class="msg"></p>
+      <details id="server-box" class="help">
+        <summary>협동 서버 주소 <span id="server-summary" class="tag"></span></summary>
+        <label class="field"><span>방 만들기/참가에 사용할 서버. 비우면 지금 접속한 주소를 씁니다.</span><input id="server" placeholder="예: 192.168.0.10:8080 또는 https://my-server.app" autocomplete="off" autocapitalize="off" /></label>
+      </details>
       <details class="help">
         <summary>어떻게 하나요?</summary>
         <ul>
@@ -103,6 +109,6 @@
     </div>
   </section>
 
-  <script type="module" src="/client/js/main.js"></script>
+  <script type="module" src="./client/js/main.js"></script>
 </body>
 </html>

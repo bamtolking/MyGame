@@ -6,6 +6,7 @@ import { Net } from './net.js';
 import { Input } from './input.js';
 import { Renderer } from './renderer.js';
 import { UI } from './ui.js';
+import { DEFAULT_SERVER } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = new UI();
@@ -61,16 +62,36 @@ $('name').value = savedName;
 const getName = () => { const n = ($('name').value || '').trim() || '생존자'; try { localStorage.setItem('dh_name', n); } catch {} return n; };
 const menuMsg = (m, ok) => { ui.el.menuMsg.textContent = m; ui.el.menuMsg.style.color = ok ? 'var(--ok)' : 'var(--danger)'; };
 
+// ---------- 협동 서버 주소 ----------
+const IS_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const NEEDS_SERVER = IS_APP || !/^https?:$/.test(location.protocol);
+const serverInput = $('server');
+const savedServer = (() => { try { return localStorage.getItem('dh_server') || ''; } catch { return ''; } })();
+serverInput.value = savedServer || DEFAULT_SERVER;
+const getServer = () => { const v = serverInput.value.trim(); try { localStorage.setItem('dh_server', v); } catch {} return v; };
+const refreshServerSummary = () => { $('server-summary').textContent = serverInput.value.trim() ? `(${serverInput.value.trim()})` : (NEEDS_SERVER ? '(입력 필요)' : '(현재 주소)'); };
+serverInput.addEventListener('input', refreshServerSummary); refreshServerSummary();
+if (NEEDS_SERVER) $('server-box').open = true;
+async function connectOrExplain() {
+  const base = getServer();
+  try { await net.connect(base); return true; }
+  catch (err) {
+    if (err && err.message === 'no-server') { menuMsg('협동 서버 주소를 입력하세요 (아래 "협동 서버 주소")'); $('server-box').open = true; serverInput.focus(); }
+    else menuMsg(base ? `서버(${base})에 연결할 수 없어요. 주소와 서버 실행 여부를 확인하세요.` : '서버에 연결할 수 없어요. 서버(npm start)가 켜져 있는지 확인하세요.');
+    return false;
+  }
+}
+
 $('btn-solo').addEventListener('click', () => startLocal());
 $('btn-create').addEventListener('click', async () => {
   S.name = getName(); menuMsg('서버에 연결하는 중…', true);
-  try { await net.connect(); net.send({ type: 'create', name: S.name }); } catch { menuMsg('서버에 연결할 수 없어요. 서버(npm start)가 켜져 있는지 확인하세요.'); }
+  if (await connectOrExplain()) net.send({ type: 'create', name: S.name });
 });
 $('btn-join').addEventListener('click', async () => {
   const code = ($('code').value || '').trim().toUpperCase();
   if (code.length !== 4) { menuMsg('방 코드 4자리를 입력하세요'); return; }
   S.name = getName(); menuMsg('서버에 연결하는 중…', true);
-  try { await net.connect(); net.send({ type: 'join', code, name: S.name }); } catch { menuMsg('서버에 연결할 수 없어요.'); }
+  if (await connectOrExplain()) net.send({ type: 'join', code, name: S.name });
 });
 $('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-join').click(); });
 $('btn-start').addEventListener('click', () => net.send({ type: 'start' }));
@@ -161,5 +182,26 @@ function loop(now) {
 }
 requestAnimationFrame(loop);
 ui.showScreen('menu');
+// ---------- 안드로이드 뒤로가기 (Capacitor App 플러그인) ----------
+const capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+if (capApp && capApp.addListener) {
+  let backAt = 0;
+  capApp.addListener('backButton', () => {
+    const inGame = !ui.el.screens.game.classList.contains('hidden');
+    const inLobby = !ui.el.screens.lobby.classList.contains('hidden');
+    if (inGame) {
+      if (!ui.el.buildpanel.classList.contains('hidden') || !ui.el.chatpanel.classList.contains('hidden')) { ui.closePanels(); return; }
+      if (ui.buildKey) { ui.setBuildKey(null); return; }
+      const now = Date.now();
+      if (now - backAt < 2000) { $('btn-menu').click(); return; }
+      backAt = now; ui.toast('한 번 더 누르면 메뉴로 나갑니다');
+    } else if (inLobby) { $('btn-leave').click(); }
+    else if (capApp.exitApp) capApp.exitApp();
+  });
+}
+// ---------- PWA: 오프라인 솔로 플레이용 서비스 워커 (앱 안에서는 불필요) ----------
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !IS_APP) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); });
+}
 // 디버그/테스트용 훅 (e2e 스크립트가 사용)
 window.__dh = { S, view, C, net };

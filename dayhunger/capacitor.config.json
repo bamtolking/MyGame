@@ -1,0 +1,12 @@
+{
+  "appId": "com.bamtolking.dayhunger",
+  "appName": "데이헝거",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
