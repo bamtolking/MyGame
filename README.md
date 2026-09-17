@@ -46,24 +46,20 @@ _site/crimson-exile/        ← /MyGame/crimson-exile/  (manifest.json + sw.js �
 _site/combo-rush/  _site/pack-and-blast/  _site/last-exit/  _site/foodtruck/  _site/thief/  _site/demolition/  _site/hijack/
 ```
 
-## GitHub Pages 배포 (처음 한 번만 설정)
+## GitHub Pages 배포
 
-이 브랜치를 push 하면 워크플로 "Deploy game hub to GitHub Pages" 가 자동으로 돌아 10개 게임을 모두 빌드합니다.
-첫 실행에서 **빌드는 성공**했고 Pages 도 Actions 방식으로 켜졌지만, 마지막 배포 단계가 다음 이유로 거부되었습니다.
+배포는 **`main` 브랜치** 기준입니다. `main` 에 push(또는 Pull Request 병합)될 때마다 워크플로 "Deploy game hub to GitHub Pages" 가 자동으로 실행되어
+10개 게임을 모두 빌드하고 `https://bamtolking.github.io/MyGame/` 에 배포합니다. 작업은 `claude/*` 브랜치에서 하고 `main` 으로 PR 을 만들어 병합합니다.
 
-> Branch "claude/game-hub-github-pages-09xp38" is not allowed to deploy to github-pages due to environment protection rules.
+처음 한 번만 확인할 설정 (저장소 → Settings):
+1. **Pages** → *Source* 가 **GitHub Actions** 인지 확인
+2. **Environments** → **github-pages** → *Deployment branches and tags* 에 **main** 이 허용되어 있는지 확인.
+   없으면 **Add deployment branch or tag rule** → `main` → **Add rule**.
+   GitHub 는 이 환경을 자동으로 만들 때 그 시점의 기본 브랜치만 허용하도록 잠급니다. 배포 잡이
+   `Branch "main" is not allowed to deploy to github-pages due to environment protection rules` 로 1초 만에 거부되면 이 설정이 원인입니다.
+3. (권장) **General** → *Default branch* 를 `main` 으로 변경. 저장소 첫 화면에 이 README 가 보이고 Actions 의 "Run workflow" 버튼도 쓸 수 있게 됩니다.
 
-GitHub 가 자동으로 만든 `github-pages` 환경이 **기본 브랜치에서만 배포 허용**으로 잠겨 있기 때문입니다. 한 번만 풀어 주면 됩니다.
-
-1. GitHub 저장소 → **Settings** → 왼쪽 메뉴 **Environments** → **github-pages** 클릭
-2. *Deployment branches and tags* 에서 **Add deployment branch or tag rule** 클릭 → 이름에 `claude/game-hub-github-pages-09xp38` 입력 → **Add rule**
-   (또는 드롭다운을 **No restriction** 으로 바꿔도 됩니다)
-3. **Actions** 탭 → 맨 위(최신) 실행 클릭 → 오른쪽 위 **Re-run jobs** → **Re-run failed jobs**
-4. 1~2분 뒤 `https://bamtolking.github.io/MyGame/` 접속 (Settings → Pages 에도 주소가 표시됩니다)
-
-Settings → **Pages** 의 *Source* 가 **GitHub Actions** 로 되어 있는지도 확인하세요 (다른 값이면 GitHub Actions 로 바꿉니다).
-이후에는 이 브랜치에 push 할 때마다 자동으로 다시 배포됩니다.
-이 브랜치를 저장소의 기본 브랜치로 바꾸고 싶다면 Settings → General → *Default branch* 에서 바꿀 수 있습니다(선택 사항, 위 규칙은 그대로 필요).
+배포 주소는 Settings → Pages 에도 표시됩니다.
 
 ## 로컬에서 빌드·미리보기
 

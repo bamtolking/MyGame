@@ -27,7 +27,7 @@ permissions:
 
 env:
   HUB_REPO: bamtolking/MyGame
-  HUB_BRANCH: claude/game-hub-github-pages-09xp38   # 허브 브랜치 (기본 브랜치를 바꿨다면 그 이름으로)
+  HUB_BRANCH: main                                    # 허브 배포 브랜치
   HUB_GAME_SLUG: CHANGE-ME                            # 예: thief
   BUILD_DIR: dist                                     # vite.config.ts 의 build.outDir
 

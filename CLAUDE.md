@@ -1,12 +1,12 @@
 # MyGame — 공개 게임 허브 운영 규칙 (Claude Code 세션용)
 
 이 저장소(`bamtolking/MyGame`)는 **공개 게임 허브**입니다. 사람들이 링크만 받아 휴대폰/PC 브라우저에서 바로 게임을 플레이하는 용도이며,
-GitHub Pages 로 `https://bamtolking.github.io/MyGame/` 에 배포됩니다. 허브 브랜치: `claude/game-hub-github-pages-09xp38`.
+GitHub Pages 로 `https://bamtolking.github.io/MyGame/` 에 배포됩니다. **배포 브랜치는 `main`** 이며, main 에 push(PR 병합)될 때마다 자동 배포됩니다.
 구조·빌드·배포 방법은 `README.md`, 게임 목록은 `games.json` 을 먼저 읽으세요.
 
 ## 절대 규칙
 1. **기존 게임을 삭제하거나 덮어쓰지 않는다.** `games/<slug>/` 폴더와 원본 브랜치(`claude/*`)는 사용자의 명시적 지시 없이는 지우거나 rebase/force-push 하지 않는다.
-2. **허브 브랜치에서만 작업하고 다른 브랜치에는 push 하지 않는다.** 다른 브랜치의 게임을 가져올 때는 `git read-tree --prefix=games/<slug>/ -u origin/<branch>:<dir>` 로 복사한다(원본 불변).
+2. **작업 브랜치(`claude/*`)에서 작업하고 `main` 으로 Pull Request 를 만든다.** 게임 원본 브랜치나 다른 작업 브랜치에는 push 하지 않는다. 다른 브랜치의 게임을 가져올 때는 `git read-tree --prefix=games/<slug>/ -u origin/<branch>:<dir>` 로 복사한다(원본 불변).
 3. **민감정보를 저장소·클라이언트 코드에 넣지 않는다.** API Key, Secret, Access Token, 비밀번호, 인증서, 관리자 키, `.env`. `.env*` 는 `.gitignore` 로 제외(`.env.example` 만 허용).
    외부 API 에 비밀키가 필요하면 프론트엔드에 키를 넣지 말고 서버 측(별도 백엔드/서버리스 함수)에서 호출하도록 설계한다.
 4. **push 전에 반드시 검사한다:** `npm run check-secrets` (모든 브랜치의 모든 커밋 검사). 의심 항목이 나오면 push 를 중단하고 사용자에게 보고한다.
@@ -28,5 +28,5 @@ GitHub Pages 로 `https://bamtolking.github.io/MyGame/` 에 배포됩니다. 허
 1. `npm run build` → 모든 게임 빌드 성공, `_site/<slug>/index.html` 생성
 2. `npm run preview` 로 `/MyGame/` 경로에서 각 게임이 404·콘솔 오류 없이 열리는지 확인(휴대폰 뷰포트)
 3. `npm run check-secrets` 통과
-4. commit → push → Actions "Deploy game hub to GitHub Pages" 의 build·deploy 잡 결과 확인
+4. commit → push → `main` 으로 PR 생성(사용자가 병합) → 병합 후 Actions "Deploy game hub to GitHub Pages" 의 build·deploy 잡 결과 확인
 5. 사용자에게 허브 URL 과 게임별 URL 을 한국어로 보고
