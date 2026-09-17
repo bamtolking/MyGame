@@ -35,6 +35,51 @@ const UI = {
     tc.addEventListener('click', e => { if (this.tree.moved > 6) return; const n = this.tree.hover; if (!n) return; if (Passives.allocate(Game.player, n.id)) { Audio_.play('orb'); Game.player.recalc(); this.drawTree(); this.treeHover(e); } });
     tc.addEventListener('contextmenu', e => { e.preventDefault(); const n = this.tree.hover; const p = Game.player; if (!n) return; if (!p.passives.has(n.id)) return; if ((p.currency.regret || 0) <= 0) { Game.flash('후회의 오브가 필요합니다'); return; } if (Passives.refund(p, n.id)) { p.currency.regret--; p.recalc(); Audio_.play('orb'); this.drawTree(); this.treeHover(e); } else Game.flash('이 노드는 환불할 수 없습니다 (연결 유지 필요)'); });
     el('btn-tree-center').onclick = () => { this.tree.x = 0; this.tree.y = 0; this.tree.zoom = 1; this.drawTree(); };
+    // 메뉴 (모바일 항목 포함)
+    el('btn-return').onclick = () => { this.closePanels(); Game.leaveMap(); };
+    el('btn-fullscreen').onclick = () => TouchCtl.fullscreen();
+    el('btn-touchmode').onclick = () => { try { localStorage.setItem('ce_touch', TouchCtl.enabled ? '0' : '1'); } catch (e) { } Save.save(); location.reload(); };
+    el('chk-autopickup').onchange = e => { Game.autoPickup = e.target.checked; try { localStorage.setItem('ce_autopickup', Game.autoPickup ? '1' : '0'); } catch (e) { } };
+    el('sheet').querySelector('.sheet-close').onclick = () => this.closeSheet();
+    el('sheet').addEventListener('click', e => { if (e.target === el('sheet')) this.closeSheet(); });
+    // 패시브 트리 터치 (드래그 이동 / 핀치 확대 / 탭 선택)
+    let pinch = null, tstart = null;
+    tc.addEventListener('touchstart', e => { e.preventDefault(); if (e.touches.length === 2) { pinch = { d: dist(e.touches[0].clientX, e.touches[0].clientY, e.touches[1].clientX, e.touches[1].clientY), z: this.tree.zoom }; tstart = null; } else { const t = e.touches[0]; tstart = { moved: 0 }; this.tree.lx = t.clientX; this.tree.ly = t.clientY; } }, { passive: false });
+    tc.addEventListener('touchmove', e => { e.preventDefault(); if (e.touches.length === 2 && pinch) { const d = dist(e.touches[0].clientX, e.touches[0].clientY, e.touches[1].clientX, e.touches[1].clientY); this.tree.zoom = clamp(pinch.z * d / pinch.d, 0.45, 2.2); this.drawTree(); return; } if (!tstart) return; const t = e.touches[0]; const dx = t.clientX - this.tree.lx, dy = t.clientY - this.tree.ly; this.tree.x += dx; this.tree.y += dy; this.tree.lx = t.clientX; this.tree.ly = t.clientY; tstart.moved += Math.abs(dx) + Math.abs(dy); this.drawTree(); }, { passive: false });
+    tc.addEventListener('touchend', e => { e.preventDefault(); if (e.touches.length < 2) pinch = null; if (tstart && tstart.moved < 8) { const t = e.changedTouches[0]; this.treeHover({ clientX: t.clientX, clientY: t.clientY }); this.hideTooltip(); const n = this.tree.hover; if (n) this.nodeSheet(n); } tstart = null; }, { passive: false });
+  },
+  // ---------- 터치용 액션 시트 ----------
+  sheet(html, actions) {
+    const s = el('sheet'); s.querySelector('.sheet-body').innerHTML = html; const a = s.querySelector('.sheet-actions'); a.innerHTML = '';
+    for (const act of actions) { const b = document.createElement('button'); b.className = 'btn' + (act.danger ? ' danger' : ''); b.textContent = act.label; b.onclick = () => { this.closeSheet(); act.fn(); }; a.appendChild(b); }
+    s.classList.remove('hidden');
+  },
+  closeSheet() { el('sheet').classList.add('hidden'); },
+  itemSheet(it, idx) {
+    const p = Game.player; const acts = [];
+    if (this.curSel) acts.push({ label: `${CURRENCY[this.curSel].name} 적용`, fn: () => this.applyCur(it) });
+    if (this.aspectSel) acts.push({ label: '형상 각인', fn: () => this.imprint(it) });
+    acts.push({ label: '장착', fn: () => { p.equip(it); this.refreshInventory(); } });
+    if (it.rarity === 'unique') acts.push({ label: '형상 추출 (아이템 파괴)', fn: () => this.extract(it, idx), danger: true });
+    acts.push({ label: '분해 (정수)', fn: () => this.salvage(it, idx, true), danger: true });
+    const eqItem = it.slot === 'ring' ? p.equipment.ring1 : p.equipment[it.slot];
+    let h = itemTooltipHTML(it); if (eqItem && eqItem !== it) h += `<div class="tt-cmp"><div class="tt-sub">장착 중:</div>${itemTooltipHTML(eqItem, { tiers: false })}</div>`;
+    this.sheet(h, acts);
+  },
+  equipSheet(it, slot) {
+    const p = Game.player; const acts = [];
+    if (this.curSel) acts.push({ label: `${CURRENCY[this.curSel].name} 적용`, fn: () => this.applyCur(it) });
+    if (this.aspectSel) acts.push({ label: '형상 각인', fn: () => this.imprint(it) });
+    acts.push({ label: '해제', fn: () => { p.unequip(slot); this.refreshInventory(); } });
+    this.sheet(itemTooltipHTML(it), acts);
+  },
+  gemSheet(g, sk, onRemove) { this.sheet(gemTooltipHTML(g, sk), [{ label: '해제', fn: onRemove }, { label: '젬 연마 (프리즘 사용)', fn: () => this.gemcut(g) }]); },
+  bagGemSheet(g) { this.sheet(gemTooltipHTML(g), [{ label: '선택 (슬롯을 탭하여 장착)', fn: () => { this.gemSel = g; this.refreshGems(); } }, { label: '젬 연마 (프리즘 사용)', fn: () => this.gemcut(g) }]); },
+  nodeSheet(n) {
+    const p = Game.player; const acts = [];
+    if (Passives.canAllocate(p, n.id)) acts.push({ label: '할당', fn: () => { if (Passives.allocate(p, n.id)) { Audio_.play('orb'); p.recalc(); this.drawTree(); } } });
+    if (p.passives.has(n.id) && Passives.canRefund(p, n.id)) acts.push({ label: `환불 (후회의 오브 ${p.currency.regret || 0}개)`, fn: () => { if (!(p.currency.regret > 0)) { Game.flash('후회의 오브가 필요합니다'); return; } if (Passives.refund(p, n.id)) { p.currency.regret--; p.recalc(); Audio_.play('orb'); this.drawTree(); } } });
+    this.sheet(Passives.nodeTooltipHTML(n, null) + (acts.length ? '' : `<div class="tt-hint">${p.passives.has(n.id) ? '할당됨 (연결 유지를 위해 환불 불가)' : '연결된 노드가 필요하거나 포인트 부족'}</div>`), acts);
   },
   // ---------- 화면 ----------
   showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); el('screen-' + id).classList.remove('hidden'); },
@@ -75,18 +120,18 @@ const UI = {
     el('clear-stats').innerHTML = `<div>${s.theme} · 티어 ${s.tier} 완료</div><div>처치: <b>${s.kills}</b> · 레벨 상승: <b>+${s.levels}</b> · 소요 시간: <b>${timeStr(s.time)}</b></div>`;
   },
   showDeath(cause, msg) { this.showScreen('dead'); el('dead-info').innerHTML = `<div>사망 원인: <b>${esc(cause)}</b></div><div>${esc(msg)}</div>`; el('btn-dead-continue').textContent = Game.player.hardcore ? '타이틀로' : '피난처에서 부활'; },
-  showHUD() { el('hud').classList.remove('hidden'); this.refreshSkillbar(); },
-  hideHUD() { el('hud').classList.add('hidden'); },
+  showHUD() { el('hud').classList.remove('hidden'); document.body.classList.add('playing'); this.refreshSkillbar(); },
+  hideHUD() { el('hud').classList.add('hidden'); document.body.classList.remove('playing'); },
   // ---------- 패널 ----------
   anyPanelOpen() { return !!this.openPanel; },
   togglePanel(id) {
     if (this.openPanel === id) { this.closePanels(); return; }
     if (!Game.player) return;
-    this.closePanels(); this.openPanel = id; el('panel-' + id).classList.remove('hidden'); Audio_.play('ui');
+    this.closePanels(); this.openPanel = id; el('panel-' + id).classList.remove('hidden'); document.body.classList.add('panel-open'); Audio_.play('ui');
     this.refreshPanel(id);
   },
-  closePanels() { document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden')); this.openPanel = null; this.curSel = null; this.aspectSel = null; this.gemSel = null; this.hideTooltip(); },
-  refreshPanel(id) { if (id === 'inv') this.refreshInventory(); else if (id === 'gems') this.refreshGems(); else if (id === 'tree') { this.resizeTree(); this.drawTree(); } else if (id === 'char') this.refreshChar(); else if (id === 'menu') { el('btn-sound').textContent = '사운드: ' + (Audio_.enabled ? '켜짐' : '꺼짐'); el('sel-filter').value = Game.player.lootFilter; } },
+  closePanels() { document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden')); this.openPanel = null; document.body.classList.remove('panel-open'); TouchCtl.held = {}; TouchCtl.released = []; this.curSel = null; this.aspectSel = null; this.gemSel = null; this.hideTooltip(); },
+  refreshPanel(id) { if (id === 'inv') this.refreshInventory(); else if (id === 'gems') this.refreshGems(); else if (id === 'tree') { this.resizeTree(); this.drawTree(); } else if (id === 'char') this.refreshChar(); else if (id === 'menu') { el('btn-sound').textContent = '사운드: ' + (Audio_.enabled ? '켜짐' : '꺼짐'); el('sel-filter').value = Game.player.lootFilter; el('chk-autopickup').checked = Game.autoPickup; el('btn-touchmode').textContent = '터치 조작: ' + (TouchCtl.enabled ? '켜짐' : '꺼짐'); el('btn-return').style.display = Game.state === 'play' ? '' : 'none'; } },
   // ---------- 툴팁 ----------
   tooltip(html, x, y) { this.ttEl.innerHTML = html; this.ttEl.classList.remove('hidden'); this.positionTooltip(x, y); },
   positionTooltip(x, y) { const r = this.ttEl.getBoundingClientRect(); let tx = x + 18, ty = y + 12; if (tx + r.width > window.innerWidth - 8) tx = x - r.width - 12; if (ty + r.height > window.innerHeight - 8) ty = window.innerHeight - r.height - 8; this.ttEl.style.left = tx + 'px'; this.ttEl.style.top = Math.max(4, ty) + 'px'; },
@@ -130,6 +175,7 @@ const UI = {
     el('map-name').textContent = `${World.theme.name} · 티어 ${World.tier}`;
     el('map-mods').textContent = (World.mapDef.mods.map(m => MAP_MODS[m].name).join(' · ') || '모드 없음') + ` · 처치 ${World.killCount}/${World.monsterTotal}`;
     el('fps').textContent = Game.fps + ' fps';
+    if (TouchCtl.enabled) TouchCtl.updateHUD(p);
     this.minimapT += dt || 0; if (this.minimapT > 0.2) { this.minimapT = 0; this.drawMinimap(); }
   },
   drawMinimap() {
@@ -156,7 +202,7 @@ const UI = {
     for (const slot of EQUIP_SLOTS) {
       const it = p.equipment[slot]; const d = document.createElement('div'); d.className = 'eq-slot'; d.dataset.slot = slot;
       d.innerHTML = it ? this.itemCell(it, 'cell') : `<div class="cell empty">${SLOT_NAMES[slot]}</div>`;
-      if (it) { d.onmouseenter = e => this.tooltip(itemTooltipHTML(it, { hint: '클릭: 해제' }), e.clientX, e.clientY); d.onmouseleave = () => this.hideTooltip(); d.onclick = () => { if (this.curSel) this.applyCur(it); else if (this.aspectSel) this.imprint(it); else { p.unequip(slot); this.refreshInventory(); this.hideTooltip(); } }; }
+      if (it) { if (!TouchCtl.enabled) { d.onmouseenter = e => this.tooltip(itemTooltipHTML(it, { hint: '클릭: 해제' }), e.clientX, e.clientY); d.onmouseleave = () => this.hideTooltip(); } d.onclick = () => { if (TouchCtl.enabled) { this.equipSheet(it, slot); return; } if (this.curSel) this.applyCur(it); else if (this.aspectSel) this.imprint(it); else { p.unequip(slot); this.refreshInventory(); this.hideTooltip(); } }; }
       eq.appendChild(d);
     }
     const inv = el('inv-grid'); inv.innerHTML = '';
@@ -165,22 +211,23 @@ const UI = {
       if (it) {
         d.innerHTML = this.itemCell(it, 'cell');
         const eqItem = it.slot === 'ring' ? p.equipment.ring1 : p.equipment[it.slot];
-        d.onmouseenter = e => { let h = itemTooltipHTML(it, { hint: this.curSel ? `클릭: ${CURRENCY[this.curSel].name} 적용` : this.aspectSel ? '클릭: 형상 각인' : '클릭: 장착 · 우클릭: 분해' + (it.rarity === 'unique' ? ' · Ctrl+클릭: 형상 추출' : '') }); if (eqItem && eqItem !== it) h += `<div class="tt-cmp"><div class="tt-sub">장착 중:</div>${itemTooltipHTML(eqItem, { tiers: false })}</div>`; this.tooltip(h, e.clientX, e.clientY); };
+        d.onmouseenter = e => { if (TouchCtl.enabled) return; let h = itemTooltipHTML(it, { hint: this.curSel ? `클릭: ${CURRENCY[this.curSel].name} 적용` : this.aspectSel ? '클릭: 형상 각인' : '클릭: 장착 · 우클릭: 분해' + (it.rarity === 'unique' ? ' · Ctrl+클릭: 형상 추출' : '') }); if (eqItem && eqItem !== it) h += `<div class="tt-cmp"><div class="tt-sub">장착 중:</div>${itemTooltipHTML(eqItem, { tiers: false })}</div>`; this.tooltip(h, e.clientX, e.clientY); };
         d.onmouseleave = () => this.hideTooltip();
-        d.onclick = e => { if (this.curSel) this.applyCur(it); else if (this.aspectSel) this.imprint(it); else if (e.ctrlKey && it.rarity === 'unique') this.extract(it, i); else { p.equip(it); this.refreshInventory(); this.hideTooltip(); } };
+        d.onclick = e => { if (TouchCtl.enabled) { this.itemSheet(it, i); return; } if (this.curSel) this.applyCur(it); else if (this.aspectSel) this.imprint(it); else if (e.ctrlKey && it.rarity === 'unique') this.extract(it, i); else { p.equip(it); this.refreshInventory(); this.hideTooltip(); } };
         d.oncontextmenu = e => { e.preventDefault(); this.salvage(it, i, e.shiftKey); };
       } else d.innerHTML = '<div class="cell empty"></div>';
       inv.appendChild(d);
     });
     el('inv-count').textContent = `${p.invCount()} / ${CFG.INV_SLOTS}`;
+    el('inv-hint').textContent = TouchCtl.enabled ? '아이템을 탭하면 장착 · 분해 · 형상 추출 · 오브 적용 메뉴가 열립니다' : '클릭: 장착 · 우클릭: 분해(정수) · Shift+우클릭: 희귀 이상 분해 · Ctrl+클릭: 유니크 형상 추출';
     // 화폐
     const cur = el('currency'); cur.innerHTML = '';
     for (const id of CURRENCY_IDS) {
       const n = p.currency[id] || 0; if (!n && id !== 'essence') continue;
       const c = CURRENCY[id]; const d = document.createElement('div'); d.className = 'cur-row' + (this.curSel === id ? ' sel' : ''); d.style.setProperty('--c', c.color);
       d.innerHTML = `<span class="orb-ico"></span><span class="nm">${c.name}</span><span class="n">×${n}</span>`;
-      d.onmouseenter = e => this.tooltip(`<div class="tt-name" style="color:${c.color}">${c.name}</div><div class="tt-mods">${c.desc}</div>${c.target === 'item' ? '<div class="tt-hint">클릭 후 아이템을 클릭하여 적용</div>' : ''}`, e.clientX, e.clientY); d.onmouseleave = () => this.hideTooltip();
-      d.onclick = () => { if (c.target !== 'item' || !n) { if (c.target === 'gem') Game.flash('젬 패널(K)에서 젬을 우클릭하여 사용'); if (c.target === 'passive') Game.flash('패시브 트리(P)에서 할당된 노드를 우클릭하여 사용'); return; } this.curSel = this.curSel === id ? null : id; this.aspectSel = null; this.refreshInventory(); Audio_.play('ui'); };
+      d.onmouseenter = e => TouchCtl.enabled || this.tooltip(`<div class="tt-name" style="color:${c.color}">${c.name}</div><div class="tt-mods">${c.desc}</div>${c.target === 'item' ? '<div class="tt-hint">클릭 후 아이템을 클릭하여 적용</div>' : ''}`, e.clientX, e.clientY); d.onmouseleave = () => this.hideTooltip();
+      d.onclick = () => { if (TouchCtl.enabled) Game.flash(c.desc, c.color); if (c.target !== 'item' || !n) { if (c.target === 'gem') Game.flash('젬 패널(K)에서 젬을 우클릭하여 사용'); if (c.target === 'passive') Game.flash('패시브 트리(P)에서 할당된 노드를 우클릭하여 사용'); return; } this.curSel = this.curSel === id ? null : id; this.aspectSel = null; this.refreshInventory(); Audio_.play('ui'); };
       cur.appendChild(d);
     }
     el('cur-hint').textContent = this.curSel ? `${CURRENCY[this.curSel].name} 적용 대기 중 — 아이템을 클릭하세요 (다시 클릭하면 취소)` : this.aspectSel ? `${ASPECTS[this.aspectSel].name} 각인 대기 중 — 희귀/마법 아이템을 클릭하세요` : '';
@@ -216,7 +263,7 @@ const UI = {
   // ---------- 젬 ----------
   refreshGems() {
     const p = Game.player; const wrap = el('sockets'); wrap.innerHTML = '';
-    const keys = ['좌클릭', '우클릭', '1', '2', '3', '4'];
+    const keys = TouchCtl.enabled ? ['주 공격', '스킬 2', '스킬 3', '스킬 4', '스킬 5', '스킬 6'] : ['좌클릭', '우클릭', '1', '2', '3', '4'];
     p.sockets.forEach((s, i) => {
       const row = document.createElement('div'); row.className = 'sock-row';
       const sk = s.main ? computeSkill(p, i) : null;
@@ -225,7 +272,7 @@ const UI = {
         const d = document.createElement('div'); d.className = 'gem-cell' + (isSup ? ' sup' : '') + (g ? ' has' : '');
         if (g) { const def = gemDef(g); d.style.setProperty('--c', def.color); d.innerHTML = `<span>${def.icon}</span><i>${g.level}</i>`; if (isSup && s.main && !supportFits(def, GEMS[s.main.id])) d.classList.add('nofit'); }
         else d.innerHTML = `<span class="dim">${isSup ? '서포트' : '스킬'}</span>`;
-        d.onmouseenter = e => { if (g) this.tooltip(gemTooltipHTML(g, !isSup ? sk : null) + (isSup && s.main && !supportFits(gemDef(g), GEMS[s.main.id]) ? '<div class="tt-hint" style="color:#ff7b7b">이 스킬에는 적용되지 않는 서포트입니다</div>' : '') + `<div class="tt-hint">클릭: 해제 · 우클릭: 젬 연마사의 프리즘 사용</div>`, e.clientX, e.clientY); else if (this.gemSel) this.tooltip('<div class="tt-sub">클릭하여 선택한 젬 장착</div>', e.clientX, e.clientY); };
+        d.onmouseenter = e => { if (TouchCtl.enabled) return; if (g) this.tooltip(gemTooltipHTML(g, !isSup ? sk : null) + (isSup && s.main && !supportFits(gemDef(g), GEMS[s.main.id]) ? '<div class="tt-hint" style="color:#ff7b7b">이 스킬에는 적용되지 않는 서포트입니다</div>' : '') + `<div class="tt-hint">클릭: 해제 · 우클릭: 젬 연마사의 프리즘 사용</div>`, e.clientX, e.clientY); else if (this.gemSel) this.tooltip('<div class="tt-sub">클릭하여 선택한 젬 장착</div>', e.clientX, e.clientY); };
         d.onmouseleave = () => this.hideTooltip();
         d.onclick = () => {
           if (this.gemSel) {
@@ -234,7 +281,7 @@ const UI = {
             if (g) p.gemBag.push(g);
             if (isSup) s.supports[j] = sel; else s.main = sel;
             this.gemSel = null; Audio_.play('orb'); p.recalc(); this.refreshGems(); this.refreshSkillbar(); this.hideTooltip();
-          } else if (g) { if (isSup) s.supports[j] = null; else s.main = null; p.gemBag.push(g); p.recalc(); this.refreshGems(); this.refreshSkillbar(); this.hideTooltip(); }
+          } else if (g) { const remove = () => { if (isSup) s.supports[j] = null; else s.main = null; p.gemBag.push(g); p.recalc(); this.refreshGems(); this.refreshSkillbar(); this.hideTooltip(); }; if (TouchCtl.enabled) this.gemSheet(g, !isSup ? sk : null, remove); else remove(); }
         };
         d.oncontextmenu = e => { e.preventDefault(); if (g) this.gemcut(g); };
         return d;
@@ -245,7 +292,7 @@ const UI = {
       row.appendChild(info); wrap.appendChild(row);
     });
     const bag = el('gem-bag'); bag.innerHTML = p.gemBag.length ? '' : '<div class="dim">보유한 젬 없음 — 몬스터를 처치하여 젬을 획득하세요</div>';
-    p.gemBag.forEach(g => { const def = gemDef(g); const d = document.createElement('div'); d.className = 'bag-gem' + (this.gemSel === g ? ' sel' : '') + (g.support ? ' sup' : ''); d.style.setProperty('--c', def.color); d.innerHTML = `<span>${def.icon}</span><b>${def.name}</b><i>Lv.${g.level}</i>${g.support ? '<em>서포트</em>' : ''}`; d.onmouseenter = e => this.tooltip(gemTooltipHTML(g) + '<div class="tt-hint">클릭: 선택 후 슬롯 클릭 · 우클릭: 젬 연마</div>', e.clientX, e.clientY); d.onmouseleave = () => this.hideTooltip(); d.onclick = () => { this.gemSel = this.gemSel === g ? null : g; this.refreshGems(); Audio_.play('ui'); }; d.oncontextmenu = e => { e.preventDefault(); this.gemcut(g); }; bag.appendChild(d); });
+    p.gemBag.forEach(g => { const def = gemDef(g); const d = document.createElement('div'); d.className = 'bag-gem' + (this.gemSel === g ? ' sel' : '') + (g.support ? ' sup' : ''); d.style.setProperty('--c', def.color); d.innerHTML = `<span>${def.icon}</span><b>${def.name}</b><i>Lv.${g.level}</i>${g.support ? '<em>서포트</em>' : ''}`; d.onmouseenter = e => TouchCtl.enabled || this.tooltip(gemTooltipHTML(g) + '<div class="tt-hint">클릭: 선택 후 슬롯 클릭 · 우클릭: 젬 연마</div>', e.clientX, e.clientY); d.onmouseleave = () => this.hideTooltip(); d.onclick = () => { if (TouchCtl.enabled && this.gemSel !== g) { this.bagGemSheet(g); return; } this.gemSel = this.gemSel === g ? null : g; this.refreshGems(); Audio_.play('ui'); }; d.oncontextmenu = e => { e.preventDefault(); this.gemcut(g); }; bag.appendChild(d); });
     el('gem-hint').textContent = this.gemSel ? `${gemDef(this.gemSel).name} 선택됨 — 장착할 슬롯을 클릭하세요` : `젬 연마사의 프리즘 ${p.currency.gemcutter || 0}개 보유`;
   },
   gemcut(g) { const p = Game.player; if (!(p.currency.gemcutter > 0)) { Game.flash('젬 연마사의 프리즘이 없습니다', '#ff7b7b'); return; } if (g.level >= CFG.MAX_GEM_LEVEL) { Game.flash('이미 최대 레벨'); return; } p.currency.gemcutter--; g.level++; Audio_.play('orb'); p.recalc(); this.refreshGems(); this.refreshSkillbar(); },

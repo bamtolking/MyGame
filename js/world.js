@@ -226,6 +226,7 @@ const World = {
   // ---------- 효과 ----------
   addZone(z) { this.zones.push(z); },
   burst(x, y, color, n, speed, life, opts = {}) {
+    if (Game.lowFx) n = Math.ceil(n * 0.5);
     for (let i = 0; i < n; i++) { const a = rand(Math.PI * 2), s = rand(speed * 0.3, speed); this.particles.push(new Particle(x, y, Math.cos(a) * s, Math.sin(a) * s, rand(life * 0.5, life), color, rand(2, 5), opts)); }
   },
   splat(x, y, color, size) {
@@ -283,9 +284,9 @@ const World = {
     for (const pr of this.projectiles) pr.update(dt); this.projectiles = this.projectiles.filter(x => x.alive);
     for (const mn of this.minions) mn.update(dt); this.minions = this.minions.filter(x => x.alive);
     this.updateZones(dt);
-    for (const pt of this.particles) pt.update(dt); if (this.particles.length > 600) this.particles.splice(0, this.particles.length - 600); this.particles = this.particles.filter(x => x.alive);
+    for (const pt of this.particles) pt.update(dt); const pcap = Game.lowFx ? 260 : 600; if (this.particles.length > pcap) this.particles.splice(0, this.particles.length - pcap); this.particles = this.particles.filter(x => x.alive);
     for (const d of this.dmgNums) d.update(dt); this.dmgNums = this.dmgNums.filter(x => x.alive);
-    for (const d of this.drops) { d.update(dt); if (d.kind !== 'item' && dist(d.x, d.y, p.x, p.y) < 26) this.pickup(d); }
+    for (const d of this.drops) { d.update(dt); const dd = dist(d.x, d.y, p.x, p.y); if ((d.kind !== 'item' && dd < 26) || (Game.autoPickup && d.kind === 'item' && dd < 36 && d.visible(p.lootFilter) && p.invCount() < CFG.INV_SLOTS)) this.pickup(d); }
     this.drops = this.drops.filter(x => x.alive);
     // 탐색
     this.exploreT += dt; if (this.exploreT > 0.15) { this.exploreT = 0; const tx = Math.floor(p.x / CFG.TILE), ty = Math.floor(p.y / CFG.TILE); for (let y = ty - 11; y <= ty + 11; y++) for (let x = tx - 11; x <= tx + 11; x++) if (x >= 0 && y >= 0 && x < this.w && y < this.h && (x - tx) ** 2 + (y - ty) ** 2 <= 121) this.explored[y * this.w + x] = 1; }

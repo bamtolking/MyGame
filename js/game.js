@@ -3,10 +3,13 @@
 const Game = {
   canvas: null, ctx: null, W: 0, H: 0, state: 'title', player: null,
   cam: { x: 0, y: 0 }, shakeT: 0, shakeAmt: 0, hurtFlash: 0, announces: [], flashes: [], time: 0, last: 0,
-  lightCanvas: null, lightCtx: null, mapOptions: [], labelsOn: true, paused: false, hoverDrop: null, labelRects: [], clearStats: null, fps: 0, frames: 0, fpsT: 0,
+  lightCanvas: null, lightCtx: null, mapOptions: [], labelsOn: true, paused: false, hoverDrop: null, labelRects: [], clearStats: null, fps: 0, frames: 0, fpsT: 0, viewScale: 1, lowFx: false, autoPickup: false, aimPreview: null,
   init() {
     this.canvas = el('game'); this.ctx = this.canvas.getContext('2d');
     this.lightCanvas = document.createElement('canvas'); this.lightCtx = this.lightCanvas.getContext('2d');
+    TouchCtl.init();
+    if (TouchCtl.enabled) { this.lowFx = true; this.autoPickup = true; try { Object.defineProperty(this.ctx, 'shadowBlur', { get: () => 0, set: () => { } }); } catch (e) { } }
+    try { const ap = localStorage.getItem('ce_autopickup'); if (ap !== null) this.autoPickup = ap === '1'; } catch (e) { }
     window.addEventListener('resize', () => this.resize()); this.resize();
     Input.init(this.canvas); UI.init();
     this.canvas.addEventListener('mousedown', e => { if (e.button === 0) this.onClick(e); });
@@ -14,7 +17,9 @@ const Game = {
     requestAnimationFrame(t => this.loop(t));
   },
   resize() {
-    this.W = this.canvas.width = window.innerWidth; this.H = this.canvas.height = window.innerHeight;
+    const maxW = TouchCtl.enabled ? 1100 : 4096; const s = Math.min(1, maxW / Math.max(1, window.innerWidth)); this.viewScale = s;
+    this.W = this.canvas.width = Math.round(window.innerWidth * s); this.H = this.canvas.height = Math.round(window.innerHeight * s);
+    this.canvas.style.width = window.innerWidth + 'px'; this.canvas.style.height = window.innerHeight + 'px';
     this.lightCanvas.width = this.W; this.lightCanvas.height = this.H;
   },
   // ---------- 상태 전환 ----------
@@ -34,7 +39,7 @@ const Game = {
     this.cam.x = this.player.x; this.cam.y = this.player.y;
     this.state = 'play'; UI.hideScreens(); UI.showHUD();
     this.announce(`${THEMES[def.theme].name} · 티어 ${def.tier}`, '#ffffff', 3);
-    if (this.player.mapsCleared === 0 && this.player.deaths === 0) { this.announce('WASD 이동 · 좌클릭 공격 · Space 회피 · R 포션 · F 궁극기', '#9fe1a5', 7); this.announce('보스를 찾아 처치하면 포탈이 열린다 (미니맵의 붉은 점)', '#ffd23f', 7); }
+    if (this.player.mapsCleared === 0 && this.player.deaths === 0) { this.announce(TouchCtl.enabled ? '왼쪽 화면 드래그: 이동 · 오른쪽 버튼: 공격/스킬 (버튼을 끌면 조준)' : 'WASD 이동 · 좌클릭 공격 · Space 회피 · R 포션 · F 궁극기', '#9fe1a5', 7); this.announce('보스를 찾아 처치하면 포탈이 열린다 (미니맵의 붉은 점)', '#ffd23f', 7); }
     this.mapStart = { kills: this.player.kills, xp: this.player.xp, level: this.player.level, t: this.player.playtime };
     Audio_.play('portal');
   },
@@ -55,7 +60,7 @@ const Game = {
     UI.hideHUD(); UI.closePanels(); UI.showDeath(cause, msg);
   },
   announce(text, color = '#fff', dur = 2.5) { this.announces.push({ text, color, t: dur, max: dur }); if (this.announces.length > 3) this.announces.shift(); },
-  flash(text, color = '#ddd') { this.flashes.push({ text, color, t: 2 }); if (this.flashes.length > 4) this.flashes.shift(); },
+  flash(text, color = '#ddd') { const ex = this.flashes.find(f => f.text === text); if (ex) { ex.t = 2; return; } this.flashes.push({ text, color, t: 2 }); if (this.flashes.length > 4) this.flashes.shift(); },
   shake(n) { this.shakeAmt = Math.max(this.shakeAmt, n); this.shakeT = 0.25; },
   // ---------- 입력 ----------
   onKey(k, e) {
@@ -74,13 +79,14 @@ const Game = {
   },
   handleInput(dt) {
     const p = this.player; const m = Input.mouse;
-    let dx = 0, dy = 0;
+    let dx = 0, dy = 0, analog = 1;
     if (Input.down('w') || Input.down('arrowup')) dy -= 1; if (Input.down('s') || Input.down('arrowdown')) dy += 1;
     if (Input.down('a') || Input.down('arrowleft')) dx -= 1; if (Input.down('d') || Input.down('arrowright')) dx += 1;
+    if (TouchCtl.enabled && TouchCtl.joy.mag > 0) { dx = TouchCtl.joy.dx; dy = TouchCtl.joy.dy; analog = TouchCtl.joy.mag; }
     if (dx || dy) p.autoTarget = null;
     if (p.autoTarget) { const t = p.autoTarget; if (!t.alive) p.autoTarget = null; else if (dist(t.x, t.y, p.x, p.y) < 40) { World.pickup(t); p.autoTarget = null; } else { const a = angleTo(p.x, p.y, t.x, t.y); dx = Math.cos(a); dy = Math.sin(a); } }
     const wm = this.screenToWorld(m.x, m.y);
-    if (!(p.castTimer > 0 && p.rootTimer > 0)) p.facing = angleTo(p.x, p.y, wm.x, wm.y);
+    if (!(p.castTimer > 0 && p.rootTimer > 0)) { if (TouchCtl.enabled) { if ((dx || dy) && !Object.keys(TouchCtl.held).length && !TouchCtl.tapAttack) p.facing = Math.atan2(dy, dx); } else p.facing = angleTo(p.x, p.y, wm.x, wm.y); }
     // 회피
     if (Input.wasPressed(' ')) p.tryDodge(dx, dy);
     if (p.dodge.t > 0) {
@@ -91,7 +97,7 @@ const Game = {
     } else {
       const len = Math.hypot(dx, dy);
       if (len > 0 && p.rootTimer <= 0 && p.frozen <= 0 && p.stun <= 0) {
-        dx /= len; dy /= len; const spd = p.stats.moveSpeed * p.speedMult();
+        dx /= len; dy /= len; const spd = p.stats.moveSpeed * p.speedMult() * analog;
         World.moveEntity(p, dx * spd * dt, dy * spd * dt); p.moving = true; p.vx = dx * spd; p.vy = dy * spd;
       } else { p.moving = false; p.vx = p.vy = 0; }
     }
@@ -102,6 +108,7 @@ const Game = {
     for (let i = 0; i < 4; i++) if (Input.down(String(i + 1))) Skills.use(p, i + 2, wm.x, wm.y);
     if (Input.wasPressed('r')) p.usePotion();
     if (Input.wasPressed('f')) Ult.use(p);
+    if (TouchCtl.enabled) TouchCtl.update(p);
   },
   fireTrailSkill(p) {
     if (!this._fireTrail || this._fireTrailLvl !== p.level) {
@@ -171,6 +178,7 @@ const Game = {
     for (const pr of World.projectiles) if (inView(pr.x, pr.y)) pr.draw(ctx);
     for (const z of World.zones) if (inView(z.x, z.y, 300)) this.renderZone(ctx, z, false);
     for (const pt of World.particles) if (inView(pt.x, pt.y)) pt.draw(ctx);
+    if (this.aimPreview && this.state === 'play') { const a = this.aimPreview; ctx.strokeStyle = hexA(a.color || '#ffffff', 0.75); ctx.lineWidth = 2; ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(a.x, a.y); ctx.stroke(); ctx.setLineDash([]); if (a.r) { ctx.fillStyle = hexA(a.color || '#ffffff', 0.15); ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); } else { ctx.beginPath(); ctx.arc(a.x, a.y, 8, 0, Math.PI * 2); ctx.stroke(); } }
     for (const d of World.dmgNums) d.draw(ctx);
     ctx.restore();
     // 조명
@@ -286,7 +294,7 @@ const Game = {
     const W = this.W; let y = 120;
     for (const a of this.announces) {
       const alpha = Math.min(1, a.t / 0.5, (a.max - a.t) / 0.3 + 0.2);
-      ctx.globalAlpha = clamp(alpha, 0, 1); ctx.font = 'bold 24px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center';
+      ctx.globalAlpha = clamp(alpha, 0, 1); ctx.font = `bold ${Math.round(clamp(W / 32, 14, 24))}px "Noto Sans KR", sans-serif`; ctx.textAlign = 'center';
       ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(a.text, W / 2, y); ctx.fillStyle = a.color; ctx.fillText(a.text, W / 2, y); y += 34;
     }
     ctx.globalAlpha = 1;

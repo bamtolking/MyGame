@@ -11,9 +11,9 @@ const Input = {
     });
     window.addEventListener('keyup', e => { this.keys[e.key.toLowerCase()] = false; });
     window.addEventListener('blur', () => { this.keys = {}; this.mouse.l = false; this.mouse.r = false; });
-    canvas.addEventListener('mousemove', e => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; });
+    canvas.addEventListener('mousemove', e => { const s = (typeof Game !== 'undefined' && Game.viewScale) || 1; this.mouse.x = e.clientX * s; this.mouse.y = e.clientY * s; });
     canvas.addEventListener('mousedown', e => {
-      Audio_.init();
+      Audio_.init(); const s = (typeof Game !== 'undefined' && Game.viewScale) || 1; this.mouse.x = e.clientX * s; this.mouse.y = e.clientY * s;
       if (e.button === 0) { this.mouse.l = true; this.mouse.lp = true; }
       if (e.button === 2) { this.mouse.r = true; this.mouse.rp = true; }
       e.preventDefault();

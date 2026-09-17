@@ -183,3 +183,97 @@ select { background: #120d18; color: #fff; border: 1px solid var(--border); padd
 .menu-layout { display: flex; flex-direction: column; gap: 10px; }
 .menu-layout .help { font-size: 12px; color: #bdb3c4; line-height: 1.7; border-top: 1px solid #2a2233; padding-top: 10px; }
 .menu-layout .help b { color: var(--gold); }
+
+/* ===== 모바일 / 터치 ===== */
+html, body { overscroll-behavior: none; -webkit-touch-callout: none; }
+canvas#game { touch-action: none; }
+#touch-ui { position: fixed; inset: 0; pointer-events: none; z-index: 12; display: none; }
+body.touch.playing #touch-ui { display: block; }
+body.panel-open #touch-ui { display: none; }
+#joy-zone { position: absolute; left: 0; top: 84px; bottom: 0; width: 45%; pointer-events: auto; touch-action: none; }
+#joy-base { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); background: rgba(0, 0, 0, 0.3); display: none; }
+#joy-knob { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: rgba(255, 255, 255, 0.4); border: 2px solid rgba(255, 255, 255, 0.6); left: 60px; top: 60px; }
+#tbtns { position: absolute; right: 0; bottom: 0; width: 330px; height: 330px; }
+.tbtn { position: absolute; border-radius: 50%; background: rgba(20, 14, 28, 0.78); border: 2px solid #5a4a6a; pointer-events: auto; touch-action: none; display: flex; align-items: center; justify-content: center; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+.tbtn .ico { font-size: 22px; color: #fff; text-shadow: 0 0 8px currentColor; z-index: 1; }
+.tbtn.primary .ico { font-size: 32px; }
+.tbtn.primary { border-color: #d9a441; box-shadow: 0 0 14px rgba(217, 164, 65, 0.3); }
+.tbtn .cd { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(0, 0, 0, 0.7); }
+.tbtn .cnt { position: absolute; right: 6px; bottom: 4px; font-size: 12px; font-weight: bold; color: #fff; z-index: 1; }
+.tbtn.held { background: rgba(217, 164, 65, 0.4); }
+.tbtn.nores .ico { filter: grayscale(1) brightness(.5); }
+.tbtn.active { box-shadow: 0 0 14px var(--gold); border-color: var(--gold); }
+.tbtn.skill:not(.has) { opacity: .45; }
+#mobile-top { display: none; position: absolute; left: 50%; top: 44px; transform: translateX(-50%); flex-direction: row; gap: 4px; width: max-content; }
+#mobile-top .btn { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+body.touch #mobile-top { display: flex; }
+body.touch #skillbar, body.touch #hints { display: none; }
+body.touch .orb { width: 70px; height: 70px; }
+body.touch .orb .val { font-size: 11px; }
+body.touch .orb .lbl { display: none; }
+body.touch #bottombar { bottom: 22px; gap: 10px; }
+body.touch #xpbar { width: 40vw; bottom: 8px; }
+body.touch #minimap { width: 100px; height: 100px; }
+body.touch #topbar { top: 6px; left: 6px; right: 6px; }
+body.touch #clock { padding: 4px 8px 4px 4px; }
+body.touch #clock-dial { width: 32px; height: 32px; }
+body.touch #clock-hand { height: 12px; }
+body.touch #clock .txt { font-size: 11px; }
+body.touch #mapinfo { font-size: 10px; padding: 3px 8px; max-width: 46vw; }
+body.touch #mapinfo b { font-size: 12px; }
+body.touch #bossbar { top: 78px; width: 60vw; }
+body.touch #buffs { top: 84px; }
+body.touch #tooltip { display: none !important; }
+#rotate-hint { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 50; background: rgba(193, 18, 31, 0.85); color: #fff; text-align: center; font-size: 12px; padding: 4px; pointer-events: none; }
+@media (orientation: portrait) {
+  body.touch #rotate-hint { display: block; }
+  body.touch #bottombar { left: 10px; right: auto; top: 96px; bottom: auto; transform: none; gap: 6px; }
+  body.touch .orb { width: 56px; height: 56px; }
+  body.touch .orb .val { font-size: 10px; }
+  body.touch #xpbar { left: 10px; transform: none; width: 118px; top: 158px; bottom: auto; }
+  body.touch #xp-text { top: 12px; font-size: 10px; }
+  body.touch #mobile-top { top: 132px; left: auto; right: 8px; transform: none; flex-wrap: wrap; justify-content: flex-end; width: 150px; }
+  body.touch #topbar { top: 22px; }
+  body.touch #mapinfo { display: none; }
+  body.touch #buffs { top: 176px; }
+}
+/* 액션 시트 */
+#sheet { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; }
+.sheet-box { background: var(--panel); border: 1px solid #4a3a55; border-radius: 8px; width: min(420px, 94vw); max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 0 40px #000; }
+.sheet-body { padding: 12px 14px; overflow: auto; font-size: 13px; line-height: 1.55; }
+.sheet-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border-top: 1px solid #2a2233; }
+.sheet-actions .btn { flex: 1 1 45%; padding: 10px; }
+.sheet-actions .btn.danger { border-color: #7a2a2a; color: #ff9b9b; }
+.sheet-close { margin: 0 12px 12px; padding: 10px; }
+/* 화면 스크롤 (좁은 화면에서 상단 잘림 방지) */
+.screen { align-items: flex-start; justify-content: flex-start; }
+.screen > * { margin: auto; }
+/* 반응형 */
+@media (max-width: 900px), (pointer: coarse) {
+  .panel { width: 98vw; height: 94vh; }
+  .panel.small-panel { width: 96vw; height: auto; }
+  .ph { padding: 6px 10px; }
+  .ph h2 { font-size: 16px; }
+  .ph .close { width: 36px; height: 36px; font-size: 16px; }
+  .pb { padding: 8px 10px; }
+  .inv-layout, .gems-layout { flex-direction: column; gap: 10px; }
+  .inv-layout .col { flex: none !important; }
+  .cell, .inv-cell .cell { width: 44px; height: 44px; font-size: 18px; }
+  #equip { grid-template-columns: repeat(3, 44px); gap: 4px; }
+  .eq-slot .cell.empty { font-size: 9px; }
+  #inv-grid { grid-template-columns: repeat(auto-fill, 44px); gap: 4px; }
+  #char-stats { grid-template-columns: 1fr; font-size: 12px; }
+  .title-box { padding: 20px 16px; }
+  .title-box h1 { font-size: 34px; letter-spacing: 3px; }
+  .title-box .intro { font-size: 12px; }
+  .create-box, .ms-box { padding: 12px; }
+  .class-card { width: min(320px, 92vw); padding: 12px; }
+  .class-card h3 { font-size: 20px; }
+  .class-card p { font-size: 12px; }
+  .map-card { width: min(300px, 92vw); padding: 12px; }
+  button.btn.big { font-size: 15px; padding: 10px 22px; }
+  .gem-cell { width: 48px; height: 48px; font-size: 20px; }
+  .gem-cell.sup { width: 40px; height: 40px; }
+  .sock-row .key { width: 40px; font-size: 10px; }
+  .menu-layout .help { font-size: 11px; }
+}
