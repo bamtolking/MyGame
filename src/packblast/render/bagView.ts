@@ -125,12 +125,6 @@ export class BagView {
         this.drawLinks({ ...s, items: trial, loadout: lo }, selItem.uid, occ2, true);
       }
     }
-    // 잠금 해금 안내
-    if (s.unlock) {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(ctx, this.ox, this.oy + cs * 5 + 12, cs * 5, 24, 6); ctx.fill();
-      ctx.fillStyle = '#ffca28'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(`해금할 칸을 ${s.unlock.need}개 고르세요 (${s.unlock.chosen.length}/${s.unlock.need})`, this.ox + cs * 2.5, this.oy + cs * 5 + 24);
-    }
   }
 
   /** 초점 장비와 인접 장비 사이의 지원 연결을 그린다. 적용된 연결은 색 선, 미적용은 회색 점선. */

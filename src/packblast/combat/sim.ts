@@ -3,7 +3,7 @@
 import { ENEMIES, BOSS, STAGE_HP_MUL, STAGE_DMG_MUL, ARMOR_MIN_RATIO, type EnemyType } from '../data/enemies';
 import { BALANCE, type Difficulty } from '../data/balance';
 import { getStages, HARD_MODS, type StageDef, type SpawnGroup } from '../data/waves';
-import { seedRng, rngNext, type RngState } from '../../sim/rng';
+import { seedRng, rngNext, type RngState } from '../core/rng';
 import type { Loadout, WeaponConfig } from '../core/loadout';
 import type { BattleStats, BattleResult, WeaponStat } from './types';
 

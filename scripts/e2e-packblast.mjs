@@ -184,7 +184,8 @@ async function run(name, viewport, mode) {
     }
     s = await state(page);
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `e2e-out/packblast/${name}-21-result.png` });
+    if ((await modalText(page)).includes('구간')) { await page.screenshot({ path: `e2e-out/packblast/${name}-21-final-summary.png` }); await tapText(page, '다음'); await page.waitForTimeout(400); }
+    await page.screenshot({ path: `e2e-out/packblast/${name}-22-result.png` });
     const res = await page.evaluate(() => ({ phase: window.__pb.run.phase, won: window.__pb.run.result?.won, stage: window.__pb.run.result?.stage, best: window.__pb.blob.meta.bestStage, hard: window.__pb.blob.meta.hardUnlocked, links: window.__pb.blob.meta.discoveredLinks.length, codex: window.__pb.blob.meta.codex.length }));
     log(`${name}: RESULT ${JSON.stringify(res)}`);
     // 패배/승리 후 새로고침해도 결과 유지

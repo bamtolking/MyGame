@@ -181,7 +181,7 @@ export class App {
   }
   private renderInfo(): void {
     const r = this.run!; const el = this.elInfo; clear(el);
-    if (this.unlockChoice) { el.append(h('div', { class: 'name' }, '가방 확장'), h('div', { class: 'line' }, `정예 전투 클리어! 잠긴 모서리 칸 중 ${r.pendingUnlock}칸을 골라 해금합니다. 자물쇠 칸을 누르세요.`)); return; }
+    if (this.unlockChoice) { el.append(h('div', { class: 'name' }, '가방 확장', h('span', { class: 'badge g3' }, `${this.unlockChoice.length}/${r.pendingUnlock} 선택`)), h('div', { class: 'line' }, `정예 전투 클리어! 잠긴 모서리 칸 중 ${r.pendingUnlock}칸을 골라 해금합니다. 자물쇠 칸을 누른 뒤 "해금 확정"을 누르세요.`)); return; }
     const uid = this.sel?.uid ?? this.inspectUid;
     const it = uid ? getItem(r, uid) : undefined;
     if (!it) {

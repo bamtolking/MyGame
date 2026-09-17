@@ -94,9 +94,11 @@ export class BattleView {
     ctx.save();
     let sx = 0, sy = 0; if (this.shakeOn && this.shake > 0) { sx = (Math.random() - 0.5) * this.shake; sy = (Math.random() - 0.5) * this.shake; }
     ctx.translate(this.ox + sx, this.oy + sy); ctx.scale(this.scale, this.scale);
-    // 바닥
-    ctx.fillStyle = '#1c2030'; ctx.fillRect(0, 0, sim.w, sim.h);
-    ctx.fillStyle = '#222738'; for (let y = 0; y < sim.h; y += 40) for (let x = ((y / 40) % 2) * 20; x < sim.w; x += 40) { ctx.fillRect(x, y, 20, 20); }
+    // 바닥 (월드 밖 여백까지 같은 무늬로 채워 레터박스가 보이지 않게)
+    const bx = -this.ox / this.scale, by = -this.oy / this.scale, bw = this.W / this.scale, bh = this.H / this.scale;
+    ctx.fillStyle = '#1c2030'; ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+    ctx.fillStyle = '#222738'; const y0 = Math.floor(by / 40) * 40 - 40, y1 = by + bh + 40;
+    for (let y = y0; y < y1; y += 40) for (let x = Math.floor(bx / 40) * 40 - 40 + ((Math.abs(y / 40)) % 2) * 20; x < bx + bw + 40; x += 40) { ctx.fillRect(x, y, 20, 20); }
     // 고철 잔해 장식 (고정)
     ctx.fillStyle = '#2b3044'; for (let i = 0; i < 12; i++) { const px = ((i * 97) % sim.w), py = ((i * 61 + 30) % sim.h); ctx.fillRect(px, py, 14 + (i % 3) * 6, 6 + (i % 2) * 4); }
     // 안전 반경(플레이어 주변)

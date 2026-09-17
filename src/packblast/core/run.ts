@@ -2,7 +2,7 @@
 import { EQUIPMENT, type EquipId, type Grade } from '../data/equipment';
 import { BALANCE, type Difficulty } from '../data/balance';
 import { getStages } from '../data/waves';
-import { seedRng, rngInt, type RngState } from '../../sim/rng';
+import { seedRng, rngInt, type RngState } from './rng';
 import { initialBag, checkPlacement, validateAll, itemCells, cellIndex, type BagGrid, type Item } from './bag';
 import { computeLoadout, type Loadout } from './loadout';
 import { generateCandidates, type RewardCandidate } from './rewards';

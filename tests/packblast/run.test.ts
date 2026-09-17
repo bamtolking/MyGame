@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRun, placeItem, startBattle, applyBattleResult, pickReward, refreshReward, heal, chooseUnlock, checkStart, addItem, restoreCheckpoint, dismantleItem } from '../../src/packblast/core/run';
 import { generateCandidates, candidateFlags } from '../../src/packblast/core/rewards';
-import { seedRng } from '../../src/sim/rng';
+import { seedRng } from '../../src/packblast/core/rng';
 import { validateRun } from '../../src/packblast/core/save';
 import type { BattleResult } from '../../src/packblast/combat/types';
 import { BALANCE } from '../../src/packblast/data/balance';

@@ -88,7 +88,7 @@ body { position: fixed; inset: 0; width: 100%; height: 100dvh; touch-action: non
 #bmsg .msg { background: rgba(10,12,30,0.8); border-left: 3px solid var(--pb-blue); padding: 5px 10px; border-radius: 8px; font-size: 12px; animation: msgin 0.25s ease-out; }
 #bmsg .msg.warn { border-color: var(--pb-accent); color: #ffe082; }
 #weapons { flex: none; display: flex; gap: 6px; overflow-x: auto; padding: 6px 10px; background: var(--pb-panel); touch-action: pan-x; min-height: 58px; align-items: center; }
-.wchip { flex: none; width: 76px; height: 46px; border-radius: 10px; background: var(--pb-panel2); border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 4px; padding: 3px 5px; position: relative; overflow: hidden; }
+.wchip { flex: none; width: 92px; height: 46px; border-radius: 10px; background: var(--pb-panel2); border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 4px; padding: 3px 5px; position: relative; overflow: hidden; }
 .wchip canvas { flex: none; }
 .wchip .col { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .wchip .nm { font-size: 10px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

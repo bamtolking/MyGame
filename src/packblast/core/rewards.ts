@@ -1,7 +1,7 @@
 // 보상 후보 생성. 판의 난수 상태(RngState)를 사용하므로 새로고침 후에도 같은 후보가 유지된다.
 import { EQUIPMENT, EQUIP_IDS, type EquipId, type Grade } from '../data/equipment';
 import { BALANCE } from '../data/balance';
-import { rngNext, rngInt, type RngState } from '../../sim/rng';
+import { rngNext, rngInt, type RngState } from './rng';
 import type { Item } from './bag';
 
 export interface RewardCandidate { id: EquipId; grade: Grade }
