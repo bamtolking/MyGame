@@ -5,11 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
-    "build": "tsc --noEmit -p tsconfig.json && vite build && node scripts/singlefile.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && node scripts/singlefile.mjs && node scripts/singlefile-packblast.mjs",
     "preview": "vite preview --host",
     "test": "vitest run",
+    "test:packblast": "vitest run tests/packblast",
+    "test:daebak": "vitest run tests/rules.test.ts tests/smoke.test.ts tests/balance.test.ts",
     "balance": "vitest run tests/balance.test.ts --reporter=verbose",
-    "e2e": "node scripts/e2e.mjs"
+    "balance:packblast": "vitest run tests/packblast/balance.test.ts --reporter=verbose",
+    "e2e": "node scripts/e2e.mjs",
+    "e2e:packblast": "node scripts/e2e-packblast.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",
