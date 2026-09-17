@@ -1,0 +1,14 @@
+{
+  "name": "닌자 랜덤 디펜스",
+  "short_name": "닌자RD",
+  "description": "랜덤 소환·합성·조합 디펜스. 친구와 최대 4명 협동.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0e1a",
+  "theme_color": "#0b0e1a",
+  "lang": "ko",
+  "icons": [
+    { "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230b0e1a'/%3E%3Ctext x='50' y='72' font-size='60' text-anchor='middle'%3E%F0%9F%A5%B7%3C/text%3E%3C/svg%3E", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,220 +1,169 @@
-// Summon / merge / craft / relocate / sell / upgrade — all validated & atomic
-import type { GameState, Grade, UnitKind, MythicId, Unit, SummonResult } from './types';
-import { rngNext, rngInt, rngPick } from './rng';
-import { UNIT_KINDS, UNITS, MYTHICS, MYTHIC_IDS, MAX_MYTHICS_ON_FIELD, SELL_VALUE, MOVE_COOLDOWN } from '../data/units';
-import { BASE_ODDS, PITY_ODDS, ODDS_ORDER } from '../data/summon';
-import { summonCost, SHARDS_PER_DESIGNATE, PITY_THRESHOLD, UPGRADES, upgradeCost } from '../data/economy';
-import { createUnit, placeUnit, clearLoc, removeUnit, unitById, freeSlot, freeBench, fieldUnits, unitLabel, pushLog } from './state';
-import { SLOTS } from '../data/map';
+// 소환 / 합성 / 조합 / 판매 / 이동 / 강화 / 골드 주고받기 — 모두 검증 후 원자적으로 처리
+import type { GameState, Unit, Kind, Grade, Element } from './types.ts';
+import { rngNext, rngPick } from './rng.ts';
+import { ELEMENTS, MYTHICS, MYTHIC_IDS, SELL_VALUE, isMythic, unitName, type MythicId } from '../data/units.ts';
+import { SUMMON_COST, SUMMON_ODDS, SUMMON_LV_COST, MAX_SUMMON_LV, MAX_ATK_LV, atkUpgradeCost, MIN_SEND_GOLD } from '../data/economy.ts';
+import { SLOT_COUNT, SLOT_ORDER, FIELD_W, FIELD_H } from '../data/board.ts';
+import { createUnit, removeUnit, unitById, freeSlot, pushLog, isAlive, label } from './state.ts';
 
-export type Result = { ok: true; msg?: string } | { ok: false; error: string };
+export type Result = { ok: true; msg?: string; unitId?: number; grade?: Grade; kind?: Kind; count?: number } | { ok: false; error: string };
 const fail = (error: string): Result => ({ ok: false, error });
 
-export function pityThreshold(s: GameState): number { return s.relics.includes('fate_dice') ? 10 : PITY_THRESHOLD; }
-export function designateCost(s: GameState): number { return s.relics.includes('fate_dice') ? 4 : SHARDS_PER_DESIGNATE; }
-export function currentOdds(s: GameState): { odds: Record<Grade, number>; pityActive: boolean; pity: number; threshold: number } {
-  const th = pityThreshold(s);
-  const pityActive = s.pity >= th;
-  return { odds: pityActive ? PITY_ODDS : BASE_ODDS, pityActive, pity: s.pity, threshold: th };
-}
-export function currentSummonCost(s: GameState): number { return summonCost(s.summonCount, s.relics); }
-
-/** Roll a grade from an odds table using the game RNG. */
-export function rollGrade(s: GameState, odds: Record<Grade, number>): Grade {
+export function currentOdds(s: GameState): [number, number, number, number] { return SUMMON_ODDS[Math.min(MAX_SUMMON_LV, Math.max(1, s.summonLv)) - 1]; }
+export function rollGrade(s: GameState, odds: readonly number[]): Grade {
   const r = rngNext(s.rng); let acc = 0;
-  for (const g of ODDS_ORDER) { acc += odds[g]; if (r < acc) return g; }
+  for (let g = 0; g < odds.length; g++) { acc += odds[g]; if (r < acc) return g as Grade; }
   return 0;
 }
 
+/** 길에 가까운 빈 자리부터 채움 */
+export function bestFreeSlot(s: GameState): number { for (const i of SLOT_ORDER) if (s.slots[i] == null) return i; return -1; }
+
 export function canSummon(s: GameState): Result {
-  if (s.phase === 'countdown' || s.phase === 'relic' || s.phase === 'won' || s.phase === 'lost') return fail('지금은 소환할 수 없습니다');
-  if (freeBench(s) < 0 && freeSlot(s) < 0) return fail('대기석과 전장이 모두 가득 찼습니다. 합성하거나 판매하세요.');
-  const cost = currentSummonCost(s);
-  if (s.gold < cost) return fail(`골드가 부족합니다 (${cost} 필요)`);
+  if (!isAlive(s)) return fail('게임이 끝났습니다');
+  if (freeSlot(s) < 0) return fail('자리가 가득 찼습니다. 합성하거나 판매하세요.');
+  if (s.gold < SUMMON_COST) return fail(`골드 부족 (${SUMMON_COST} 필요)`);
   return { ok: true };
 }
-
-export function summon(s: GameState): Result & { result?: SummonResult } {
+export function summon(s: GameState): Result {
   const c = canSummon(s); if (!c.ok) return c;
-  const cost = currentSummonCost(s);
-  const { odds, pityActive } = currentOdds(s);
-  s.gold -= cost; s.stats.goldSpent += cost; s.summonCount++; s.stats.summons++;
-  const grade = rollGrade(s, odds);
-  let kind: UnitKind; let designated = false;
-  if (s.designatedKind) { kind = s.designatedKind; s.designatedKind = null; designated = true; }
-  else kind = rngPick(s.rng, UNIT_KINDS);
-  if (grade >= 2) s.pity = 0; else s.pity++;
-  if (grade === 0) s.shards += s.relics.includes('fate_dice') ? 2 : 1;
-  const u = createUnit(s, kind, grade);
-  const b = freeBench(s);
-  if (b >= 0) placeUnit(s, u, { t: 'b', idx: b }); else placeUnit(s, u, { t: 'f', slot: freeSlot(s) });
-  if (grade > s.stats.peakGrade) s.stats.peakGrade = grade;
-  const result: SummonResult = { grade, kind, pityUsed: pityActive, designated, unitId: u.id };
-  s.lastResult = result;
-  s.events.push({ t: 'summon', unit: u.id, grade });
-  return { ok: true, result };
+  s.gold -= SUMMON_COST; s.stats.goldSpent += SUMMON_COST; s.stats.summons++;
+  const grade = rollGrade(s, currentOdds(s));
+  const kind = rngPick(s.rng, ELEMENTS);
+  const slot = bestFreeSlot(s);
+  const u = createUnit(s, kind, grade, slot);
+  s.stats.gradeCount[grade]++;
+  s.events.push({ t: 'summon', slot, grade, kind });
+  if (grade >= 2) pushLog(s, `${unitName(kind, grade)} 소환!`, 'good');
+  return { ok: true, unitId: u.id, grade, kind };
 }
 
-export function designateKind(s: GameState, kind: UnitKind): Result {
-  if (s.designatedKind) return fail('이미 종류가 지정되어 있습니다');
-  const cost = designateCost(s);
-  if (s.shards < cost) return fail(`운명 조각이 부족합니다 (${cost} 필요)`);
-  s.shards -= cost; s.designatedKind = kind;
-  pushLog(s, `다음 소환 종류 지정: ${UNITS[kind].name}`, 'good');
-  return { ok: true };
+/** 합성 가능 여부: 같은 등급(0~2) 3개. same=true면 같은 속성 3개(확정) */
+export function mergeCandidates(s: GameState, u: Unit, same: boolean): Unit[] {
+  if (isMythic(u.kind) || u.grade >= 3) return [];
+  return s.units.filter(o => o.id !== u.id && o.grade === u.grade && !isMythic(o.kind) && (!same || o.kind === u.kind)).sort((a, b) => a.id - b.id);
+}
+export function canMerge(s: GameState, u: Unit): { confirmed: boolean; random: boolean } {
+  return { confirmed: mergeCandidates(s, u, true).length >= 2, random: mergeCandidates(s, u, false).length >= 2 };
 }
 
-/** Merge preview: what would 3 ids produce? */
-export function mergePreview(s: GameState, ids: number[]): { ok: boolean; error?: string; grade?: Grade; kind?: UnitKind | null; confirmed?: boolean; warnLocked?: string[] } {
-  if (ids.length !== 3) return { ok: false, error: '유닛 3개를 선택하세요' };
-  if (new Set(ids).size !== 3) return { ok: false, error: '같은 유닛을 중복 선택했습니다' };
-  const us = ids.map(id => unitById(s, id));
-  if (us.some(u => !u)) return { ok: false, error: '존재하지 않는 유닛' };
-  const units = us as Unit[];
-  if (units.some(u => u.mythic)) return { ok: false, error: '신화는 합성 재료가 될 수 없습니다' };
-  const g = units[0].grade;
-  if (units.some(u => u.grade !== g)) return { ok: false, error: '같은 등급끼리만 합성할 수 있습니다' };
-  if (g >= 3) return { ok: false, error: '전설은 더 승급하지 않습니다 (신화는 조합창에서)' };
-  const kinds = units.map(u => u.kind);
-  let kind: UnitKind | null = null; let confirmed = false;
-  if (kinds.every(k => k === kinds[0])) { kind = kinds[0]; confirmed = true; }
-  else if (s.relics.includes('sorting_box')) {
-    for (const k of kinds) if (kinds.filter(x => x === k).length >= 2) { kind = k; confirmed = true; break; }
-  }
-  const warnLocked = units.filter(u => u.locked).map(u => unitLabel(u));
-  return { ok: true, grade: (g + 1) as Grade, kind, confirmed, warnLocked };
-}
-
-export function merge(s: GameState, ids: number[]): Result & { unitId?: number } {
-  if (s.phase === 'won' || s.phase === 'lost' || s.phase === 'countdown') return fail('지금은 합성할 수 없습니다');
-  const p = mergePreview(s, ids); if (!p.ok) return fail(p.error!);
-  const units = ids.map(id => unitById(s, id)!);
-  // result location: first unit that is on the field, else first unit's bench spot
-  const anchor = units.find(u => u.loc.t === 'f') ?? units[0];
-  const loc = { ...anchor.loc };
-  const resultKind: UnitKind = p.kind ?? rngPick(s.rng, UNIT_KINDS);
-  for (const u of units) removeUnit(s, u);   // atomic: all removed before creating
-  const nu = createUnit(s, resultKind, p.grade!);
-  placeUnit(s, nu, loc);
+/** u를 기준으로 같은 등급 2개를 더 소모해 다음 등급 1개. random=false면 같은 속성만 사용(확정). */
+export function mergeUnit(s: GameState, id: number, random = false): Result {
+  if (!isAlive(s)) return fail('게임이 끝났습니다');
+  const u = unitById(s, id); if (!u) return fail('유닛 없음');
+  if (isMythic(u.kind)) return fail('신화는 합성할 수 없습니다');
+  if (u.grade >= 3) return fail('전설은 합성이 아니라 조합(신화)으로만 승급합니다');
+  const same = mergeCandidates(s, u, true);
+  let mats: Unit[]; let confirmed: boolean;
+  if (same.length >= 2) { mats = same.slice(0, 2); confirmed = true; }
+  else if (random) { const any = mergeCandidates(s, u, false); if (any.length < 2) return fail('같은 등급 유닛이 3개 필요합니다'); mats = any.slice(0, 2); confirmed = false; }
+  else return fail(`같은 속성·등급 유닛이 3개 필요합니다 (${same.length + 1}/3)`);
+  const grade = (u.grade + 1) as Grade;
+  const kind: Kind = confirmed ? u.kind : rngPick(s.rng, ELEMENTS);
+  const slot = u.slot;
+  removeUnit(s, u); for (const m of mats) removeUnit(s, m);
+  const nu = createUnit(s, kind, grade, slot);
   s.stats.merges++;
-  if (p.grade! > s.stats.peakGrade) s.stats.peakGrade = p.grade!;
-  if (p.grade === 3) s.stats.legendMade++;
-  const pos = loc.t === 'f' ? SLOTS[loc.slot] : { x: 200, y: 590 };
-  s.events.push({ t: 'merge', unit: nu.id, grade: nu.grade, x: pos.x, y: pos.y });
-  pushLog(s, `합성 완료: ${['일반', '희귀', '영웅', '전설'][nu.grade]} ${UNITS[nu.kind].name}${p.confirmed ? ' (확정)' : ' (무작위)'}`, 'good');
-  return { ok: true, unitId: nu.id };
+  s.events.push({ t: 'merge', slot, grade, kind, confirmed });
+  pushLog(s, `합성: ${unitName(kind, grade)}${confirmed ? '' : ' (무작위)'}`, grade >= 2 ? 'good' : 'info');
+  return { ok: true, unitId: nu.id, grade, kind };
 }
 
-/** Auto pick 3 unlocked units of a grade, preferring same kind if kind given (returns ids or null). */
-export function autoPick(s: GameState, grade: Grade, kind: UnitKind | null): number[] | null {
-  const pool = s.units.filter(u => !u.mythic && u.grade === grade && !u.locked && (kind == null || u.kind === kind));
-  // prefer bench units, then non-fav, then oldest
-  pool.sort((a, b) => (a.loc.t === 'b' ? 0 : 1) - (b.loc.t === 'b' ? 0 : 1) || (a.fav ? 1 : 0) - (b.fav ? 1 : 0) || a.id - b.id);
-  if (pool.length < 3) return null;
-  return pool.slice(0, 3).map(u => u.id);
+/** 확정 합성을 가능한 만큼 반복. 낮은 등급부터. */
+export function autoMerge(s: GameState): Result {
+  if (!isAlive(s)) return fail('게임이 끝났습니다');
+  let n = 0; let guard = 0;
+  while (guard++ < 200) {
+    let did = false;
+    for (const g of [0, 1, 2] as Grade[]) {
+      for (const el of ELEMENTS) {
+        const group = s.units.filter(u => u.grade === g && u.kind === el).sort((a, b) => a.id - b.id);
+        if (group.length >= 3) { const r = mergeUnit(s, group[0].id, false); if (r.ok) { n++; did = true; break; } }
+      }
+      if (did) break;
+    }
+    if (!did) break;
+  }
+  if (n === 0) return fail('확정 합성할 수 있는 조합이 없습니다 (같은 속성·등급 3개)');
+  return { ok: true, count: n, msg: `${n}회 합성` };
 }
 
-// ---- Mythic crafting ----
-export interface RecipeStatus { id: MythicId; have: { kind: UnitKind; grade: Grade; unitId: number | null }[]; missing: number; cores: boolean; canCraft: boolean; reason: string }
+export interface RecipeStatus { id: MythicId; have: { el: Element; unitId: number | null }[]; missing: number; canCraft: boolean; reason: string }
 export function recipeStatus(s: GameState, id: MythicId): RecipeStatus {
-  const m = MYTHICS[id];
   const used = new Set<number>();
-  const have = m.recipe.map(r => {
-    // prefer locked/reserved units, then bench, then field
-    const cands = s.units.filter(u => !u.mythic && u.kind === r.kind && u.grade === r.grade && !used.has(u.id))
-      .sort((a, b) => (b.locked ? 1 : 0) - (a.locked ? 1 : 0) || (a.loc.t === 'b' ? 0 : 1) - (b.loc.t === 'b' ? 0 : 1) || a.id - b.id);
-    const u = cands[0]; if (u) used.add(u.id);
-    return { kind: r.kind, grade: r.grade, unitId: u ? u.id : null };
+  const have = MYTHICS[id].recipe.map(el => {
+    const u = s.units.filter(x => x.kind === el && x.grade === 3 && !used.has(x.id)).sort((a, b) => a.id - b.id)[0];
+    if (u) used.add(u.id);
+    return { el, unitId: u ? u.id : null };
   });
   const missing = have.filter(h => h.unitId == null).length;
-  const cores = s.cores >= 1;
-  const onField = fieldUnits(s).filter(u => u.mythic);
-  let reason = '';
-  if (s.units.some(u => u.mythic === id)) reason = '이미 보유한 신화입니다 (중복 불가)';
-  else if (onField.length >= MAX_MYTHICS_ON_FIELD && freeBench(s) < 0) reason = `신화는 전장에 최대 ${MAX_MYTHICS_ON_FIELD}기`;
-  else if (missing > 0) reason = `재료 ${missing}개 부족`;
-  else if (!cores) reason = '공방 핵 필요 (보스 처치 보상)';
-  return { id, have, missing, cores, canCraft: reason === '', reason };
+  return { id, have, missing, canCraft: missing === 0, reason: missing ? `전설 재료 ${missing}개 부족` : '' };
 }
-
-export function craftMythic(s: GameState, id: MythicId): Result & { unitId?: number } {
-  if (s.phase === 'won' || s.phase === 'lost' || s.phase === 'countdown') return fail('지금은 조합할 수 없습니다');
+export function craft(s: GameState, id: MythicId): Result {
+  if (!isAlive(s)) return fail('게임이 끝났습니다');
+  if (!MYTHIC_IDS.includes(id)) return fail('알 수 없는 신화');
   const st = recipeStatus(s, id); if (!st.canCraft) return fail(st.reason);
   const mats = st.have.map(h => unitById(s, h.unitId!)!);
-  const anchor = mats.find(u => u.loc.t === 'f') ?? mats[0];
-  const loc = { ...anchor.loc };
-  const fieldMythics = fieldUnits(s).filter(u => u.mythic).length;
-  s.cores -= 1;
-  for (const u of mats) removeUnit(s, u);
-  const nu = createUnit(s, MYTHICS[id].recipe[0].kind, 4, id);
-  if (loc.t === 'f' && fieldMythics >= MAX_MYTHICS_ON_FIELD) { const b = freeBench(s); placeUnit(s, nu, { t: 'b', idx: b }); }
-  else placeUnit(s, nu, loc);
-  s.stats.mythicsMade.push(id);
-  const pos = nu.loc.t === 'f' ? SLOTS[nu.loc.slot] : { x: 200, y: 590 };
-  s.events.push({ t: 'mythic', unit: nu.id, id, x: pos.x, y: pos.y });
+  const slot = mats[0].slot;
+  for (const m of mats) removeUnit(s, m);
+  const nu = createUnit(s, id, 4, slot);
+  s.stats.crafts++; s.stats.mythics.push(id);
+  s.events.push({ t: 'mythic', slot, kind: id });
   pushLog(s, `신화 완성! ${MYTHICS[id].name}`, 'good');
-  return { ok: true, unitId: nu.id };
+  return { ok: true, unitId: nu.id, grade: 4, kind: id };
 }
 
-/** Lock all currently matching ingredients for a recipe (reserve). Returns count locked. */
-export function reserveRecipe(s: GameState, id: MythicId): number {
-  const st = recipeStatus(s, id); let n = 0;
-  for (const h of st.have) { const u = unitById(s, h.unitId ?? undefined); if (u && !u.locked) { u.locked = true; n++; } }
-  return n;
-}
-
-// ---- Movement ----
-export function moveUnit(s: GameState, id: number, to: { t: 'f'; slot: number } | { t: 'b'; idx: number }): Result {
+export function sellValue(u: Unit): number { return SELL_VALUE[u.grade]; }
+export function sell(s: GameState, id: number): Result {
+  if (!isAlive(s)) return fail('게임이 끝났습니다');
   const u = unitById(s, id); if (!u) return fail('유닛 없음');
-  if (s.phase === 'won' || s.phase === 'lost') return fail('게임이 끝났습니다');
-  if (u.moveCd > 0) return fail(`재배치 대기 ${u.moveCd.toFixed(1)}초`);
-  if (to.t === 'f') {
-    if (to.slot < 0 || to.slot >= s.slots.length) return fail('잘못된 자리');
-    const occ = s.slots[to.slot];
-    if (occ != null && occ !== u.id) return swapUnits(s, u.id, occ);
-    if (u.mythic && u.loc.t !== 'f') {
-      const onField = fieldUnits(s).filter(x => x.mythic && x.id !== u.id).length;
-      if (onField >= MAX_MYTHICS_ON_FIELD) return fail(`신화는 전장에 최대 ${MAX_MYTHICS_ON_FIELD}기`);
-    }
-  } else {
-    if (to.idx < 0 || to.idx >= s.bench.length) return fail('잘못된 대기석');
-    const occ = s.bench[to.idx];
-    if (occ != null && occ !== u.id) return swapUnits(s, u.id, occ);
-  }
-  clearLoc(s, u); placeUnit(s, u, to);
-  u.moveCd = MOVE_COOLDOWN; u.tele = 0; // cancels telegraphed attack without refunding cooldown
-  return { ok: true };
-}
-
-export function swapUnits(s: GameState, a: number, b: number): Result {
-  const ua = unitById(s, a), ub = unitById(s, b); if (!ua || !ub || a === b) return fail('교환 대상 오류');
-  if (ua.moveCd > 0 || ub.moveCd > 0) return fail('재배치 대기 중인 유닛입니다');
-  const la = { ...ua.loc }, lb = { ...ub.loc };
-  clearLoc(s, ua); clearLoc(s, ub); placeUnit(s, ua, lb); placeUnit(s, ub, la);
-  ua.moveCd = MOVE_COOLDOWN; ub.moveCd = MOVE_COOLDOWN; ua.tele = 0; ub.tele = 0;
-  return { ok: true };
-}
-
-export function toggleLock(s: GameState, id: number): Result { const u = unitById(s, id); if (!u) return fail('유닛 없음'); u.locked = !u.locked; return { ok: true }; }
-export function toggleFav(s: GameState, id: number): Result { const u = unitById(s, id); if (!u) return fail('유닛 없음'); u.fav = !u.fav; return { ok: true }; }
-
-export function sellValue(u: Unit): number { return u.mythic ? 300 : SELL_VALUE[u.grade as Grade]; }
-export function sellUnit(s: GameState, id: number): Result {
-  const u = unitById(s, id); if (!u) return fail('유닛 없음');
-  if (s.phase === 'won' || s.phase === 'lost') return fail('게임이 끝났습니다');
   const v = sellValue(u); removeUnit(s, u); s.gold += v; s.stats.goldEarned += v;
-  pushLog(s, `${unitLabel(u)} 판매 +${v}`, 'info');
+  pushLog(s, `${label(u)} 판매 +${v}`, 'info');
+  return { ok: true, msg: `+${v} 골드` };
+}
+
+export function move(s: GameState, id: number, slot: number): Result {
+  if (!isAlive(s)) return fail('게임이 끝났습니다');
+  const u = unitById(s, id); if (!u) return fail('유닛 없음');
+  if (slot < 0 || slot >= SLOT_COUNT) return fail('잘못된 자리');
+  if (u.slot === slot) return { ok: true };
+  const occ = s.slots[slot];
+  if (occ != null) { const o = unitById(s, occ)!; const from = u.slot; s.slots[from] = o.id; s.slots[slot] = u.id; u.slot = slot; o.slot = from; }
+  else { s.slots[u.slot] = null; s.slots[slot] = u.id; u.slot = slot; }
   return { ok: true };
 }
 
-export function buyUpgrade(s: GameState, id: 'atk' | 'spd' | 'life'): Result {
-  const def = UPGRADES.find(d => d.id === id)!;
-  const lv = s.upgrades[id];
-  if (lv >= def.max) return fail('최대 단계입니다');
-  const cost = upgradeCost(def, lv);
+export function upgradeSummon(s: GameState): Result {
+  if (!isAlive(s)) return fail('게임이 끝났습니다');
+  if (s.summonLv >= MAX_SUMMON_LV) return fail('소환 레벨 최대');
+  const cost = SUMMON_LV_COST[s.summonLv - 1];
   if (s.gold < cost) return fail(`골드 부족 (${cost} 필요)`);
-  s.gold -= cost; s.stats.goldSpent += cost; s.upgrades[id] = lv + 1;
-  if (id === 'life') { s.maxLife += def.per; s.life += def.per; }
-  s.events.push({ t: 'levelup' });
+  s.gold -= cost; s.stats.goldSpent += cost; s.summonLv++;
+  s.events.push({ t: 'levelup', what: 'summon' });
+  pushLog(s, `소환 레벨 ${s.summonLv}! 높은 등급 확률 상승`, 'good');
+  return { ok: true };
+}
+export function upgradeAtk(s: GameState): Result {
+  if (!isAlive(s)) return fail('게임이 끝났습니다');
+  if (s.atkLv >= MAX_ATK_LV) return fail('공격력 강화 최대');
+  const cost = atkUpgradeCost(s.atkLv);
+  if (s.gold < cost) return fail(`골드 부족 (${cost} 필요)`);
+  s.gold -= cost; s.stats.goldSpent += cost; s.atkLv++;
+  s.events.push({ t: 'levelup', what: 'atk' });
+  return { ok: true };
+}
+
+export function sendGold(s: GameState, amount: number): Result {
+  if (!isAlive(s)) return fail('게임이 끝났습니다');
+  amount = Math.floor(amount);
+  if (!(amount >= MIN_SEND_GOLD)) return fail(`최소 ${MIN_SEND_GOLD} 골드`);
+  if (s.gold < amount) return fail('골드 부족');
+  s.gold -= amount; s.stats.goldSent += amount;
+  return { ok: true };
+}
+export function receiveGold(s: GameState, amount: number): Result {
+  amount = Math.floor(amount); if (!(amount > 0)) return fail('잘못된 금액');
+  s.gold += amount; s.stats.goldReceived += amount; s.stats.goldEarned += amount;
+  s.events.push({ t: 'gold', amount, x: FIELD_W / 2, y: FIELD_H / 2 });
   return { ok: true };
 }

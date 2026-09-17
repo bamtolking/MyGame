@@ -1,257 +1,167 @@
-import type { GameState, Enemy, Unit, SimEvent } from '../sim/types';
-import { FIELD_W, FIELD_H, PATH_POINTS, PATH_HALF, SLOTS, SLOT_R, posAt, PATH_LEN } from '../data/map';
-import { ENEMIES } from '../data/enemies';
-import { UNITS, MYTHICS } from '../data/units';
-import { unitSprite, enemySprite, SPR, GRADE_HEX } from './sprites';
-import { Fx, DmgNumbers } from './fx';
-import { baseStats } from '../sim/state';
+// Canvas 2D 렌더러. 자기 판(GameState)과 남의 판(스냅샷) 모두 BoardView로 그립니다.
+import type { GameState, SimEvent } from '../sim/types.ts';
+import { FIELD_W, FIELD_H, CELL, COLS, ROWS, SLOT_COUNT, slotPos, slotAt, pathPos, PATH_LEN, MONSTER_CAP } from '../data/board.ts';
+import { kindHex, GRADE_HEX, unitStats, type Kind, type Grade } from '../data/units.ts';
+import { MONSTER_DEFS, type MonsterType } from '../data/monsters.ts';
+import { unitSprite, monsterSprite, clearSpriteCache } from './sprites.ts';
+import { Fx } from './fx.ts';
+import { atkMul, aliveMonsters } from '../sim/state.ts';
+import { snapUnits, snapMonsters, type BoardSnap } from '../sim/snapshot.ts';
 
-export interface ViewState {
-  selectedUnit: number | null;
-  hoverSlot: number | null;
-  skillMode: 'bomb' | 'freeze' | null;
-  skillX: number; skillY: number; skillValid: boolean;
-  showRanges: boolean;
-}
+export interface ViewUnit { slot: number; kind: Kind; grade: Grade; range?: number; cdFrac?: number }
+export interface ViewMonster { x: number; y: number; type: MonsterType; boss: boolean; hpPct: number; stunned: boolean; slowed: boolean; dist: number }
+export interface BoardView { units: ViewUnit[]; monsters: ViewMonster[]; selected: number | null; moveFrom: number | null; dragging: { kind: Kind; grade: Grade; x: number; y: number } | null; eliminated: boolean; remote: boolean; label?: string; monsterCount: number }
 
 export class Renderer {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
-  scale = 1; ox = 0; oy = 0; dpr = 1;
+  scale = 1; ox = 0; oy = 0; dpr = 1; cssW = 0; cssH = 0;
   bg: HTMLCanvasElement | null = null;
-  fx = new Fx(); dmg = new DmgNumbers();
-  time = 0;
-  unitAnim = new Map<number, { shot: number; born: number }>();
-  enemyFlash = new Map<number, number>();
-  view: ViewState = { selectedUnit: null, hoverSlot: null, skillMode: null, skillX: 0, skillY: 0, skillValid: false, showRanges: true };
-  onEvent: ((e: SimEvent) => void) | null = null;
-  lowFx = false;
+  fx = new Fx();
+  time = 0; shake = 0;
+  showRanges = true;
+  anim = new Map<number, number>(); // slot → 마지막 공격 시각(반동 연출)
 
-  constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas; this.ctx = canvas.getContext('2d', { alpha: false })!;
-  }
+  constructor(canvas: HTMLCanvasElement) { this.canvas = canvas; this.ctx = canvas.getContext('2d', { alpha: false })!; }
 
   resize(cssW: number, cssH: number): void {
-    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.dpr = Math.min(2, window.devicePixelRatio || 1); this.cssW = cssW; this.cssH = cssH;
     this.canvas.width = Math.round(cssW * this.dpr); this.canvas.height = Math.round(cssH * this.dpr);
     this.canvas.style.width = cssW + 'px'; this.canvas.style.height = cssH + 'px';
     this.scale = Math.min(cssW / FIELD_W, cssH / FIELD_H);
     this.ox = (cssW - FIELD_W * this.scale) / 2; this.oy = (cssH - FIELD_H * this.scale) / 2;
-    this.bg = null;
+    this.bg = null; clearSpriteCache();
   }
-  /** CSS px → logical field coords */
   toField(px: number, py: number): [number, number] { return [(px - this.ox) / this.scale, (py - this.oy) / this.scale]; }
-  slotAt(fx: number, fy: number): number | null {
-    let best: number | null = null, bd = 30;
-    for (const s of SLOTS) { const d = Math.hypot(s.x - fx, s.y - fy); if (d < bd) { bd = d; best = s.id; } }
-    return best;
+  slotAtPx(px: number, py: number): number { const [x, y] = this.toField(px, py); return slotAt(x, y); }
+
+  /** 자기 판 → 뷰 */
+  static viewOf(s: GameState, selected: number | null, moveFrom: number | null, dragging: BoardView['dragging'], label?: string): BoardView {
+    const am = atkMul(s);
+    return {
+      units: s.units.map(u => ({ slot: u.slot, kind: u.kind, grade: u.grade, range: unitStats(u.kind, u.grade, am).range, cdFrac: 0 })),
+      monsters: s.monsters.filter(m => m.alive).map(m => ({ x: m.x, y: m.y, type: m.type, boss: m.boss, hpPct: m.hp / m.maxHp, stunned: m.stunT > 0, slowed: m.slowT > 0 || m.auraSlow > 0, dist: m.dist })),
+      selected, moveFrom, dragging, eliminated: s.phase === 'eliminated', remote: false, label, monsterCount: aliveMonsters(s),
+    };
+  }
+  /** 남의 판(스냅샷) → 뷰. elapsed = 스냅샷 수신 후 경과 초(위치 보간) */
+  static viewOfSnap(b: BoardSnap, elapsed: number, label: string): BoardView {
+    return { units: snapUnits(b), monsters: snapMonsters(b, elapsed, pathPos, PATH_LEN), selected: null, moveFrom: null, dragging: null, eliminated: b.ph === 'eliminated', remote: true, label, monsterCount: b.n };
+  }
+
+  pushEvents(events: SimEvent[]): void {
+    for (const e of events) {
+      switch (e.t) {
+        case 'shot': {
+          const color = kindHex(e.kind); this.anim.set(e.from, this.time);
+          this.fx.shot(e.x1, e.y1, e.x2, e.y2, e.kind, color, e.targets);
+          if (e.kind === 'fire' || e.kind === 'titan') this.fx.burst(e.x2, e.y2, e.kind === 'titan' ? 14 : 5 + e.grade * 2, color, 50, 2.2, 0.35);
+          else if (e.kind === 'ice' || e.kind === 'queen') this.fx.ring(e.x2, e.y2, 3, 12 + e.grade * 3, color, 0.35, 1.5);
+          else if (e.kind === 'earth') this.fx.ring(e.x2, e.y2, 2, 10, '#c89a63', 0.3, 2);
+          else if (e.kind === 'bolt' || e.kind === 'dragon') this.fx.burst(e.x2, e.y2, 3, color, 40, 1.5, 0.25);
+          break;
+        }
+        case 'die': this.fx.burst(e.x, e.y, e.boss ? 40 : 7, e.boss ? '#ff6b9a' : '#ff8a8a', e.boss ? 120 : 55, e.boss ? 4 : 2.5, e.boss ? 1.2 : 0.5, 40); if (e.gold >= 3 || e.boss) this.fx.float(e.x, e.y - 8, `+${e.gold}`, '#ffd76a', e.boss ? 16 : 10); if (e.boss) this.shake = 0.6; break;
+        case 'summon': { const p = slotPos(e.slot); this.fx.ring(p.x, p.y, 4, 26, GRADE_HEX[e.grade], 0.5, 2.5); if (e.grade >= 2) { this.fx.burst(p.x, p.y, 16 + e.grade * 6, GRADE_HEX[e.grade], 70, 2.5, 0.8); } break; }
+        case 'merge': { const p = slotPos(e.slot); this.fx.ring(p.x, p.y, 30, 6, GRADE_HEX[e.grade], 0.45, 3); this.fx.burst(p.x, p.y, 14 + e.grade * 6, GRADE_HEX[e.grade], 80, 2.5, 0.7); this.fx.float(p.x, p.y - 26, e.confirmed ? '합성!' : '무작위 합성!', GRADE_HEX[e.grade], 12, 1.1); break; }
+        case 'mythic': { const p = slotPos(e.slot); this.fx.ring(p.x, p.y, 10, 60, kindHex(e.kind), 0.9, 4); this.fx.burst(p.x, p.y, 50, kindHex(e.kind), 110, 3, 1.2); this.shake = 0.5; break; }
+        case 'gold': this.fx.float(e.x, e.y, `+${e.amount} 골드`, '#ffd76a', 13, 1.3); break;
+        case 'eliminated': this.shake = 1; this.fx.burst(FIELD_W / 2, FIELD_H / 2, 60, '#ff5560', 150, 3, 1.5); break;
+        case 'won': this.fx.burst(FIELD_W / 2, FIELD_H / 2, 80, '#ffd76a', 160, 3.5, 2); break;
+        case 'round': if (e.boss) this.shake = 0.4; break;
+      }
+    }
   }
 
   private buildBg(): HTMLCanvasElement {
-    const cv = document.createElement('canvas'); cv.width = this.canvas.width; cv.height = this.canvas.height;
-    const c = cv.getContext('2d')!; c.scale(this.dpr, this.dpr);
-    c.fillStyle = '#0d1023'; c.fillRect(0, 0, cv.width, cv.height);
-    c.translate(this.ox, this.oy); c.scale(this.scale, this.scale);
-    // ground
-    const g = c.createLinearGradient(0, 0, 0, FIELD_H); g.addColorStop(0, '#1a1f3d'); g.addColorStop(1, '#141633');
-    c.fillStyle = g; c.fillRect(-40, -40, FIELD_W + 80, FIELD_H + 80);
-    // stars / lanterns glow
-    let sd = 7; const r = () => { sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0; return sd / 4294967296; };
-    for (let i = 0; i < 40; i++) { c.fillStyle = `rgba(255,255,255,${0.15 + r() * 0.3})`; c.fillRect(r() * FIELD_W, r() * FIELD_H, 1.2, 1.2); }
-    // stalls (decoration in empty corners)
-    const stall = (x: number, y: number, w: number, h: number, col: string) => { c.fillStyle = '#3e2723'; c.fillRect(x, y + 6, w, h); c.fillStyle = col; c.beginPath(); c.moveTo(x - 4, y + 8); c.lineTo(x + w / 2, y - 6); c.lineTo(x + w + 4, y + 8); c.closePath(); c.fill(); c.fillStyle = 'rgba(255,255,255,0.25)'; for (let i = 0; i < w; i += 8) c.fillRect(x + i, y + 8, 4, 3); };
-    stall(20, 320, 40, 30, '#c62828'); stall(20, 520, 44, 40, '#6a1b9a'); stall(350, 385, 34, 30, '#ef6c00'); stall(340, 545, 46, 36, '#00838f');
-    // path
-    c.lineCap = 'round'; c.lineJoin = 'round';
-    c.strokeStyle = '#3b2a1a'; c.lineWidth = PATH_HALF * 2 + 8; c.beginPath(); PATH_POINTS.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.stroke();
-    c.strokeStyle = '#8b6b45'; c.lineWidth = PATH_HALF * 2; c.stroke();
-    c.strokeStyle = 'rgba(255,220,160,0.18)'; c.lineWidth = 4; c.setLineDash([10, 14]); c.stroke(); c.setLineDash([]);
-    // direction chevrons
-    c.fillStyle = 'rgba(255,240,200,0.35)';
-    for (let p = 40; p < PATH_LEN - 20; p += 110) { const [x, y] = posAt(p); const [x2, y2] = posAt(p + 6); const a = Math.atan2(y2 - y, x2 - x); c.save(); c.translate(x, y); c.rotate(a); c.beginPath(); c.moveTo(-4, -5); c.lineTo(3, 0); c.lineTo(-4, 5); c.closePath(); c.fill(); c.restore(); }
-    // lantern posts along path corners
-    c.fillStyle = '#ffb74d';
-    for (const [x, y] of PATH_POINTS.slice(1, -1)) { const gl = c.createRadialGradient(x, y, 2, x, y, 40); gl.addColorStop(0, 'rgba(255,183,77,0.22)'); gl.addColorStop(1, 'rgba(255,183,77,0)'); c.fillStyle = gl; c.beginPath(); c.arc(x, y, 40, 0, Math.PI * 2); c.fill(); }
-    // entrance gate
-    c.fillStyle = '#5d4037'; c.fillRect(-30, 30, 22, 60); c.fillStyle = '#ffcc80'; c.font = 'bold 9px sans-serif'; c.textAlign = 'center'; c.fillText('입구', -19, 62);
-    // vault (exit)
-    c.fillStyle = '#4e342e'; c.beginPath(); c.roundRect(160, 575, 80, 40, 8); c.fill(); c.strokeStyle = '#ffd54f'; c.lineWidth = 2; c.stroke();
-    c.fillStyle = '#ffd54f'; c.font = 'bold 11px sans-serif'; c.fillText('보물 창고', 200, 598);
-    c.fillStyle = '#2b1d14'; c.beginPath(); c.roundRect(188, 577, 24, 20, 4); c.fill();
-    // slot pads
-    for (const s of SLOTS) { c.beginPath(); c.arc(s.x, s.y, SLOT_R, 0, Math.PI * 2); c.fillStyle = 'rgba(255,255,255,0.05)'; c.fill(); c.strokeStyle = 'rgba(255,230,180,0.35)'; c.lineWidth = 1.2; c.setLineDash([3, 3]); c.stroke(); c.setLineDash([]); }
-    return cv;
+    const c = document.createElement('canvas'); c.width = this.canvas.width; c.height = this.canvas.height;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#0e1120'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); ctx.translate(this.ox, this.oy); ctx.scale(this.scale, this.scale);
+    // 바닥(안뜰)
+    ctx.fillStyle = '#1b2236'; ctx.fillRect(0, 0, FIELD_W, FIELD_H);
+    // 길(고리)
+    ctx.fillStyle = '#3b3a4e';
+    ctx.fillRect(0, 0, FIELD_W, CELL); ctx.fillRect(0, FIELD_H - CELL, FIELD_W, CELL); ctx.fillRect(0, 0, CELL, FIELD_H); ctx.fillRect(FIELD_W - CELL, 0, CELL, FIELD_H);
+    // 길 바닥 돌 무늬
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    for (let i = 0; i < COLS; i++) for (let j = 0; j < ROWS; j++) { if (i > 0 && i < COLS - 1 && j > 0 && j < ROWS - 1) continue; if ((i + j) % 2 === 0) ctx.fillRect(i * CELL + 2, j * CELL + 2, CELL - 4, CELL - 4); }
+    // 길 중앙 점선(방향)
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.setLineDash([8, 10]); ctx.lineWidth = 2;
+    ctx.strokeRect(CELL / 2, CELL / 2, FIELD_W - CELL, FIELD_H - CELL); ctx.setLineDash([]);
+    // 안뜰 테두리(담장)
+    ctx.strokeStyle = '#4a5578'; ctx.lineWidth = 3; ctx.strokeRect(CELL, CELL, FIELD_W - 2 * CELL, FIELD_H - 2 * CELL);
+    // 자리
+    for (let i = 0; i < SLOT_COUNT; i++) { const p = slotPos(i); ctx.fillStyle = 'rgba(255,255,255,0.045)'; ctx.beginPath(); ctx.roundRect(p.x - 21, p.y - 21, 42, 42, 8); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1; ctx.stroke(); }
+    // 출발 지점 표시
+    const sp = pathPos(0); ctx.fillStyle = 'rgba(255,90,90,0.25)'; ctx.beginPath(); ctx.arc(sp.x, sp.y, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = 'bold 9px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('출현', sp.x, sp.y);
+    // 방향 화살표
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    const arrow = (x: number, y: number, a: number) => { ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-4, -5); ctx.lineTo(-4, 5); ctx.closePath(); ctx.fill(); ctx.restore(); };
+    arrow(FIELD_W / 2, CELL / 2, 0); arrow(FIELD_W - CELL / 2, FIELD_H / 2, Math.PI / 2); arrow(FIELD_W / 2, FIELD_H - CELL / 2, Math.PI); arrow(CELL / 2, FIELD_H / 2, -Math.PI / 2);
+    return c;
   }
 
-  consumeEvents(s: GameState): void {
-    const fx = this.fx;
-    for (const e of s.events) {
-      switch (e.t) {
-        case 'shoot': this.unitAnim.set(e.unit, { shot: this.time, born: this.unitAnim.get(e.unit)?.born ?? 0 }); if (e.kind === 'puff') fx.puff(e.x + 10, e.y - 20, '#eceff1', 5, 0.5); if (e.kind === 'pulse') fx.ring(e.tx, e.ty, 50, '#b39ddb', 0.35, 2); if (e.kind === 'suntele') fx.ring(e.tx, e.ty, 75, '#ff9100', 0.8, 2); break;
-        case 'hit': this.enemyFlash.set(e.enemy, 0.08); this.dmg.push(e.enemy, e.x, e.y, e.dmg); if (e.kind === 'hit' && !this.lowFx) fx.burst(e.x, e.y, 2, '#fff', 40, 1.5, 0.25); break;
-        case 'explode': {
-          if (e.kind === 'cracker') { fx.burst(e.x, e.y, 14, '#ff7043', 90, 3, 0.45); fx.ring(e.x, e.y, e.r, '#ffab40', 0.3); fx.shake(2, 0.15); }
-          else if (e.kind === 'acidburst') { fx.burst(e.x, e.y, 8, '#aeea00', 70, 2.5, 0.4); fx.ring(e.x, e.y, e.r, '#c6ff00', 0.3); }
-          else if (e.kind === 'acid') { fx.burst(e.x, e.y, 5, '#9ccc65', 40, 2, 0.35); }
-          else if (e.kind === 'sun') { fx.burst(e.x, e.y, 30, '#ffab00', 140, 4, 0.6); fx.ring(e.x, e.y, e.r, '#fff176', 0.5, 4); fx.zone(e.x, e.y, e.r, '#ff6f00', 2); fx.shake(5, 0.3); fx.flash(0.1); }
-          else if (e.kind === 'gravity') { fx.ring(e.x, e.y, e.r, '#ffd600', 0.6, 4); fx.burst(e.x, e.y, 16, '#fff59d', 60, 3, 0.5); fx.shake(3, 0.2); }
-          else if (e.kind === 'bomb') { fx.burst(e.x, e.y, 24, '#ff5252', 130, 3.5, 0.5); fx.ring(e.x, e.y, e.r, '#ff8a80', 0.4, 4); fx.shake(4, 0.25); }
-          else if (e.kind === 'heal') { fx.ring(e.x, e.y, e.r, '#ce93d8', 0.4, 1.5); }
-          break;
-        }
-        case 'chain': fx.bolt(e.pts, e.conducted ? '#80d8ff' : '#ffee58', e.grade >= 4 ? 0.3 : 0.2, e.grade >= 4 ? 3 : 2); break;
-        case 'shock': fx.burst(e.x, e.y, 5, '#80d8ff', 50, 2, 0.3); break;
-        case 'die': { const d = ENEMIES[e.type]; fx.burst(e.x, e.y, e.boss ? 40 : 8, d.color, e.boss ? 150 : 70, e.boss ? 4 : 2.5, e.boss ? 0.9 : 0.45); if (e.boss) { fx.shake(6, 0.4); fx.flash(0.15); } break; }
-        case 'exit': fx.text(e.x, e.y - 10, `-${e.dmg}`, '#ff5252', 14, 1); fx.shake(3, 0.2); break;
-        case 'summon': break;
-        case 'merge': fx.burst(e.x, e.y, 18, GRADE_HEX[e.grade], 90, 3, 0.6); fx.ring(e.x, e.y, 30, GRADE_HEX[e.grade], 0.5, 3); break;
-        case 'mythic': fx.burst(e.x, e.y, 50, MYTHICS[e.id].color, 160, 4, 1.0); fx.ring(e.x, e.y, 60, '#fff', 0.8, 4); fx.ring(e.x, e.y, 120, MYTHICS[e.id].color, 1.0, 3); fx.shake(5, 0.4); fx.flash(0.2); this.unitAnim.set(e.unit, { shot: 0, born: this.time }); break;
-        case 'pull': fx.ring(e.x, e.y, 20, '#b39ddb', 0.3, 2); break;
-        case 'gold': fx.gold(e.x, e.y - 8, e.amount); break;
-        case 'skill': if (e.kind === 'freeze') { fx.burst(e.x, e.y, 24, '#80deea', 100, 3, 0.6); fx.ring(e.x, e.y, e.r, '#e0f7fa', 0.5, 4); fx.zone(e.x, e.y, e.r, '#4dd0e1', 1.5); } break;
-        case 'seal': { const sl = SLOTS[e.slot]; fx.ring(sl.x, sl.y, SLOT_R + 6, e.phase === 'warn' ? '#ffab40' : '#7c4dff', 0.6, 3); break; }
-        default: break;
-      }
-      this.onEvent?.(e);
-    }
-    s.events.length = 0;
-  }
-
-  draw(s: GameState, dt: number): void {
-    this.time += dt;
-    this.fx.update(dt); this.dmg.flush(dt, this.fx);
-    for (const [id, t] of this.enemyFlash) { const n = t - dt; if (n <= 0) this.enemyFlash.delete(id); else this.enemyFlash.set(id, n); }
+  draw(v: BoardView, dt: number): void {
+    this.time += dt; this.fx.update(dt);
+    if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 2);
+    const ctx = this.ctx;
     if (!this.bg) this.bg = this.buildBg();
-    const c = this.ctx; const cw = this.canvas.width, ch = this.canvas.height;
-    c.setTransform(1, 0, 0, 1, 0, 0);
-    c.drawImage(this.bg, 0, 0);
-    let shx = 0, shy = 0;
-    if (this.fx.shakeT > 0) { shx = (this.fx.rnd() - 0.5) * this.fx.shakeAmt * 2; shy = (this.fx.rnd() - 0.5) * this.fx.shakeAmt * 2; }
-    c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    c.translate(this.ox + shx, this.oy + shy); c.scale(this.scale, this.scale);
-    c.lineJoin = 'round'; c.lineCap = 'round';
-    this.drawSlotStates(s);
-    this.drawUnitsUnder(s);
-    this.drawEnemies(s);
-    this.drawUnits(s);
-    this.drawProjectiles(s);
-    this.fx.draw(c);
-    this.drawOverlays(s);
-    if (this.fx.flashT > 0) { c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = `rgba(255,255,255,${Math.min(0.35, this.fx.flashT * 2)})`; c.fillRect(0, 0, cw, ch); }
-  }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.bg, 0, 0);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const sx = this.shake > 0 ? (Math.random() - 0.5) * this.shake * 6 : 0, sy = this.shake > 0 ? (Math.random() - 0.5) * this.shake * 6 : 0;
+    ctx.translate(this.ox + sx, this.oy + sy); ctx.scale(this.scale, this.scale);
+    ctx.save(); ctx.beginPath(); ctx.rect(-4, -4, FIELD_W + 8, FIELD_H + 8); ctx.clip();
 
-  private drawSlotStates(s: GameState): void {
-    const c = this.ctx; const v = this.view;
-    const sel = v.selectedUnit != null ? s.units.find(u => u.id === v.selectedUnit) : null;
-    // overheat
-    const rt = s.waveRt;
-    if (rt && rt.overheatT > 0) {
-      const warn = rt.overheatT > 25; const pulse = 0.5 + 0.5 * Math.sin(this.time * 6);
-      for (const i of rt.overheatSlots) { const sl = SLOTS[i]; c.beginPath(); c.arc(sl.x, sl.y, SLOT_R + 4, 0, Math.PI * 2); c.strokeStyle = warn ? `rgba(255,171,64,${0.3 + pulse * 0.5})` : `rgba(255,87,34,${0.5 + pulse * 0.4})`; c.lineWidth = 3; c.stroke(); if (!warn) { c.fillStyle = 'rgba(255,87,34,0.15)'; c.fill(); } c.fillStyle = '#ffab40'; c.font = 'bold 9px sans-serif'; c.textAlign = 'center'; c.fillText(warn ? '과열 예고' : '과열 +40%', sl.x, sl.y - SLOT_R - 6); }
+    // 사거리 표시 (선택 유닛)
+    if (v.selected != null && this.showRanges) {
+      const u = v.units.find(x => x.slot === v.selected);
+      if (u && u.range) { const p = slotPos(u.slot); ctx.fillStyle = kindHex(u.kind) + '18'; ctx.strokeStyle = kindHex(u.kind) + '88'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(p.x, p.y, u.range, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
     }
-    // seals
-    for (const z of s.seals) { const sl = SLOTS[z.slot]; const pulse = 0.5 + 0.5 * Math.sin(this.time * 8); c.beginPath(); c.arc(sl.x, sl.y, SLOT_R + 4, 0, Math.PI * 2); if (z.warnT > 0) { c.strokeStyle = `rgba(255,171,64,${0.4 + pulse * 0.5})`; c.lineWidth = 3; c.setLineDash([4, 4]); c.stroke(); c.setLineDash([]); c.fillStyle = '#ffab40'; c.font = 'bold 9px sans-serif'; c.textAlign = 'center'; c.fillText(`봉인 ${z.warnT.toFixed(1)}`, sl.x, sl.y - SLOT_R - 6); } else { c.fillStyle = 'rgba(124,77,255,0.35)'; c.fill(); c.strokeStyle = '#7c4dff'; c.lineWidth = 3; c.stroke(); c.fillStyle = '#d1c4e9'; c.font = 'bold 9px sans-serif'; c.textAlign = 'center'; c.fillText(`봉인 ${z.sealT.toFixed(1)}`, sl.x, sl.y - SLOT_R - 6); } }
-    // placement highlight
-    if (sel) {
-      for (const sl of SLOTS) { const occ = s.slots[sl.id]; if (occ === sel.id) continue; c.beginPath(); c.arc(sl.x, sl.y, SLOT_R, 0, Math.PI * 2); c.fillStyle = occ == null ? 'rgba(129,199,132,0.22)' : 'rgba(255,213,79,0.12)'; c.fill(); c.strokeStyle = occ == null ? '#81c784' : 'rgba(255,213,79,0.6)'; c.lineWidth = 1.5; c.stroke(); }
+    // 이동 대상 자리 강조
+    if (v.moveFrom != null || v.dragging) {
+      for (let i = 0; i < SLOT_COUNT; i++) { const p = slotPos(i); const occ = v.units.some(u => u.slot === i); ctx.strokeStyle = occ ? 'rgba(255,200,80,0.5)' : 'rgba(120,255,160,0.6)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.roundRect(p.x - 21, p.y - 21, 42, 42, 8); ctx.stroke(); }
+      ctx.setLineDash([]);
     }
-    if (v.hoverSlot != null) { const sl = SLOTS[v.hoverSlot]; c.beginPath(); c.arc(sl.x, sl.y, SLOT_R + 3, 0, Math.PI * 2); c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); }
-  }
-
-  private drawUnitsUnder(s: GameState): void {
-    const c = this.ctx; const sel = this.view.selectedUnit;
-    for (const u of s.units) {
-      if (u.loc.t !== 'f') continue; const sl = SLOTS[u.loc.slot];
-      const st = baseStats(s, u);
-      if (u.id === sel) {
-        c.beginPath(); c.arc(sl.x, sl.y, st.range, 0, Math.PI * 2); c.fillStyle = 'rgba(255,255,255,0.07)'; c.fill(); c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1.5; c.stroke();
-        if (st.aura) { c.beginPath(); c.arc(sl.x, sl.y, st.auraRange, 0, Math.PI * 2); c.strokeStyle = 'rgba(255,241,118,0.6)'; c.setLineDash([4, 4]); c.stroke(); c.setLineDash([]); }
-        if (u.mythic === 'chrono') { c.beginPath(); c.arc(sl.x, sl.y, 100, 0, Math.PI * 2); c.strokeStyle = 'rgba(0,229,255,0.6)'; c.setLineDash([4, 4]); c.stroke(); c.setLineDash([]); }
-      }
-      if (u.mythic === 'chrono') { const pulse = 0.5 + 0.5 * Math.sin(this.time * 2); c.beginPath(); c.arc(sl.x, sl.y, 100, 0, Math.PI * 2); c.fillStyle = `rgba(0,229,255,${0.05 + pulse * 0.04})`; c.fill(); }
-      if (u.tele > 0) { const k = 1 - u.tele / 0.8; c.beginPath(); c.arc(u.teleX, u.teleY, 75, 0, Math.PI * 2); c.strokeStyle = `rgba(255,145,0,${0.4 + k * 0.5})`; c.lineWidth = 2 + k * 3; c.stroke(); c.beginPath(); c.arc(u.teleX, u.teleY, 75 * k, 0, Math.PI * 2); c.fillStyle = 'rgba(255,145,0,0.18)'; c.fill(); }
+    // 유닛
+    const upx = Math.round(this.scale * this.dpr * 56);
+    for (const u of v.units) {
+      const p = slotPos(u.slot); const spr = unitSprite(u.kind, u.grade, upx);
+      const last = this.anim.get(u.slot) ?? -9; const k = Math.max(0, 1 - (this.time - last) / 0.18);
+      const bob = v.remote ? 0 : Math.sin(this.time * 3 + u.slot) * 0.8;
+      const sel = v.selected === u.slot;
+      if (sel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(p.x - 22, p.y - 22, 44, 44, 9); ctx.stroke(); }
+      if (v.dragging && v.moveFrom === u.slot) ctx.globalAlpha = 0.35;
+      const sz = 56 * (1 + k * 0.12);
+      ctx.drawImage(spr, p.x - sz / 2, p.y - sz / 2 + bob - 3, sz, sz);
+      ctx.globalAlpha = 1;
     }
-  }
-
-  private drawUnits(s: GameState): void {
-    const c = this.ctx;
-    for (const u of s.units) {
-      if (u.loc.t !== 'f') continue; const sl = SLOTS[u.loc.slot];
-      const an = this.unitAnim.get(u.id); const since = an ? this.time - an.shot : 9; const bornK = an && this.time - an.born < 0.8 ? (this.time - an.born) / 0.8 : 1;
-      const bob = Math.sin(this.time * 3 + u.id) * 1.2;
-      const recoil = since < 0.15 ? (1 - since / 0.15) : 0;
-      const slotId = sl.id; const sealed = s.seals.some(z => z.sealT > 0 && z.slot === slotId);
-      c.save(); c.translate(sl.x, sl.y + bob);
-      const sc = (u.mythic ? 1.25 : 0.95 + u.grade * 0.05) * (bornK < 1 ? 0.6 + 0.4 * bornK + Math.sin(bornK * Math.PI) * 0.35 : 1);
-      c.scale(sc * (1 + recoil * 0.12), sc * (1 - recoil * 0.12));
-      if (u.id === this.view.selectedUnit) { c.beginPath(); c.arc(0, 8, 22, 0, Math.PI * 2); c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); }
-      const spr = unitSprite(u.kind, u.grade, u.mythic, this.dpr);
-      c.drawImage(spr, -SPR / 2, -SPR / 2 - 6, SPR, SPR);
-      if (sealed) { c.globalAlpha = 0.6; c.fillStyle = '#7c4dff'; c.beginPath(); c.arc(0, 0, 20, 0, Math.PI * 2); c.fill(); c.globalAlpha = 1; }
-      c.restore();
-      // grade pip & lock
-      const col = GRADE_HEX[u.grade];
-      c.fillStyle = col; c.beginPath(); c.arc(sl.x + 14, sl.y + 12, 4, 0, Math.PI * 2); c.fill(); c.strokeStyle = '#111'; c.lineWidth = 1; c.stroke();
-      if (u.locked) { c.font = '9px sans-serif'; c.textAlign = 'center'; c.fillText('🔒', sl.x - 14, sl.y + 16); }
-      if (u.fav) { c.font = '9px sans-serif'; c.textAlign = 'center'; c.fillText('⭐', sl.x - 14, sl.y - 12); }
-      if (u.moveCd > 0) { c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 2; c.beginPath(); c.arc(sl.x, sl.y, SLOT_R + 2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (u.moveCd / 1.5)); c.stroke(); }
+    // 몬스터
+    const mpx = Math.round(this.scale * this.dpr * 44);
+    const sorted = v.monsters.slice().sort((a, b) => a.y - b.y);
+    for (const m of sorted) {
+      const d = MONSTER_DEFS[m.type]; const spr = monsterSprite(m.type, mpx);
+      const sz = d.size * 2.2;
+      const wob = Math.sin(this.time * 10 + m.dist * 0.1) * (m.stunned ? 0 : 1.5);
+      ctx.drawImage(spr, m.x - sz / 2, m.y - sz / 2 + wob - 2, sz, sz);
+      if (m.slowed) { ctx.fillStyle = 'rgba(120,200,255,0.35)'; ctx.beginPath(); ctx.arc(m.x, m.y, sz * 0.4, 0, Math.PI * 2); ctx.fill(); }
+      if (m.stunned) { ctx.fillStyle = '#ffe97a'; ctx.font = 'bold 9px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('★', m.x + Math.sin(this.time * 12) * 5, m.y - sz * 0.55); }
+      // 체력바
+      const w = m.boss ? 34 : 16, h = m.boss ? 4 : 2.5; const bx = m.x - w / 2, by = m.y - sz / 2 - 5;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx - 0.5, by - 0.5, w + 1, h + 1);
+      ctx.fillStyle = m.hpPct > 0.5 ? '#6cff8a' : m.hpPct > 0.25 ? '#ffd24a' : '#ff5a5a'; ctx.fillRect(bx, by, w * Math.max(0, m.hpPct), h);
     }
-  }
-
-  private drawEnemies(s: GameState): void {
-    const c = this.ctx;
-    for (const e of s.enemies) {
-      if (!e.alive || e.progress <= 0) continue;
-      const d = ENEMIES[e.type]; const spr = enemySprite(e.type, this.dpr); const size = e.isBoss ? 72 : SPR;
-      const sc = e.isBoss ? 1 : e.type === 'slimelet' ? 0.7 : 0.8;
-      const wob = e.freezeT > 0 ? 0 : Math.sin(this.time * 8 + e.id) * 0.06;
-      c.save(); c.translate(e.x, e.y);
-      if (e.slowT > 0) { c.beginPath(); c.arc(0, 4, d.r + 4, 0, Math.PI * 2); c.fillStyle = 'rgba(79,195,247,0.35)'; c.fill(); }
-      if (e.corro > 0) { c.beginPath(); c.arc(0, 4, d.r + 2, 0, Math.PI * 2); c.strokeStyle = 'rgba(156,204,101,0.8)'; c.lineWidth = 2; c.stroke(); }
-      if (e.vulnT > 0) { c.beginPath(); c.arc(0, 4, d.r + 6, 0, Math.PI * 2); c.strokeStyle = 'rgba(255,82,82,0.8)'; c.lineWidth = 2; c.setLineDash([3, 3]); c.stroke(); c.setLineDash([]); }
-      c.scale(sc * (1 + wob), sc * (1 - wob));
-      c.drawImage(spr, -size / 2, -size / 2 - 4, size, size);
-      if (this.enemyFlash.has(e.id)) { c.globalCompositeOperation = 'source-atop'; c.fillStyle = 'rgba(255,255,255,0.6)'; c.fillRect(-size / 2, -size / 2 - 4, size, size); c.globalCompositeOperation = 'source-over'; }
-      if (e.freezeT > 0) { c.fillStyle = 'rgba(178,235,242,0.55)'; c.beginPath(); c.roundRect(-d.r - 4, -d.r - 6, d.r * 2 + 8, d.r * 2 + 10, 4); c.fill(); }
-      c.restore();
-      if (e.shield > 0) { c.beginPath(); c.arc(e.x, e.y + 2, d.r + 5, 0, Math.PI * 2); c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 2; c.stroke(); }
-      if (e.type === 'boss_cart' || (e.type === 'boss_king' && e.bossPhase === 1)) { c.font = 'bold 10px sans-serif'; c.textAlign = 'center'; c.fillStyle = e.bossStance === 0 ? '#b0bec5' : '#ff5252'; c.fillText(e.bossStance === 0 ? '🛡 방어' : '💥 취약', e.x, e.y - d.r - 16); }
-      if (e.type === 'boss_flag' && e.escortIds.length) { c.font = 'bold 9px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#ffab40'; c.fillText(`호위 ${e.escortIds.length}`, e.x, e.y - d.r - 16); }
-      if (e.escortOf >= 0) { c.beginPath(); c.arc(e.x, e.y + 2, d.r + 3, 0, Math.PI * 2); c.strokeStyle = 'rgba(255,171,64,0.8)'; c.lineWidth = 1.5; c.stroke(); }
-      // hp bar
-      const w = e.isBoss ? 44 : 18, h = e.isBoss ? 5 : 3; const bx = e.x - w / 2, by = e.y - d.r - (e.isBoss ? 10 : 8);
-      c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(bx - 1, by - 1, w + 2, h + 2);
-      c.fillStyle = e.isBoss ? '#ff5252' : e.type === 'courier' ? '#ffd54f' : '#66bb6a'; c.fillRect(bx, by, w * Math.max(0, e.hp / e.maxHp), h);
-      if (e.maxShield > 0 && e.shield > 0) { c.fillStyle = '#e0e0e0'; c.fillRect(bx, by - 2, w * (e.shield / e.maxShield), 1.5); }
-    }
-  }
-
-  private drawProjectiles(s: GameState): void {
-    const c = this.ctx;
-    for (const p of s.projectiles) {
-      switch (p.kind) {
-        case 'arrow': { const a = Math.atan2(p.ty - p.y, p.tx - p.x); c.save(); c.translate(p.x, p.y); c.rotate(a); c.strokeStyle = p.grade >= 2 ? '#ffd54f' : '#e8d5a0'; c.lineWidth = 2; c.beginPath(); c.moveTo(-6, 0); c.lineTo(5, 0); c.stroke(); c.fillStyle = '#eee'; c.beginPath(); c.moveTo(6, 0); c.lineTo(2, -2); c.lineTo(2, 2); c.closePath(); c.fill(); c.restore(); break; }
-        case 'shard': c.save(); c.translate(p.x, p.y); c.rotate(this.time * 10); c.fillStyle = '#b3e5fc'; c.beginPath(); c.moveTo(0, -5); c.lineTo(4, 0); c.lineTo(0, 5); c.lineTo(-4, 0); c.closePath(); c.fill(); c.restore(); break;
-        case 'cracker': c.fillStyle = '#e53935'; c.beginPath(); c.arc(p.x, p.y, 4, 0, Math.PI * 2); c.fill(); c.fillStyle = '#ffab00'; c.beginPath(); c.arc(p.x + 3, p.y - 4, 1.5, 0, Math.PI * 2); c.fill(); break;
-        case 'glob': c.fillStyle = '#9ccc65'; c.beginPath(); c.arc(p.x, p.y, 4, 0, Math.PI * 2); c.fill(); break;
-        case 'skill_bomb': c.fillStyle = '#ff5252'; c.beginPath(); c.arc(p.x, p.y, 6, 0, Math.PI * 2); c.fill(); c.strokeStyle = 'rgba(255,82,82,0.6)'; c.lineWidth = 2; c.beginPath(); c.arc(p.tx, p.ty, p.radius, 0, Math.PI * 2); c.stroke(); break;
-        case 'skill_freeze': c.fillStyle = '#80deea'; c.beginPath(); c.arc(p.x, p.y, 6, 0, Math.PI * 2); c.fill(); c.strokeStyle = 'rgba(128,222,234,0.6)'; c.lineWidth = 2; c.beginPath(); c.arc(p.tx, p.ty, p.radius, 0, Math.PI * 2); c.stroke(); break;
-        default: break;
-      }
-    }
-  }
-
-  private drawOverlays(s: GameState): void {
-    const c = this.ctx; const v = this.view;
-    if (v.skillMode) {
-      const r = v.skillMode === 'bomb' ? 60 : 70; const col = v.skillMode === 'bomb' ? '#ff5252' : '#4dd0e1';
-      c.beginPath(); c.arc(v.skillX, v.skillY, r, 0, Math.PI * 2); c.fillStyle = v.skillMode === 'bomb' ? 'rgba(255,82,82,0.18)' : 'rgba(77,208,225,0.18)'; c.fill(); c.strokeStyle = col; c.lineWidth = 2; c.setLineDash([6, 4]); c.stroke(); c.setLineDash([]);
-      c.fillStyle = '#fff'; c.font = 'bold 11px sans-serif'; c.textAlign = 'center'; c.fillText(v.skillMode === 'bomb' ? '탭: 긴급 포격' : '탭: 냉각 폭탄', v.skillX, v.skillY - r - 6);
-    }
-    if (s.phase === 'countdown') {
-      c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillRect(0, 0, FIELD_W, FIELD_H);
-      const n = Math.ceil(s.countdownT); const k = 1 - (s.countdownT - Math.floor(s.countdownT));
-      c.fillStyle = '#fff'; c.font = `bold ${60 + k * 20}px system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(Math.max(1, n)), FIELD_W / 2, FIELD_H / 2); c.textBaseline = 'alphabetic';
-      c.font = 'bold 14px system-ui'; c.fillText('적이 입구(왼쪽 위)에서 보물 창고(아래)로 옵니다', FIELD_W / 2, FIELD_H / 2 + 50);
-    }
+    // 드래그 중인 유닛
+    if (v.dragging) { const spr = unitSprite(v.dragging.kind, v.dragging.grade, upx); ctx.globalAlpha = 0.9; ctx.drawImage(spr, v.dragging.x - 30, v.dragging.y - 34, 60, 60); ctx.globalAlpha = 1; }
+    // 효과
+    if (!v.remote) this.fx.draw(ctx);
+    // 몬스터 수 게이지 (위쪽 길 위)
+    const frac = Math.min(1, v.monsterCount / MONSTER_CAP);
+    if (frac > 0.5) { ctx.fillStyle = frac > 0.85 ? `rgba(255,60,60,${0.15 + 0.15 * Math.sin(this.time * 8)})` : 'rgba(255,120,60,0.10)'; ctx.fillRect(0, 0, FIELD_W, FIELD_H); }
+    // 탈락 / 원격 라벨
+    if (v.eliminated) { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, 0, FIELD_W, FIELD_H); ctx.fillStyle = '#ff6b7a'; ctx.font = 'bold 26px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('탈락', FIELD_W / 2, FIELD_H / 2); }
+    if (v.label) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.font = 'bold 11px system-ui, sans-serif'; const tw = ctx.measureText(v.label).width + 12; ctx.beginPath(); ctx.roundRect(FIELD_W / 2 - tw / 2, 4, tw, 16, 6); ctx.fill(); ctx.fillStyle = v.remote ? '#9fd0ff' : '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(v.label, FIELD_W / 2, 12); }
+    ctx.restore();
   }
 }

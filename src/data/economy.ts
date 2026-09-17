@@ -1,32 +1,28 @@
-export const START_GOLD = 110;
-export const START_LIFE = 20;
-export const BENCH_SIZE = 3;
-export const PREP_TIME = 7;          // seconds between waves
-export const EARLY_BONUS_PER_SEC = 2; // gold per remaining prep second
-export const SUMMON_BASE = 30;
-export const SUMMON_STEP = 2;         // + per summon so far
-export const SUMMON_MAX = 100;
-export const SHARDS_PER_DESIGNATE = 5;
-export const PITY_THRESHOLD = 12;
+// 경제·라운드 상수
+export const START_GOLD = 100;
+export const SUMMON_COST = 20;
+export const TOTAL_ROUNDS = 40;
+export const ROUND_TIME = 25;        // 초. 라운드 간격 (몬스터는 계속 남아 누적)
+export const COUNTDOWN = 3;          // 시작 카운트다운
+export const BOSS_TIME = 60;         // 보스 제한시간(초) — 넘기면 탈락
+export const FINAL_TIME = BOSS_TIME + 1; // 마지막 라운드 길이(멀티 종료 시점)
+export const MAX_PLAYERS = 4;
+export const MIN_SEND_GOLD = 10;
 
-export function summonCost(count: number, relics: string[] = []): number {
-  const c = SUMMON_BASE + SUMMON_STEP * count;
-  return Math.min(SUMMON_MAX, c);
-}
-export function waveReward(wave: number): number { return 30 + 4 * wave; }
-
-export interface UpgradeDef { id: 'atk' | 'spd' | 'life'; name: string; desc: string; max: number; per: number; base: number; step: number }
-export const UPGRADES: UpgradeDef[] = [
-  { id: 'atk', name: '공방 담금질', desc: '모든 유닛 공격력 +6%/단계', max: 12, per: 0.06, base: 45, step: 25 },
-  { id: 'spd', name: '태엽 조율', desc: '모든 유닛 공격 속도 +4%/단계 (버프 상한 별도)', max: 8, per: 0.04, base: 60, step: 35 },
-  { id: 'life', name: '금고 보수', desc: '기지 생명 +3 (최대치도 증가)', max: 5, per: 3, base: 90, step: 60 },
+/** 소환 확률 (등급 0~3), 소환 레벨 1~5 */
+export const SUMMON_ODDS: [number, number, number, number][] = [
+  [0.62, 0.28, 0.085, 0.015],
+  [0.52, 0.32, 0.13, 0.03],
+  [0.42, 0.34, 0.18, 0.06],
+  [0.32, 0.34, 0.24, 0.10],
+  [0.22, 0.33, 0.30, 0.15],
 ];
-export function upgradeCost(def: UpgradeDef, level: number): number { return def.base + def.step * level; }
+export const SUMMON_LV_COST = [120, 260, 520, 1000]; // Lv1→2, 2→3, 3→4, 4→5
+export const MAX_SUMMON_LV = 5;
 
-export const SKILL_COOLDOWN = { bomb: 60, freeze: 50 };
-export const SKILL_BOMB = { radius: 60, dmg: 140, perWave: 0.08, bossMul: 0.35 };
-export const SKILL_FREEZE = { radius: 70, dur: 2.0, bossSlow: 0.4, bossDur: 2.0, resist: 4.0 };
-export const EXTRA_ORDER_WAVES: Record<number, { gold: number; shards: number }> = { 15: { gold: 90, shards: 3 }, 25: { gold: 140, shards: 4 }, 35: { gold: 200, shards: 5 } };
-export const COURIER_WAVES: Record<number, number> = { 6: 45, 14: 70, 24: 95, 33: 130 }; // wave -> reward
-export const OVERHEAT_WAVES: number[] = [12, 22, 32];
-export const OVERHEAT_BONUS = 0.4;
+export const ATK_PER_LV = 0.08;
+export const MAX_ATK_LV = 15;
+export function atkUpgradeCost(lv: number): number { return 60 + 45 * lv; }
+
+export function roundIncome(r: number): number { return 25 + 3 * r; }
+export function killGold(r: number, boss: boolean): number { return boss ? 100 * Math.max(1, Math.round(r / 10)) : 1 + Math.floor(r / 8); }
