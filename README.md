@@ -1,3 +1,9 @@
+> ## 📌 이 저장소에는 게임이 두 개 있습니다
+> - **`last-exit/` — 「털고 튀어!: 라스트 엑시트」** (한 손 조작 탈출 액션, 최신 작업). 실행 방법은 [`last-exit/README.md`](last-exit/README.md) 를 보세요. 가장 쉬운 방법: `last-exit/play/index.html` 파일을 브라우저로 열기.
+> - `루트` — 「대박수비대: 합성 대폭주」 (타워 디펜스, 이전 작업). 아래 설명은 이 게임에 대한 것입니다.
+>
+> 루트에서 `npm run lastexit:dev` / `npm run lastexit:test` / `npm run lastexit:build` 로 라스트 엑시트 명령을 바로 실행할 수도 있습니다 (먼저 `cd last-exit && npm install`).
+
 # 대박수비대: 합성 대폭주 (첫 베타)
 
 랜덤 소환 · 합성 · 배치 타워 디펜스. 도깨비 야시장의 보물 창고를 40웨이브 동안 지킵니다.
