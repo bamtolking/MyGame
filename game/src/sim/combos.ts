@@ -42,7 +42,7 @@ export function shardsOnLaser(s: GameState, e: Enemy, u: Unit): number {
   if (e.st.shardCd > 0) return COMBO_NUM.shardsDmgMul; // 배율은 유지, 파편은 대기
   e.st.shardCd = STATUS.shardCd;
   const g = unitStats('laser', u.grade);
-  const sd = COMBO_NUM.shardsDmg * (g.dmg / 9);
+  const sd = COMBO_NUM.shardsDmg * (g.dmg / 8);
   const x = e.x, y = e.y;
   for (const o of enemiesNear(s, x, y, COMBO_NUM.shardsRadius)) if (o.id !== e.id) hitEnemy(s, o, sd, { unit: u, kind: 'laser', combo: true, dtype: 'explosion' });
   s.events.push({ t: 'explode', x, y, r: COMBO_NUM.shardsRadius, kind: 'shards' });

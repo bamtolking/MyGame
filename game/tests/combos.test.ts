@@ -40,7 +40,7 @@ describe('연계 ② 집속 폭격 (회오리 + 폭탄)', () => {
     const hp0 = a.hp; run(s, 3.5);
     const ev = drain(s); expect(ev.some(e => e.t === 'combo' && e.id === 'focus')).toBe(true);
     const ex = ev.find(e => e.t === 'explode' && e.kind === 'focus') as { r: number }; expect(ex.r).toBeCloseTo(UNIT_PARAMS.bomber.radius[1] * COMBO_NUM.focusRadiusMul);
-    expect(hp0 - a.hp).toBeGreaterThanOrEqual(20 * COMBO_NUM.focusDmgMul - 2 - 0.01);
+    expect(hp0 - a.hp).toBeGreaterThanOrEqual(14 * COMBO_NUM.focusDmgMul - 2 - 0.01);
   });
   it('회오리는 적을 경로 위에서 표식 지점으로 모은다(길 이탈 없음)', () => {
     const s = game(1); forceWave(s); const v = put(s, 'vortex', 2, 1); const anchor = nearSlot(s, 1);
@@ -65,7 +65,7 @@ describe('연계 ③ 빙결 관통 (빙결 + 레이저)', () => {
     applyChill(s, b, 0.4, 10); const hpA = a.hp;
     step(s); // 첫 스텝에서 발사: 광선은 더 앞선 b를 향함(a는 광선 폭 밖)
     const ev = drain(s); expect(ev.some(e => e.t === 'combo' && e.id === 'shards')).toBe(true);
-    const hitB = ev.filter(e => e.t === 'hit' && e.enemy === b.id) as { dmg: number }[]; expect(hitB[0].dmg).toBeCloseTo(9 * COMBO_NUM.shardsDmgMul - 2, 1);
+    const hitB = ev.filter(e => e.t === 'hit' && e.enemy === b.id) as { dmg: number }[]; expect(hitB[0].dmg).toBeCloseTo(8 * COMBO_NUM.shardsDmgMul - 2, 1);
     expect(a.hp).toBeLessThan(hpA); // 파편 피해
     expect(ev.filter(e => e.t === 'combo').length).toBe(1);
   });

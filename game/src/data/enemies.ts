@@ -17,8 +17,8 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   boltant:     { name: '나사개미', trait: '군집형', hint: '작은 적이 무리로 몰려옵니다. 범위·연쇄 공격에 약함.', hp: 13, speed: 52, reward: 1, armor: 0, lifeDmg: 1, radius: 6, boss: false, color: '#8d6e63', color2: '#3e2723', ctrlResist: false },
   scrapturtle: { name: '고철거북', trait: '중장갑형', hint: '느리지만 튼튼하고 직격 피해를 2 줄입니다. 화상·폭발이 효과적.', hp: 170, speed: 24, reward: 7, armor: 2, lifeDmg: 2, radius: 13, boss: false, color: '#78909c', color2: '#37474f', ctrlResist: false },
   repairdrone: { name: '수리드론', trait: '지원형', hint: '주변 적에게 보호막을 씌웁니다. 먼저 처리하세요.', hp: 55, speed: 38, reward: 6, armor: 0, lifeDmg: 1, radius: 10, boss: false, color: '#4dd0e1', color2: '#006064', ctrlResist: false },
-  boss_golem:  { name: '고철 골렘', trait: '중간 보스', hint: '체력 50% 아래에서 장갑을 두르고 빨라집니다.', hp: 1500, speed: 22, reward: 60, armor: 1, lifeDmg: 10, radius: 20, boss: true, color: '#9e9e9e', color2: '#ff7043', ctrlResist: true },
-  boss_core:   { name: '코어 마스터', trait: '최종 보스', hint: '보호막·부하 소환·가속 패턴을 예고 후 사용합니다.', hp: 3400, speed: 19, reward: 0, armor: 1, lifeDmg: 99, radius: 22, boss: true, color: '#7e57c2', color2: '#ff4081', ctrlResist: true },
+  boss_golem:  { name: '고철 골렘', trait: '중간 보스', hint: '체력 50% 아래에서 장갑을 두르고 빨라집니다.', hp: 2200, speed: 22, reward: 60, armor: 1, lifeDmg: 10, radius: 20, boss: true, color: '#9e9e9e', color2: '#ff7043', ctrlResist: true },
+  boss_core:   { name: '코어 마스터', trait: '최종 보스', hint: '보호막·부하 소환·가속 패턴을 예고 후 사용합니다.', hp: 4600, speed: 19, reward: 0, armor: 1, lifeDmg: 99, radius: 22, boss: true, color: '#7e57c2', color2: '#ff4081', ctrlResist: true },
 };
 
 /** 지원형 적(수리드론) */

@@ -51,7 +51,8 @@ export function emptyStatus(): Status { return { oil: 0, burn: 0, burnDps: 0, ch
 
 export function spawnEnemy(s: GameState, kind: EnemyKind, hpMul: number, dist = 0, spawnedBy: number | null = null): Enemy {
   const d = ENEMIES[kind]; const diff = DIFF[s.difficulty];
-  const hp = Math.round(d.hp * (d.boss ? diff.hpMul : hpMul * diff.hpMul));
+  // 보스는 난이도 체력 배율을 절반만 적용(대신 패턴 빈도·부하 수가 늘어남)
+  const hp = Math.round(d.hp * (d.boss ? 1 + (diff.hpMul - 1) * 0.5 : hpMul * diff.hpMul));
   const g = pathGeo(s.mapId); const [x, y] = posAt(g, dist);
   const e: Enemy = { id: s.nextId++, kind, hp, maxHp: hp, dist, speed: d.speed * diff.speedMul, x, y, alive: true, reward: Math.round(d.reward * diff.rewardMul), armor: d.armor, lifeDmg: d.lifeDmg, st: emptyStatus(), droneT: 1.5, wave: s.wave, spawnedBy, boss: d.boss ? { enraged: false, shieldTimer: 0, hasteTimer: 0, hasteT: 0, minionsDone: 0, telegraph: null } : null, pullBy: null, dotAcc: 0, dotT: 0 };
   s.enemies.push(e); return e;

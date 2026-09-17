@@ -43,12 +43,12 @@ export const HARD_EXTRA: Record<number, Group[]> = {
 
 export const DIFF: Record<Difficulty, { name: string; hpMul: number; speedMul: number; gapMul: number; rewardMul: number; desc: string }> = {
   normal: { name: '보통', hpMul: 1.0, speedMul: 1.0, gapMul: 1.0, rewardMul: 1.0, desc: '처음 배우기 좋은 구성.' },
-  hard: { name: '어려움', hpMul: 1.3, speedMul: 1.08, gapMul: 0.85, rewardMul: 1.1, desc: '지원형이 늘고 간격이 짧아지며 보스 패턴이 잦아집니다.' },
+  hard: { name: '어려움', hpMul: 1.4, speedMul: 1.1, gapMul: 0.85, rewardMul: 1.1, desc: '지원형이 늘고 간격이 짧아지며 보스 패턴이 잦아집니다.' },
 };
 
 /** 웨이브별 일반 적 체력 배율(보스 제외). */
 export function hpMul(wave: number): number {
-  return 1 + 0.17 * (wave - 1) + (wave >= 10 ? 0.5 : 0);
+  return 1 + 0.2 * (wave - 1) + (wave >= 10 ? 0.9 : 0) + (wave >= 15 ? 0.7 : 0);
 }
 export function waveDef(wave: number, diff: Difficulty): WaveDef {
   const base = WAVES_NORMAL[wave - 1];

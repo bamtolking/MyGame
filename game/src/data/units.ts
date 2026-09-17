@@ -31,9 +31,9 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   oil: { name: '기름분사기', family: 'bot', role: '연계 조건 생성', desc: '기름을 뿌려 적을 미끄럽게 적십니다. 자체 피해는 낮지만 화염과 만나면 폭발.', g3: '광역 분사: 훨씬 넓은 범위에 기름을 퍼뜨리고 더 오래 남습니다.', color: '#8d6e63', color2: '#d7ccc8', dmg: 2, cd: 1.5, range: 96, attack: 'lob', sfx: 'shoot_oil' },
   vortex: { name: '회오리 정령', family: 'spirit', role: '적 집결', desc: '주기적으로 회오리를 일으켜 근처 적을 한곳으로 끌어모읍니다. 보스는 감속·표식만.', g3: '거대 회오리: 더 넓고 강하게 모으며 표식이 오래 남습니다.', color: '#b39ddb', color2: '#e1bee7', dmg: 3, cd: 2.6, range: 74, attack: 'pulse', sfx: 'vortex' },
   frost: { name: '빙결술사', family: 'spirit', role: '감속 · 연계 조건', desc: '냉기탄으로 적을 느리게 만듭니다. 레이저·번개와 연계됩니다.', g3: '범위 냉각: 착탄 지점 주변을 얼리고 잠깐 빙결시킵니다.', color: '#4fc3f7', color2: '#e1f5fe', dmg: 6, cd: 0.95, range: 100, attack: 'projectile', sfx: 'shoot_frost' },
-  laser: { name: '레이저병', family: 'bot', role: '직선 관통', desc: '직선 광선으로 줄지어 오는 적을 한꺼번에 뚫습니다.', g3: '중광선: 더 굵고 긴 광선으로 더 많은 적을 관통합니다.', color: '#ef5350', color2: '#ff8a80', dmg: 9, cd: 1.2, range: 105, attack: 'beam', sfx: 'shoot_laser' },
+  laser: { name: '레이저병', family: 'bot', role: '직선 관통', desc: '직선 광선으로 줄지어 오는 적을 한꺼번에 뚫습니다.', g3: '중광선: 더 굵고 긴 광선으로 더 많은 적을 관통합니다.', color: '#ef5350', color2: '#ff8a80', dmg: 8, cd: 1.2, range: 105, attack: 'beam', sfx: 'shoot_laser' },
   tesla: { name: '번개코일', family: 'bot', role: '밀집 처리', desc: '번개가 가까운 적들 사이를 튀어 다닙니다. 같은 적은 한 번만 맞습니다.', g3: '폭풍 코일: 연결 대상이 늘고 감쇠 없이 튑니다.', color: '#ffee58', color2: '#fff9c4', dmg: 8, cd: 1.15, range: 88, attack: 'chain', sfx: 'shoot_tesla' },
-  bomber: { name: '폭탄병', family: 'bot', role: '범위 폭발', desc: '포물선으로 폭탄을 던져 착탄 지점 주변을 폭파합니다.', g3: '파편 폭탄: 폭발 뒤 파편이 흩어져 2차 폭발을 일으킵니다.', color: '#90a4ae', color2: '#ff5252', dmg: 20, cd: 2.4, range: 128, attack: 'lob', sfx: 'shoot_bomb' },
+  bomber: { name: '폭탄병', family: 'bot', role: '범위 폭발', desc: '포물선으로 폭탄을 던져 착탄 지점 주변을 폭파합니다.', g3: '파편 폭탄: 폭발 뒤 파편이 흩어져 2차 폭발을 일으킵니다.', color: '#90a4ae', color2: '#ff5252', dmg: 14, cd: 2.5, range: 120, attack: 'lob', sfx: 'shoot_bomb' },
   engineer: { name: '동력공병', family: 'spirit', role: '지원 · 공격 속도', desc: '인접한 유닛의 공격 속도를 높입니다. 레이저병과 함께 두면 과충전 광선.', g3: '과충전 발전기: 주기적으로 범위 안 유닛의 다음 공격을 강화합니다.', color: '#66bb6a', color2: '#c8e6c9', dmg: 0, cd: 1, range: 96, attack: 'aura', sfx: 'engineer' },
 };
 
@@ -41,7 +41,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
 export const UNIT_PARAMS = {
   flame: {
     projSpeed: 260,
-    burnDps: { 1: 3, 2: 6, 3: 12 } as Record<Grade, number>,
+    burnDps: { 1: 3, 2: 6, 3: 10 } as Record<Grade, number>,
     burnDur: 3.0,
     coneAngle: Math.PI / 3.2,   // 3등급 부채꼴 각도(전체)
   },
@@ -68,7 +68,7 @@ export const UNIT_PARAMS = {
   },
   laser: {
     length: { 1: 150, 2: 165, 3: 210 } as Record<Grade, number>,
-    width: { 1: 10, 2: 12, 3: 20 } as Record<Grade, number>,
+    width: { 1: 10, 2: 12, 3: 18 } as Record<Grade, number>,
   },
   tesla: {
     targets: { 1: 3, 2: 4, 3: 6 } as Record<Grade, number>,
@@ -78,7 +78,7 @@ export const UNIT_PARAMS = {
   bomber: {
     radius: { 1: 38, 2: 42, 3: 48 } as Record<Grade, number>,
     flight: 0.7,
-    frags3: 5, fragRadius3: 26, fragDmgMul3: 0.35, fragSpread3: 40,
+    frags3: 4, fragRadius3: 26, fragDmgMul3: 0.3, fragSpread3: 40,
   },
   engineer: {
     haste: { 1: 0.18, 2: 0.26, 3: 0.34 } as Record<Grade, number>,   // 공격 속도 증가
