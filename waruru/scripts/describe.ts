@@ -18,13 +18,20 @@ const dump = (title: string) => {
 dump('안정화 직후');
 const cutIdx = process.argv.indexOf('--cut');
 if (cutIdx > 0) { s.world.cutRope(s.world.ropes.get(process.argv[cutIdx + 1])!); console.log('밧줄 강제 절단', process.argv[cutIdx + 1]); }
-const shotArg = process.argv[3] && !process.argv[3].startsWith('--') ? process.argv[3].split(',').map(Number) : null;
-if (shotArg) { s.launch({ angleDeg: shotArg[0], power: shotArg[1] }); console.log('발사', shotArg); }
+const remIdx = process.argv.indexOf('--remove');
+if (remIdx > 0) { s.world.removeEntry(s.world.mustEntry(process.argv[remIdx + 1])); s.world.wakeAllDynamic(); console.log('강제 제거', process.argv[remIdx + 1]); }
+// 발사 목록: "a,p" 또는 "a,p;a,p" (조준 가능 상태가 될 때마다 다음 발사)
+const shotList = process.argv[3] && !process.argv[3].startsWith('--') ? process.argv[3].split(';').map((t) => t.split(',').map(Number)) : [];
+let shotIdx = 0;
+const tryFire = () => { if (shotIdx < shotList.length && s.state === 'aiming') { const a = shotList[shotIdx++]; s.launch({ angleDeg: a[0], power: a[1] }); console.log('발사', a); } };
+tryFire();
 const stepsIdx = process.argv.indexOf('--steps');
 const steps = stepsIdx > 0 ? Number(process.argv[stepsIdx + 1]) : 360;
 for (let i = 1; i <= steps; i++) {
   s.step();
-  for (const ev of s.drainEvents()) if (ev.t !== 'hit') console.log(`  [${(s.step_ / 60).toFixed(2)}s]`, JSON.stringify(ev));
+  tryFire();
+  const showHits = process.argv.includes('--hits');
+  for (const ev of s.drainEvents()) if (ev.t !== 'hit' || (showHits && ev.speed > 3)) console.log(`  [${(s.step_ / 60).toFixed(2)}s]`, ev.t === 'hit' ? `hit ${ev.material}/${ev.other} v=${ev.speed.toFixed(1)} at ${ev.x.toFixed(0)},${ev.y.toFixed(0)}` : JSON.stringify(ev));
   if (i % 60 === 0) dump(`${(i / 60).toFixed(0)}초 후`);
   if (s.state === 'success' || s.state === 'failed') { dump('결과'); break; }
 }

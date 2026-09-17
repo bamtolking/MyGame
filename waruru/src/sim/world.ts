@@ -227,6 +227,10 @@ export class World {
   }
 
   // ---------- 제거 ----------
+  wakeAllDynamic() {
+    for (const e of this.entries.values()) if (!e.removed && !e.isStatic) Sleeping.set(e.body, false);
+  }
+
   removeEntry(entry: BodyEntry) {
     if (entry.removed) return;
     entry.removed = true;

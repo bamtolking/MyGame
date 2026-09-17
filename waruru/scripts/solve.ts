@@ -8,12 +8,20 @@ const key = process.argv[2] ?? 'L01';
 const fine = process.argv.includes('--fine');
 const firstIdx = process.argv.indexOf('--first');
 const first: ShotInput | null = firstIdx > 0 ? (() => { const [a, p] = process.argv[firstIdx + 1].split(',').map(Number); return { angleDeg: a, power: p }; })() : null;
+const watchIdx = process.argv.indexOf('--watch');
+const watchId = watchIdx > 0 ? process.argv[watchIdx + 1] : null; // 이 물체가 50px 이상 움직였으면 'm' 표시
 const level = LEVELS.find((l) => l.key === key);
 if (!level) { console.error('no level', key); process.exit(1); }
 
 const angles: number[] = []; for (let a = 0; a <= 85; a += fine ? 1 : 2.5) angles.push(a);
 const powers: number[] = []; for (let p = 0.25; p <= 1.0001; p += fine ? 0.025 : 0.05) powers.push(Math.round(p * 1000) / 1000);
 
+// 입력 없이 기다렸을 때 저절로 달성되는지(자동 성공 오류) 먼저 확인
+{
+  const idle = runShots(level, [], 60 * 8);
+  if (idle.goalsDone > 0 || idle.failReason) console.log(`!! 경고: 입력 없이 ${idle.goalsDone}개 목표 달성 / 실패 사유 ${idle.failReason} — 초기 배치가 불안정함`);
+  idle.dispose();
+}
 const t0 = Date.now();
 const grid: string[][] = [];
 const successes: { a: number; p: number; steps: number; shots: number }[] = [];
@@ -28,6 +36,7 @@ for (const p of powers) {
     else {
       const cut = [...s.world.ropes.values()].some((r) => r.cut);
       ch = s.goalsDone > 0 ? 'abcdefghi'[s.goalsDone - 1] : cut ? 'r' : '?';
+      if (ch === '?' && watchId) { const e = s.world.entries.get(watchId); if (e && (e.removed || Math.hypot(e.body.position.x - e.init.x, e.body.position.y - e.init.y) > 50 || Math.abs(e.body.angle - e.init.angle) > 0.35)) ch = 'm'; }
     }
     row.push(ch);
     s.dispose();

@@ -85,26 +85,35 @@ async function run(name, viewport) {
   const before = await page.evaluate(() => JSON.stringify(window.__waruru.save.best));
   log(`${name}: save after L01 = ${before}`);
   // 다음 스테이지 → 재시작 확인 → L02..L05 해법 재생
-  const sols = { 2: [5, 0.9], 3: [80, 0.9], 4: [60, 0.85], 5: [25, 0.9] };
-  for (const [id, [a, p]] of Object.entries(sols)) {
+  const sols = { 2: [[5,0.9]], 3: [[80,0.9]], 4: [[60,0.85]], 5: [[25,0.9]], 6: [[75,0.6]], 7: [[25,0.85]], 8: [[22.5,0.9]], 9: [[60,0.65]], 10: [[40,0.7]], 11: [[72.5,0.65]], 12: [[70,0.9]], 13: [[80,0.9]], 14: [[50,0.95]], 15: [[72.5,0.65]], 16: [[60,0.6],[57.5,0.85]], 17: [[35,0.65],[50,0.8]], 18: [[77.5,0.9]], 19: [[25,0.6]], 20: [[56,0.925]] };
+  let solved = 0;
+  for (const [id, shots] of Object.entries(sols)) {
     await page.evaluate((id) => window.__waruru.startLevel(Number(id)), id);
     await page.waitForTimeout(300);
     const skip2 = await page.$('#tip-skip'); if (skip2) await skip2.tap();
-    const counts0 = await page.evaluate(() => window.__waruru.session.world.counts());
-    // 빗나간 발사 후 재시작 → 물체 수 동일해야 함
-    await dragShot(page, 60, 0.3); await page.waitForTimeout(1500);
-    await page.tap('#btn-restart'); await page.waitForTimeout(200);
-    const counts1 = await page.evaluate(() => window.__waruru.session.world.counts());
-    log(`${name}: L0${id} restart bodies ${counts0.bodies}→${counts1.bodies} constraints ${counts0.constraints}→${counts1.constraints}`);
-    await dragShot(page, a, p);
-    await page.waitForTimeout(600);
-    if (Number(id) === 3) await page.screenshot({ path: `e2e-out/${name}-07-L03-ropecut.png` });
-    if (Number(id) === 4) { await page.waitForTimeout(900); await page.screenshot({ path: `e2e-out/${name}-08-L04-ball.png` }); }
-    if (Number(id) === 5) { await page.waitForTimeout(800); await page.screenshot({ path: `e2e-out/${name}-09-L05-domino.png` }); }
+    if (Number(id) === 3) {
+      const counts0 = await page.evaluate(() => window.__waruru.session.world.counts());
+      await dragShot(page, 60, 0.3); await page.waitForTimeout(1500);
+      await page.tap('#btn-restart'); await page.waitForTimeout(200);
+      const counts1 = await page.evaluate(() => window.__waruru.session.world.counts());
+      log(`${name}: L03 restart bodies ${counts0.bodies}→${counts1.bodies} constraints ${counts0.constraints}→${counts1.constraints}`);
+    }
+    for (let k = 0; k < shots.length; k++) {
+      // 다음 발사가 가능해질 때까지 대기(이전 결과 유지 확인)
+      for (let w = 0; w < 60; w++) { const st = await page.evaluate(() => window.__waruru.session.state); if (st === 'aiming' || st === 'success' || st === 'failed') break; await page.waitForTimeout(150); }
+      const st = await page.evaluate(() => window.__waruru.session.state); if (st !== 'aiming') break;
+      await dragShot(page, shots[k][0], shots[k][1]); await page.waitForTimeout(700);
+    }
     res = await waitResult(page);
     const s2 = await page.evaluate(() => window.__waruru.session.summary());
-    log(`${name}: L0${id} solution via touch → ${res} ${JSON.stringify(s2)}`);
+    if (res === 'success') solved++;
+    if (Number(id) === 3) await page.screenshot({ path: `e2e-out/${name}-07-L03-ropecut.png` });
+    if (Number(id) === 9) await page.screenshot({ path: `e2e-out/${name}-08-L09-protect.png` });
+    if (Number(id) === 18) await page.screenshot({ path: `e2e-out/${name}-09-L18-chain.png` });
+    if (Number(id) === 20) await page.screenshot({ path: `e2e-out/${name}-10-L20-final.png` });
+    log(`${name}: L${String(id).padStart(2,'0')} solution via touch → ${res} goals=${s2.goalsDone}/${s2.goals} stars=${s2.stars}`);
   }
+  log(`${name}: solved via touch ${solved}/${Object.keys(sols).length} follow-up stages`);
   await page.waitForTimeout(900);
   await page.screenshot({ path: `e2e-out/${name}-10-L05-result.png` });
   // 일시정지: 스텝이 멈추는지
