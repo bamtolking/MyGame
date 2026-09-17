@@ -5,8 +5,9 @@ name: Deploy game hub to GitHub Pages
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches:
+      - main
+  workflow_dispatch:   # 수동 실행(Actions → Run workflow)만 추가로 허용. 다른 브랜치 push 로는 실행되지 않음.
 
 permissions:
   contents: read

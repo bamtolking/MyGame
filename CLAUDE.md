@@ -12,6 +12,9 @@ GitHub Pages 로 `https://bamtolking.github.io/MyGame/` 에 배포됩니다. **�
 4. **push 전에 반드시 검사한다:** `npm run check-secrets` (모든 브랜치의 모든 커밋 검사). 의심 항목이 나오면 push 를 중단하고 사용자에게 보고한다.
    과거 커밋에서 발견되면 **임의로 공개하거나 히스토리를 고치지 말고** 사용자에게 경고만 한다(공개 저장소이므로 히스토리 정리가 필요할 수 있음을 알린다).
 5. 각 게임의 CSS·JS·이미지·사운드·manifest·service worker 경로는 `/MyGame/<slug>/` 아래에서 동작해야 한다: Vite 는 `base: './'`, HTML/manifest/SW 는 상대 경로, SW 캐시 이름은 게임 고유 접두어, localStorage 키는 게임 고유.
+6. **`.github/workflows/pages.yml` 의 트리거에 작업 브랜치 이름을 넣지 않는다.** 트리거는 `on.push.branches: [main]` 하나뿐이어야 하며, `'**'` 같은 패턴이나 `claude/*` 브랜치를 추가하지 않는다.
+   워크플로는 브랜치마다 자기 안의 파일을 따르므로, 작업 브랜치에 그런 트리거를 넣으면 그 브랜치에 push 할 때마다 Pages 배포가 시도되고 환경 규칙에 막혀 실패한다.
+   GitHub Pages 를 배포하는 워크플로는 이 파일 하나로 통일하고, 배포는 `main` 병합으로만 일어나게 한다. 다른 이름의 Pages 배포 워크플로를 새로 만들지 않는다.
 
 ## 게임 추가 흐름
 - **프로토타입** (사용자가 휴대폰으로 테스트): `games/<slug>/` 에 독립 프로젝트로 넣고 `games.json` 에 항목 추가 → push 하면 허브에 자동 반영.
