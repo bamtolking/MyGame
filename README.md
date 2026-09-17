@@ -2,7 +2,7 @@
 
 | 게임 | 장르 | 폴더 | 실행 |
 | --- | --- | --- | --- |
-| **데이헝거** | 벽 짓고 살아남기(벽짓살) · 낮밤 생존 · **최대 4인 협동** | [`dayhunger/`](dayhunger/) | `cd dayhunger && npm install && npm start` |
+| **데이헝거** | 벽 짓고 살아남기(벽짓살) · 낮밤 생존 · **최대 4인 협동** | [`dayhunger/`](dayhunger/) | 안드로이드 앱: [Releases의 `dayhunger.apk`](https://github.com/bamtolking/MyGame/releases/tag/dayhunger-latest) · 브라우저: `cd dayhunger && npm install && npm start` |
 | **대박수비대: 합성 대폭주** | 랜덤 소환·합성 타워 디펜스 · 싱글 | 저장소 루트 (`src/`, `play/`) | 아래 참고 |
 
 데이헝거의 규칙·조작·서버 배포 방법은 [`dayhunger/README.md`](dayhunger/README.md)에 있습니다.
