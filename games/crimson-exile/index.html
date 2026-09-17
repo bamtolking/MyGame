@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>CRIMSON EXILE — 크림슨 엑자일</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0810">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Crimson Exile">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- ===== HUD ===== -->
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <div id="clock">
+      <div id="clock-dial"><div id="clock-hand"></div><div class="sun">☀</div><div class="moon">☾</div></div>
+      <div class="txt"><span id="clock-icon"></span> <span id="clock-label"></span><br><span id="clock-bonus"></span></div>
+    </div>
+    <div id="mapinfo"><b id="map-name"></b><span id="map-mods"></span></div>
+    <div id="minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas><span id="fps"></span></div>
+  </div>
+  <div id="mobile-top"><button class="btn" data-open="inv">가방</button><button class="btn" data-open="gems">젬</button><button class="btn" data-open="tree">트리</button><button class="btn" data-open="char">캐릭</button><button class="btn" data-open="menu">메뉴</button></div>
+  <div id="bossbar" class="hidden"><div id="boss-name"></div><div class="bar"><div id="boss-fill"></div></div></div>
+  <div id="buffs"></div>
+  <div id="bottombar">
+    <div class="orb" id="orb-hp"><div class="fill"></div><span class="val"></span><span class="lbl">생명력</span></div>
+    <div id="skillbar"></div>
+    <div class="orb" id="orb-res"><div class="fill"></div><span class="val"></span><span class="lbl"></span></div>
+  </div>
+  <div id="xpbar"><div id="xp-fill"></div><span id="xp-text"></span></div>
+  <div id="hints">I 인벤토리 · K 젬 · P 패시브 · C 캐릭터 · Z 라벨 · T 귀환 · M 사운드 · Esc 메뉴</div>
+</div>
+
+<div id="tooltip" class="hidden"></div>
+<div id="rotate-hint">가로 화면을 권장합니다</div>
+<div id="sheet" class="hidden"><div class="sheet-box"><div class="sheet-body"></div><div class="sheet-actions"></div><button class="btn sheet-close">닫기</button></div></div>
+
+<!-- ===== 화면 ===== -->
+<div id="screen-title" class="screen">
+  <div class="title-box">
+    <h1>CRIMSON EXILE</h1>
+    <div class="sub">크림슨 엑자일 — 붉은 달 아래의 추방자들</div>
+    <p class="intro">다크에덴의 종족 전쟁과 낮밤 주기, 디아블로 4의 전투 감각과 전설 형상, 패스 오브 엑자일의 젬·패시브 트리·오브 제작을 하나로.</p>
+    <button class="btn big" id="btn-new">새 캐릭터</button>
+    <button class="btn big hidden" id="btn-continue">이어하기</button>
+    <div class="controls">
+      <b>조작</b> WASD 이동 · 마우스 조준 · 좌/우클릭 스킬 · 1~4 스킬 · Space 회피 · R 포션 · F 궁극기 · 아이템 라벨 클릭으로 획득
+    </div>
+  </div>
+</div>
+
+<div id="screen-create" class="screen hidden">
+  <div class="create-box">
+    <h2>종족 선택</h2>
+    <div id="class-cards"></div>
+    <div class="create-row">
+      <input id="inp-name" maxlength="12" placeholder="캐릭터 이름">
+      <label><input type="checkbox" id="chk-hardcore"> 하드코어 (사망 시 캐릭터 삭제)</label>
+      <button class="btn big" id="btn-start">에덴으로 추방되기</button>
+      <button class="btn" id="btn-back">뒤로</button>
+    </div>
+  </div>
+</div>
+
+<div id="screen-mapselect" class="screen hidden">
+  <div class="ms-box">
+    <h2>에덴의 피난처</h2>
+    <div id="ms-char"></div>
+    <div class="ms-actions">
+      <button class="btn" data-open="inv">인벤토리 (I)</button><button class="btn" data-open="gems">젬 (K)</button><button class="btn" data-open="tree">패시브 (P)</button><button class="btn" data-open="char">캐릭터 (C)</button><button class="btn" id="btn-reroll">지도 다시 뽑기</button>
+    </div>
+    <h3>지도 선택</h3>
+    <div id="map-cards"></div>
+  </div>
+</div>
+
+<div id="screen-mapclear" class="screen hidden">
+  <div class="title-box">
+    <h2>지도 완료</h2>
+    <div id="clear-stats"></div>
+    <button class="btn big" id="btn-clear-continue">피난처로</button>
+  </div>
+</div>
+
+<div id="screen-dead" class="screen hidden">
+  <div class="title-box dead">
+    <h2>당신은 죽었다</h2>
+    <div id="dead-info"></div>
+    <button class="btn big" id="btn-dead-continue">부활</button>
+  </div>
+</div>
+
+<!-- ===== 패널 ===== -->
+<div id="panel-inv" class="panel hidden">
+  <div class="ph"><h2>인벤토리</h2><span id="inv-count"></span><button class="close">✕</button></div>
+  <div class="pb inv-layout">
+    <div class="col">
+      <h4>장비</h4>
+      <div id="equip"></div>
+      <h4>아이템 라벨 필터</h4>
+      <select id="sel-filter-inv"><option value="all">모두 표시</option><option value="magic">마법 이상만</option><option value="rare">희귀 이상만</option></select>
+    </div>
+    <div class="col">
+      <h4>가방</h4>
+      <div id="inv-grid"></div>
+      <div class="hint" id="inv-hint"></div>
+    </div>
+    <div class="col">
+      <h4>화폐 (오브)</h4>
+      <div id="currency"></div>
+      <div id="cur-hint" class="hint"></div>
+      <button class="btn small" id="btn-refine">정수 5개 → 변환의 오브</button>
+      <h4>형상 도감 (디아블로 4 스타일)</h4>
+      <div id="aspects"></div>
+    </div>
+  </div>
+</div>
+
+<div id="panel-gems" class="panel hidden">
+  <div class="ph"><h2>스킬 젬 & 서포트 젬</h2><span id="gem-hint"></span><button class="close">✕</button></div>
+  <div class="pb gems-layout">
+    <div class="col"><h4>스킬 슬롯 (스킬 젬 + 서포트 젬 2개)</h4><div id="sockets"></div></div>
+    <div class="col"><h4>젬 가방</h4><div id="gem-bag"></div><div class="hint">서포트 젬은 태그가 맞는 스킬에만 적용됩니다 (예: 다중 투사체 → 투사체 스킬). 젬은 처치 경험치로 레벨이 오릅니다.</div></div>
+  </div>
+</div>
+
+<div id="panel-tree" class="panel hidden">
+  <div class="ph"><h2>패시브 트리</h2><span id="tree-points"></span><button class="btn small" id="btn-tree-center">중앙으로</button><button class="close">✕</button></div>
+  <div class="pb tree-wrap"><canvas id="tree-canvas"></canvas><div class="tree-hint">드래그: 이동 · 휠: 확대 · 클릭: 할당 · 우클릭: 환불(후회의 오브)</div></div>
+</div>
+
+<div id="panel-char" class="panel hidden">
+  <div class="ph"><h2>캐릭터</h2><button class="close">✕</button></div>
+  <div class="pb"><div id="char-stats"></div></div>
+</div>
+
+<div id="panel-menu" class="panel hidden small-panel">
+  <div class="ph"><h2>메뉴</h2><button class="close">✕</button></div>
+  <div class="pb menu-layout">
+    <button class="btn" id="btn-resume">계속하기</button>
+    <button class="btn" id="btn-sound">사운드: 켜짐</button>
+    <label>아이템 라벨 필터 <select id="sel-filter"><option value="all">모두 표시</option><option value="magic">마법 이상만</option><option value="rare">희귀 이상만</option></select></label>
+    <button class="btn" id="btn-return">피난처로 귀환 (T)</button>
+    <label><input type="checkbox" id="chk-autopickup"> 아이템 자동 줍기</label>
+    <button class="btn" id="btn-fullscreen">전체화면</button>
+    <button class="btn" id="btn-touchmode">터치 조작: 꺼짐</button>
+    <button class="btn" id="btn-title">저장 후 타이틀로</button>
+    <div class="help">
+      <b>조작</b><br>WASD/방향키 이동 · 마우스 조준 · 좌클릭/우클릭 스킬 1·2 · 1~4 스킬 3~6<br>Space 회피 구르기 (무적) · R 포션 · F 종족 궁극기 · T 피난처 귀환 · Z 아이템 라벨<br>
+      <b>시스템</b><br>낮/밤 주기에 따라 종족 피해가 변합니다. 밤에는 블러드문이 뜰 수 있고, 티어 2부터 적대 종족 추방자가 사냥하러 옵니다.<br>
+      스킬 젬에 서포트 젬을 연결하고, 오브로 아이템을 제작하며, 유니크의 형상을 추출해 희귀 아이템에 각인하세요.
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/daynight.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/input.js"></script>
+<script src="js/data_items.js"></script>
+<script src="js/items.js"></script>
+<script src="js/data_gems.js"></script>
+<script src="js/passives.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/skills.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/player.js"></script>
+<script src="js/combat.js"></script>
+<script src="js/monsters.js"></script>
+<script src="js/world.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/touch.js"></script>
+<script src="js/save.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

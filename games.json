@@ -1,0 +1,87 @@
+{
+  "site": {
+    "title": "MyGame 게임 허브",
+    "description": "Claude Code로 만든 HTML5 게임 모음. 휴대폰 브라우저에서 바로 플레이할 수 있습니다.",
+    "basePath": "/MyGame/",
+    "repo": "https://github.com/bamtolking/MyGame"
+  },
+  "games": [
+    {
+      "slug": "daebak-defense",
+      "title": "대박수비대: 합성 대폭주",
+      "tagline": "랜덤 소환·합성·배치 타워 디펜스. 도깨비 야시장의 보물 창고를 40웨이브 동안 지킵니다.",
+      "emoji": "🏮",
+      "orientation": "portrait",
+      "pwa": false,
+      "branch": "claude/session-xitrmc",
+      "sourcePath": "저장소 루트 (index.html, src/)",
+      "build": { "install": true, "command": "npm run build", "outDir": "dist" }
+    },
+    {
+      "slug": "line-wars",
+      "title": "라인워즈: 군단의 충돌",
+      "tagline": "병력을 편성표에 배치하면 정해진 시간마다 자동 출격. 편성과 배치로 전선을 바꾸는 오프라인 AI 대전 전략.",
+      "emoji": "⚔️",
+      "orientation": "landscape",
+      "pwa": true,
+      "branch": "claude/epic-gauss-ht6czg",
+      "sourcePath": "저장소 루트 (index.html, src/, public/, docs/=빌드 결과)",
+      "build": { "install": true, "command": "npm run build", "outDir": "docs" }
+    },
+    {
+      "slug": "crimson-exile",
+      "title": "크림슨 엑자일 (CRIMSON EXILE)",
+      "tagline": "종족 전쟁·낮밤 주기, 젬 링크·패시브 트리·오브 제작을 섞은 브라우저 핵앤슬래시 ARPG. 터치 조작 지원.",
+      "emoji": "🩸",
+      "orientation": "landscape",
+      "pwa": true,
+      "branch": "claude/ecstatic-ramanujan-cfm6rp",
+      "sourcePath": "저장소 루트 (index.html, js/, css/, manifest.json, sw.js)",
+      "build": { "install": false, "command": "node scripts/build-www.js", "outDir": "www" }
+    },
+    {
+      "slug": "combo-rush",
+      "title": "합체방어대: 콤보 러시",
+      "tagline": "선택형 소환·합성·연계 디펜스. 기계와 정령을 합쳐 18웨이브의 고철 벌레와 보스 2종을 막습니다.",
+      "emoji": "⚙️",
+      "orientation": "portrait",
+      "pwa": false,
+      "branch": "claude/combo-rush-tower-defense-c3edcg",
+      "sourcePath": "game/ 폴더 (+ 루트 package.json·vite.config.ts)",
+      "build": { "install": true, "command": "npm run build", "outDir": "dist" }
+    },
+    {
+      "slug": "pack-and-blast",
+      "title": "가방이 무기다: 팩 앤 블래스트",
+      "tagline": "5×5 가방에 장비를 배치하고 인접 효과로 조합을 만든 뒤 짧은 자동 전투. 12개 전투 구간과 보스.",
+      "emoji": "🎒",
+      "orientation": "portrait",
+      "pwa": false,
+      "branch": "claude/pack-and-blast-game-5ox2gz",
+      "sourcePath": "src/packblast/ + packblast/index.html (대박수비대와 같은 프로젝트의 2번째 진입점)",
+      "build": { "install": true, "command": "npm run build", "outDir": "dist" }
+    },
+    {
+      "slug": "last-exit",
+      "title": "털고 튀어!: 라스트 엑시트",
+      "tagline": "한 손 조작 탑다운 탈출 액션. 6개 구역을 내려가며 전리품을 챙기고, 살아서 탈출해야만 내 것이 됩니다.",
+      "emoji": "🚪",
+      "orientation": "portrait",
+      "pwa": false,
+      "branch": "claude/last-exit-game-dev-7unvj9",
+      "sourcePath": "last-exit/ 폴더",
+      "build": { "install": true, "command": "npm run build", "outDir": "dist" }
+    },
+    {
+      "slug": "monster-stall",
+      "title": "괴물 포장마차: 합치고 팔자!",
+      "tagline": "합성 퍼즐 + 주문 처리 + 소규모 가게 운영. 밤마다 찾아오는 작은 괴물 손님들의 3분짜리 영업.",
+      "emoji": "🍢",
+      "orientation": "portrait",
+      "pwa": false,
+      "branch": "claude/monster-food-truck-game-thu1lj",
+      "sourcePath": "monster-stall/ 폴더",
+      "build": { "install": true, "command": "npm run build", "outDir": "dist" }
+    }
+  ]
+}

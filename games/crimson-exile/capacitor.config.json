@@ -1,0 +1,8 @@
+{
+  "appId": "com.bamtolking.crimsonexile",
+  "appName": "Crimson Exile",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false, "backgroundColor": "#0b0810" },
+  "ios": { "contentInset": "never", "backgroundColor": "#0b0810" }
+}

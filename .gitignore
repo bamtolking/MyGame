@@ -1,4 +1,7 @@
 node_modules
+_site
 dist
+dist-legacy
 .vite
 e2e-out
+www
