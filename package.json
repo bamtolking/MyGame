@@ -1,31 +1,16 @@
 {
-  "name": "ninja-random-defense",
-  "version": "0.2.0-beta.1",
+  "name": "mygame-hub",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
+  "description": "MyGame 게임 허브 — games/ 아래 각 게임을 빌드해 GitHub Pages 한 사이트(/MyGame/<게임>/)로 배포",
   "scripts": {
-    "dev": "vite --host",
-    "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json && vite build && node scripts/singlefile.mjs",
-    "preview": "vite preview --host",
-    "server": "node server/index.ts",
-    "start": "npm run build && npm run server",
-    "test": "vitest run",
-    "balance": "node scripts/balance.ts",
-    "e2e": "node scripts/e2e.mjs",
-    "legacy:balance": "vitest run legacy/tests/balance.test.ts --reporter=verbose",
-    "legacy:e2e": "node legacy/scripts/e2e.mjs"
+    "build": "node scripts/build-site.mjs",
+    "preview": "node scripts/serve-site.mjs",
+    "check-secrets": "node scripts/check-secrets.mjs --history",
+    "check-secrets:tree": "node scripts/check-secrets.mjs"
   },
-  "devDependencies": {
-    "@types/node": "^22.20.3",
-    "@types/ws": "^8.18.1",
-    "peer": "^1.0.2",
-    "playwright-core": "1.63.0",
-    "typescript": "5.9.3",
-    "vite": "7.3.1",
-    "vitest": "5.0.1"
-  },
-  "dependencies": {
-    "peerjs": "^1.5.5",
-    "ws": "^8.21.3"
+  "engines": {
+    "node": ">=22"
   }
 }

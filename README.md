@@ -1,81 +1,131 @@
-# 닌자 랜덤 디펜스 (v0.2 베타)
+# MyGame — 게임 허브 (GitHub Pages)
 
-워크래프트3 "랜덤 디펜스" 계열(나루토 랜덤 디펜스 등)을 휴대폰 브라우저용으로 만든 게임입니다.
-몬스터가 내 판 바깥 길을 **계속 돌고**, 살아 있는 몬스터가 **80마리가 되면 탈락**. 25초마다 라운드가 올라가며 40라운드를 버티고 마지막 보스를 잡으면 승리입니다.
-골드로 닌자를 **랜덤 소환**하고, 같은 것 3개를 **합성**해 등급을 올리고, 전설 3종을 **조합**해 신화를 만듭니다.
-**친구와 최대 4명 협동**: 방 코드로 모여 같은 라운드 시계로 각자 판을 지키고, 골드를 보내고, 친구 판을 관전합니다.
+Claude Code로 만든 HTML5 게임 11개를 **한 사이트**에서 각각 다른 주소로 실행하는 허브입니다.
+휴대폰 브라우저(Chrome / Safari)에서 바로 플레이할 수 있고, 로그인·서버·결제·광고가 없습니다.
 
-> 원작 IP(캐릭터·이름)는 쓰지 않고 오리지널 닌자 캐릭터로 만들었습니다.
+- 허브 첫 화면: `https://bamtolking.github.io/MyGame/` — 게임 목록과 **플레이** 버튼
+- 각 게임: `https://bamtolking.github.io/MyGame/<게임 폴더 이름>/`
 
-## 바로 하기 (비개발자용)
+## 게임 목록과 원본 브랜치
 
-**방법 1 — 인터넷 링크 (친구와 하려면 이 방법 추천)**
-GitHub 저장소 **Settings → Pages → Source: "GitHub Actions"** 로 바꾸면, 이 브랜치에 push될 때마다 `https://<계정>.github.io/<저장소>/` 주소에 게임이 올라갑니다(`.github/workflows/pages.yml`). 그 링크를 친구에게 보내면 됩니다.
+| # | 게임 | 배포 주소 (경로) | 원본 브랜치 | 원본 브랜치에서의 위치 | 허브 폴더 |
+|---|---|---|---|---|---|
+| 1 | 대박수비대: 합성 대폭주 | `/MyGame/daebak-defense/` | `claude/session-xitrmc` (기본 브랜치) | 저장소 루트 | `games/daebak-defense/` |
+| 2 | 라인워즈: 군단의 충돌 | `/MyGame/line-wars/` | `claude/epic-gauss-ht6czg` | 저장소 루트 (`docs/`=빌드 결과) | `games/line-wars/` |
+| 3 | 크림슨 엑자일 (CRIMSON EXILE) | `/MyGame/crimson-exile/` | `claude/ecstatic-ramanujan-cfm6rp` | 저장소 루트 (빌드 없는 순수 JS) | `games/crimson-exile/` |
+| 4 | 합체방어대: 콤보 러시 | `/MyGame/combo-rush/` | `claude/combo-rush-tower-defense-c3edcg` | `game/` 폴더 | `games/combo-rush/` |
+| 5 | 가방이 무기다: 팩 앤 블래스트 | `/MyGame/pack-and-blast/` | `claude/pack-and-blast-game-5ox2gz` | `src/packblast/` + `packblast/index.html` | `games/pack-and-blast/` |
+| 6 | 털고 튀어!: 라스트 엑시트 | `/MyGame/last-exit/` | `claude/last-exit-game-dev-7unvj9` | `last-exit/` 폴더 | `games/last-exit/` |
+| 7 | 괴물 포장마차: 합치고 팔자! | `/MyGame/foodtruck/` | `claude/monster-food-truck-game-thu1lj` | `monster-stall/` 폴더 | `games/foodtruck/` |
+| 8 | 나 혼자 도둑단: 25초의 공범 | `/MyGame/thief/` | `claude/heist-game-25sec-xwnluz` | `heist/` 폴더 | `games/thief/` |
+| 9 | 와르르! 철거왕: 한 발의 기적 | `/MyGame/demolition/` | `claude/waruru-demolition-physics-puzzle-38dmbu` | `waruru/` 폴더 | `games/demolition/` |
+| 10 | 갈아타!: 바디 하이재킹 | `/MyGame/hijack/` | `claude/galaata-body-hijacking-game-xju67u` | `galaata/` 폴더 | `games/hijack/` |
+| 11 | 닌자 랜덤 디펜스 (친구와 협동) | `/MyGame/ninja-random-defense/` | `claude/naruto-random-defense-mobile-h3lssi` | 저장소 루트 (`legacy/` 제외) | `games/ninja-random-defense/` |
 
-**방법 2 — 파일 하나**
-`play/index.html` 파일 하나가 게임 전체입니다. 휴대폰이나 PC 브라우저(Chrome/Safari)로 열면 바로 실행됩니다. 혼자 하기는 확실히 되고, 방 만들기(P2P)도 대부분 브라우저에서 됩니다.
+**원본 브랜치는 하나도 수정·삭제하지 않았습니다.** 이 브랜치의 `games/` 폴더는 각 브랜치에서 가져온 복사본이며,
+허브에서 동작하도록 필요한 최소한의 경로만 손봤습니다(아래 "허브용으로 바꾼 것" 참고).
 
-**방법 3 — 같은 Wi-Fi에서 개발 서버**
-```bash
-npm install
-npm run dev        # 터미널의 http://<PC IP>:5173 주소를 휴대폰으로 열기
-```
-
-홈 화면에 추가(PWA)하면 앱처럼 전체 화면으로 실행됩니다.
-
-## 같이 하기
-
-1. 한 명이 **방 만들기** → 6자리 코드가 나옵니다. "코드 공유"로 링크/코드를 보내세요.
-2. 친구는 **코드로 참가**(또는 공유된 링크를 열면 코드가 채워짐).
-3. 방장이 **게임 시작**. 모두 같은 시각에 라운드가 오릅니다. 각자 자기 판을 지키고, 상단 이름 탭으로 친구 판을 관전할 수 있습니다.
-4. 하단 **팀** 버튼: 골드 보내기(50/100/200), 이모티콘. 탈락해도 친구가 끝날 때까지 관전합니다.
-5. 끝나면 팀 결과표. 방장이 "같은 방에서 다시"를 누르면 로비로 돌아갑니다.
-
-연결 방식은 두 가지이고 자동으로 고릅니다.
-- **P2P (기본, 서버 없음)**: 방장 브라우저가 방을 운영합니다. 공용 PeerJS 시그널 서버를 거쳐 기기끼리 직접 연결됩니다. 방장은 게임 화면을 켜 둬야 합니다. 일부 통신사/공유기에서는 연결이 안 될 수 있습니다.
-- **전용 서버**: `npm run build && npm run server` (또는 `Dockerfile`)로 띄우면 그 주소로 접속한 사람끼리 서버가 방을 운영합니다(더 안정적). 정적 호스팅(Pages)에서 쓰려면 타이틀 화면 "고급: 전용 서버 주소"에 `wss://주소/ws`를 입력하세요. Render·Fly·Railway 같은 Node 호스팅에 올릴 수 있습니다.
-
-## 조작
-
-- **소환**(20골드): 길에 가까운 빈 자리부터 채워집니다. 자리는 24칸.
-- **유닛 탭** → 정보 패널: 합성(같은 속성·등급 3개 → 다음 등급 확정) / 무작위 합성(같은 등급 아무거나 3개 → 무작위 속성) / 이동 / 판매.
-- **자동 합성**: 확정 합성을 한 번에 전부. **이동**: "이동" 후 자리 탭, 또는 유닛을 드래그. 유닛이 있는 자리로 옮기면 교환.
-- **조합**: 전설(현자) 3종 → 신화 4종. **강화**: 소환 레벨(높은 등급 확률↑), 공격력.
-- 솔로는 1×/2×, 일시정지 가능. 멀티는 실시간.
-
-## 규칙 요약
-
-| 항목 | 값 |
-|---|---|
-| 몬스터 한도 | 80 (도달 시 탈락) |
-| 라운드 | 40개, 25초 간격, 라운드마다 20마리 |
-| 보스 | 10·20·30·40 라운드, 60초 안에 처치 못 하면 탈락. 마지막 보스 처치 = 승리 |
-| 속성 | 화염(범위) · 얼음(감속) · 번개(연쇄) · 질풍(고속) · 대지(기절) |
-| 등급 | 일반 → 희귀 → 영웅 → 전설 (×1 / ×3.3 / ×11 / ×36) → 신화(조합) |
-
-자세한 수치는 `docs/BALANCE.md`.
-
-## 개발
+## 저장소 구조
 
 ```
-src/data/      수치 데이터 (판·유닛·몬스터·경제) — 밸런스는 여기만
-src/sim/       시뮬레이션 (순수 TS, 결정적, 고정 1/30초 스텝): engine(라운드·전투), roster(소환·합성·조합), snapshot(관전용 압축)
-src/net/       protocol, room(방 호스트 — 브라우저 P2P와 Node 서버가 같은 코드), client, loopback, transports(PeerJS/WebSocket)
-src/render/    Canvas 2D 렌더러, 절차적 스프라이트, 이펙트
-src/ui/        화면·HUD·입력·게임 루프
-src/platform/  효과음(WebAudio), 저장(localStorage)
-server/        Node 22 서버 (정적 파일 + /ws). TypeScript를 그대로 실행 (type stripping)
-tests/         vitest: 규칙, 방 호스트, 서버, 봇 밸런스 스모크
-scripts/       balance(봇 스윕), e2e(헤드리스 Chromium: 솔로/WS 협동/P2P 협동), singlefile
-legacy/        이전 게임 "대박수비대"(경로형 타워 디펜스, 싱글). 빌드하면 dist/legacy/, 파일은 legacy/play/index.html
+games.json                  게임 목록(제목·설명·폴더·빌드 방법) — 허브 첫 화면과 빌드 스크립트가 모두 이 파일을 읽습니다
+hub/index.html              허브 첫 화면 템플릿 (게임 카드가 자동으로 채워짐)
+hub/404.html                없는 주소로 들어왔을 때 보여줄 페이지
+scripts/build-site.mjs      모든 게임을 빌드해 _site/<게임>/ 로 모으고 첫 화면을 생성
+scripts/serve-site.mjs      _site/ 를 /MyGame/ 경로로 띄우는 로컬 미리보기 서버 (의존성 없음)
+.github/workflows/pages.yml GitHub Pages 자동 배포
+games/<게임>/               게임별 독립 프로젝트 (각자 package.json · 빌드 · 테스트)
 ```
+
+배포 결과(`_site/`)는 다음과 같습니다.
+
+```
+_site/index.html            ← /MyGame/
+_site/daebak-defense/       ← /MyGame/daebak-defense/
+_site/line-wars/            ← /MyGame/line-wars/      (manifest.webmanifest + sw.js 포함, 홈 화면 설치 가능)
+_site/crimson-exile/        ← /MyGame/crimson-exile/  (manifest.json + sw.js 포함, 홈 화면 설치 가능)
+_site/combo-rush/  _site/pack-and-blast/  _site/last-exit/  _site/foodtruck/  _site/thief/  _site/demolition/  _site/hijack/
+_site/ninja-random-defense/ ← /MyGame/ninja-random-defense/ (manifest.webmanifest 포함, 서비스 워커 없음, P2P 협동은 공용 PeerJS 서버 이용)
+```
+
+## GitHub Pages 배포
+
+배포는 **`main` 브랜치** 기준입니다. `main` 에 push(또는 Pull Request 병합)될 때마다 워크플로 "Deploy game hub to GitHub Pages" 가 자동으로 실행되어
+11개 게임을 모두 빌드하고 `https://bamtolking.github.io/MyGame/` 에 배포합니다. 작업은 `claude/*` 브랜치에서 하고 `main` 으로 PR 을 만들어 병합합니다.
+
+처음 한 번만 확인할 설정 (저장소 → Settings):
+1. **Pages** → *Source* 가 **GitHub Actions** 인지 확인
+2. **Environments** → **github-pages** → *Deployment branches and tags* 에 **main** 이 허용되어 있는지 확인.
+   없으면 **Add deployment branch or tag rule** → `main` → **Add rule**.
+   GitHub 는 이 환경을 자동으로 만들 때 그 시점의 기본 브랜치만 허용하도록 잠급니다. 배포 잡이
+   `Branch "main" is not allowed to deploy to github-pages due to environment protection rules` 로 1초 만에 거부되면 이 설정이 원인입니다.
+3. (권장) **General** → *Default branch* 를 `main` 으로 변경. 저장소 첫 화면에 이 README 가 보이고 Actions 의 "Run workflow" 버튼도 쓸 수 있게 됩니다.
+
+배포 주소는 Settings → Pages 에도 표시됩니다.
+
+## 로컬에서 빌드·미리보기
 
 ```bash
-npm test           # vitest (약 3초)
-npm run balance    # 봇 정책 × 시드 스윕
-npm run build      # 타입검사 + 빌드 + play/index.html
-npm run e2e        # 헤드리스 Chromium 실기동 (빌드 후). 스크린샷 e2e-out/
-npm run server     # 빌드된 dist/ + WebSocket 방 서버 (기본 8080)
+node --version                 # 22 이상
+npm run build                  # games/*/ 를 모두 npm ci + 빌드 → _site/
+npm run preview                # http://localhost:8080/MyGame/  (같은 Wi-Fi 휴대폰은 터미널에 표시되는 IP 주소)
+
+node scripts/build-site.mjs last-exit          # 한 게임만 다시 빌드
+SKIP_INSTALL=1 node scripts/build-site.mjs     # npm ci 생략 (이미 설치돼 있을 때)
 ```
 
-멀티는 각자의 판을 자기 기기에서 계산하고(솔로와 같은 엔진), 호스트는 방 인원·라운드 시계·요약/관전 스냅샷 중계·골드 전달만 합니다. 구현 상태와 제한은 `docs/STATUS.md`, 테스트 결과는 `docs/TEST_RESULTS.md`.
+게임 하나만 개발할 때는 그 폴더로 들어가 원래대로 작업하면 됩니다: `cd games/last-exit && npm install && npm run dev`
+
+## 원본 브랜치가 바뀌었을 때 허브 복사본 갱신
+
+`games/<slug>/` 는 원본 브랜치의 **복사본**이라 원본 브랜치에 새 커밋이 생겨도 자동으로 따라오지 않습니다. 다시 가져오려면:
+
+```bash
+git rm -r -q games/<slug> && git read-tree --prefix=games/<slug>/ -u origin/<원본 브랜치>:<원본 폴더>
+# 예) git rm -r -q games/hijack && git read-tree --prefix=games/hijack/ -u origin/claude/galaata-body-hijacking-game-xju67u:galaata
+```
+
+콤보 러시·팩 앤 블래스트는 허브용 설정 파일이 따로 있으므로(아래 표) `src/` 등 내용 폴더만 바꿔 넣으세요.
+
+## 새 게임 추가하는 방법
+
+1. `games/<새-폴더>/` 에 독립 프로젝트로 넣습니다 (Vite 프로젝트라면 `vite.config.ts` 의 `base: './'` 필수).
+2. `games.json` 의 `games` 배열에 항목을 추가합니다 (`slug` = 폴더 이름 = 주소, `build.outDir` = 빌드 결과 폴더).
+3. push 하면 허브 첫 화면과 배포에 자동 반영됩니다.
+
+## 운영 원칙 (프로토타입 → 정식 개발)
+
+- **프로토타입**: `games/<slug>/` 에 소스째 넣고 `games.json` 에 등록하면 허브에서 바로 휴대폰 테스트가 됩니다. 이 저장소는 공개이므로 프로토타입 소스도 공개됩니다.
+- **정식 개발 대상으로 지정한 게임**: 원본 소스를 **Private 저장소**(예: `bamtolking/<slug>-dev`)로 옮겨 개발하고, 허브에는 **빌드 결과물만** 올립니다.
+  - Private 저장소에 `templates/publish-to-hub.yml` 을 넣으면 push 때마다 빌드해 이 허브의 `games/<slug>/` 에 결과물만 커밋합니다(토큰은 Private 저장소의 Actions Secret 에만 보관).
+  - 허브의 `games.json` 에서 그 게임을 `"build": { "prebuilt": true }` 로 바꾸면 허브는 빌드 없이 폴더를 그대로 배포합니다.
+  - 허브에 남아 있던 소스 사본은 지시가 있을 때 제거합니다. 과거 커밋에는 남으므로 완전히 숨기려면 히스토리 정리가 필요합니다.
+  - 브라우저 게임의 **빌드된 JS 는 누구나 내려받을 수 있습니다**(난독화는 암호화가 아님). 숨겨야 할 로직·비밀키는 서버 측에 둡니다.
+- **새 게임은 기존 게임과 분리**: 폴더·package.json·localStorage 키·service worker 캐시 이름을 공유하지 않습니다.
+
+## 보안 규칙
+
+- API Key · Secret · Access Token · 비밀번호 · 인증서 · 관리자 키 · `.env` 를 저장소나 클라이언트 코드에 넣지 않습니다. `.env*` 는 `.gitignore` 로 제외되어 있습니다(`.env.example` 만 허용).
+- 외부 API 에 비밀키가 필요하면 프론트엔드에 키를 넣지 말고 서버 측 구조(별도 백엔드/서버리스 함수)를 씁니다.
+- push 전에 `npm run check-secrets` 를 실행합니다. 모든 브랜치의 모든 커밋을 검사하며, 의심 항목이 있으면 종료 코드 1 로 멈춥니다. 배포 워크플로도 빌드 전에 작업 트리를 검사합니다.
+- 오탐은 `.secrets-allowlist` 에 정규식으로 등록합니다. 과거 커밋에서 발견된 항목은 임의로 처리하지 않고 저장소 소유자가 판단합니다.
+- 마지막 전체 검사: 이 문서를 갱신한 시점에 10개 게임 브랜치를 포함한 모든 커밋(27개)에서 민감정보 없음.
+
+## 허브용으로 바꾼 것 (원본 브랜치와 다른 점)
+
+| 게임 | 변경 | 이유 |
+|---|---|---|
+| 대박수비대 | 루트 → `games/daebak-defense/` 로 이동 (내용 동일) | 루트를 허브 첫 화면에 쓰기 위해 |
+| 콤보 러시 | `game/` 내용을 폴더 루트로 올리고 `package.json`·`vite.config.ts`·`tsconfig.json` 에서 `game/` 접두어 제거, `scripts/*.mjs` 의 `game/play` → `play` | 원본은 루트 설정이 `root: 'game'` 으로 가리키는 구조 |
+| 팩 앤 블래스트 | `src/packblast/` → `src/`, `tests/packblast/` → `tests/`, `packblast/index.html` → `index.html`, 전용 `package.json`·`vite.config.ts` 추가, `scripts/*.mjs` 경로 정리 | 원본은 대박수비대와 한 프로젝트를 공유(두 번째 진입점) |
+| 크림슨 엑자일 | `sw.js` 의 오래된 캐시 삭제를 `crimson-exile-` 접두어 캐시로 한정. 브랜치의 `.github/workflows/pages.yml` 은 복사하지 않음(허브 워크플로가 대신함) | 같은 도메인의 다른 게임 오프라인 캐시를 지우지 않도록 |
+| 라인워즈 | `public/sw.js`(및 `docs/sw.js`)의 캐시 삭제를 `linewars-` 접두어로 한정 | 위와 같음 |
+| 라스트 엑시트 · 괴물 포장마차 · 나 혼자 도둑단 · 와르르! 철거왕 · 갈아타! | 변경 없음 (폴더 그대로 복사, 폴더 이름만 주소에 맞춤) | 이미 독립 프로젝트 |
+| 닌자 랜덤 디펜스 | `legacy/`(대박수비대 사본)와 브랜치 전용 `.github/workflows/pages.yml` 을 복사하지 않고, `vite.config.ts`·`tsconfig.json`·`package.json` 에서 legacy 진입점·스크립트만 제거 | 대박수비대는 `games/daebak-defense/` 에 이미 있고, 배포는 허브 워크플로가 담당 |
+
+## 세이브·PWA가 안 깨지는 이유
+
+- 모든 게임이 `base: './'` (상대 경로) 로 빌드되어 CSS·JS·아이콘 경로가 `/MyGame/<게임>/` 아래에서 그대로 맞습니다.
+- 저장 키(localStorage)가 게임마다 다릅니다: `daebak_defense_v1`, `combo_rush_*`, `crimson_exile_save_v1`, `lw.*`, `packblast_save_v1`, `last_exit_v1`, `monster-stall.save.v1`, `solo_heist_25s_v1`, `waruru.save.v1`, `galaata_v1`, `nrd.v1`(닌자 랜덤 디펜스). 같은 도메인이라도 서로 덮어쓰지 않습니다.
+- 서비스 워커는 각각 `/MyGame/crimson-exile/sw.js`, `/MyGame/line-wars/sw.js` 로 등록되어 범위(scope)가 자기 게임 폴더로 한정됩니다. manifest 의 `start_url`·`scope` 도 `./` 라 같은 폴더를 가리킵니다.
+- 나머지 9개 게임은 서비스 워커 없이 동작하며(원본과 동일), 그래픽·사운드를 코드로 생성하므로 외부 파일 경로가 없습니다. 크림슨 엑자일만 Google Fonts 를 인터넷에서 불러오고, 닌자 랜덤 디펜스의 협동 모드는 공용 PeerJS 시그널 서버(0.peerjs.com)와 WebRTC 를 씁니다(혼자 하기는 완전 오프라인 동작).

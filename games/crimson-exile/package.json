@@ -1,0 +1,20 @@
+{
+  "name": "crimson-exile",
+  "version": "1.0.0",
+  "description": "다크에덴 × 디아블로 4 × 패스 오브 엑자일 스타일 브라우저/모바일 ARPG",
+  "private": true,
+  "scripts": {
+    "start": "npx serve .",
+    "build": "node scripts/build-www.js",
+    "android:init": "npm run build && npx cap add android",
+    "android": "npm run build && npx cap sync android && npx cap open android",
+    "ios:init": "npm run build && npx cap add ios",
+    "ios": "npm run build && npx cap sync ios && npx cap open ios"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0"
+  }
+}

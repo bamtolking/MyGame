@@ -1,0 +1,24 @@
+{
+  "name": "monster-stall",
+  "version": "0.1.0-beta.1",
+  "private": true,
+  "type": "module",
+  "description": "괴물 포장마차: 합치고 팔자! — 합성 퍼즐 + 주문 처리 + 소규모 가게 운영 (모바일 웹 베타)",
+  "scripts": {
+    "dev": "vite --host",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --exclude tests/balance.test.ts",
+    "test:all": "vitest run",
+    "balance": "vitest run tests/balance.test.ts --reporter=verbose",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && node scripts/singlefile.mjs",
+    "preview": "vite preview --host",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.3",
+    "playwright-core": "1.63.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.1",
+    "vitest": "5.0.1"
+  }
+}

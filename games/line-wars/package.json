@@ -1,0 +1,23 @@
+{
+  "name": "line-wars-legion-clash",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LINE WARS: LEGION CLASH - mobile lane-war strategy game (working title)",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build && node tools/postbuild.mjs",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "sim": "node --experimental-strip-types tools/headless.ts",
+    "balance": "node --experimental-strip-types tools/balance.ts",
+    "stress": "node --experimental-strip-types tools/stress.ts"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "playwright-core": "1.63.0",
+    "@types/node": "22.20.3"
+  }
+}

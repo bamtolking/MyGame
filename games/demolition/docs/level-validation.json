@@ -1,0 +1,934 @@
+{
+  "env": {
+    "node": "v22.22.2",
+    "matter": "0.20.0",
+    "fixedDt": 0.016666666666666666,
+    "substeps": 1,
+    "gravity": 1.6,
+    "maxSpeed": 1450,
+    "judge": {
+      "toppleAngleDeg": 50,
+      "toppleMinMoveRatio": 0.1,
+      "toppleFallRatio": 1.5,
+      "holdSteps": 18,
+      "settleSpeed": 0.35,
+      "settleSpeedHanging": 1.5,
+      "settleAngular": 0.012,
+      "settleHoldSteps": 30,
+      "creepWindowSteps": 45,
+      "creepMaxMove": 2.5,
+      "creepMaxRotDeg": 1.5,
+      "successSettleSteps": 30,
+      "successMaxWaitSteps": 300,
+      "shotMaxObserveSteps": 780,
+      "comboWindowSteps": 90,
+      "presettleSteps": 90,
+      "resultDelaySteps": 45
+    },
+    "date": "2026-09-17T07:44:48.333Z"
+  },
+  "results": [
+    {
+      "key": "L01",
+      "id": 1,
+      "title": "첫 철거",
+      "version": 1,
+      "solutionVersion": 1,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 145,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L02",
+      "id": 2,
+      "title": "위가 아니라 아래",
+      "version": 1,
+      "solutionVersion": 1,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 270,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L03",
+      "id": 3,
+      "title": "줄 하나의 역할",
+      "version": 1,
+      "solutionVersion": 1,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 269,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 7
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L04",
+      "id": 4,
+      "title": "굴러가는 정답",
+      "version": 2,
+      "solutionVersion": 2,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 220,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L05",
+      "id": 5,
+      "title": "도미노 작업장",
+      "version": 1,
+      "solutionVersion": 1,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "5/5",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 266,
+        "maxCombo": 4,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L06",
+      "id": 6,
+      "title": "반대편을 눌러라",
+      "version": 4,
+      "solutionVersion": 4,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 321,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L07",
+      "id": 7,
+      "title": "받침목 하나",
+      "version": 3,
+      "solutionVersion": 3,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "2/2",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 259,
+        "maxCombo": 2,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L08",
+      "id": 8,
+      "title": "건드리면 안 되는 상자",
+      "version": 1,
+      "solutionVersion": 1,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 349,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "protectHit",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "보호상자 방향 낮은 발사 5°/0.6",
+          "state": "failed",
+          "reason": "protectHit",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L09",
+      "id": 9,
+      "title": "두 줄 중 하나",
+      "version": 4,
+      "solutionVersion": 4,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 178,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L10",
+      "id": 10,
+      "title": "세게 쏘면 손해",
+      "version": 2,
+      "solutionVersion": 2,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 134,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "보호상자 방향 낮은 발사 5°/0.6",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L11",
+      "id": 11,
+      "title": "무게를 옮겨라",
+      "version": 2,
+      "solutionVersion": 2,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 256,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L12",
+      "id": 12,
+      "title": "위로 돌아가는 길",
+      "version": 4,
+      "solutionVersion": 4,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 199,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "protectHit",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "보호상자 방향 낮은 발사 5°/0.6",
+          "state": "failed",
+          "reason": "protectHit",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L13",
+      "id": 13,
+      "title": "한 번에 세 곳",
+      "version": 1,
+      "solutionVersion": 1,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "3/3",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 287,
+        "maxCombo": 3,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L14",
+      "id": 14,
+      "title": "넘어뜨리되 지켜라",
+      "version": 2,
+      "solutionVersion": 2,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.04px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 158,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "보호상자 방향 낮은 발사 5°/0.6",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L15",
+      "id": 15,
+      "title": "균형을 무너뜨려라",
+      "version": 30,
+      "solutionVersion": 30,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 267,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 6
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "protectHit",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "보호상자 방향 낮은 발사 5°/0.6",
+          "state": "failed",
+          "reason": "protectHit",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L16",
+      "id": 16,
+      "title": "길을 열고 굴려라",
+      "version": 10,
+      "solutionVersion": 10,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 2,
+        "goals": "2/2",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 623,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 16,
+        "ok": 11
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L17",
+      "id": 17,
+      "title": "두 발의 설계",
+      "version": 6,
+      "solutionVersion": 6,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 2,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 493,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 16,
+        "ok": 13
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L18",
+      "id": 18,
+      "title": "세 장치의 약속",
+      "version": 3,
+      "solutionVersion": 3,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 475,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L19",
+      "id": 19,
+      "title": "보호구역 사이로",
+      "version": 2,
+      "solutionVersion": 2,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "1/1",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 124,
+        "maxCombo": 1,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "protectHit",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "보호상자 방향 낮은 발사 5°/0.6",
+          "state": "failed",
+          "reason": "protectHit",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    },
+    {
+      "key": "L20",
+      "id": 20,
+      "title": "마지막 대연쇄",
+      "version": 7,
+      "solutionVersion": 7,
+      "versionMatch": true,
+      "lint": [],
+      "idleOk": true,
+      "idleDetail": "목표 0 실패 - 최대 이동 0.00px",
+      "replay": {
+        "success": true,
+        "shotsUsed": 1,
+        "goals": "4/4",
+        "protectsSafe": true,
+        "stars": 3,
+        "steps": 294,
+        "maxCombo": 4,
+        "failReason": null
+      },
+      "deterministic": true,
+      "perturb": {
+        "total": 8,
+        "ok": 8
+      },
+      "failInputs": [
+        {
+          "input": "약한 발사 10°/0.3",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "수직 발사 88°/0.5",
+          "state": "failed",
+          "reason": "outOfShots",
+          "goals": 0
+        },
+        {
+          "input": "보호상자 방향 낮은 발사 5°/0.6",
+          "state": "failed",
+          "reason": "protectHit",
+          "goals": 0
+        }
+      ],
+      "starThreeOk": true,
+      "verified": true,
+      "notes": []
+    }
+  ]
+}

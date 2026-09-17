@@ -1,0 +1,25 @@
+{
+  "name": "last-exit",
+  "version": "0.1.0-beta.1",
+  "private": true,
+  "type": "module",
+  "description": "털고 튀어!: 라스트 엑시트 — 한 손 조작 탈출 액션 (모바일 웹 베타)",
+  "scripts": {
+    "dev": "vite --host --port 5174",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:rules": "vitest run tests/rules.test.ts",
+    "test:runs": "vitest run tests/runs.test.ts --reporter=verbose",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && node scripts/singlefile.mjs",
+    "preview": "vite preview --host --port 5175",
+    "e2e": "node scripts/e2e.mjs",
+    "check:singlefile": "node scripts/check-singlefile.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.3",
+    "playwright-core": "1.63.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.1",
+    "vitest": "5.0.1"
+  }
+}
