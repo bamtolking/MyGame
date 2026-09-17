@@ -15,7 +15,11 @@
       "pwa": false,
       "branch": "claude/session-xitrmc",
       "sourcePath": "저장소 루트 (index.html, src/)",
-      "build": { "install": true, "command": "npm run build", "outDir": "dist" }
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
     },
     {
       "slug": "line-wars",
@@ -26,7 +30,11 @@
       "pwa": true,
       "branch": "claude/epic-gauss-ht6czg",
       "sourcePath": "저장소 루트 (index.html, src/, public/, docs/=빌드 결과)",
-      "build": { "install": true, "command": "npm run build", "outDir": "docs" }
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "docs"
+      }
     },
     {
       "slug": "crimson-exile",
@@ -37,7 +45,11 @@
       "pwa": true,
       "branch": "claude/ecstatic-ramanujan-cfm6rp",
       "sourcePath": "저장소 루트 (index.html, js/, css/, manifest.json, sw.js)",
-      "build": { "install": false, "command": "node scripts/build-www.js", "outDir": "www" }
+      "build": {
+        "install": false,
+        "command": "node scripts/build-www.js",
+        "outDir": "www"
+      }
     },
     {
       "slug": "combo-rush",
@@ -48,7 +60,11 @@
       "pwa": false,
       "branch": "claude/combo-rush-tower-defense-c3edcg",
       "sourcePath": "game/ 폴더 (+ 루트 package.json·vite.config.ts)",
-      "build": { "install": true, "command": "npm run build", "outDir": "dist" }
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
     },
     {
       "slug": "pack-and-blast",
@@ -59,7 +75,11 @@
       "pwa": false,
       "branch": "claude/pack-and-blast-game-5ox2gz",
       "sourcePath": "src/packblast/ + packblast/index.html (대박수비대와 같은 프로젝트의 2번째 진입점)",
-      "build": { "install": true, "command": "npm run build", "outDir": "dist" }
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
     },
     {
       "slug": "last-exit",
@@ -70,7 +90,11 @@
       "pwa": false,
       "branch": "claude/last-exit-game-dev-7unvj9",
       "sourcePath": "last-exit/ 폴더",
-      "build": { "install": true, "command": "npm run build", "outDir": "dist" }
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
     },
     {
       "slug": "monster-stall",
@@ -81,7 +105,26 @@
       "pwa": false,
       "branch": "claude/monster-food-truck-game-thu1lj",
       "sourcePath": "monster-stall/ 폴더",
-      "build": { "install": true, "command": "npm run build", "outDir": "dist" }
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
+    },
+    {
+      "slug": "heist",
+      "title": "나 혼자 도둑단: 25초의 공범",
+      "tagline": "25초 안에 에너지 코어를 훔쳐 나오는 탑다운 액션. 실패한 시도의 내 행동이 다음 시도에서 분신으로 재생되어 함께 싸웁니다.",
+      "emoji": "⏱️",
+      "orientation": "portrait",
+      "pwa": false,
+      "branch": "claude/heist-game-25sec-xwnluz",
+      "sourcePath": "heist/ 폴더",
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
     }
   ]
 }

@@ -1,6 +1,6 @@
 # MyGame — 게임 허브 (GitHub Pages)
 
-Claude Code로 만든 HTML5 게임 7개를 **한 사이트**에서 각각 다른 주소로 실행하는 허브입니다.
+Claude Code로 만든 HTML5 게임 8개를 **한 사이트**에서 각각 다른 주소로 실행하는 허브입니다.
 휴대폰 브라우저(Chrome / Safari)에서 바로 플레이할 수 있고, 로그인·서버·결제·광고가 없습니다.
 
 - 허브 첫 화면: `https://bamtolking.github.io/MyGame/` — 게임 목록과 **플레이** 버튼
@@ -17,6 +17,7 @@ Claude Code로 만든 HTML5 게임 7개를 **한 사이트**에서 각각 다른
 | 5 | 가방이 무기다: 팩 앤 블래스트 | `/MyGame/pack-and-blast/` | `claude/pack-and-blast-game-5ox2gz` | `src/packblast/` + `packblast/index.html` | `games/pack-and-blast/` |
 | 6 | 털고 튀어!: 라스트 엑시트 | `/MyGame/last-exit/` | `claude/last-exit-game-dev-7unvj9` | `last-exit/` 폴더 | `games/last-exit/` |
 | 7 | 괴물 포장마차: 합치고 팔자! | `/MyGame/monster-stall/` | `claude/monster-food-truck-game-thu1lj` | `monster-stall/` 폴더 | `games/monster-stall/` |
+| 8 | 나 혼자 도둑단: 25초의 공범 | `/MyGame/heist/` | `claude/heist-game-25sec-xwnluz` | `heist/` 폴더 | `games/heist/` |
 
 **원본 브랜치는 하나도 수정·삭제하지 않았습니다.** 이 브랜치의 `games/` 폴더는 각 브랜치에서 가져온 복사본이며,
 허브에서 동작하도록 필요한 최소한의 경로만 손봤습니다(아래 "허브용으로 바꾼 것" 참고).
@@ -45,15 +46,22 @@ _site/combo-rush/ ...
 
 ## GitHub Pages 배포 (처음 한 번만 설정)
 
-1. GitHub 저장소 → **Settings** → 왼쪽 **Pages**
-2. *Build and deployment* 의 **Source** 를 **GitHub Actions** 로 선택 (저장 버튼 없음, 선택하면 바로 적용)
-3. **Actions** 탭 → "Deploy game hub to GitHub Pages" → 실패한 실행이 있으면 **Re-run all jobs**, 없으면 **Run workflow**
-4. 2~4분 뒤 `https://bamtolking.github.io/MyGame/` 접속
+이 브랜치를 push 하면 워크플로 "Deploy game hub to GitHub Pages" 가 자동으로 돌아 8개 게임을 모두 빌드합니다.
+첫 실행에서 **빌드는 성공**했고 Pages 도 Actions 방식으로 켜졌지만, 마지막 배포 단계가 다음 이유로 거부되었습니다.
 
-이후에는 이 브랜치(`claude/game-hub-github-pages-09xp38`)에 push 할 때마다 자동으로 다시 배포됩니다.
-GitHub Pages 환경(`github-pages`)이 **기본 브랜치에서만 배포 허용**으로 잠겨 있으면 배포 단계가 거부됩니다.
-그럴 때는 (a) Settings → General → **Default branch** 를 이 브랜치로 바꾸거나,
-(b) Settings → Environments → github-pages → *Deployment branches* 에 이 브랜치를 추가하세요.
+> Branch "claude/game-hub-github-pages-09xp38" is not allowed to deploy to github-pages due to environment protection rules.
+
+GitHub 가 자동으로 만든 `github-pages` 환경이 **기본 브랜치에서만 배포 허용**으로 잠겨 있기 때문입니다. 한 번만 풀어 주면 됩니다.
+
+1. GitHub 저장소 → **Settings** → 왼쪽 메뉴 **Environments** → **github-pages** 클릭
+2. *Deployment branches and tags* 에서 **Add deployment branch or tag rule** 클릭 → 이름에 `claude/game-hub-github-pages-09xp38` 입력 → **Add rule**
+   (또는 드롭다운을 **No restriction** 으로 바꿔도 됩니다)
+3. **Actions** 탭 → 맨 위(최신) 실행 클릭 → 오른쪽 위 **Re-run jobs** → **Re-run failed jobs**
+4. 1~2분 뒤 `https://bamtolking.github.io/MyGame/` 접속 (Settings → Pages 에도 주소가 표시됩니다)
+
+Settings → **Pages** 의 *Source* 가 **GitHub Actions** 로 되어 있는지도 확인하세요 (다른 값이면 GitHub Actions 로 바꿉니다).
+이후에는 이 브랜치에 push 할 때마다 자동으로 다시 배포됩니다.
+이 브랜치를 저장소의 기본 브랜치로 바꾸고 싶다면 Settings → General → *Default branch* 에서 바꿀 수 있습니다(선택 사항, 위 규칙은 그대로 필요).
 
 ## 로컬에서 빌드·미리보기
 
@@ -83,11 +91,11 @@ SKIP_INSTALL=1 node scripts/build-site.mjs     # npm ci 생략 (이미 설치돼
 | 팩 앤 블래스트 | `src/packblast/` → `src/`, `tests/packblast/` → `tests/`, `packblast/index.html` → `index.html`, 전용 `package.json`·`vite.config.ts` 추가, `scripts/*.mjs` 경로 정리 | 원본은 대박수비대와 한 프로젝트를 공유(두 번째 진입점) |
 | 크림슨 엑자일 | `sw.js` 의 오래된 캐시 삭제를 `crimson-exile-` 접두어 캐시로 한정. 브랜치의 `.github/workflows/pages.yml` 은 복사하지 않음(허브 워크플로가 대신함) | 같은 도메인의 다른 게임 오프라인 캐시를 지우지 않도록 |
 | 라인워즈 | `public/sw.js`(및 `docs/sw.js`)의 캐시 삭제를 `linewars-` 접두어로 한정 | 위와 같음 |
-| 라스트 엑시트 · 괴물 포장마차 | 변경 없음 (폴더 그대로 복사) | 이미 독립 프로젝트 |
+| 라스트 엑시트 · 괴물 포장마차 · 나 혼자 도둑단 | 변경 없음 (폴더 그대로 복사) | 이미 독립 프로젝트 |
 
 ## 세이브·PWA가 안 깨지는 이유
 
 - 모든 게임이 `base: './'` (상대 경로) 로 빌드되어 CSS·JS·아이콘 경로가 `/MyGame/<게임>/` 아래에서 그대로 맞습니다.
-- 저장 키(localStorage)가 게임마다 다릅니다: `daebak_defense_v1`, `combo_rush_*`, `crimson_exile_save_v1`, `lw.*`, `packblast_save_v1`, `last_exit_v1`, `monster-stall.save.v1`. 같은 도메인이라도 서로 덮어쓰지 않습니다.
+- 저장 키(localStorage)가 게임마다 다릅니다: `daebak_defense_v1`, `combo_rush_*`, `crimson_exile_save_v1`, `lw.*`, `packblast_save_v1`, `last_exit_v1`, `monster-stall.save.v1`, `solo_heist_25s_v1`. 같은 도메인이라도 서로 덮어쓰지 않습니다.
 - 서비스 워커는 각각 `/MyGame/crimson-exile/sw.js`, `/MyGame/line-wars/sw.js` 로 등록되어 범위(scope)가 자기 게임 폴더로 한정됩니다. manifest 의 `start_url`·`scope` 도 `./` 라 같은 폴더를 가리킵니다.
-- 나머지 5개 게임은 서비스 워커 없이 동작하며(원본과 동일), 그래픽·사운드를 코드로 생성하므로 외부 파일 경로가 없습니다. 크림슨 엑자일만 Google Fonts 를 인터넷에서 불러옵니다.
+- 나머지 6개 게임은 서비스 워커 없이 동작하며(원본과 동일), 그래픽·사운드를 코드로 생성하므로 외부 파일 경로가 없습니다. 크림슨 엑자일만 Google Fonts 를 인터넷에서 불러옵니다.
