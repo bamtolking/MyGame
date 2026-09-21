@@ -3,6 +3,7 @@
 -- 손님은 "Customers" 충돌 그룹이라 카운터·조리대·플레이어를 통과합니다 (귀신이니까요).
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.GhostDiner.Config)
 local Recipes = require(ReplicatedStorage.GhostDiner.Recipes)
@@ -285,11 +286,53 @@ local function resolve(rec)
 	end
 end
 
+-- 배불리 먹은 손님은 걸어 나가지 않고 빛과 함께 승천합니다 (성불)
+local function startAscension(rec)
+	rec.ascendStarted = true
+	setMood(rec, "ascend")
+	local root = rec.root
+	root.Anchored = true
+	local glow = Instance.new("PointLight")
+	glow.Color = Color3.fromRGB(255, 240, 200)
+	glow.Range = 20
+	glow.Brightness = 2.5
+	glow.Parent = root
+	local sparkle = Instance.new("ParticleEmitter")
+	sparkle.Rate = 40
+	sparkle.Lifetime = NumberRange.new(1, 1.8)
+	sparkle.Speed = NumberRange.new(2, 5)
+	sparkle.Size = NumberSequence.new(0.6, 0)
+	sparkle.Transparency = NumberSequence.new(0, 1)
+	sparkle.Color = ColorSequence.new(Color3.fromRGB(255, 235, 160))
+	sparkle.LightEmission = 1
+	sparkle.SpreadAngle = Vector2.new(180, 180)
+	sparkle.Parent = root
+	local info = TweenInfo.new(Config.AscendDuration, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
+	TweenService:Create(root, info, { CFrame = root.CFrame * CFrame.new(0, 28, 0) * CFrame.Angles(0, math.pi * 0.9, 0) }):Play()
+	for _, p in rec.model:GetDescendants() do
+		if p:IsA("BasePart") and p ~= root then
+			TweenService:Create(p, TweenInfo.new(Config.AscendDuration * 0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Transparency = 1 }):Play()
+		end
+	end
+	Remotes.notifyAll({ kind = "ascend", position = root.Position, name = rec.ctype.name })
+end
+
 local function leave(rec, mood: string)
 	freeSpot(rec)
-	rec.state = "leaving"
-	setMood(rec, mood)
 	rec.prompt.Enabled = false
+	setMood(rec, mood)
+	if mood == "happy" then
+		rec.state = "ascending"
+		rec.ascendAt = now() + 0.9
+		rec.removeAt = rec.ascendAt + Config.AscendDuration
+		rec.humanoid.WalkSpeed = 0
+		resolve(rec)
+		if deps.onAscended then
+			deps.onAscended(rec)
+		end
+		return
+	end
+	rec.state = "leaving"
 	rec.humanoid.WalkSpeed = rec.ctype.speed * 1.3
 	moveTo(rec, map.exitPoint)
 	resolve(rec)
@@ -404,6 +447,15 @@ local function update()
 			rec.model:PivotTo(CFrame.new(rec.target + Vector3.new(0, 3, 0)))
 		end
 		local st = rec.state
+		if st == "ascending" then
+			if not rec.ascendStarted and t >= rec.ascendAt then
+				startAscension(rec)
+			end
+			if t >= rec.removeAt then
+				remove(rec)
+			end
+			continue
+		end
 		if st == "toSpot" or st == "toStation" or st == "leaving" then
 			local d = (flat(rec.root.Position) - flat(rec.target)).Magnitude
 			if d < 2.2 then
@@ -491,7 +543,7 @@ function Customers.spawn(spec, night: number, opts)
 		state = "toSpot",
 		spot = nil,
 		target = map.spawnPoint,
-		total = Waves.patienceFor(spec.typeId, night, GameState.level("smile"), Upgrades.patienceMult) * (opts.patienceMult or 1),
+		total = Waves.patienceFor(spec.typeId, night, GameState.level("smile"), Upgrades.patienceMult) * (opts.patienceMult or 1) * (if GameState.hasRelic("smile") then 1.15 else 1),
 		pool = opts.pool or Recipes.dishesForNight(night),
 		changedMind = false,
 		deadlineAt = 0,
@@ -508,6 +560,9 @@ function Customers.spawn(spec, night: number, opts)
 	model:SetAttribute("DeadlineAt", 0)
 	model:SetAttribute("Total", rec.total)
 	model:SetAttribute("Boss", ctype.boss == true)
+	if ctype.lines and #ctype.lines > 0 then
+		model:SetAttribute("Line", ctype.lines[rng:NextInteger(1, #ctype.lines)])
+	end
 	setOrdersAttr(rec)
 	root:SetAttribute("Kind", "customer")
 
@@ -556,11 +611,47 @@ function Customers.hasSpace(): boolean
 	return false
 end
 
--- 아직 처리가 끝나지 않은 손님 수 (나가는 중인 손님 제외)
+-- 아직 처리가 끝나지 않은 손님 수 (나가는 중·성불 중인 손님 제외)
 function Customers.pendingCount(): number
 	local n = 0
 	for _, rec in active do
-		if rec.state ~= "leaving" then
+		if rec.state ~= "leaving" and rec.state ~= "ascending" then
+			n += 1
+		end
+	end
+	return n
+end
+
+-- 시간 부적: 기다리는 손님 전원 인내심 연장. 영향받은 수를 돌려줌
+function Customers.extendAll(seconds: number): number
+	local n = 0
+	for _, rec in active do
+		if rec.state == "waiting" then
+			rec.deadlineAt += seconds
+			rec.total += seconds
+			rec.model:SetAttribute("DeadlineAt", rec.deadlineAt)
+			rec.model:SetAttribute("Total", rec.total)
+			n += 1
+		end
+	end
+	return n
+end
+
+-- 평온 부적: 난동 중인 악귀를 진정시켜 돌려보냄. 진정한 수를 돌려줌
+function Customers.calmAll(): number
+	local n = 0
+	for _, rec in active do
+		if rec.state == "toStation" then
+			if rec.targetStation then
+				Stations.untarget(rec.targetStation)
+				rec.targetStation = nil
+			end
+			for _, p in rec.model:GetDescendants() do
+				if p:IsA("PointLight") then
+					p:Destroy()
+				end
+			end
+			leave(rec, "calm")
 			n += 1
 		end
 	end

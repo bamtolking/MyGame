@@ -3,7 +3,7 @@
 -- 밸런스를 바꾸고 싶으면 이 파일과 Recipes / CustomerTypes / Waves / Upgrades 만 손대면 됩니다.
 
 local Config = {
-	Version = "0.2.0-beta.1",
+	Version = "0.3.0-beta.1",
 	GameName = "저승 휴게소",
 
 	-- 라운드 흐름
@@ -47,6 +47,24 @@ local Config = {
 	EventChance = 0.45,
 	EventMinNight = 3,
 	BlackoutDuration = 12, -- 정전 지속(초)
+
+	-- 부적 (팀 필살기 게이지)
+	TalismanMax = 100,
+	TalismanPerServe = 10,
+	TalismanTipBonus = 5,
+	TalismanBossBonus = 30,
+	TimeCharmSeconds = 12, -- 시간 부적: 기다리는 손님 인내심 +초
+	FortuneDuration = 20, -- 풍요 부적 지속(초)
+	FortuneMult = 1.5,
+
+	-- 유물 (보스 밤 뒤 팀 투표)
+	RelicVoteTime = 20,
+
+	-- 떡메치기
+	PoundSoloCooldown = 1.2, -- 혼자 칠 때 타격 간격(초)
+
+	-- 성불 연출
+	AscendDuration = 3.2,
 
 	-- 명성(영구 진행)
 	FamePerServe = 1,

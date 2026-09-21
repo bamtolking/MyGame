@@ -17,11 +17,14 @@ local Tutorial = require(script.Parent:WaitForChild("Tutorial"))
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Recipes = require(Shared:WaitForChild("Recipes"))
 local Config = require(Shared:WaitForChild("Config"))
+local Talismans = require(Shared:WaitForChild("Talismans"))
 local remotes = ReplicatedStorage:WaitForChild("GhostDinerRemotes")
 local notify = remotes:WaitForChild("Notify") :: RemoteEvent
 local buyRemote = remotes:WaitForChild("Buy") :: RemoteFunction
 local setHatRemote = remotes:WaitForChild("SetHat") :: RemoteFunction
 local readyRemote = remotes:WaitForChild("Ready") :: RemoteEvent
+local useTalismanRemote = remotes:WaitForChild("UseTalisman") :: RemoteEvent
+local relicVoteRemote = remotes:WaitForChild("RelicVote") :: RemoteEvent
 local state = ReplicatedStorage:WaitForChild("GhostDinerState")
 local map = workspace:WaitForChild("GhostDinerMap")
 
@@ -112,6 +115,19 @@ hud.onReady = function()
 	Sfx.play("ready")
 	readyRemote:FireServer()
 end
+hud.onTalisman = function(id)
+	Sfx.play("ui")
+	useTalismanRemote:FireServer(id)
+end
+hud.onRelicVote = function(index)
+	Sfx.play("ui")
+	relicVoteRemote:FireServer(index)
+end
+local function talismanReady(): boolean
+	local v = state:GetAttribute("Talisman")
+	local max = state:GetAttribute("TalismanMax")
+	return type(v) == "number" and type(max) == "number" and v >= max and state:GetAttribute("Phase") == "night"
+end
 hud.recipeButton.MouseButton1Click:Connect(function()
 	Sfx.play("ui")
 	panels.toggleRecipes()
@@ -137,8 +153,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	elseif input.KeyCode == Enum.KeyCode.C then
 		Sfx.play("ui")
 		panels.toggleWardrobe()
+	elseif input.KeyCode == Enum.KeyCode.One or input.KeyCode == Enum.KeyCode.Two or input.KeyCode == Enum.KeyCode.Three then
+		local idx = if input.KeyCode == Enum.KeyCode.One then 1 elseif input.KeyCode == Enum.KeyCode.Two then 2 else 3
+		local t = Talismans.List[idx]
+		if t and talismanReady() then
+			hud.onTalisman(t.id)
+		end
 	end
 end)
+
+local TALISMAN_COLORS = { time = Fx.Colors.blue, calm = Fx.Colors.white, fortune = Fx.Colors.gold }
 
 local KITCHEN_CENTER = Vector3.new(0, 12, -22)
 
@@ -238,6 +262,26 @@ notify.OnClientEvent:Connect(function(payload)
 		Fx.flash(Fx.Colors.red, 0.5, 1.5)
 		Fx.shake(1.2, 0.8)
 		hud.showResult(payload)
+	elseif kind == "talisman" then
+		Sfx.play("talisman")
+		Fx.talismanRing(TALISMAN_COLORS[payload.id] or Fx.Colors.gold)
+		hud.announce(string.format("%s %s!", payload.emoji or "🧧", payload.name or "부적"), string.format("%s · %s", payload.user or "", payload.detail or ""), Color3.fromRGB(255, 200, 240))
+	elseif kind == "relicResult" then
+		hud.announce("🔮 유물 획득: " .. tostring(payload.emoji or "") .. " " .. tostring(payload.name or ""), tostring(payload.desc or ""), Color3.fromRGB(220, 170, 255))
+		Fx.confetti(KITCHEN_CENTER)
+	elseif kind == "pound" then
+		local stationsFolder = map:FindFirstChild("Stations")
+		local part = stationsFolder and stationsFolder:FindFirstChild(tostring(payload.stationId or ""))
+		if part then
+			Fx.swingMallet(part:FindFirstChild("Mallet"))
+		end
+		Sfx.play("pound", 0.85 + 0.05 * (payload.hits or 1))
+		Fx.burst(payload.position, Fx.Colors.white, 12, 0.4, 5)
+		Fx.floatText(payload.position + Vector3.new(0, 1, 0), string.format("쿵! %d/%d", payload.hits or 0, payload.total or 0), Fx.Colors.gold, 22)
+		Fx.shakeAt(payload.position, 0.25, 0.2)
+	elseif kind == "ascend" then
+		Sfx.play("ascend")
+		Fx.burst(payload.position + Vector3.new(0, 2, 0), Fx.Colors.gold, 24, 0.5, 4)
 	end
 end)
 
@@ -300,6 +344,10 @@ local HINTS = {
 	"밥솥의 밥은 타지 않아요. 미리 지어 두세요",
 	"명성을 모으면 옷장(C)에서 새 모자를 쓸 수 있어요",
 	"구미호는 기다리다 마음을 바꿉니다 — 주문이 바뀌면 ❗ 표시",
+	"서빙할수록 🧧 부적 게이지가 차요. 가득 차면 1·2·3 키로 시간·평온·풍요 부적!",
+	"보스 밤을 넘기면 도깨비 상인이 유물 3개를 가져와요 — 팀 투표로 하나를 고르세요",
+	"인절미는 밥을 떡메에 올리고 두 명이 번갈아 6번 쳐야 해요 (혼자면 천천히)",
+	"배불리 먹은 손님은 빛과 함께 성불합니다 — 그게 이 휴게소의 존재 이유",
 }
 task.spawn(function()
 	local i = 1

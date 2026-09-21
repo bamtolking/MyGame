@@ -32,6 +32,12 @@ local SOUNDS = {
 	combo = { id = "rbxasset://sounds/electronicpingshort.wav", volume = 0.5, pitch = 1.0 },
 	ready = { id = "rbxasset://sounds/button.wav", volume = 0.5, pitch = 1.2 },
 	blackout = { id = "rbxasset://sounds/switch.wav", volume = 0.8, pitch = 0.5 },
+	pound = { id = "rbxasset://sounds/collide.wav", volume = 0.7, pitch = 0.9 },
+	talisman = { id = "rbxasset://sounds/flashbulb.wav", volume = 0.8 },
+	talismanReady = { id = "rbxasset://sounds/electronicpingshort.wav", volume = 0.7, pitch = 0.6 },
+	relicOffer = { id = "rbxasset://sounds/switch3.wav", volume = 0.7, pitch = 0.8 },
+	relic = { id = "rbxasset://sounds/victory.wav", volume = 0.6, pitch = 0.85 },
+	ascend = { id = "rbxasset://sounds/swoosh.wav", volume = 0.5, pitch = 1.4 },
 }
 
 -- pitchMult: 기본 음높이에 곱함 (콤보 등)

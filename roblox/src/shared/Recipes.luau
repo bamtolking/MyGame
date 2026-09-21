@@ -32,6 +32,7 @@ Recipes.StationNames = {
 	ricecooker = "밥솥",
 	trash = "쓰레기통",
 	extinguisher = "소화기함",
+	mallet = "떡메",
 }
 
 local itemList: { Item } = {
@@ -60,6 +61,7 @@ local itemList: { Item } = {
 	{ id = "tteokbokki", name = "떡볶이", kind = "dish", color = { 220, 50, 40 }, shape = "bowl", price = 14, unlock = 3, emoji = "🍲" },
 	{ id = "bungeoppang", name = "붕어빵", kind = "dish", color = { 200, 140, 70 }, shape = "plate", price = 14, unlock = 5, emoji = "🐟" },
 	{ id = "twigim", name = "모둠 튀김", kind = "dish", color = { 230, 180, 90 }, shape = "plate", price = 16, unlock = 7, emoji = "🍤" },
+	{ id = "injeolmi", name = "인절미", kind = "dish", color = { 240, 225, 180 }, shape = "plate", price = 20, unlock = 6, emoji = "🍡" },
 	{ id = "kimbap", name = "김밥", kind = "dish", color = { 40, 40, 40 }, shape = "plate", price = 18, unlock = 9, emoji = "🍙" },
 
 	-- 실패
@@ -100,6 +102,9 @@ local cookList: { Cook } = {
 }
 
 Recipes.Cooks = cookList
+
+-- 떡메치기: 두 요리사가 번갈아 쳐야 함 (혼자면 천천히)
+Recipes.Pound = { input = "rice", output = "injeolmi", hits = 6 }
 
 function Recipes.get(id: string): Item?
 	return Recipes.Items[id]
@@ -205,6 +210,12 @@ function Recipes.describe(dishId: string): { string }
 		visited[id] = true
 		local item = Recipes.Items[id]
 		if not item then
+			return
+		end
+		-- 떡메로 만드는 것?
+		if Recipes.Pound.output == id then
+			explain(Recipes.Pound.input)
+			table.insert(steps, string.format("%s → 떡메 (두 명이 번갈아 %d번 치기) → %s", Recipes.name(Recipes.Pound.input), Recipes.Pound.hits, item.name))
 			return
 		end
 		-- 익혀서 만드는 것?

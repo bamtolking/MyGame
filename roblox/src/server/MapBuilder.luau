@@ -360,6 +360,7 @@ local STATION_STYLE = {
 	ricecooker = { color = Color3.fromRGB(235, 235, 240), material = Enum.Material.SmoothPlastic },
 	trash = { color = Color3.fromRGB(50, 90, 60), material = Enum.Material.Metal },
 	extinguisher = { color = Color3.fromRGB(210, 40, 40), material = Enum.Material.SmoothPlastic },
+	mallet = { color = Color3.fromRGB(120, 115, 110), material = Enum.Material.Granite },
 }
 
 local function makeStation(parent: Folder, kind: string, index: number, x: number, z: number, crateItem: string?, locked: boolean): StationSpec
@@ -406,6 +407,18 @@ local function makeStation(parent: Folder, kind: string, index: number, x: numbe
 	elseif kind == "combine" then
 		part({ Name = "Top", Size = Vector3.new(4.2, 0.2, 4.2), Position = Vector3.new(x, 3.1, z), Color = Color3.fromRGB(200, 205, 215), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 2.3, 0)
+	elseif kind == "mallet" then
+		-- 절구 + 떡메 (떡메는 클라이언트가 휘두르는 연출을 함)
+		part({ Name = "Mortar", Size = Vector3.new(1.8, 2.8, 2.8), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.9, z) * UPRIGHT, Color = Color3.fromRGB(90, 60, 40), Material = Enum.Material.Wood, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		part({ Name = "MortarRim", Size = Vector3.new(0.25, 3.0, 3.0), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 4.7, z) * UPRIGHT, Color = Color3.fromRGB(70, 45, 30), Material = Enum.Material.Wood, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		local mallet = Instance.new("Model")
+		mallet.Name = "Mallet"
+		local handle = part({ Name = "Handle", Size = Vector3.new(0.35, 3.4, 0.35), Position = Vector3.new(x + 1.6, 4.7, z - 1.2), Color = Color3.fromRGB(150, 105, 60), Material = Enum.Material.Wood, CanCollide = false, CollisionGroup = "Furniture", Parent = mallet })
+		part({ Name = "Head", Size = Vector3.new(1.3, 0.9, 0.9), Position = Vector3.new(x + 1.6, 6.6, z - 1.2), Color = Color3.fromRGB(110, 75, 45), Material = Enum.Material.Wood, CanCollide = false, CollisionGroup = "Furniture", Parent = mallet })
+		mallet.PrimaryPart = handle
+		mallet.WorldPivot = CFrame.new(x + 1.6, 3.0, z - 1.2)
+		mallet.Parent = base
+		displayOffset = Vector3.new(0, 3.9, 0)
 	elseif kind == "extinguisher" then
 		-- 벽에 붙은 빨간 소화기함
 		base.Size = Vector3.new(1.2, 2.6, 2.2)
@@ -666,10 +679,11 @@ function MapBuilder.build(): MapInfo
 	add("pot", 3, 0, -30, nil, true)
 	add("griddle", 1, 10, -30)
 	add("griddle", 2, 16, -30, nil, true)
-	-- 가운데 섬 B(Z=-16): 조리대 3
+	-- 가운데 섬 B(Z=-16): 조리대 3 + 떡메
 	add("combine", 1, -12, -16)
 	add("combine", 2, 0, -16)
 	add("combine", 3, 12, -16)
+	add("mallet", 1, -26, -16)
 
 	root.Parent = workspace
 

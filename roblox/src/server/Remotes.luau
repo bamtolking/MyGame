@@ -34,6 +34,8 @@ Remotes.Notify = notify
 Remotes.Buy = remoteFunction("Buy")
 Remotes.SetHat = remoteFunction("SetHat")
 Remotes.Ready = remoteEvent("Ready")
+Remotes.UseTalisman = remoteEvent("UseTalisman")
+Remotes.RelicVote = remoteEvent("RelicVote")
 Remotes.State = state
 
 function Remotes.set(key: string, value: any)

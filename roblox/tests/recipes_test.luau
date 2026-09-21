@@ -53,6 +53,10 @@ while changed do
 			changed = true
 		end
 	end
+	if reachable[Recipes.Pound.input] and not reachable[Recipes.Pound.output] then
+		reachable[Recipes.Pound.output] = true
+		changed = true
+	end
 	for _, combo in Recipes.Combos do
 		local ok = true
 		for _, input in combo.inputs do
@@ -73,6 +77,9 @@ for _, id in Recipes.allDishes() do
 	T.check(string.find(steps[1], "재료 상자") ~= nil, "첫 단계는 상자: " .. id .. " / " .. steps[1])
 	T.check(string.find(steps[#steps], Recipes.name(id), 1, true) ~= nil, "마지막 단계는 요리: " .. id)
 end
+
+T.check(Recipes.Items[Recipes.Pound.input] and Recipes.Items[Recipes.Pound.output], "떡메 재료·결과 존재")
+T.check(string.find(table.concat(Recipes.describe("injeolmi"), "|"), "떡메", 1, true) ~= nil, "인절미 설명에 떡메")
 
 -- 합치기: 순서와 무관, 재료가 남거나 모자라면 실패
 T.eq(Recipes.findCombo({ "gochujang", "tteok" }).output, "tteokbokki_raw", "순서 무관")

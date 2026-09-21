@@ -1,6 +1,6 @@
 --!nonstrict
--- 게임 흐름: 대기 → 준비 카운트다운 → 밤(손님 웨이브·이벤트·목표) → 낮(상점·준비 투표) → … → 폐업(결과) → 다시 대기.
--- 콤보·명성·순위표·정전도 여기서 관리합니다.
+-- 게임 흐름: 대기 → 준비 카운트다운 → 밤(손님 웨이브·이벤트·목표·부적) → 낮(상점·준비 투표·유물 투표) → … → 폐업(결과·리뷰) → 다시 대기.
+-- 콤보·명성·순위표·정전·부적 게이지·유물도 여기서 관리합니다.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -12,6 +12,9 @@ local Events = require(ReplicatedStorage.GhostDiner.Events)
 local Challenges = require(ReplicatedStorage.GhostDiner.Challenges)
 local Combo = require(ReplicatedStorage.GhostDiner.Combo)
 local Cosmetics = require(ReplicatedStorage.GhostDiner.Cosmetics)
+local Talismans = require(ReplicatedStorage.GhostDiner.Talismans)
+local Relics = require(ReplicatedStorage.GhostDiner.Relics)
+local Reviews = require(ReplicatedStorage.GhostDiner.Reviews)
 local GameState = require(script.Parent.GameState)
 local Remotes = require(script.Parent.Remotes)
 local Items = require(script.Parent.Items)
@@ -23,6 +26,7 @@ local MapBuilder = require(script.Parent.MapBuilder)
 local GameLoop = {}
 local map
 local onRunReset: () -> () = function() end
+local onRelicGained: () -> () = function() end
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -74,6 +78,28 @@ function GameLoop.publish()
 	Remotes.set("NightAngry", ns.angry or 0)
 	Remotes.set("NightBurnt", ns.burnt or 0)
 	Remotes.set("NightFires", ns.fires or 0)
+	Remotes.set("NightAscended", ns.ascended or 0)
+	Remotes.set("Talisman", S.talisman)
+	Remotes.set("TalismanMax", Config.TalismanMax)
+	Remotes.set("FortuneUntil", S.fortuneUntil)
+	local relicIds = {}
+	for id in S.relics do
+		table.insert(relicIds, id)
+	end
+	table.sort(relicIds)
+	Remotes.set("Relics", table.concat(relicIds, ","))
+	Remotes.set("RelicOffer", table.concat(S.relicOffer, ","))
+	local counts = {}
+	for i = 1, #S.relicOffer do
+		counts[i] = 0
+	end
+	for _, idx in S.relicVotes do
+		if counts[idx] then
+			counts[idx] += 1
+		end
+	end
+	Remotes.set("RelicVotes", table.concat(counts, ","))
+	Remotes.set("RelicVoteEndsAt", S.relicVoteEndsAt)
 	for id, level in S.upgrades do
 		Remotes.set("Upg_" .. id, level)
 	end
@@ -107,6 +133,18 @@ local function awardFame(player: Player, n: number)
 	fp[player.UserId] = (fp[player.UserId] or 0) + n
 end
 
+local function addTalisman(amount: number)
+	if GameState.hasRelic("ink") then
+		amount *= 1.5
+	end
+	local wasFull = GameState.talisman >= Config.TalismanMax
+	GameState.talisman = math.min(Config.TalismanMax, GameState.talisman + amount)
+	if not wasFull and GameState.talisman >= Config.TalismanMax then
+		Remotes.toastAll("🧧 부적이 준비됐습니다! 1·2·3 키 또는 화면 버튼으로 사용하세요", "good")
+		Remotes.soundAll("talismanReady")
+	end
+end
+
 -- 서빙 성공: 최종 코인을 계산해 돌려줌
 local function onServed(rec, player: Player, dishId: string, base: number, tip: number, fraction: number): number
 	local t = now()
@@ -117,10 +155,11 @@ local function onServed(rec, player: Player, dishId: string, base: number, tip: 
 	end
 	GameState.comboExpiresAt = t + Config.ComboWindow
 	local event = Events.get(GameState.eventId)
-	local tipMult = if event and event.tipMult then event.tipMult else 1
+	local tipMult = (if event and event.tipMult then event.tipMult else 1) * (if GameState.hasRelic("ladle") then 1.5 else 1)
 	local rewardMult = if event and event.rewardMult then event.rewardMult else 1
+	local fortune = if t < GameState.fortuneUntil then Config.FortuneMult else 1
 	local mult = Combo.multiplier(GameState.combo)
-	local coins = math.floor((base + tip * tipMult) * rewardMult * mult + 0.5)
+	local coins = math.floor((base + tip * tipMult) * rewardMult * mult * fortune + 0.5)
 	GameState.addCoins(coins)
 
 	local S, ns = GameState.stats, GameState.nightStats
@@ -129,6 +168,7 @@ local function onServed(rec, player: Player, dishId: string, base: number, tip: 
 	ns.served += 1
 	if tip > 0 then
 		ns.tips += 1
+		S.tipCount += 1
 	end
 	if fraction >= 0.7 then
 		ns.fastServes += 1
@@ -141,10 +181,14 @@ local function onServed(rec, player: Player, dishId: string, base: number, tip: 
 	Data.addServed(player, 1)
 	Data.addCoins(player, coins)
 	awardFame(player, Config.FamePerServe)
+	addTalisman(Config.TalismanPerServe + (if tip > 0 then Config.TalismanTipBonus else 0) + (if rec.ctype.boss then Config.TalismanBossBonus else 0))
 
 	local msg = string.format("%s 서빙! +%d 코인", Recipes.name(dishId), coins)
 	if tip > 0 then
 		msg ..= string.format(" (팁 %d)", tip)
+	end
+	if fortune > 1 then
+		msg ..= " 💰풍요"
 	end
 	if GameState.combo >= 2 then
 		msg ..= string.format("  🔥 콤보 x%d", GameState.combo)
@@ -156,6 +200,7 @@ local function onServed(rec, player: Player, dishId: string, base: number, tip: 
 end
 
 local function onAngry(rec, damage: number)
+	damage = math.floor(damage * (if GameState.hasRelic("club") then 0.5 else 1) + 0.5)
 	GameState.damage(damage)
 	GameState.stats.angry += 1
 	GameState.nightStats.angry += 1
@@ -167,6 +212,12 @@ end
 
 local function onResolved(rec)
 	GameState.customersDone += 1
+	GameLoop.publish()
+end
+
+local function onAscended(rec)
+	GameState.stats.ascended += 1
+	GameState.nightStats.ascended += 1
 	GameLoop.publish()
 end
 
@@ -218,6 +269,94 @@ local function startBlackout()
 			endBlackout()
 		end
 	end)
+end
+
+-- ---------- 부적 ----------
+local function useTalisman(player: Player, id: any)
+	if GameState.phase ~= "night" then
+		Remotes.toast(player, "부적은 영업 중에만 쓸 수 있어요")
+		return
+	end
+	if GameState.talisman < Config.TalismanMax then
+		Remotes.toast(player, "부적 게이지가 아직 안 찼어요")
+		return
+	end
+	local talisman = Talismans.get(if type(id) == "string" then id else nil)
+	if not talisman then
+		return
+	end
+	GameState.talisman = 0
+	GameState.stats.talismansUsed += 1
+	local detail = ""
+	if talisman.id == "time" then
+		local n = Customers.extendAll(Config.TimeCharmSeconds)
+		detail = string.format("손님 %d명 인내심 +%d초", n, Config.TimeCharmSeconds)
+	elseif talisman.id == "calm" then
+		local n = Customers.calmAll()
+		detail = if n > 0 then string.format("악귀 %d명이 진정해 돌아갑니다", n) else "진정시킬 악귀가 없었어요"
+	elseif talisman.id == "fortune" then
+		GameState.fortuneUntil = now() + Config.FortuneDuration
+		detail = string.format("%d초 동안 보상 ×%.1f", Config.FortuneDuration, Config.FortuneMult)
+	end
+	Remotes.notifyAll({ kind = "talisman", id = talisman.id, name = talisman.name, emoji = talisman.emoji, user = player.DisplayName, detail = detail })
+	Remotes.toastAll(string.format("🧧 %s 님이 %s 사용! %s", player.DisplayName, talisman.name, detail), "good")
+	GameLoop.publish()
+end
+
+-- ---------- 유물 투표 ----------
+local function resolveRelic()
+	local offer = GameState.relicOffer
+	if #offer == 0 then
+		return
+	end
+	local rng = Random.new()
+	local id = Relics.tally(offer, GameState.relicVotes, rng) or offer[rng:NextInteger(1, #offer)]
+	GameState.relicOffer = {}
+	GameState.relicVotes = {}
+	GameState.relicVoteEndsAt = 0
+	GameState.relics[id] = true
+	local relic = Relics.get(id)
+	if relic then
+		Remotes.notifyAll({ kind = "relicResult", id = id, name = relic.name, desc = relic.desc, emoji = relic.emoji })
+		Remotes.toastAll("🔮 유물 획득: " .. relic.emoji .. " " .. relic.name .. " — " .. relic.desc, "good")
+		Remotes.soundAll("relic")
+	end
+	onRelicGained()
+	GameLoop.publish()
+end
+
+local function offerRelics(night: number)
+	local offer = Relics.offer(GameState.relics, Random.new(GameState.seed + night * 31), 3)
+	if #offer == 0 then
+		return
+	end
+	GameState.relicOffer = offer
+	GameState.relicVotes = {}
+	GameState.relicVoteEndsAt = now() + Config.RelicVoteTime
+	Remotes.toastAll("🔮 도깨비 상인이 유물을 가져왔습니다! 하나를 골라 투표하세요", "good")
+	Remotes.soundAll("relicOffer")
+	GameLoop.publish()
+end
+
+local function relicVote(player: Player, index: any)
+	if #GameState.relicOffer == 0 or type(index) ~= "number" then
+		return
+	end
+	index = math.floor(index)
+	if index < 1 or index > #GameState.relicOffer then
+		return
+	end
+	GameState.relicVotes[player.UserId] = index
+	GameLoop.publish()
+	local all = true
+	for _, p in Players:GetPlayers() do
+		if not GameState.relicVotes[p.UserId] then
+			all = false
+		end
+	end
+	if all then
+		resolveRelic()
+	end
 end
 
 -- 밤 하나를 진행. "cleared" | "abandon" | "dead"
@@ -302,7 +441,7 @@ end
 
 local function nightCleared(night: number)
 	local ns = GameState.nightStats
-	local bonus = Config.NightClearBonus * night
+	local bonus = Config.NightClearBonus * night * (if GameState.hasRelic("pouch") then 2 else 1)
 	GameState.addCoins(bonus)
 
 	local challenge = Challenges.get(GameState.challengeId)
@@ -346,6 +485,7 @@ local function nightCleared(night: number)
 		mvp = mvpName,
 		mvpServed = mvpServed,
 		served = ns.served,
+		ascended = ns.ascended,
 		tips = ns.tips,
 		maxCombo = ns.maxCombo,
 		angry = ns.angry,
@@ -355,6 +495,24 @@ local function nightCleared(night: number)
 	Remotes.soundAll("clear")
 	if newBest then
 		GameLoop.refreshLeaderboard()
+	end
+	if CustomerTypes.bossNight(night) then
+		offerRelics(night)
+	end
+end
+
+local function runDay()
+	setPhase("day", Config.DayLength)
+	MapBuilder.setNight(false)
+	Remotes.notifyAll({ kind = "day", night = GameState.night })
+	while now() < GameState.phaseEndsAt and playerCount() > 0 do
+		if #GameState.relicOffer > 0 and now() >= GameState.relicVoteEndsAt then
+			resolveRelic()
+		end
+		task.wait(0.25)
+	end
+	if #GameState.relicOffer > 0 then
+		resolveRelic()
 	end
 end
 
@@ -375,10 +533,13 @@ function GameLoop.refreshLeaderboard()
 	end)
 end
 
-function GameLoop.init(mapInfo, resetCallback: () -> ())
+function GameLoop.init(mapInfo, resetCallback: () -> (), relicCallback: (() -> ())?)
 	map = mapInfo
 	onRunReset = resetCallback
-	Customers.init(map, { onServed = onServed, onAngry = onAngry, onResolved = onResolved })
+	if relicCallback then
+		onRelicGained = relicCallback
+	end
+	Customers.init(map, { onServed = onServed, onAngry = onAngry, onResolved = onResolved, onAscended = onAscended })
 	Stations.setCallbacks(stationCallbacks)
 
 	Remotes.Ready.OnServerEvent:Connect(function(player)
@@ -405,6 +566,8 @@ function GameLoop.init(mapInfo, resetCallback: () -> ())
 		end
 		GameLoop.publish()
 	end)
+	Remotes.UseTalisman.OnServerEvent:Connect(useTalisman)
+	Remotes.RelicVote.OnServerEvent:Connect(relicVote)
 end
 
 function GameLoop.start()
@@ -437,10 +600,7 @@ function GameLoop.start()
 					break
 				end
 				nightCleared(night)
-				setPhase("day", Config.DayLength)
-				MapBuilder.setNight(false)
-				Remotes.notifyAll({ kind = "day", night = night })
-				waitPhase()
+				runDay()
 				if playerCount() == 0 then
 					ended = "abandon"
 					break
@@ -464,18 +624,31 @@ function GameLoop.start()
 				table.sort(perPlayer, function(a, b)
 					return a.served > b.served
 				end)
+				local S = GameState.stats
+				local reviews = Reviews.generate({ served = S.served, angry = S.angry, burnt = S.burnt, fires = S.fires, maxCombo = S.maxCombo, night = GameState.night, tips = S.tipCount }, Random.new())
+				local relicNames = {}
+				for id in GameState.relics do
+					local r = Relics.get(id)
+					if r then
+						table.insert(relicNames, r.emoji .. " " .. r.name)
+					end
+				end
 				Remotes.notifyAll({
 					kind = "result",
 					night = GameState.night,
-					served = GameState.stats.served,
-					angry = GameState.stats.angry,
-					earned = GameState.stats.earned,
-					tips = GameState.stats.tips,
-					maxCombo = GameState.stats.maxCombo,
-					burnt = GameState.stats.burnt,
-					fires = GameState.stats.fires,
+					served = S.served,
+					ascended = S.ascended,
+					angry = S.angry,
+					earned = S.earned,
+					tips = S.tips,
+					maxCombo = S.maxCombo,
+					burnt = S.burnt,
+					fires = S.fires,
+					talismans = S.talismansUsed,
+					relics = table.concat(relicNames, " · "),
 					mvp = mvpName,
 					players = perPlayer,
+					reviews = reviews,
 				})
 				Data.saveAll()
 				Customers.clear()

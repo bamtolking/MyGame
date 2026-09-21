@@ -13,7 +13,7 @@ local Shop = {}
 local publish: () -> () = function() end
 
 function Shop.applyWalkSpeed(player: Player?)
-	local speed = Config.BaseWalkSpeed + Upgrades.walkSpeedBonus(GameState.level("shoes"), Config.WalkSpeedPerLevel)
+	local speed = Config.BaseWalkSpeed + Upgrades.walkSpeedBonus(GameState.level("shoes"), Config.WalkSpeedPerLevel) + (if GameState.hasRelic("wind") then 3 else 0)
 	local list = if player then { player } else Players:GetPlayers()
 	for _, p in list do
 		local character = p.Character

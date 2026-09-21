@@ -6,6 +6,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Combo = require(Shared:WaitForChild("Combo"))
 local Config = require(Shared:WaitForChild("Config"))
+local Relics = require(Shared:WaitForChild("Relics"))
+local Talismans = require(Shared:WaitForChild("Talismans"))
 
 local Hud = {}
 
@@ -143,7 +145,7 @@ function Hud.create(playerGui: PlayerGui)
 	local challengeStroke = mk("UIStroke", { Color = Color3.fromRGB(255, 200, 90), Thickness = 1.5, Transparency = 0.3 }, challengeBox) :: UIStroke
 
 	-- 준비 완료 버튼
-	local readyButton = mk("TextButton", { Name = "Ready", Visible = false, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -150), Size = UDim2.new(0, 260, 0, 40), BackgroundColor3 = Color3.fromRGB(40, 120, 80), Font = FONT, TextSize = 17, TextColor3 = Color3.fromRGB(255, 255, 255), Text = "✅ 준비 완료", AutoButtonColor = true }, gui) :: TextButton
+	local readyButton = mk("TextButton", { Name = "Ready", Visible = false, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -190), Size = UDim2.new(0, 260, 0, 40), BackgroundColor3 = Color3.fromRGB(40, 120, 80), Font = FONT, TextSize = 17, TextColor3 = Color3.fromRGB(255, 255, 255), Text = "✅ 준비 완료", AutoButtonColor = true }, gui) :: TextButton
 	corner(readyButton, 10)
 	local readyLocal = false
 	readyButton.MouseButton1Click:Connect(function()
@@ -151,13 +153,60 @@ function Hud.create(playerGui: PlayerGui)
 		self.onReady()
 	end)
 
+	-- 부적 게이지 + 버튼
+	local talismanFrame = mk("Frame", { Name = "Talisman", Visible = false, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -146), Size = UDim2.new(0, 360, 0, 30), BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.35 }, gui)
+	corner(talismanFrame, 8)
+	local talismanLabel = label(talismanFrame, { Position = UDim2.new(0, 10, 0, 2), Size = UDim2.new(1, -20, 0, 18), TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Text = "🧧 부적 0%" })
+	local talismanBarBg = mk("Frame", { Position = UDim2.new(0, 10, 0, 22), Size = UDim2.new(1, -20, 0, 5), BackgroundColor3 = Color3.fromRGB(50, 40, 60), BorderSizePixel = 0 }, talismanFrame)
+	corner(talismanBarBg, 3)
+	local talismanBar = mk("Frame", { Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(255, 200, 80), BorderSizePixel = 0 }, talismanBarBg)
+	corner(talismanBar, 3)
+	local talismanButtons = mk("Frame", { Name = "TalismanButtons", Visible = false, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -184), Size = UDim2.new(0, 480, 0, 40), BackgroundTransparency = 1 }, gui)
+	mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 8) }, talismanButtons)
+	self.onTalisman = function(_id) end
+	for _, t in Talismans.List do
+		local b = mk("TextButton", { Size = UDim2.new(0, 152, 1, 0), BackgroundColor3 = Color3.fromRGB(180, 120, 40), Font = FONT, TextSize = 14, TextColor3 = Color3.fromRGB(255, 255, 255), Text = string.format("[%s] %s %s", t.key, t.emoji, t.name), AutoButtonColor = true }, talismanButtons) :: TextButton
+		corner(b, 10)
+		mk("UIStroke", { Color = Color3.fromRGB(255, 230, 150), Thickness = 1.5 }, b)
+		b.MouseButton1Click:Connect(function()
+			self.onTalisman(t.id)
+		end)
+	end
+
+	-- 유물 투표 패널 (Attribute 로 동기화되어 늦게 들어와도 보임)
+	local relicPanel = mk("Frame", { Name = "RelicVote", Visible = false, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 620, 0, 290), BackgroundColor3 = Color3.fromRGB(28, 22, 40), BackgroundTransparency = 0.05, ZIndex = 15 }, gui)
+	corner(relicPanel, 16)
+	mk("UIStroke", { Color = Color3.fromRGB(200, 120, 255), Thickness = 2 }, relicPanel)
+	label(relicPanel, { Position = UDim2.new(0, 0, 0, 12), Size = UDim2.new(1, 0, 0, 30), TextSize = 21, Text = "🔮 도깨비 상인의 유물 — 하나를 골라 투표하세요", ZIndex = 16 })
+	local relicTimer = label(relicPanel, { Position = UDim2.new(0, 0, 0, 42), Size = UDim2.new(1, 0, 0, 20), TextSize = 14, Font = FONT_REG, TextColor3 = Color3.fromRGB(220, 200, 240), Text = "", ZIndex = 16 })
+	local relicCards = {}
+	self.onRelicVote = function(_index) end
+	for i = 1, 3 do
+		local card = mk("Frame", { Position = UDim2.new(0, 16 + (i - 1) * 198, 0, 68), Size = UDim2.new(0, 190, 0, 206), BackgroundColor3 = Color3.fromRGB(45, 38, 62), ZIndex = 16 }, relicPanel)
+		corner(card, 12)
+		local emoji = label(card, { Position = UDim2.new(0, 0, 0, 8), Size = UDim2.new(1, 0, 0, 44), TextSize = 38, Text = "", ZIndex = 17 })
+		local name = label(card, { Position = UDim2.new(0, 8, 0, 54), Size = UDim2.new(1, -16, 0, 24), TextSize = 17, TextColor3 = Color3.fromRGB(255, 230, 170), Text = "", ZIndex = 17 })
+		local desc = label(card, { Position = UDim2.new(0, 8, 0, 80), Size = UDim2.new(1, -16, 0, 58), TextSize = 14, Font = FONT_REG, TextColor3 = Color3.fromRGB(225, 220, 235), TextYAlignment = Enum.TextYAlignment.Top, Text = "", ZIndex = 17 })
+		local votes = label(card, { Position = UDim2.new(0, 8, 0, 140), Size = UDim2.new(1, -16, 0, 20), TextSize = 14, TextColor3 = Color3.fromRGB(200, 255, 200), Text = "투표 0", ZIndex = 17 })
+		local voteButton = mk("TextButton", { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -8), Size = UDim2.new(1, -16, 0, 32), BackgroundColor3 = Color3.fromRGB(120, 60, 180), Font = FONT, TextSize = 15, TextColor3 = Color3.fromRGB(255, 255, 255), Text = "이걸로!", ZIndex = 17 }, card) :: TextButton
+		corner(voteButton, 8)
+		voteButton.MouseButton1Click:Connect(function()
+			self.onRelicVote(i)
+		end)
+		relicCards[i] = { card = card, emoji = emoji, name = name, desc = desc, votes = votes, button = voteButton }
+	end
+	local relicOfferShown = ""
+
 	-- 손에 든 것 / 힌트
 	local held = label(gui, { Name = "Held", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -110), Size = UDim2.new(0, 360, 0, 30), TextSize = 18, BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.35, Text = "🖐 빈손" })
 	corner(held, 8)
 	local hint = label(gui, { Name = "Hint", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -76), Size = UDim2.new(0, 620, 0, 28), TextSize = 15, Font = FONT_REG, TextColor3 = Color3.fromRGB(215, 205, 235), Text = "" })
 
+	-- 보유 유물
+	local relicRow = label(gui, { Name = "Relics", Visible = false, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 158), Size = UDim2.new(0, 640, 0, 24), TextSize = 14, Font = FONT_REG, TextColor3 = Color3.fromRGB(230, 200, 255), Text = "" })
+
 	-- 알림(토스트)
-	local toasts = mk("Frame", { Name = "Toasts", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 160), Size = UDim2.new(0, 560, 0, 200), BackgroundTransparency = 1 }, gui)
+	local toasts = mk("Frame", { Name = "Toasts", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 190), Size = UDim2.new(0, 560, 0, 200), BackgroundTransparency = 1 }, gui)
 	mk("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, toasts)
 
 	-- 큰 안내
@@ -180,7 +229,8 @@ function Hud.create(playerGui: PlayerGui)
 
 	-- 결과 화면
 	local result = mk("Frame", { Name = "Result", Visible = false, Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(10, 8, 16), BackgroundTransparency = 0.25, ZIndex = 20 }, gui)
-	local resultBox = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 540, 0, 460), BackgroundColor3 = Color3.fromRGB(28, 22, 40), ZIndex = 21 }, result)
+	local resultBox = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 600, 0, 560), BackgroundColor3 = Color3.fromRGB(28, 22, 40), ZIndex = 21 }, result)
+	mk("UISizeConstraint", { MaxSize = Vector2.new(600, 560), MinSize = Vector2.new(320, 300) }, resultBox)
 	corner(resultBox, 16)
 	mk("UIStroke", { Color = Color3.fromRGB(200, 80, 120), Thickness = 2 }, resultBox)
 	local resultTitle = label(resultBox, { Position = UDim2.new(0, 0, 0, 18), Size = UDim2.new(1, 0, 0, 48), TextSize = 34, Text = "💀 폐업", ZIndex = 22 })
@@ -295,7 +345,7 @@ function Hud.create(playerGui: PlayerGui)
 	function self.showSummary(p)
 		summaryTitle.Text = string.format("☀️ %d번째 밤 종료!", p.night or 0)
 		local lines = {
-			string.format("서빙 <b>%d</b> · 팁 <b>%d</b>회 · 최대 콤보 <b>x%d</b>", p.served or 0, p.tips or 0, p.maxCombo or 0),
+			string.format("서빙 <b>%d</b> · 성불 <b>%d</b> · 팁 <b>%d</b>회 · 최대 콤보 <b>x%d</b>", p.served or 0, p.ascended or 0, p.tips or 0, p.maxCombo or 0),
 			string.format("악귀 <b>%d</b> · 탄 음식 <b>%d</b>", p.angry or 0, p.burnt or 0),
 			string.format("밤 보너스 <font color=\"#FFD27F\">+%d 코인</font>", p.bonus or 0),
 		}
@@ -327,12 +377,22 @@ function Hud.create(playerGui: PlayerGui)
 	function self.showResult(data)
 		resultTitle.Text = string.format("💀 폐업 — %d번째 밤에 무너짐", data.night or 0)
 		local lines = {
-			string.format("서빙한 요리: <b>%d</b>  ·  최대 콤보: <b>x%d</b>", data.served or 0, data.maxCombo or 0),
-			string.format("악귀가 된 손님: <b>%d</b>  ·  탄 음식: <b>%d</b>  ·  화재: <b>%d</b>", data.angry or 0, data.burnt or 0, data.fires or 0),
+			string.format("서빙한 요리: <b>%d</b>  ·  성불한 영혼: <b>%d</b>  ·  최대 콤보: <b>x%d</b>", data.served or 0, data.ascended or 0, data.maxCombo or 0),
+			string.format("악귀가 된 손님: <b>%d</b>  ·  탄 음식: <b>%d</b>  ·  화재: <b>%d</b>  ·  부적 사용: <b>%d</b>", data.angry or 0, data.burnt or 0, data.fires or 0, data.talismans or 0),
 			string.format("번 코인: <b>%d</b> (팁 %d)", data.earned or 0, data.tips or 0),
 		}
+		if data.relics and data.relics ~= "" then
+			table.insert(lines, "🔮 유물: " .. data.relics)
+		end
 		if data.mvp and data.mvp ~= "" then
 			table.insert(lines, string.format("🏆 이번 판 MVP: <b>%s</b>", data.mvp))
+		end
+		if data.reviews then
+			table.insert(lines, "")
+			table.insert(lines, "<b>💬 손님 리뷰</b>")
+			for _, r in data.reviews do
+				table.insert(lines, "  " .. r)
+			end
 		end
 		table.insert(lines, "")
 		table.insert(lines, "<b>요리사별 서빙 · 얻은 명성</b>")
@@ -440,6 +500,78 @@ function Hud.create(playerGui: PlayerGui)
 			challengeBox.TextColor3 = if ok then Color3.fromRGB(190, 255, 200) else Color3.fromRGB(245, 240, 235)
 		else
 			challengeBox.Visible = false
+		end
+
+		-- 부적 게이지
+		local talisman = attrN(state, "Talisman")
+		local talismanMax = attrN(state, "TalismanMax")
+		if talismanMax <= 0 then
+			talismanMax = 100
+		end
+		if phase == "night" or phase == "day" then
+			talismanFrame.Visible = true
+			local pct = math.clamp(talisman / talismanMax, 0, 1)
+			talismanBar.Size = UDim2.new(pct, 0, 1, 0)
+			local full = pct >= 1
+			talismanLabel.Text = if full then "🧧 부적 준비 완료! 1·2·3 키 또는 아래 버튼" else string.format("🧧 부적 %d%%  (서빙할수록 참)", math.floor(pct * 100))
+			talismanBar.BackgroundColor3 = if full then Color3.fromRGB(255, 120, 200) else Color3.fromRGB(255, 200, 80)
+			talismanButtons.Visible = full and phase == "night"
+		else
+			talismanFrame.Visible = false
+			talismanButtons.Visible = false
+		end
+		local fortuneUntil = attrN(state, "FortuneUntil")
+		if fortuneUntil > t then
+			coinLabel.Text ..= string.format("  💰×%.1f %ds", Config.FortuneMult, math.ceil(fortuneUntil - t))
+		end
+
+		-- 보유 유물
+		local relics = attrS(state, "Relics")
+		if relics ~= "" then
+			local names = {}
+			for id in string.gmatch(relics, "[^,]+") do
+				local r = Relics.get(id)
+				if r then
+					table.insert(names, r.emoji .. " " .. r.name)
+				end
+			end
+			relicRow.Visible = true
+			relicRow.Text = "🔮 유물: " .. table.concat(names, " · ")
+		else
+			relicRow.Visible = false
+		end
+
+		-- 유물 투표 패널
+		local offer = attrS(state, "RelicOffer")
+		if offer ~= "" then
+			if offer ~= relicOfferShown then
+				relicOfferShown = offer
+				local ids = {}
+				for id in string.gmatch(offer, "[^,]+") do
+					table.insert(ids, id)
+				end
+				for i, card in relicCards do
+					local relic = Relics.get(ids[i])
+					card.card.Visible = relic ~= nil
+					if relic then
+						card.emoji.Text = relic.emoji
+						card.name.Text = relic.name
+						card.desc.Text = relic.desc
+					end
+				end
+				relicPanel.Visible = true
+			end
+			local counts = {}
+			for c in string.gmatch(attrS(state, "RelicVotes"), "[^,]+") do
+				table.insert(counts, tonumber(c) or 0)
+			end
+			for i, card in relicCards do
+				card.votes.Text = string.format("투표 %d", counts[i] or 0)
+			end
+			relicTimer.Text = string.format("%d초 뒤 확정 · 모두 투표하면 바로 확정", math.ceil(math.max(0, attrN(state, "RelicVoteEndsAt") - t)))
+		else
+			relicOfferShown = ""
+			relicPanel.Visible = false
 		end
 
 		-- 준비 버튼

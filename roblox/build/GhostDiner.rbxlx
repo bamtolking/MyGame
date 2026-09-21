@@ -59,7 +59,7 @@ function Challenges.get(id: string?): Challenge?
 	return Challenges.ById[id]
 end
 
-function Challenges.pick(night: number, rng: { NextInteger: (any, number, number) -> number }): Challenge?
+function Challenges.pick(night: number, rng: any): Challenge?
 	local candidates = {}
 	for _, c in list do
 		if c.minNight <= night then
@@ -138,7 +138,7 @@ return Combo
 -- 밸런스를 바꾸고 싶으면 이 파일과 Recipes / CustomerTypes / Waves / Upgrades 만 손대면 됩니다.
 
 local Config = {
-	Version = "0.2.0-beta.1",
+	Version = "0.3.0-beta.1",
 	GameName = "저승 휴게소",
 
 	-- 라운드 흐름
@@ -182,6 +182,24 @@ local Config = {
 	EventChance = 0.45,
 	EventMinNight = 3,
 	BlackoutDuration = 12, -- 정전 지속(초)
+
+	-- 부적 (팀 필살기 게이지)
+	TalismanMax = 100,
+	TalismanPerServe = 10,
+	TalismanTipBonus = 5,
+	TalismanBossBonus = 30,
+	TimeCharmSeconds = 12, -- 시간 부적: 기다리는 손님 인내심 +초
+	FortuneDuration = 20, -- 풍요 부적 지속(초)
+	FortuneMult = 1.5,
+
+	-- 유물 (보스 밤 뒤 팀 투표)
+	RelicVoteTime = 20,
+
+	-- 떡메치기
+	PoundSoloCooldown = 1.2, -- 혼자 칠 때 타격 간격(초)
+
+	-- 성불 연출
+	AscendDuration = 3.2,
 
 	-- 명성(영구 진행)
 	FamePerServe = 1,
@@ -286,6 +304,7 @@ export type CustomerType = {
 	weight: number, -- 등장 가중치(밤에 따라 보정)
 	boss: boolean?,
 	quirk: string?, -- mindChange: 인내심 절반에서 주문을 바꿈
+	lines: { string }, -- 카운터에 서면 하는 말
 	look: {
 		body: { number },
 		head: { number },
@@ -309,6 +328,7 @@ local customerList: { CustomerType } = {
 		smash = 1,
 		minNight = 1,
 		weight = 10,
+		lines = { "이승 분식이 그렇게 맛있다며?", "빨리요 빨리! 도깨비는 참을성이 없어요", "방망이는 안 휘두를게요. 아마도.", "김 나는 거 주세요, 뜨끈한 거!" },
 		look = { body = { 80, 170, 90 }, head = { 120, 200, 110 }, scale = 0.85, hover = 0.6, feature = "horn" },
 	},
 	{
@@ -322,6 +342,7 @@ local customerList: { CustomerType } = {
 		smash = 1,
 		minNight = 2,
 		weight = 7,
+		lines = { "이승에서 못 먹은 걸 한 입만…", "머리카락은 안 들어가게 해 주세요", "밤은 길어요. 하지만 인내심은 짧아요", "따뜻한 국물이면 성불할 수 있을 것 같아요" },
 		look = { body = { 240, 240, 245 }, head = { 245, 240, 240 }, scale = 1.0, hover = 1.4, feature = "hair" },
 	},
 	{
@@ -335,6 +356,7 @@ local customerList: { CustomerType } = {
 		smash = 1,
 		minNight = 4,
 		weight = 5,
+		lines = { "명부에 이름을 적기 전에 한 끼만.", "나는 기다리는 걸 제일 싫어한다.", "빨리 주면 팁을 두둑이 주지.", "갓은 벗지 않는다. 먹을 땐 예외다." },
 		look = { body = { 25, 25, 30 }, head = { 225, 215, 210 }, scale = 1.1, hover = 0.8, feature = "hat" },
 	},
 	{
@@ -349,6 +371,7 @@ local customerList: { CustomerType } = {
 		minNight = 6,
 		weight = 4,
 		quirk = "mindChange",
+		lines = { "음… 뭘 먹을지 아직 고민 중이에요 후후", "꼬리 아홉 개 값은 해야죠? 두 개 주문!", "마음이 바뀔 수도 있어요. 미리 말해 두는 거예요", "간은 안 먹어요. 요즘은 분식파예요" },
 		look = { body = { 235, 140, 60 }, head = { 245, 200, 150 }, scale = 1.0, hover = 0.7, feature = "tails" },
 	},
 	{
@@ -362,6 +385,7 @@ local customerList: { CustomerType } = {
 		smash = 2,
 		minNight = 8,
 		weight = 3,
+		lines = { "크르릉… 배고프다… 곶감 말고 진짜 음식!", "두 개 다 빨리 안 주면 조리대를 씹어 먹겠다", "산에서 여기까지 뛰어왔다. 배고프다.", "호랑이는 기다리지 않는다. 기다리게 만들지 마라." },
 		look = { body = { 235, 150, 40 }, head = { 240, 170, 60 }, scale = 1.15, hover = 0.5, feature = "stripes" },
 	},
 	{
@@ -376,6 +400,7 @@ local customerList: { CustomerType } = {
 		minNight = 5,
 		weight = 0, -- 일반 추첨에는 안 나오고 5의 배수 밤마다 보스로 등장
 		boss = true,
+		lines = { "허허, 내 수염이 배고픔에 떨리는구나. 세 그릇이다.", "이 산의 신령이 왔다. 실망시키지 말거라.", "느긋해 보여도 세 번 실망하면 산이 운다." },
 		look = { body = { 245, 245, 235 }, head = { 250, 225, 200 }, scale = 1.5, hover = 1.0, feature = "beard" },
 	},
 }
@@ -462,7 +487,7 @@ function Events.get(id: string?): NightEvent?
 end
 
 -- 이번 밤 이벤트 추첨. rng 는 Random 과 같은 인터페이스.
-function Events.pick(night: number, rng: { NextNumber: (any) -> number }, chance: number, minNight: number): NightEvent?
+function Events.pick(night: number, rng: any, chance: number, minNight: number): NightEvent?
 	if night < minNight then
 		return nil
 	end
@@ -665,6 +690,7 @@ Recipes.StationNames = {
 	ricecooker = "밥솥",
 	trash = "쓰레기통",
 	extinguisher = "소화기함",
+	mallet = "떡메",
 }
 
 local itemList: { Item } = {
@@ -693,6 +719,7 @@ local itemList: { Item } = {
 	{ id = "tteokbokki", name = "떡볶이", kind = "dish", color = { 220, 50, 40 }, shape = "bowl", price = 14, unlock = 3, emoji = "🍲" },
 	{ id = "bungeoppang", name = "붕어빵", kind = "dish", color = { 200, 140, 70 }, shape = "plate", price = 14, unlock = 5, emoji = "🐟" },
 	{ id = "twigim", name = "모둠 튀김", kind = "dish", color = { 230, 180, 90 }, shape = "plate", price = 16, unlock = 7, emoji = "🍤" },
+	{ id = "injeolmi", name = "인절미", kind = "dish", color = { 240, 225, 180 }, shape = "plate", price = 20, unlock = 6, emoji = "🍡" },
 	{ id = "kimbap", name = "김밥", kind = "dish", color = { 40, 40, 40 }, shape = "plate", price = 18, unlock = 9, emoji = "🍙" },
 
 	-- 실패
@@ -733,6 +760,9 @@ local cookList: { Cook } = {
 }
 
 Recipes.Cooks = cookList
+
+-- 떡메치기: 두 요리사가 번갈아 쳐야 함 (혼자면 천천히)
+Recipes.Pound = { input = "rice", output = "injeolmi", hits = 6 }
 
 function Recipes.get(id: string): Item?
 	return Recipes.Items[id]
@@ -840,6 +870,12 @@ function Recipes.describe(dishId: string): { string }
 		if not item then
 			return
 		end
+		-- 떡메로 만드는 것?
+		if Recipes.Pound.output == id then
+			explain(Recipes.Pound.input)
+			table.insert(steps, string.format("%s → 떡메 (두 명이 번갈아 %d번 치기) → %s", Recipes.name(Recipes.Pound.input), Recipes.Pound.hits, item.name))
+			return
+		end
 		-- 익혀서 만드는 것?
 		for _, cook in Recipes.Cooks do
 			if cook.output == id then
@@ -892,6 +928,202 @@ return Recipes
         </Properties>
       </Item>
       <Item class="ModuleScript" referent="11">
+        <Properties>
+          <string name="Name">Relics</string>
+          <string name="Source"><![CDATA[--!strict
+-- 유물: 보스 밤(5·10·15…)을 넘기면 도깨비 상인이 3개를 제시하고, 팀 투표로 하나를 고릅니다. 한 판 동안 유지.
+export type Relic = { id: string, name: string, desc: string, emoji: string }
+
+local Relics = {}
+
+local list: { Relic } = {
+	{ id = "ladle", name = "황금 국자", desc = "팁 +50%", emoji = "🥄" },
+	{ id = "club", name = "도깨비 방망이", desc = "악귀 난동 피해 -50%", emoji = "🏏" },
+	{ id = "sturdy", name = "튼튼한 조리대", desc = "부서진 조리대 복구 시간 절반", emoji = "🔧" },
+	{ id = "fireward", name = "불꽃 수호 부적", desc = "불이 번지지 않고, 발화까지 시간 2배", emoji = "🛡️" },
+	{ id = "smile", name = "다정한 미소", desc = "손님 인내심 +15%", emoji = "😊" },
+	{ id = "wind", name = "바람 신발", desc = "모든 요리사 이동 속도 +3", emoji = "🌬️" },
+	{ id = "pouch", name = "복주머니", desc = "밤 클리어 보너스 2배", emoji = "👛" },
+	{ id = "iceladle", name = "얼음 국자", desc = "완성 후 타기까지 시간 2배", emoji = "🧊" },
+	{ id = "ink", name = "부적 먹물", desc = "부적 게이지가 50% 더 빨리 참", emoji = "🖌️" },
+}
+
+Relics.List = list
+Relics.ById = {} :: { [string]: Relic }
+for _, r in list do
+	Relics.ById[r.id] = r
+end
+
+function Relics.get(id: string?): Relic?
+	if not id then
+		return nil
+	end
+	return Relics.ById[id]
+end
+
+-- 아직 없는 유물 중 count 개를 무작위로 (부족하면 있는 만큼)
+function Relics.offer(owned: { [string]: boolean }, rng: any, count: number): { string }
+	local pool = {}
+	for _, r in list do
+		if not owned[r.id] then
+			table.insert(pool, r.id)
+		end
+	end
+	local out = {}
+	while #out < count and #pool > 0 do
+		local idx = rng:NextInteger(1, #pool)
+		table.insert(out, pool[idx])
+		table.remove(pool, idx)
+	end
+	return out
+end
+
+-- 투표 집계: votes[userId] = 후보 번호. 최다 득표(동률이면 rng). 표가 없으면 nil.
+function Relics.tally(offer: { string }, votes: { [any]: number }, rng: any): string?
+	if #offer == 0 then
+		return nil
+	end
+	local counts = {}
+	for i = 1, #offer do
+		counts[i] = 0
+	end
+	local any = false
+	for _, idx in votes do
+		if counts[idx] then
+			counts[idx] += 1
+			any = true
+		end
+	end
+	if not any then
+		return nil
+	end
+	local best = 0
+	for i = 1, #offer do
+		best = math.max(best, counts[i])
+	end
+	local winners = {}
+	for i = 1, #offer do
+		if counts[i] == best then
+			table.insert(winners, i)
+		end
+	end
+	return offer[winners[rng:NextInteger(1, #winners)]]
+end
+
+return Relics
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="12">
+        <Properties>
+          <string name="Name">Reviews</string>
+          <string name="Source"><![CDATA[--!strict
+-- 폐업 리뷰: 그 판의 기록을 보고 손님들이 남기는 별점 한 줄.
+local Reviews = {}
+
+export type Stats = { [string]: any }
+
+local function n(stats: Stats, key: string): number
+	local v = stats[key]
+	return if type(v) == "number" then v else 0
+end
+
+-- 3줄을 돌려줌 (조건에 맞는 것 우선, 부족하면 기본 대사)
+function Reviews.generate(stats: Stats, rng: any): { string }
+	local served, angry, burnt, fires = n(stats, "served"), n(stats, "angry"), n(stats, "burnt"), n(stats, "fires")
+	local maxCombo, night, tips = n(stats, "maxCombo"), n(stats, "night"), n(stats, "tips")
+	local special = {}
+	local function add(text: string)
+		table.insert(special, text)
+	end
+	if served > 0 and angry == 0 then
+		add("처녀귀신: 기다리는 동안 한 번도 화가 안 났어요. 여기가 극락인가요? ★★★★★")
+	end
+	if angry > served then
+		add("저승사자: 기다리다 지쳐 다들 악귀가 됐다. 다음엔 명부부터 적겠다. ★☆☆☆☆")
+	elseif angry >= 3 then
+		add("꼬마 도깨비: 화난 친구들이 조리대를 부쉈어요. 솔직히 재밌었어요! ★★☆☆☆")
+	end
+	if burnt >= 3 then
+		add("구미호: 탄 냄새가 아직 꼬리 아홉 개에 배어 있어요. ★★☆☆☆")
+	elseif burnt == 0 and served >= 5 then
+		add("배고픈 호랑이: 탄 음식이 하나도 없다니. 크르릉(칭찬이다). ★★★★☆")
+	end
+	if fires > 0 then
+		add(string.format("산신령: 주방에 불이 %d번 났더구나. 불구경은 좋았다. ★★★☆☆", fires))
+	end
+	if maxCombo >= 5 then
+		add(string.format("구미호: 콤보 x%d… 이런 손놀림은 이승에서도 못 봤어요. ★★★★★", maxCombo))
+	end
+	if tips >= 10 then
+		add(string.format("저승사자: 팁을 %d번이나 받아 갔다. 빠른 자에게 복이 있으리. ★★★★★", tips))
+	end
+	if night >= 10 then
+		add("저승사자: 열 번째 밤을 넘긴 인간은 백 년 만이다. ★★★★★")
+	elseif night <= 2 then
+		add("꼬마 도깨비: 문 열자마자 닫았어요? 배고파요… ★☆☆☆☆")
+	end
+	if served >= 30 then
+		add(string.format("처녀귀신: 영혼 %d명을 배불리 보냈어요. 다들 성불했대요. ★★★★★", served))
+	end
+	local generic = {
+		"꼬마 도깨비: 라면은 맛있었는데 자리가 좁아요. ★★★☆☆",
+		"처녀귀신: 등불이 예뻐서 별 하나 더. ★★★★☆",
+		"저승사자: 메뉴판 글씨가 작다. 안경을 쓰고 왔어야 했나. ★★★☆☆",
+		"구미호: 요리사 모자가 귀여워서 봐 드릴게요. ★★★★☆",
+		"배고픈 호랑이: 인절미… 다음엔 인절미를 달라. ★★★☆☆",
+	}
+	local out = {}
+	while #out < 3 and #special > 0 do
+		local idx = rng:NextInteger(1, #special)
+		table.insert(out, special[idx])
+		table.remove(special, idx)
+	end
+	while #out < 3 and #generic > 0 do
+		local idx = rng:NextInteger(1, #generic)
+		table.insert(out, generic[idx])
+		table.remove(generic, idx)
+	end
+	return out
+end
+
+return Reviews
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="13">
+        <Properties>
+          <string name="Name">Talismans</string>
+          <string name="Source"><![CDATA[--!strict
+-- 부적: 서빙으로 채우는 팀 게이지가 가득 차면 누구나 하나를 골라 씁니다.
+export type Talisman = { id: string, name: string, desc: string, emoji: string, key: string }
+
+local Talismans = {}
+
+local list: { Talisman } = {
+	{ id = "time", name = "시간 부적", desc = "기다리는 손님 전원의 인내심 +12초", emoji = "⏳", key = "1" },
+	{ id = "calm", name = "평온 부적", desc = "난동 중인 악귀를 모두 진정시켜 돌려보냄", emoji = "🕊️", key = "2" },
+	{ id = "fortune", name = "풍요 부적", desc = "20초 동안 모든 보상 ×1.5", emoji = "💰", key = "3" },
+}
+
+Talismans.List = list
+Talismans.ById = {} :: { [string]: Talisman }
+for _, t in list do
+	Talismans.ById[t.id] = t
+end
+
+function Talismans.get(id: string?): Talisman?
+	if not id then
+		return nil
+	end
+	return Talismans.ById[id]
+end
+
+return Talismans
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="14">
         <Properties>
           <string name="Name">Upgrades</string>
           <string name="Source"><![CDATA[--!strict
@@ -962,7 +1194,7 @@ return Upgrades
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="12">
+      <Item class="ModuleScript" referent="15">
         <Properties>
           <string name="Name">Waves</string>
           <string name="Source"><![CDATA[--!strict
@@ -1097,15 +1329,15 @@ return Waves
       </Item>
     </Item>
   </Item>
-  <Item class="ServerScriptService" referent="13">
+  <Item class="ServerScriptService" referent="16">
     <Properties>
       <string name="Name">ServerScriptService</string>
     </Properties>
-    <Item class="Folder" referent="14">
+    <Item class="Folder" referent="17">
       <Properties>
         <string name="Name">GhostDinerServer</string>
       </Properties>
-      <Item class="ModuleScript" referent="15">
+      <Item class="ModuleScript" referent="18">
         <Properties>
           <string name="Name">Customers</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -1113,6 +1345,7 @@ return Waves
 -- 손님은 "Customers" 충돌 그룹이라 카운터·조리대·플레이어를 통과합니다 (귀신이니까요).
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.GhostDiner.Config)
 local Recipes = require(ReplicatedStorage.GhostDiner.Recipes)
@@ -1395,11 +1628,53 @@ local function resolve(rec)
 	end
 end
 
+-- 배불리 먹은 손님은 걸어 나가지 않고 빛과 함께 승천합니다 (성불)
+local function startAscension(rec)
+	rec.ascendStarted = true
+	setMood(rec, "ascend")
+	local root = rec.root
+	root.Anchored = true
+	local glow = Instance.new("PointLight")
+	glow.Color = Color3.fromRGB(255, 240, 200)
+	glow.Range = 20
+	glow.Brightness = 2.5
+	glow.Parent = root
+	local sparkle = Instance.new("ParticleEmitter")
+	sparkle.Rate = 40
+	sparkle.Lifetime = NumberRange.new(1, 1.8)
+	sparkle.Speed = NumberRange.new(2, 5)
+	sparkle.Size = NumberSequence.new(0.6, 0)
+	sparkle.Transparency = NumberSequence.new(0, 1)
+	sparkle.Color = ColorSequence.new(Color3.fromRGB(255, 235, 160))
+	sparkle.LightEmission = 1
+	sparkle.SpreadAngle = Vector2.new(180, 180)
+	sparkle.Parent = root
+	local info = TweenInfo.new(Config.AscendDuration, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
+	TweenService:Create(root, info, { CFrame = root.CFrame * CFrame.new(0, 28, 0) * CFrame.Angles(0, math.pi * 0.9, 0) }):Play()
+	for _, p in rec.model:GetDescendants() do
+		if p:IsA("BasePart") and p ~= root then
+			TweenService:Create(p, TweenInfo.new(Config.AscendDuration * 0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Transparency = 1 }):Play()
+		end
+	end
+	Remotes.notifyAll({ kind = "ascend", position = root.Position, name = rec.ctype.name })
+end
+
 local function leave(rec, mood: string)
 	freeSpot(rec)
-	rec.state = "leaving"
-	setMood(rec, mood)
 	rec.prompt.Enabled = false
+	setMood(rec, mood)
+	if mood == "happy" then
+		rec.state = "ascending"
+		rec.ascendAt = now() + 0.9
+		rec.removeAt = rec.ascendAt + Config.AscendDuration
+		rec.humanoid.WalkSpeed = 0
+		resolve(rec)
+		if deps.onAscended then
+			deps.onAscended(rec)
+		end
+		return
+	end
+	rec.state = "leaving"
 	rec.humanoid.WalkSpeed = rec.ctype.speed * 1.3
 	moveTo(rec, map.exitPoint)
 	resolve(rec)
@@ -1514,6 +1789,15 @@ local function update()
 			rec.model:PivotTo(CFrame.new(rec.target + Vector3.new(0, 3, 0)))
 		end
 		local st = rec.state
+		if st == "ascending" then
+			if not rec.ascendStarted and t >= rec.ascendAt then
+				startAscension(rec)
+			end
+			if t >= rec.removeAt then
+				remove(rec)
+			end
+			continue
+		end
 		if st == "toSpot" or st == "toStation" or st == "leaving" then
 			local d = (flat(rec.root.Position) - flat(rec.target)).Magnitude
 			if d < 2.2 then
@@ -1601,7 +1885,7 @@ function Customers.spawn(spec, night: number, opts)
 		state = "toSpot",
 		spot = nil,
 		target = map.spawnPoint,
-		total = Waves.patienceFor(spec.typeId, night, GameState.level("smile"), Upgrades.patienceMult) * (opts.patienceMult or 1),
+		total = Waves.patienceFor(spec.typeId, night, GameState.level("smile"), Upgrades.patienceMult) * (opts.patienceMult or 1) * (if GameState.hasRelic("smile") then 1.15 else 1),
 		pool = opts.pool or Recipes.dishesForNight(night),
 		changedMind = false,
 		deadlineAt = 0,
@@ -1618,6 +1902,9 @@ function Customers.spawn(spec, night: number, opts)
 	model:SetAttribute("DeadlineAt", 0)
 	model:SetAttribute("Total", rec.total)
 	model:SetAttribute("Boss", ctype.boss == true)
+	if ctype.lines and #ctype.lines > 0 then
+		model:SetAttribute("Line", ctype.lines[rng:NextInteger(1, #ctype.lines)])
+	end
 	setOrdersAttr(rec)
 	root:SetAttribute("Kind", "customer")
 
@@ -1666,11 +1953,47 @@ function Customers.hasSpace(): boolean
 	return false
 end
 
--- 아직 처리가 끝나지 않은 손님 수 (나가는 중인 손님 제외)
+-- 아직 처리가 끝나지 않은 손님 수 (나가는 중·성불 중인 손님 제외)
 function Customers.pendingCount(): number
 	local n = 0
 	for _, rec in active do
-		if rec.state ~= "leaving" then
+		if rec.state ~= "leaving" and rec.state ~= "ascending" then
+			n += 1
+		end
+	end
+	return n
+end
+
+-- 시간 부적: 기다리는 손님 전원 인내심 연장. 영향받은 수를 돌려줌
+function Customers.extendAll(seconds: number): number
+	local n = 0
+	for _, rec in active do
+		if rec.state == "waiting" then
+			rec.deadlineAt += seconds
+			rec.total += seconds
+			rec.model:SetAttribute("DeadlineAt", rec.deadlineAt)
+			rec.model:SetAttribute("Total", rec.total)
+			n += 1
+		end
+	end
+	return n
+end
+
+-- 평온 부적: 난동 중인 악귀를 진정시켜 돌려보냄. 진정한 수를 돌려줌
+function Customers.calmAll(): number
+	local n = 0
+	for _, rec in active do
+		if rec.state == "toStation" then
+			if rec.targetStation then
+				Stations.untarget(rec.targetStation)
+				rec.targetStation = nil
+			end
+			for _, p in rec.model:GetDescendants() do
+				if p:IsA("PointLight") then
+					p:Destroy()
+				end
+			end
+			leave(rec, "calm")
 			n += 1
 		end
 	end
@@ -1698,7 +2021,7 @@ return Customers
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="16">
+      <Item class="ModuleScript" referent="19">
         <Properties>
           <string name="Name">Data</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -1977,12 +2300,12 @@ return Data
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="17">
+      <Item class="ModuleScript" referent="20">
         <Properties>
           <string name="Name">GameLoop</string>
           <string name="Source"><![CDATA[--!nonstrict
--- 게임 흐름: 대기 → 준비 카운트다운 → 밤(손님 웨이브·이벤트·목표) → 낮(상점·준비 투표) → … → 폐업(결과) → 다시 대기.
--- 콤보·명성·순위표·정전도 여기서 관리합니다.
+-- 게임 흐름: 대기 → 준비 카운트다운 → 밤(손님 웨이브·이벤트·목표·부적) → 낮(상점·준비 투표·유물 투표) → … → 폐업(결과·리뷰) → 다시 대기.
+-- 콤보·명성·순위표·정전·부적 게이지·유물도 여기서 관리합니다.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -1994,6 +2317,9 @@ local Events = require(ReplicatedStorage.GhostDiner.Events)
 local Challenges = require(ReplicatedStorage.GhostDiner.Challenges)
 local Combo = require(ReplicatedStorage.GhostDiner.Combo)
 local Cosmetics = require(ReplicatedStorage.GhostDiner.Cosmetics)
+local Talismans = require(ReplicatedStorage.GhostDiner.Talismans)
+local Relics = require(ReplicatedStorage.GhostDiner.Relics)
+local Reviews = require(ReplicatedStorage.GhostDiner.Reviews)
 local GameState = require(script.Parent.GameState)
 local Remotes = require(script.Parent.Remotes)
 local Items = require(script.Parent.Items)
@@ -2005,6 +2331,7 @@ local MapBuilder = require(script.Parent.MapBuilder)
 local GameLoop = {}
 local map
 local onRunReset: () -> () = function() end
+local onRelicGained: () -> () = function() end
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -2056,6 +2383,28 @@ function GameLoop.publish()
 	Remotes.set("NightAngry", ns.angry or 0)
 	Remotes.set("NightBurnt", ns.burnt or 0)
 	Remotes.set("NightFires", ns.fires or 0)
+	Remotes.set("NightAscended", ns.ascended or 0)
+	Remotes.set("Talisman", S.talisman)
+	Remotes.set("TalismanMax", Config.TalismanMax)
+	Remotes.set("FortuneUntil", S.fortuneUntil)
+	local relicIds = {}
+	for id in S.relics do
+		table.insert(relicIds, id)
+	end
+	table.sort(relicIds)
+	Remotes.set("Relics", table.concat(relicIds, ","))
+	Remotes.set("RelicOffer", table.concat(S.relicOffer, ","))
+	local counts = {}
+	for i = 1, #S.relicOffer do
+		counts[i] = 0
+	end
+	for _, idx in S.relicVotes do
+		if counts[idx] then
+			counts[idx] += 1
+		end
+	end
+	Remotes.set("RelicVotes", table.concat(counts, ","))
+	Remotes.set("RelicVoteEndsAt", S.relicVoteEndsAt)
 	for id, level in S.upgrades do
 		Remotes.set("Upg_" .. id, level)
 	end
@@ -2089,6 +2438,18 @@ local function awardFame(player: Player, n: number)
 	fp[player.UserId] = (fp[player.UserId] or 0) + n
 end
 
+local function addTalisman(amount: number)
+	if GameState.hasRelic("ink") then
+		amount *= 1.5
+	end
+	local wasFull = GameState.talisman >= Config.TalismanMax
+	GameState.talisman = math.min(Config.TalismanMax, GameState.talisman + amount)
+	if not wasFull and GameState.talisman >= Config.TalismanMax then
+		Remotes.toastAll("🧧 부적이 준비됐습니다! 1·2·3 키 또는 화면 버튼으로 사용하세요", "good")
+		Remotes.soundAll("talismanReady")
+	end
+end
+
 -- 서빙 성공: 최종 코인을 계산해 돌려줌
 local function onServed(rec, player: Player, dishId: string, base: number, tip: number, fraction: number): number
 	local t = now()
@@ -2099,10 +2460,11 @@ local function onServed(rec, player: Player, dishId: string, base: number, tip: 
 	end
 	GameState.comboExpiresAt = t + Config.ComboWindow
 	local event = Events.get(GameState.eventId)
-	local tipMult = if event and event.tipMult then event.tipMult else 1
+	local tipMult = (if event and event.tipMult then event.tipMult else 1) * (if GameState.hasRelic("ladle") then 1.5 else 1)
 	local rewardMult = if event and event.rewardMult then event.rewardMult else 1
+	local fortune = if t < GameState.fortuneUntil then Config.FortuneMult else 1
 	local mult = Combo.multiplier(GameState.combo)
-	local coins = math.floor((base + tip * tipMult) * rewardMult * mult + 0.5)
+	local coins = math.floor((base + tip * tipMult) * rewardMult * mult * fortune + 0.5)
 	GameState.addCoins(coins)
 
 	local S, ns = GameState.stats, GameState.nightStats
@@ -2111,6 +2473,7 @@ local function onServed(rec, player: Player, dishId: string, base: number, tip: 
 	ns.served += 1
 	if tip > 0 then
 		ns.tips += 1
+		S.tipCount += 1
 	end
 	if fraction >= 0.7 then
 		ns.fastServes += 1
@@ -2123,10 +2486,14 @@ local function onServed(rec, player: Player, dishId: string, base: number, tip: 
 	Data.addServed(player, 1)
 	Data.addCoins(player, coins)
 	awardFame(player, Config.FamePerServe)
+	addTalisman(Config.TalismanPerServe + (if tip > 0 then Config.TalismanTipBonus else 0) + (if rec.ctype.boss then Config.TalismanBossBonus else 0))
 
 	local msg = string.format("%s 서빙! +%d 코인", Recipes.name(dishId), coins)
 	if tip > 0 then
 		msg ..= string.format(" (팁 %d)", tip)
+	end
+	if fortune > 1 then
+		msg ..= " 💰풍요"
 	end
 	if GameState.combo >= 2 then
 		msg ..= string.format("  🔥 콤보 x%d", GameState.combo)
@@ -2138,6 +2505,7 @@ local function onServed(rec, player: Player, dishId: string, base: number, tip: 
 end
 
 local function onAngry(rec, damage: number)
+	damage = math.floor(damage * (if GameState.hasRelic("club") then 0.5 else 1) + 0.5)
 	GameState.damage(damage)
 	GameState.stats.angry += 1
 	GameState.nightStats.angry += 1
@@ -2149,6 +2517,12 @@ end
 
 local function onResolved(rec)
 	GameState.customersDone += 1
+	GameLoop.publish()
+end
+
+local function onAscended(rec)
+	GameState.stats.ascended += 1
+	GameState.nightStats.ascended += 1
 	GameLoop.publish()
 end
 
@@ -2200,6 +2574,94 @@ local function startBlackout()
 			endBlackout()
 		end
 	end)
+end
+
+-- ---------- 부적 ----------
+local function useTalisman(player: Player, id: any)
+	if GameState.phase ~= "night" then
+		Remotes.toast(player, "부적은 영업 중에만 쓸 수 있어요")
+		return
+	end
+	if GameState.talisman < Config.TalismanMax then
+		Remotes.toast(player, "부적 게이지가 아직 안 찼어요")
+		return
+	end
+	local talisman = Talismans.get(if type(id) == "string" then id else nil)
+	if not talisman then
+		return
+	end
+	GameState.talisman = 0
+	GameState.stats.talismansUsed += 1
+	local detail = ""
+	if talisman.id == "time" then
+		local n = Customers.extendAll(Config.TimeCharmSeconds)
+		detail = string.format("손님 %d명 인내심 +%d초", n, Config.TimeCharmSeconds)
+	elseif talisman.id == "calm" then
+		local n = Customers.calmAll()
+		detail = if n > 0 then string.format("악귀 %d명이 진정해 돌아갑니다", n) else "진정시킬 악귀가 없었어요"
+	elseif talisman.id == "fortune" then
+		GameState.fortuneUntil = now() + Config.FortuneDuration
+		detail = string.format("%d초 동안 보상 ×%.1f", Config.FortuneDuration, Config.FortuneMult)
+	end
+	Remotes.notifyAll({ kind = "talisman", id = talisman.id, name = talisman.name, emoji = talisman.emoji, user = player.DisplayName, detail = detail })
+	Remotes.toastAll(string.format("🧧 %s 님이 %s 사용! %s", player.DisplayName, talisman.name, detail), "good")
+	GameLoop.publish()
+end
+
+-- ---------- 유물 투표 ----------
+local function resolveRelic()
+	local offer = GameState.relicOffer
+	if #offer == 0 then
+		return
+	end
+	local rng = Random.new()
+	local id = Relics.tally(offer, GameState.relicVotes, rng) or offer[rng:NextInteger(1, #offer)]
+	GameState.relicOffer = {}
+	GameState.relicVotes = {}
+	GameState.relicVoteEndsAt = 0
+	GameState.relics[id] = true
+	local relic = Relics.get(id)
+	if relic then
+		Remotes.notifyAll({ kind = "relicResult", id = id, name = relic.name, desc = relic.desc, emoji = relic.emoji })
+		Remotes.toastAll("🔮 유물 획득: " .. relic.emoji .. " " .. relic.name .. " — " .. relic.desc, "good")
+		Remotes.soundAll("relic")
+	end
+	onRelicGained()
+	GameLoop.publish()
+end
+
+local function offerRelics(night: number)
+	local offer = Relics.offer(GameState.relics, Random.new(GameState.seed + night * 31), 3)
+	if #offer == 0 then
+		return
+	end
+	GameState.relicOffer = offer
+	GameState.relicVotes = {}
+	GameState.relicVoteEndsAt = now() + Config.RelicVoteTime
+	Remotes.toastAll("🔮 도깨비 상인이 유물을 가져왔습니다! 하나를 골라 투표하세요", "good")
+	Remotes.soundAll("relicOffer")
+	GameLoop.publish()
+end
+
+local function relicVote(player: Player, index: any)
+	if #GameState.relicOffer == 0 or type(index) ~= "number" then
+		return
+	end
+	index = math.floor(index)
+	if index < 1 or index > #GameState.relicOffer then
+		return
+	end
+	GameState.relicVotes[player.UserId] = index
+	GameLoop.publish()
+	local all = true
+	for _, p in Players:GetPlayers() do
+		if not GameState.relicVotes[p.UserId] then
+			all = false
+		end
+	end
+	if all then
+		resolveRelic()
+	end
 end
 
 -- 밤 하나를 진행. "cleared" | "abandon" | "dead"
@@ -2284,7 +2746,7 @@ end
 
 local function nightCleared(night: number)
 	local ns = GameState.nightStats
-	local bonus = Config.NightClearBonus * night
+	local bonus = Config.NightClearBonus * night * (if GameState.hasRelic("pouch") then 2 else 1)
 	GameState.addCoins(bonus)
 
 	local challenge = Challenges.get(GameState.challengeId)
@@ -2328,6 +2790,7 @@ local function nightCleared(night: number)
 		mvp = mvpName,
 		mvpServed = mvpServed,
 		served = ns.served,
+		ascended = ns.ascended,
 		tips = ns.tips,
 		maxCombo = ns.maxCombo,
 		angry = ns.angry,
@@ -2337,6 +2800,24 @@ local function nightCleared(night: number)
 	Remotes.soundAll("clear")
 	if newBest then
 		GameLoop.refreshLeaderboard()
+	end
+	if CustomerTypes.bossNight(night) then
+		offerRelics(night)
+	end
+end
+
+local function runDay()
+	setPhase("day", Config.DayLength)
+	MapBuilder.setNight(false)
+	Remotes.notifyAll({ kind = "day", night = GameState.night })
+	while now() < GameState.phaseEndsAt and playerCount() > 0 do
+		if #GameState.relicOffer > 0 and now() >= GameState.relicVoteEndsAt then
+			resolveRelic()
+		end
+		task.wait(0.25)
+	end
+	if #GameState.relicOffer > 0 then
+		resolveRelic()
 	end
 end
 
@@ -2357,10 +2838,13 @@ function GameLoop.refreshLeaderboard()
 	end)
 end
 
-function GameLoop.init(mapInfo, resetCallback: () -> ())
+function GameLoop.init(mapInfo, resetCallback: () -> (), relicCallback: (() -> ())?)
 	map = mapInfo
 	onRunReset = resetCallback
-	Customers.init(map, { onServed = onServed, onAngry = onAngry, onResolved = onResolved })
+	if relicCallback then
+		onRelicGained = relicCallback
+	end
+	Customers.init(map, { onServed = onServed, onAngry = onAngry, onResolved = onResolved, onAscended = onAscended })
 	Stations.setCallbacks(stationCallbacks)
 
 	Remotes.Ready.OnServerEvent:Connect(function(player)
@@ -2387,6 +2871,8 @@ function GameLoop.init(mapInfo, resetCallback: () -> ())
 		end
 		GameLoop.publish()
 	end)
+	Remotes.UseTalisman.OnServerEvent:Connect(useTalisman)
+	Remotes.RelicVote.OnServerEvent:Connect(relicVote)
 end
 
 function GameLoop.start()
@@ -2419,10 +2905,7 @@ function GameLoop.start()
 					break
 				end
 				nightCleared(night)
-				setPhase("day", Config.DayLength)
-				MapBuilder.setNight(false)
-				Remotes.notifyAll({ kind = "day", night = night })
-				waitPhase()
+				runDay()
 				if playerCount() == 0 then
 					ended = "abandon"
 					break
@@ -2446,18 +2929,31 @@ function GameLoop.start()
 				table.sort(perPlayer, function(a, b)
 					return a.served > b.served
 				end)
+				local S = GameState.stats
+				local reviews = Reviews.generate({ served = S.served, angry = S.angry, burnt = S.burnt, fires = S.fires, maxCombo = S.maxCombo, night = GameState.night, tips = S.tipCount }, Random.new())
+				local relicNames = {}
+				for id in GameState.relics do
+					local r = Relics.get(id)
+					if r then
+						table.insert(relicNames, r.emoji .. " " .. r.name)
+					end
+				end
 				Remotes.notifyAll({
 					kind = "result",
 					night = GameState.night,
-					served = GameState.stats.served,
-					angry = GameState.stats.angry,
-					earned = GameState.stats.earned,
-					tips = GameState.stats.tips,
-					maxCombo = GameState.stats.maxCombo,
-					burnt = GameState.stats.burnt,
-					fires = GameState.stats.fires,
+					served = S.served,
+					ascended = S.ascended,
+					angry = S.angry,
+					earned = S.earned,
+					tips = S.tips,
+					maxCombo = S.maxCombo,
+					burnt = S.burnt,
+					fires = S.fires,
+					talismans = S.talismansUsed,
+					relics = table.concat(relicNames, " · "),
 					mvp = mvpName,
 					players = perPlayer,
+					reviews = reviews,
 				})
 				Data.saveAll()
 				Customers.clear()
@@ -2474,7 +2970,7 @@ return GameLoop
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="18">
+      <Item class="ModuleScript" referent="21">
         <Properties>
           <string name="Name">GameState</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -2501,12 +2997,18 @@ local GameState = {
 	ready = {}, -- userId → true
 	readyCount = 0,
 	blackout = false,
+	talisman = 0, -- 부적 게이지
+	fortuneUntil = 0, -- 풍요 부적 종료 시각
+	relics = {} :: { [string]: boolean }, -- 보유 유물
+	relicOffer = {} :: { string }, -- 투표 중인 유물 후보
+	relicVotes = {} :: { [number]: number }, -- userId → 후보 번호
+	relicVoteEndsAt = 0,
 	seed = 0,
 	runId = 0,
 }
 
 function GameState.resetNight()
-	GameState.nightStats = { served = 0, burnt = 0, tips = 0, maxCombo = 0, angry = 0, fastServes = 0, fires = 0, perPlayer = {} }
+	GameState.nightStats = { served = 0, burnt = 0, tips = 0, maxCombo = 0, angry = 0, fastServes = 0, fires = 0, ascended = 0, perPlayer = {} }
 end
 
 function GameState.resetRun()
@@ -2521,7 +3023,7 @@ function GameState.resetRun()
 	end
 	GameState.customersTotal = 0
 	GameState.customersDone = 0
-	GameState.stats = { served = 0, angry = 0, earned = 0, tips = 0, maxCombo = 0, burnt = 0, fires = 0, perPlayer = {}, famePerPlayer = {} }
+	GameState.stats = { served = 0, angry = 0, earned = 0, tips = 0, tipCount = 0, maxCombo = 0, burnt = 0, fires = 0, ascended = 0, talismansUsed = 0, perPlayer = {}, famePerPlayer = {} }
 	GameState.resetNight()
 	GameState.combo = 0
 	GameState.comboExpiresAt = 0
@@ -2530,12 +3032,22 @@ function GameState.resetRun()
 	GameState.ready = {}
 	GameState.readyCount = 0
 	GameState.blackout = false
+	GameState.talisman = 0
+	GameState.fortuneUntil = 0
+	GameState.relics = {}
+	GameState.relicOffer = {}
+	GameState.relicVotes = {}
+	GameState.relicVoteEndsAt = 0
 	GameState.seed = math.random(1, 2 ^ 30)
 	GameState.runId += 1
 end
 
 function GameState.level(upgradeId: string): number
 	return GameState.upgrades[upgradeId] or 0
+end
+
+function GameState.hasRelic(id: string): boolean
+	return GameState.relics[id] == true
 end
 
 function GameState.addCoins(n: number)
@@ -2564,7 +3076,7 @@ return GameState
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="19">
+      <Item class="ModuleScript" referent="22">
         <Properties>
           <string name="Name">Items</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -2685,7 +3197,7 @@ return Items
 ]]></string>
         </Properties>
       </Item>
-      <Item class="Script" referent="20">
+      <Item class="Script" referent="23">
         <Properties>
           <string name="Name">Main</string>
           <token name="RunContext">0</token>
@@ -2705,6 +3217,8 @@ local Wardrobe = require(script.Parent.Wardrobe)
 local map = MapBuilder.build()
 Stations.init(map)
 GameLoop.init(map, function()
+	Shop.applyWalkSpeed(nil)
+end, function()
 	Shop.applyWalkSpeed(nil)
 end)
 Data.init()
@@ -2745,7 +3259,7 @@ print("[GhostDiner] 저승 휴게소 서버 시작 v" .. Config.Version)
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="21">
+      <Item class="ModuleScript" referent="24">
         <Properties>
           <string name="Name">MapBuilder</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -3110,6 +3624,7 @@ local STATION_STYLE = {
 	ricecooker = { color = Color3.fromRGB(235, 235, 240), material = Enum.Material.SmoothPlastic },
 	trash = { color = Color3.fromRGB(50, 90, 60), material = Enum.Material.Metal },
 	extinguisher = { color = Color3.fromRGB(210, 40, 40), material = Enum.Material.SmoothPlastic },
+	mallet = { color = Color3.fromRGB(120, 115, 110), material = Enum.Material.Granite },
 }
 
 local function makeStation(parent: Folder, kind: string, index: number, x: number, z: number, crateItem: string?, locked: boolean): StationSpec
@@ -3156,6 +3671,18 @@ local function makeStation(parent: Folder, kind: string, index: number, x: numbe
 	elseif kind == "combine" then
 		part({ Name = "Top", Size = Vector3.new(4.2, 0.2, 4.2), Position = Vector3.new(x, 3.1, z), Color = Color3.fromRGB(200, 205, 215), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 2.3, 0)
+	elseif kind == "mallet" then
+		-- 절구 + 떡메 (떡메는 클라이언트가 휘두르는 연출을 함)
+		part({ Name = "Mortar", Size = Vector3.new(1.8, 2.8, 2.8), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.9, z) * UPRIGHT, Color = Color3.fromRGB(90, 60, 40), Material = Enum.Material.Wood, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		part({ Name = "MortarRim", Size = Vector3.new(0.25, 3.0, 3.0), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 4.7, z) * UPRIGHT, Color = Color3.fromRGB(70, 45, 30), Material = Enum.Material.Wood, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		local mallet = Instance.new("Model")
+		mallet.Name = "Mallet"
+		local handle = part({ Name = "Handle", Size = Vector3.new(0.35, 3.4, 0.35), Position = Vector3.new(x + 1.6, 4.7, z - 1.2), Color = Color3.fromRGB(150, 105, 60), Material = Enum.Material.Wood, CanCollide = false, CollisionGroup = "Furniture", Parent = mallet })
+		part({ Name = "Head", Size = Vector3.new(1.3, 0.9, 0.9), Position = Vector3.new(x + 1.6, 6.6, z - 1.2), Color = Color3.fromRGB(110, 75, 45), Material = Enum.Material.Wood, CanCollide = false, CollisionGroup = "Furniture", Parent = mallet })
+		mallet.PrimaryPart = handle
+		mallet.WorldPivot = CFrame.new(x + 1.6, 3.0, z - 1.2)
+		mallet.Parent = base
+		displayOffset = Vector3.new(0, 3.9, 0)
 	elseif kind == "extinguisher" then
 		-- 벽에 붙은 빨간 소화기함
 		base.Size = Vector3.new(1.2, 2.6, 2.2)
@@ -3416,10 +3943,11 @@ function MapBuilder.build(): MapInfo
 	add("pot", 3, 0, -30, nil, true)
 	add("griddle", 1, 10, -30)
 	add("griddle", 2, 16, -30, nil, true)
-	-- 가운데 섬 B(Z=-16): 조리대 3
+	-- 가운데 섬 B(Z=-16): 조리대 3 + 떡메
 	add("combine", 1, -12, -16)
 	add("combine", 2, 0, -16)
 	add("combine", 3, 12, -16)
+	add("mallet", 1, -26, -16)
 
 	root.Parent = workspace
 
@@ -3439,7 +3967,7 @@ return MapBuilder
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="22">
+      <Item class="ModuleScript" referent="25">
         <Properties>
           <string name="Name">Remotes</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -3478,6 +4006,8 @@ Remotes.Notify = notify
 Remotes.Buy = remoteFunction("Buy")
 Remotes.SetHat = remoteFunction("SetHat")
 Remotes.Ready = remoteEvent("Ready")
+Remotes.UseTalisman = remoteEvent("UseTalisman")
+Remotes.RelicVote = remoteEvent("RelicVote")
 Remotes.State = state
 
 function Remotes.set(key: string, value: any)
@@ -3512,7 +4042,7 @@ return Remotes
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="23">
+      <Item class="ModuleScript" referent="26">
         <Properties>
           <string name="Name">Shop</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -3530,7 +4060,7 @@ local Shop = {}
 local publish: () -> () = function() end
 
 function Shop.applyWalkSpeed(player: Player?)
-	local speed = Config.BaseWalkSpeed + Upgrades.walkSpeedBonus(GameState.level("shoes"), Config.WalkSpeedPerLevel)
+	local speed = Config.BaseWalkSpeed + Upgrades.walkSpeedBonus(GameState.level("shoes"), Config.WalkSpeedPerLevel) + (if GameState.hasRelic("wind") then 3 else 0)
 	local list = if player then { player } else Players:GetPlayers()
 	for _, p in list do
 		local character = p.Character
@@ -3595,7 +4125,7 @@ return Shop
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="24">
+      <Item class="ModuleScript" referent="27">
         <Properties>
           <string name="Name">Stations</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -3619,6 +4149,8 @@ local byKind: { [string]: { any } } = {}
 local COOKERS = { pot = true, griddle = true, fryer = true, ricecooker = true }
 local FLAME_COOKERS = { pot = true, griddle = true, fryer = true }
 local BURNABLE = { board = true, combine = true, pot = true, griddle = true, fryer = true, ricecooker = true }
+local SMASHABLE = { board = true, combine = true, pot = true, griddle = true, fryer = true, ricecooker = true, mallet = true }
+local Players = game:GetService("Players")
 local UNLOCK_BY_UPGRADE = { pot = "pot", griddle = "griddle", fryer = "fryer", ricecooker = "ricecooker" }
 local callbacks: { [string]: any } = {} -- onBurnt(spec) / onFire(spec, reason) / onSpread(from, to) / onExtinguish(spec, player) / isNight()
 
@@ -3646,6 +4178,10 @@ local function clearContents(spec)
 	spec.burnAt = nil
 	spec.burntAt = nil
 	spec.contents = {}
+	spec.hits = 0
+	spec.lastHitter = nil
+	spec.lastHitterName = nil
+	spec.lastHitAt = 0
 end
 
 local function applyEffects(spec)
@@ -3694,6 +4230,10 @@ local function refresh(spec)
 	partRef:SetAttribute("DoneAt", spec.doneAt or 0)
 	partRef:SetAttribute("BurnAt", spec.burnAt or 0)
 	partRef:SetAttribute("BurntAt", spec.burntAt or 0)
+	partRef:SetAttribute("IgniteAt", if spec.burntAt then spec.burntAt + Config.FireDelay * (if GameState.hasRelic("fireward") then 2 else 1) else 0)
+	partRef:SetAttribute("Hits", spec.hits or 0)
+	partRef:SetAttribute("HitsNeeded", Recipes.Pound.hits)
+	partRef:SetAttribute("LastHitter", spec.lastHitterName or "")
 	partRef:SetAttribute("Locked", spec.locked)
 	partRef:SetAttribute("Smashed", spec.smashed)
 	partRef:SetAttribute("ChopTime", chopTime())
@@ -3866,7 +4406,7 @@ local function onCooker(spec, player: Player, held: string?)
 		spec.output = cook.output
 		spec.startAt = t
 		spec.doneAt = t + cook.time * Upgrades.cookMult(GameState.level("fire"))
-		spec.burnAt = if cook.noBurn then nil else spec.doneAt + Config.BurnDelay
+		spec.burnAt = if cook.noBurn then nil else spec.doneAt + Config.BurnDelay * (if GameState.hasRelic("iceladle") then 2 else 1)
 		Remotes.sound(player, "sizzle")
 		refresh(spec)
 	elseif spec.state == "cooking" then
@@ -3908,6 +4448,68 @@ local function onExtinguisherBox(spec, player: Player, held: string?)
 	end
 end
 
+-- 떡메: 밥을 올리고 두 요리사가 번갈아 침 (혼자면 간격을 두고)
+local function onMallet(spec, player: Player, held: string?)
+	local pound = Recipes.Pound
+	if spec.state == "idle" then
+		if not held then
+			toast(player, "밥을 올려야 떡메를 칠 수 있어요")
+			return
+		end
+		if held ~= pound.input then
+			toast(player, Recipes.name(held) .. "은(는) 떡메로 칠 수 없어요 (" .. Recipes.name(pound.input) .. "만)")
+			return
+		end
+		Items.take(player)
+		spec.state = "pounding"
+		spec.item = held
+		spec.hits = 0
+		spec.lastHitter = nil
+		spec.lastHitterName = nil
+		spec.lastHitAt = 0
+		Remotes.sound(player, "put")
+		toast(player, "🥢 이제 빈손으로 E! 두 명이 번갈아 " .. pound.hits .. "번 치세요")
+		refresh(spec)
+	elseif spec.state == "pounding" then
+		if held then
+			toast(player, "손을 비우고 떡메를 치세요")
+			return
+		end
+		local t = now()
+		if spec.lastHitter == player.UserId then
+			if #Players:GetPlayers() >= 2 then
+				toast(player, "🥢 다른 요리사가 칠 차례예요! (번갈아 치기)", "bad")
+				return
+			end
+			if t - spec.lastHitAt < Config.PoundSoloCooldown then
+				return
+			end
+		end
+		spec.hits += 1
+		spec.lastHitter = player.UserId
+		spec.lastHitterName = player.DisplayName
+		spec.lastHitAt = t
+		Remotes.notifyAll({ kind = "pound", stationId = spec.id, position = spec.baseCFrame.Position + Vector3.new(0, 4, 0), hits = spec.hits, total = pound.hits })
+		if spec.hits >= pound.hits then
+			spec.state = "done"
+			spec.item = pound.output
+			Remotes.soundAll("ding")
+			Remotes.toastAll("🍡 " .. Recipes.name(pound.output) .. " 완성! 떡메에서 꺼내세요", "good")
+		end
+		refresh(spec)
+	else
+		if held then
+			toast(player, "손을 비우고 꺼내세요")
+			return
+		end
+		if Items.give(player, spec.item) then
+			Remotes.sound(player, "pick")
+			clearContents(spec)
+			refresh(spec)
+		end
+	end
+end
+
 local function onTriggered(spec, player: Player)
 	if spec.locked or spec.smashed then
 		return
@@ -3937,6 +4539,8 @@ local function onTriggered(spec, player: Player)
 		onTrash(spec, player, held)
 	elseif spec.kind == "extinguisher" then
 		onExtinguisherBox(spec, player, held)
+	elseif spec.kind == "mallet" then
+		onMallet(spec, player, held)
 	end
 end
 
@@ -4105,14 +4709,14 @@ local function update()
 				if callbacks.onBurnt then
 					callbacks.onBurnt(spec)
 				end
-			elseif spec.state == "burnt" and spec.burntAt and t >= spec.burntAt + Config.FireDelay then
+			elseif spec.state == "burnt" and spec.burntAt and t >= spec.burntAt + Config.FireDelay * (if GameState.hasRelic("fireward") then 2 else 1) then
 				ignite(spec, "burnt", nil)
 			end
 		end
 		if spec.state == "fire" and spec.nextSpreadAt and t >= spec.nextSpreadAt then
 			spec.nextSpreadAt = t + Config.FireSpreadInterval
 			local isNight = callbacks.isNight == nil or callbacks.isNight()
-			if isNight and fireCount() < Config.MaxFires then
+			if isNight and fireCount() < Config.MaxFires and not GameState.hasRelic("fireward") then
 				local target = nearestSpreadTarget(spec)
 				if target then
 					ignite(target, "spread", spec)
@@ -4188,7 +4792,7 @@ end
 function Stations.pickSmashTarget(rng: Random)
 	local candidates = {}
 	for _, spec in specs do
-		if BURNABLE[spec.kind] and not spec.locked and not spec.smashed and not spec.targeted and spec.state ~= "fire" then
+		if SMASHABLE[spec.kind] and not spec.locked and not spec.smashed and not spec.targeted and spec.state ~= "fire" then
 			table.insert(candidates, spec)
 		end
 	end
@@ -4206,7 +4810,7 @@ function Stations.smash(spec)
 		return
 	end
 	spec.smashed = true
-	spec.smashedUntil = now() + Config.SmashDuration
+	spec.smashedUntil = now() + Config.SmashDuration * (if GameState.hasRelic("sturdy") then 0.5 else 1)
 	clearContents(spec)
 	spec.fireAt = nil
 	spec.nextSpreadAt = nil
@@ -4234,7 +4838,7 @@ return Stations
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="25">
+      <Item class="ModuleScript" referent="28">
         <Properties>
           <string name="Name">Wardrobe</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -4425,27 +5029,27 @@ return Wardrobe
       </Item>
     </Item>
   </Item>
-  <Item class="SoundService" referent="26">
+  <Item class="SoundService" referent="29">
     <Properties>
       <string name="Name">SoundService</string>
       <bool name="RespectFilteringEnabled">true</bool>
     </Properties>
   </Item>
-  <Item class="StarterPlayer" referent="27">
+  <Item class="StarterPlayer" referent="30">
     <Properties>
       <string name="Name">StarterPlayer</string>
       <float name="CameraMaxZoomDistance">60</float>
       <float name="CameraMinZoomDistance">8</float>
     </Properties>
-    <Item class="StarterPlayerScripts" referent="28">
+    <Item class="StarterPlayerScripts" referent="31">
       <Properties>
         <string name="Name">StarterPlayerScripts</string>
       </Properties>
-      <Item class="Folder" referent="29">
+      <Item class="Folder" referent="32">
         <Properties>
           <string name="Name">GhostDinerClient</string>
         </Properties>
-        <Item class="ModuleScript" referent="30">
+        <Item class="ModuleScript" referent="33">
           <Properties>
             <string name="Name">Fx</string>
             <string name="Source"><![CDATA[--!nonstrict
@@ -4657,6 +5261,52 @@ function Fx.setBlackout(on: boolean)
 	end
 end
 
+-- 부적 발동: 카운터에서 퍼지는 빛의 고리
+function Fx.talismanRing(color: Color3)
+	local ring = mk("Part", { Anchored = true, CanCollide = false, CanQuery = false, CanTouch = false, Shape = Enum.PartType.Cylinder, Material = Enum.Material.Neon, Color = color, Transparency = 0.2, Size = Vector3.new(0.3, 4, 4), CFrame = CFrame.new(0, 1.2, -1) * CFrame.Angles(0, 0, math.rad(90)) }, workspace)
+	TweenService:Create(ring, TweenInfo.new(1.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(0.3, 130, 130), Transparency = 1 }):Play()
+	task.delay(1.3, function()
+		ring:Destroy()
+	end)
+	Fx.flash(color, 0.35, 0.7)
+	Fx.shake(0.3, 0.3)
+end
+
+-- 떡메 휘두르기 (로컬 연출)
+local malletPivots: { [Model]: CFrame } = {}
+local swinging: { [Model]: boolean } = {}
+function Fx.swingMallet(model: Instance?)
+	if not model or not model:IsA("Model") then
+		return
+	end
+	local pivot = malletPivots[model]
+	if not pivot then
+		pivot = model:GetPivot()
+		malletPivots[model] = pivot
+	end
+	if swinging[model] then
+		return
+	end
+	swinging[model] = true
+	task.spawn(function()
+		local start = os.clock()
+		local duration = 0.36
+		while model.Parent do
+			local u = (os.clock() - start) / duration
+			if u >= 1 then
+				break
+			end
+			local angle = if u < 0.35 then (u / 0.35) * 70 else (1 - (u - 0.35) / 0.65) * 70
+			model:PivotTo(pivot * CFrame.Angles(0, 0, math.rad(angle)))
+			RunService.RenderStepped:Wait()
+		end
+		if model.Parent then
+			model:PivotTo(pivot)
+		end
+		swinging[model] = nil
+	end)
+end
+
 -- 0(없음)~1(최대) 비네트 강도
 function Fx.setVignette(alpha: number)
 	for _, f in vignetteFrames do
@@ -4668,7 +5318,7 @@ return Fx
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="31">
+        <Item class="ModuleScript" referent="34">
           <Properties>
             <string name="Name">Hud</string>
             <string name="Source"><![CDATA[--!nonstrict
@@ -4679,6 +5329,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Combo = require(Shared:WaitForChild("Combo"))
 local Config = require(Shared:WaitForChild("Config"))
+local Relics = require(Shared:WaitForChild("Relics"))
+local Talismans = require(Shared:WaitForChild("Talismans"))
 
 local Hud = {}
 
@@ -4816,7 +5468,7 @@ function Hud.create(playerGui: PlayerGui)
 	local challengeStroke = mk("UIStroke", { Color = Color3.fromRGB(255, 200, 90), Thickness = 1.5, Transparency = 0.3 }, challengeBox) :: UIStroke
 
 	-- 준비 완료 버튼
-	local readyButton = mk("TextButton", { Name = "Ready", Visible = false, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -150), Size = UDim2.new(0, 260, 0, 40), BackgroundColor3 = Color3.fromRGB(40, 120, 80), Font = FONT, TextSize = 17, TextColor3 = Color3.fromRGB(255, 255, 255), Text = "✅ 준비 완료", AutoButtonColor = true }, gui) :: TextButton
+	local readyButton = mk("TextButton", { Name = "Ready", Visible = false, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -190), Size = UDim2.new(0, 260, 0, 40), BackgroundColor3 = Color3.fromRGB(40, 120, 80), Font = FONT, TextSize = 17, TextColor3 = Color3.fromRGB(255, 255, 255), Text = "✅ 준비 완료", AutoButtonColor = true }, gui) :: TextButton
 	corner(readyButton, 10)
 	local readyLocal = false
 	readyButton.MouseButton1Click:Connect(function()
@@ -4824,13 +5476,60 @@ function Hud.create(playerGui: PlayerGui)
 		self.onReady()
 	end)
 
+	-- 부적 게이지 + 버튼
+	local talismanFrame = mk("Frame", { Name = "Talisman", Visible = false, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -146), Size = UDim2.new(0, 360, 0, 30), BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.35 }, gui)
+	corner(talismanFrame, 8)
+	local talismanLabel = label(talismanFrame, { Position = UDim2.new(0, 10, 0, 2), Size = UDim2.new(1, -20, 0, 18), TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Text = "🧧 부적 0%" })
+	local talismanBarBg = mk("Frame", { Position = UDim2.new(0, 10, 0, 22), Size = UDim2.new(1, -20, 0, 5), BackgroundColor3 = Color3.fromRGB(50, 40, 60), BorderSizePixel = 0 }, talismanFrame)
+	corner(talismanBarBg, 3)
+	local talismanBar = mk("Frame", { Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(255, 200, 80), BorderSizePixel = 0 }, talismanBarBg)
+	corner(talismanBar, 3)
+	local talismanButtons = mk("Frame", { Name = "TalismanButtons", Visible = false, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -184), Size = UDim2.new(0, 480, 0, 40), BackgroundTransparency = 1 }, gui)
+	mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 8) }, talismanButtons)
+	self.onTalisman = function(_id) end
+	for _, t in Talismans.List do
+		local b = mk("TextButton", { Size = UDim2.new(0, 152, 1, 0), BackgroundColor3 = Color3.fromRGB(180, 120, 40), Font = FONT, TextSize = 14, TextColor3 = Color3.fromRGB(255, 255, 255), Text = string.format("[%s] %s %s", t.key, t.emoji, t.name), AutoButtonColor = true }, talismanButtons) :: TextButton
+		corner(b, 10)
+		mk("UIStroke", { Color = Color3.fromRGB(255, 230, 150), Thickness = 1.5 }, b)
+		b.MouseButton1Click:Connect(function()
+			self.onTalisman(t.id)
+		end)
+	end
+
+	-- 유물 투표 패널 (Attribute 로 동기화되어 늦게 들어와도 보임)
+	local relicPanel = mk("Frame", { Name = "RelicVote", Visible = false, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 620, 0, 290), BackgroundColor3 = Color3.fromRGB(28, 22, 40), BackgroundTransparency = 0.05, ZIndex = 15 }, gui)
+	corner(relicPanel, 16)
+	mk("UIStroke", { Color = Color3.fromRGB(200, 120, 255), Thickness = 2 }, relicPanel)
+	label(relicPanel, { Position = UDim2.new(0, 0, 0, 12), Size = UDim2.new(1, 0, 0, 30), TextSize = 21, Text = "🔮 도깨비 상인의 유물 — 하나를 골라 투표하세요", ZIndex = 16 })
+	local relicTimer = label(relicPanel, { Position = UDim2.new(0, 0, 0, 42), Size = UDim2.new(1, 0, 0, 20), TextSize = 14, Font = FONT_REG, TextColor3 = Color3.fromRGB(220, 200, 240), Text = "", ZIndex = 16 })
+	local relicCards = {}
+	self.onRelicVote = function(_index) end
+	for i = 1, 3 do
+		local card = mk("Frame", { Position = UDim2.new(0, 16 + (i - 1) * 198, 0, 68), Size = UDim2.new(0, 190, 0, 206), BackgroundColor3 = Color3.fromRGB(45, 38, 62), ZIndex = 16 }, relicPanel)
+		corner(card, 12)
+		local emoji = label(card, { Position = UDim2.new(0, 0, 0, 8), Size = UDim2.new(1, 0, 0, 44), TextSize = 38, Text = "", ZIndex = 17 })
+		local name = label(card, { Position = UDim2.new(0, 8, 0, 54), Size = UDim2.new(1, -16, 0, 24), TextSize = 17, TextColor3 = Color3.fromRGB(255, 230, 170), Text = "", ZIndex = 17 })
+		local desc = label(card, { Position = UDim2.new(0, 8, 0, 80), Size = UDim2.new(1, -16, 0, 58), TextSize = 14, Font = FONT_REG, TextColor3 = Color3.fromRGB(225, 220, 235), TextYAlignment = Enum.TextYAlignment.Top, Text = "", ZIndex = 17 })
+		local votes = label(card, { Position = UDim2.new(0, 8, 0, 140), Size = UDim2.new(1, -16, 0, 20), TextSize = 14, TextColor3 = Color3.fromRGB(200, 255, 200), Text = "투표 0", ZIndex = 17 })
+		local voteButton = mk("TextButton", { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -8), Size = UDim2.new(1, -16, 0, 32), BackgroundColor3 = Color3.fromRGB(120, 60, 180), Font = FONT, TextSize = 15, TextColor3 = Color3.fromRGB(255, 255, 255), Text = "이걸로!", ZIndex = 17 }, card) :: TextButton
+		corner(voteButton, 8)
+		voteButton.MouseButton1Click:Connect(function()
+			self.onRelicVote(i)
+		end)
+		relicCards[i] = { card = card, emoji = emoji, name = name, desc = desc, votes = votes, button = voteButton }
+	end
+	local relicOfferShown = ""
+
 	-- 손에 든 것 / 힌트
 	local held = label(gui, { Name = "Held", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -110), Size = UDim2.new(0, 360, 0, 30), TextSize = 18, BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.35, Text = "🖐 빈손" })
 	corner(held, 8)
 	local hint = label(gui, { Name = "Hint", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -76), Size = UDim2.new(0, 620, 0, 28), TextSize = 15, Font = FONT_REG, TextColor3 = Color3.fromRGB(215, 205, 235), Text = "" })
 
+	-- 보유 유물
+	local relicRow = label(gui, { Name = "Relics", Visible = false, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 158), Size = UDim2.new(0, 640, 0, 24), TextSize = 14, Font = FONT_REG, TextColor3 = Color3.fromRGB(230, 200, 255), Text = "" })
+
 	-- 알림(토스트)
-	local toasts = mk("Frame", { Name = "Toasts", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 160), Size = UDim2.new(0, 560, 0, 200), BackgroundTransparency = 1 }, gui)
+	local toasts = mk("Frame", { Name = "Toasts", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 190), Size = UDim2.new(0, 560, 0, 200), BackgroundTransparency = 1 }, gui)
 	mk("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, toasts)
 
 	-- 큰 안내
@@ -4853,7 +5552,8 @@ function Hud.create(playerGui: PlayerGui)
 
 	-- 결과 화면
 	local result = mk("Frame", { Name = "Result", Visible = false, Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(10, 8, 16), BackgroundTransparency = 0.25, ZIndex = 20 }, gui)
-	local resultBox = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 540, 0, 460), BackgroundColor3 = Color3.fromRGB(28, 22, 40), ZIndex = 21 }, result)
+	local resultBox = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 600, 0, 560), BackgroundColor3 = Color3.fromRGB(28, 22, 40), ZIndex = 21 }, result)
+	mk("UISizeConstraint", { MaxSize = Vector2.new(600, 560), MinSize = Vector2.new(320, 300) }, resultBox)
 	corner(resultBox, 16)
 	mk("UIStroke", { Color = Color3.fromRGB(200, 80, 120), Thickness = 2 }, resultBox)
 	local resultTitle = label(resultBox, { Position = UDim2.new(0, 0, 0, 18), Size = UDim2.new(1, 0, 0, 48), TextSize = 34, Text = "💀 폐업", ZIndex = 22 })
@@ -4968,7 +5668,7 @@ function Hud.create(playerGui: PlayerGui)
 	function self.showSummary(p)
 		summaryTitle.Text = string.format("☀️ %d번째 밤 종료!", p.night or 0)
 		local lines = {
-			string.format("서빙 <b>%d</b> · 팁 <b>%d</b>회 · 최대 콤보 <b>x%d</b>", p.served or 0, p.tips or 0, p.maxCombo or 0),
+			string.format("서빙 <b>%d</b> · 성불 <b>%d</b> · 팁 <b>%d</b>회 · 최대 콤보 <b>x%d</b>", p.served or 0, p.ascended or 0, p.tips or 0, p.maxCombo or 0),
 			string.format("악귀 <b>%d</b> · 탄 음식 <b>%d</b>", p.angry or 0, p.burnt or 0),
 			string.format("밤 보너스 <font color=\"#FFD27F\">+%d 코인</font>", p.bonus or 0),
 		}
@@ -5000,12 +5700,22 @@ function Hud.create(playerGui: PlayerGui)
 	function self.showResult(data)
 		resultTitle.Text = string.format("💀 폐업 — %d번째 밤에 무너짐", data.night or 0)
 		local lines = {
-			string.format("서빙한 요리: <b>%d</b>  ·  최대 콤보: <b>x%d</b>", data.served or 0, data.maxCombo or 0),
-			string.format("악귀가 된 손님: <b>%d</b>  ·  탄 음식: <b>%d</b>  ·  화재: <b>%d</b>", data.angry or 0, data.burnt or 0, data.fires or 0),
+			string.format("서빙한 요리: <b>%d</b>  ·  성불한 영혼: <b>%d</b>  ·  최대 콤보: <b>x%d</b>", data.served or 0, data.ascended or 0, data.maxCombo or 0),
+			string.format("악귀가 된 손님: <b>%d</b>  ·  탄 음식: <b>%d</b>  ·  화재: <b>%d</b>  ·  부적 사용: <b>%d</b>", data.angry or 0, data.burnt or 0, data.fires or 0, data.talismans or 0),
 			string.format("번 코인: <b>%d</b> (팁 %d)", data.earned or 0, data.tips or 0),
 		}
+		if data.relics and data.relics ~= "" then
+			table.insert(lines, "🔮 유물: " .. data.relics)
+		end
 		if data.mvp and data.mvp ~= "" then
 			table.insert(lines, string.format("🏆 이번 판 MVP: <b>%s</b>", data.mvp))
+		end
+		if data.reviews then
+			table.insert(lines, "")
+			table.insert(lines, "<b>💬 손님 리뷰</b>")
+			for _, r in data.reviews do
+				table.insert(lines, "  " .. r)
+			end
 		end
 		table.insert(lines, "")
 		table.insert(lines, "<b>요리사별 서빙 · 얻은 명성</b>")
@@ -5115,6 +5825,78 @@ function Hud.create(playerGui: PlayerGui)
 			challengeBox.Visible = false
 		end
 
+		-- 부적 게이지
+		local talisman = attrN(state, "Talisman")
+		local talismanMax = attrN(state, "TalismanMax")
+		if talismanMax <= 0 then
+			talismanMax = 100
+		end
+		if phase == "night" or phase == "day" then
+			talismanFrame.Visible = true
+			local pct = math.clamp(talisman / talismanMax, 0, 1)
+			talismanBar.Size = UDim2.new(pct, 0, 1, 0)
+			local full = pct >= 1
+			talismanLabel.Text = if full then "🧧 부적 준비 완료! 1·2·3 키 또는 아래 버튼" else string.format("🧧 부적 %d%%  (서빙할수록 참)", math.floor(pct * 100))
+			talismanBar.BackgroundColor3 = if full then Color3.fromRGB(255, 120, 200) else Color3.fromRGB(255, 200, 80)
+			talismanButtons.Visible = full and phase == "night"
+		else
+			talismanFrame.Visible = false
+			talismanButtons.Visible = false
+		end
+		local fortuneUntil = attrN(state, "FortuneUntil")
+		if fortuneUntil > t then
+			coinLabel.Text ..= string.format("  💰×%.1f %ds", Config.FortuneMult, math.ceil(fortuneUntil - t))
+		end
+
+		-- 보유 유물
+		local relics = attrS(state, "Relics")
+		if relics ~= "" then
+			local names = {}
+			for id in string.gmatch(relics, "[^,]+") do
+				local r = Relics.get(id)
+				if r then
+					table.insert(names, r.emoji .. " " .. r.name)
+				end
+			end
+			relicRow.Visible = true
+			relicRow.Text = "🔮 유물: " .. table.concat(names, " · ")
+		else
+			relicRow.Visible = false
+		end
+
+		-- 유물 투표 패널
+		local offer = attrS(state, "RelicOffer")
+		if offer ~= "" then
+			if offer ~= relicOfferShown then
+				relicOfferShown = offer
+				local ids = {}
+				for id in string.gmatch(offer, "[^,]+") do
+					table.insert(ids, id)
+				end
+				for i, card in relicCards do
+					local relic = Relics.get(ids[i])
+					card.card.Visible = relic ~= nil
+					if relic then
+						card.emoji.Text = relic.emoji
+						card.name.Text = relic.name
+						card.desc.Text = relic.desc
+					end
+				end
+				relicPanel.Visible = true
+			end
+			local counts = {}
+			for c in string.gmatch(attrS(state, "RelicVotes"), "[^,]+") do
+				table.insert(counts, tonumber(c) or 0)
+			end
+			for i, card in relicCards do
+				card.votes.Text = string.format("투표 %d", counts[i] or 0)
+			end
+			relicTimer.Text = string.format("%d초 뒤 확정 · 모두 투표하면 바로 확정", math.ceil(math.max(0, attrN(state, "RelicVoteEndsAt") - t)))
+		else
+			relicOfferShown = ""
+			relicPanel.Visible = false
+		end
+
 		-- 준비 버튼
 		if phase == "day" or phase == "countdown" then
 			readyButton.Visible = true
@@ -5132,7 +5914,7 @@ return Hud
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="32">
+        <Item class="ModuleScript" referent="35">
           <Properties>
             <string name="Name">Labels</string>
             <string name="Source"><![CDATA[--!nonstrict
@@ -5140,6 +5922,7 @@ return Hud
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
+local Players = game:GetService("Players")
 
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Recipes = require(Shared:WaitForChild("Recipes"))
@@ -5271,11 +6054,16 @@ local function updateStationLabel(part: BasePart, entry)
 			end
 		elseif state == "burnt" then
 			local burntAt = attrN(part, "BurntAt")
-			local left = math.max(0, burntAt + Config.FireDelay - t)
+			local igniteAt = attrN(part, "IgniteAt")
+			if igniteAt <= 0 then
+				igniteAt = burntAt + Config.FireDelay
+			end
+			local left = math.max(0, igniteAt - t)
+			local span = math.max(1, igniteAt - burntAt)
 			entry.status.Text = string.format("💀 탔어요! %d초 뒤 불이 납니다", math.ceil(left))
 			entry.status.TextColor3 = Color3.fromRGB(255, 120, 120)
 			entry.barBg.Visible = true
-			entry.bar.Size = UDim2.new(math.clamp(left / Config.FireDelay, 0, 1), 0, 1, 0)
+			entry.bar.Size = UDim2.new(math.clamp(left / span, 0, 1), 0, 1, 0)
 			entry.bar.BackgroundColor3 = Color3.fromRGB(255, 80, 60)
 		else
 			entry.status.Text = "비어 있음"
@@ -5294,6 +6082,23 @@ local function updateStationLabel(part: BasePart, entry)
 	elseif kind == "extinguisher" then
 		entry.title.Text = "🧯 " .. label
 		entry.status.Text = "빈손으로 E: 소화기 꺼내기"
+	elseif kind == "mallet" then
+		entry.title.Text = "🥢 " .. label
+		local hits = attrN(part, "Hits")
+		local needed = attrN(part, "HitsNeeded")
+		if state == "pounding" then
+			local last = attrS(part, "LastHitter")
+			entry.status.Text = if last == "" then string.format("쿵! %d/%d · 누구든 E", hits, needed) else string.format("쿵! %d/%d · %s 말고 다른 요리사!", hits, needed, last)
+			entry.status.TextColor3 = Color3.fromRGB(255, 220, 150)
+			entry.barBg.Visible = true
+			entry.bar.Size = UDim2.new(if needed > 0 then hits / needed else 0, 0, 1, 0)
+			entry.bar.BackgroundColor3 = Color3.fromRGB(255, 200, 80)
+		elseif state == "done" then
+			entry.status.Text = "✅ 인절미 완성! 꺼내세요"
+			entry.status.TextColor3 = Color3.fromRGB(150, 255, 160)
+		else
+			entry.status.Text = "밥을 올리고 두 명이 번갈아 치기"
+		end
 	end
 end
 
@@ -5347,6 +6152,12 @@ end
 
 local function onMoodChanged(entry, mood: string)
 	local root = entry.root
+	if mood ~= "angry" then
+		local aura = root:FindFirstChild("AngryAura")
+		if aura then
+			aura:Destroy()
+		end
+	end
 	if mood == "happy" then
 		startAnim(entry, "hop", 0.7)
 		if fx then
@@ -5427,6 +6238,13 @@ local function updateCustomerLabel(model: Model, entry)
 		if frac < 0.25 then
 			entry.order.TextColor3 = if math.floor(os.clock() * 4) % 2 == 0 then Color3.fromRGB(255, 120, 100) else Color3.fromRGB(255, 240, 200)
 		end
+		-- 도착 직후 3.5초는 손님의 한마디
+		local line = attrS(model, "Line")
+		local elapsed = total - (deadline - now())
+		if line ~= "" and elapsed < 3.5 then
+			entry.order.Text = "💬 " .. line
+			entry.order.TextColor3 = Color3.fromRGB(230, 225, 255)
+		end
 	elseif mood == "queue" then
 		entry.order.Text = "⏳ 자리 기다리는 중 (" .. entry.ordersText .. ")"
 		entry.order.TextColor3 = Color3.fromRGB(200, 195, 220)
@@ -5438,6 +6256,14 @@ local function updateCustomerLabel(model: Model, entry)
 	elseif mood == "happy" then
 		entry.order.Text = "💚 잘 먹었다~"
 		entry.order.TextColor3 = Color3.fromRGB(150, 255, 160)
+		entry.barBg.Visible = false
+	elseif mood == "ascend" then
+		entry.order.Text = "✨ 성불합니다… 고마워요"
+		entry.order.TextColor3 = Color3.fromRGB(255, 240, 180)
+		entry.barBg.Visible = false
+	elseif mood == "calm" then
+		entry.order.Text = "🕊️ 진정했다… 돌아갈게요"
+		entry.order.TextColor3 = Color3.fromRGB(200, 230, 255)
 		entry.barBg.Visible = false
 	else
 		entry.order.Text = "🚶 오는 중 (" .. entry.ordersText .. ")"
@@ -5554,6 +6380,21 @@ local function hintFor(part: BasePart, heldId: string?): (string?, number)
 			return "소화기 넣기", 0
 		end
 		return "손을 비우세요", 0
+	elseif kind == "mallet" then
+		if state == "idle" then
+			return if heldId == Recipes.Pound.input then "밥 올리기" else "밥을 들고 오세요", 0
+		elseif state == "pounding" then
+			if heldId then
+				return "손을 비우고 치세요", 0
+			end
+			local last = attrS(part, "LastHitter")
+			local me = Players.LocalPlayer and Players.LocalPlayer.DisplayName or ""
+			if last == me and #Players:GetPlayers() >= 2 then
+				return "다른 요리사 차례!", 0
+			end
+			return string.format("떡메 치기! (%d/%d)", attrN(part, "Hits"), attrN(part, "HitsNeeded")), 0
+		end
+		return if heldId then "손을 비우고 꺼내세요" else "인절미 꺼내기", 0
 	end
 	return nil, 0
 end
@@ -5644,7 +6485,7 @@ function Labels.init(map: Instance, heldGetter: () -> string?, fxModule, ordersC
 		for model, entry in customerLabels do
 			if model.Parent then
 				updateCustomerLabel(model, entry)
-				if entry.mood ~= "happy" and entry.mood ~= "angry" then
+				if entry.mood ~= "happy" and entry.mood ~= "angry" and entry.mood ~= "ascend" and entry.mood ~= "calm" then
 					table.insert(list, { name = entry.displayName or model.Name, orders = entry.ordersText or "", fraction = entry.fraction or -1, mood = entry.mood })
 				end
 			else
@@ -5660,7 +6501,7 @@ return Labels
 ]]></string>
           </Properties>
         </Item>
-        <Item class="LocalScript" referent="33">
+        <Item class="LocalScript" referent="36">
           <Properties>
             <string name="Name">Main</string>
             <string name="Source"><![CDATA[--!nonstrict
@@ -5682,11 +6523,14 @@ local Tutorial = require(script.Parent:WaitForChild("Tutorial"))
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Recipes = require(Shared:WaitForChild("Recipes"))
 local Config = require(Shared:WaitForChild("Config"))
+local Talismans = require(Shared:WaitForChild("Talismans"))
 local remotes = ReplicatedStorage:WaitForChild("GhostDinerRemotes")
 local notify = remotes:WaitForChild("Notify") :: RemoteEvent
 local buyRemote = remotes:WaitForChild("Buy") :: RemoteFunction
 local setHatRemote = remotes:WaitForChild("SetHat") :: RemoteFunction
 local readyRemote = remotes:WaitForChild("Ready") :: RemoteEvent
+local useTalismanRemote = remotes:WaitForChild("UseTalisman") :: RemoteEvent
+local relicVoteRemote = remotes:WaitForChild("RelicVote") :: RemoteEvent
 local state = ReplicatedStorage:WaitForChild("GhostDinerState")
 local map = workspace:WaitForChild("GhostDinerMap")
 
@@ -5777,6 +6621,19 @@ hud.onReady = function()
 	Sfx.play("ready")
 	readyRemote:FireServer()
 end
+hud.onTalisman = function(id)
+	Sfx.play("ui")
+	useTalismanRemote:FireServer(id)
+end
+hud.onRelicVote = function(index)
+	Sfx.play("ui")
+	relicVoteRemote:FireServer(index)
+end
+local function talismanReady(): boolean
+	local v = state:GetAttribute("Talisman")
+	local max = state:GetAttribute("TalismanMax")
+	return type(v) == "number" and type(max) == "number" and v >= max and state:GetAttribute("Phase") == "night"
+end
 hud.recipeButton.MouseButton1Click:Connect(function()
 	Sfx.play("ui")
 	panels.toggleRecipes()
@@ -5802,8 +6659,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	elseif input.KeyCode == Enum.KeyCode.C then
 		Sfx.play("ui")
 		panels.toggleWardrobe()
+	elseif input.KeyCode == Enum.KeyCode.One or input.KeyCode == Enum.KeyCode.Two or input.KeyCode == Enum.KeyCode.Three then
+		local idx = if input.KeyCode == Enum.KeyCode.One then 1 elseif input.KeyCode == Enum.KeyCode.Two then 2 else 3
+		local t = Talismans.List[idx]
+		if t and talismanReady() then
+			hud.onTalisman(t.id)
+		end
 	end
 end)
+
+local TALISMAN_COLORS = { time = Fx.Colors.blue, calm = Fx.Colors.white, fortune = Fx.Colors.gold }
 
 local KITCHEN_CENTER = Vector3.new(0, 12, -22)
 
@@ -5903,6 +6768,26 @@ notify.OnClientEvent:Connect(function(payload)
 		Fx.flash(Fx.Colors.red, 0.5, 1.5)
 		Fx.shake(1.2, 0.8)
 		hud.showResult(payload)
+	elseif kind == "talisman" then
+		Sfx.play("talisman")
+		Fx.talismanRing(TALISMAN_COLORS[payload.id] or Fx.Colors.gold)
+		hud.announce(string.format("%s %s!", payload.emoji or "🧧", payload.name or "부적"), string.format("%s · %s", payload.user or "", payload.detail or ""), Color3.fromRGB(255, 200, 240))
+	elseif kind == "relicResult" then
+		hud.announce("🔮 유물 획득: " .. tostring(payload.emoji or "") .. " " .. tostring(payload.name or ""), tostring(payload.desc or ""), Color3.fromRGB(220, 170, 255))
+		Fx.confetti(KITCHEN_CENTER)
+	elseif kind == "pound" then
+		local stationsFolder = map:FindFirstChild("Stations")
+		local part = stationsFolder and stationsFolder:FindFirstChild(tostring(payload.stationId or ""))
+		if part then
+			Fx.swingMallet(part:FindFirstChild("Mallet"))
+		end
+		Sfx.play("pound", 0.85 + 0.05 * (payload.hits or 1))
+		Fx.burst(payload.position, Fx.Colors.white, 12, 0.4, 5)
+		Fx.floatText(payload.position + Vector3.new(0, 1, 0), string.format("쿵! %d/%d", payload.hits or 0, payload.total or 0), Fx.Colors.gold, 22)
+		Fx.shakeAt(payload.position, 0.25, 0.2)
+	elseif kind == "ascend" then
+		Sfx.play("ascend")
+		Fx.burst(payload.position + Vector3.new(0, 2, 0), Fx.Colors.gold, 24, 0.5, 4)
 	end
 end)
 
@@ -5965,6 +6850,10 @@ local HINTS = {
 	"밥솥의 밥은 타지 않아요. 미리 지어 두세요",
 	"명성을 모으면 옷장(C)에서 새 모자를 쓸 수 있어요",
 	"구미호는 기다리다 마음을 바꿉니다 — 주문이 바뀌면 ❗ 표시",
+	"서빙할수록 🧧 부적 게이지가 차요. 가득 차면 1·2·3 키로 시간·평온·풍요 부적!",
+	"보스 밤을 넘기면 도깨비 상인이 유물 3개를 가져와요 — 팀 투표로 하나를 고르세요",
+	"인절미는 밥을 떡메에 올리고 두 명이 번갈아 6번 쳐야 해요 (혼자면 천천히)",
+	"배불리 먹은 손님은 빛과 함께 성불합니다 — 그게 이 휴게소의 존재 이유",
 }
 task.spawn(function()
 	local i = 1
@@ -5977,7 +6866,7 @@ end)
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="34">
+        <Item class="ModuleScript" referent="37">
           <Properties>
             <string name="Name">Panels</string>
             <string name="Source"><![CDATA[--!nonstrict
@@ -6234,7 +7123,7 @@ return Panels
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="35">
+        <Item class="ModuleScript" referent="38">
           <Properties>
             <string name="Name">Sfx</string>
             <string name="Source"><![CDATA[--!nonstrict
@@ -6271,6 +7160,12 @@ local SOUNDS = {
 	combo = { id = "rbxasset://sounds/electronicpingshort.wav", volume = 0.5, pitch = 1.0 },
 	ready = { id = "rbxasset://sounds/button.wav", volume = 0.5, pitch = 1.2 },
 	blackout = { id = "rbxasset://sounds/switch.wav", volume = 0.8, pitch = 0.5 },
+	pound = { id = "rbxasset://sounds/collide.wav", volume = 0.7, pitch = 0.9 },
+	talisman = { id = "rbxasset://sounds/flashbulb.wav", volume = 0.8 },
+	talismanReady = { id = "rbxasset://sounds/electronicpingshort.wav", volume = 0.7, pitch = 0.6 },
+	relicOffer = { id = "rbxasset://sounds/switch3.wav", volume = 0.7, pitch = 0.8 },
+	relic = { id = "rbxasset://sounds/victory.wav", volume = 0.6, pitch = 0.85 },
+	ascend = { id = "rbxasset://sounds/swoosh.wav", volume = 0.5, pitch = 1.4 },
 }
 
 -- pitchMult: 기본 음높이에 곱함 (콤보 등)
@@ -6317,7 +7212,7 @@ return Sfx
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="36">
+        <Item class="ModuleScript" referent="39">
           <Properties>
             <string name="Name">Tutorial</string>
             <string name="Source"><![CDATA[--!nonstrict
@@ -6473,7 +7368,7 @@ return Tutorial
       </Item>
     </Item>
   </Item>
-  <Item class="Workspace" referent="37">
+  <Item class="Workspace" referent="40">
     <Properties>
       <string name="Name">Workspace</string>
       <bool name="NeedsPivotMigration">false</bool>

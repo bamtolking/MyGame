@@ -207,6 +207,52 @@ function Fx.setBlackout(on: boolean)
 	end
 end
 
+-- 부적 발동: 카운터에서 퍼지는 빛의 고리
+function Fx.talismanRing(color: Color3)
+	local ring = mk("Part", { Anchored = true, CanCollide = false, CanQuery = false, CanTouch = false, Shape = Enum.PartType.Cylinder, Material = Enum.Material.Neon, Color = color, Transparency = 0.2, Size = Vector3.new(0.3, 4, 4), CFrame = CFrame.new(0, 1.2, -1) * CFrame.Angles(0, 0, math.rad(90)) }, workspace)
+	TweenService:Create(ring, TweenInfo.new(1.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(0.3, 130, 130), Transparency = 1 }):Play()
+	task.delay(1.3, function()
+		ring:Destroy()
+	end)
+	Fx.flash(color, 0.35, 0.7)
+	Fx.shake(0.3, 0.3)
+end
+
+-- 떡메 휘두르기 (로컬 연출)
+local malletPivots: { [Model]: CFrame } = {}
+local swinging: { [Model]: boolean } = {}
+function Fx.swingMallet(model: Instance?)
+	if not model or not model:IsA("Model") then
+		return
+	end
+	local pivot = malletPivots[model]
+	if not pivot then
+		pivot = model:GetPivot()
+		malletPivots[model] = pivot
+	end
+	if swinging[model] then
+		return
+	end
+	swinging[model] = true
+	task.spawn(function()
+		local start = os.clock()
+		local duration = 0.36
+		while model.Parent do
+			local u = (os.clock() - start) / duration
+			if u >= 1 then
+				break
+			end
+			local angle = if u < 0.35 then (u / 0.35) * 70 else (1 - (u - 0.35) / 0.65) * 70
+			model:PivotTo(pivot * CFrame.Angles(0, 0, math.rad(angle)))
+			RunService.RenderStepped:Wait()
+		end
+		if model.Parent then
+			model:PivotTo(pivot)
+		end
+		swinging[model] = nil
+	end)
+end
+
 -- 0(없음)~1(최대) 비네트 강도
 function Fx.setVignette(alpha: number)
 	for _, f in vignetteFrames do

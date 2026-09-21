@@ -39,7 +39,7 @@ function Challenges.get(id: string?): Challenge?
 	return Challenges.ById[id]
 end
 
-function Challenges.pick(night: number, rng: { NextInteger: (any, number, number) -> number }): Challenge?
+function Challenges.pick(night: number, rng: any): Challenge?
 	local candidates = {}
 	for _, c in list do
 		if c.minNight <= night then

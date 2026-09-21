@@ -19,6 +19,8 @@ local byKind: { [string]: { any } } = {}
 local COOKERS = { pot = true, griddle = true, fryer = true, ricecooker = true }
 local FLAME_COOKERS = { pot = true, griddle = true, fryer = true }
 local BURNABLE = { board = true, combine = true, pot = true, griddle = true, fryer = true, ricecooker = true }
+local SMASHABLE = { board = true, combine = true, pot = true, griddle = true, fryer = true, ricecooker = true, mallet = true }
+local Players = game:GetService("Players")
 local UNLOCK_BY_UPGRADE = { pot = "pot", griddle = "griddle", fryer = "fryer", ricecooker = "ricecooker" }
 local callbacks: { [string]: any } = {} -- onBurnt(spec) / onFire(spec, reason) / onSpread(from, to) / onExtinguish(spec, player) / isNight()
 
@@ -46,6 +48,10 @@ local function clearContents(spec)
 	spec.burnAt = nil
 	spec.burntAt = nil
 	spec.contents = {}
+	spec.hits = 0
+	spec.lastHitter = nil
+	spec.lastHitterName = nil
+	spec.lastHitAt = 0
 end
 
 local function applyEffects(spec)
@@ -94,6 +100,10 @@ local function refresh(spec)
 	partRef:SetAttribute("DoneAt", spec.doneAt or 0)
 	partRef:SetAttribute("BurnAt", spec.burnAt or 0)
 	partRef:SetAttribute("BurntAt", spec.burntAt or 0)
+	partRef:SetAttribute("IgniteAt", if spec.burntAt then spec.burntAt + Config.FireDelay * (if GameState.hasRelic("fireward") then 2 else 1) else 0)
+	partRef:SetAttribute("Hits", spec.hits or 0)
+	partRef:SetAttribute("HitsNeeded", Recipes.Pound.hits)
+	partRef:SetAttribute("LastHitter", spec.lastHitterName or "")
 	partRef:SetAttribute("Locked", spec.locked)
 	partRef:SetAttribute("Smashed", spec.smashed)
 	partRef:SetAttribute("ChopTime", chopTime())
@@ -266,7 +276,7 @@ local function onCooker(spec, player: Player, held: string?)
 		spec.output = cook.output
 		spec.startAt = t
 		spec.doneAt = t + cook.time * Upgrades.cookMult(GameState.level("fire"))
-		spec.burnAt = if cook.noBurn then nil else spec.doneAt + Config.BurnDelay
+		spec.burnAt = if cook.noBurn then nil else spec.doneAt + Config.BurnDelay * (if GameState.hasRelic("iceladle") then 2 else 1)
 		Remotes.sound(player, "sizzle")
 		refresh(spec)
 	elseif spec.state == "cooking" then
@@ -308,6 +318,68 @@ local function onExtinguisherBox(spec, player: Player, held: string?)
 	end
 end
 
+-- 떡메: 밥을 올리고 두 요리사가 번갈아 침 (혼자면 간격을 두고)
+local function onMallet(spec, player: Player, held: string?)
+	local pound = Recipes.Pound
+	if spec.state == "idle" then
+		if not held then
+			toast(player, "밥을 올려야 떡메를 칠 수 있어요")
+			return
+		end
+		if held ~= pound.input then
+			toast(player, Recipes.name(held) .. "은(는) 떡메로 칠 수 없어요 (" .. Recipes.name(pound.input) .. "만)")
+			return
+		end
+		Items.take(player)
+		spec.state = "pounding"
+		spec.item = held
+		spec.hits = 0
+		spec.lastHitter = nil
+		spec.lastHitterName = nil
+		spec.lastHitAt = 0
+		Remotes.sound(player, "put")
+		toast(player, "🥢 이제 빈손으로 E! 두 명이 번갈아 " .. pound.hits .. "번 치세요")
+		refresh(spec)
+	elseif spec.state == "pounding" then
+		if held then
+			toast(player, "손을 비우고 떡메를 치세요")
+			return
+		end
+		local t = now()
+		if spec.lastHitter == player.UserId then
+			if #Players:GetPlayers() >= 2 then
+				toast(player, "🥢 다른 요리사가 칠 차례예요! (번갈아 치기)", "bad")
+				return
+			end
+			if t - spec.lastHitAt < Config.PoundSoloCooldown then
+				return
+			end
+		end
+		spec.hits += 1
+		spec.lastHitter = player.UserId
+		spec.lastHitterName = player.DisplayName
+		spec.lastHitAt = t
+		Remotes.notifyAll({ kind = "pound", stationId = spec.id, position = spec.baseCFrame.Position + Vector3.new(0, 4, 0), hits = spec.hits, total = pound.hits })
+		if spec.hits >= pound.hits then
+			spec.state = "done"
+			spec.item = pound.output
+			Remotes.soundAll("ding")
+			Remotes.toastAll("🍡 " .. Recipes.name(pound.output) .. " 완성! 떡메에서 꺼내세요", "good")
+		end
+		refresh(spec)
+	else
+		if held then
+			toast(player, "손을 비우고 꺼내세요")
+			return
+		end
+		if Items.give(player, spec.item) then
+			Remotes.sound(player, "pick")
+			clearContents(spec)
+			refresh(spec)
+		end
+	end
+end
+
 local function onTriggered(spec, player: Player)
 	if spec.locked or spec.smashed then
 		return
@@ -337,6 +409,8 @@ local function onTriggered(spec, player: Player)
 		onTrash(spec, player, held)
 	elseif spec.kind == "extinguisher" then
 		onExtinguisherBox(spec, player, held)
+	elseif spec.kind == "mallet" then
+		onMallet(spec, player, held)
 	end
 end
 
@@ -505,14 +579,14 @@ local function update()
 				if callbacks.onBurnt then
 					callbacks.onBurnt(spec)
 				end
-			elseif spec.state == "burnt" and spec.burntAt and t >= spec.burntAt + Config.FireDelay then
+			elseif spec.state == "burnt" and spec.burntAt and t >= spec.burntAt + Config.FireDelay * (if GameState.hasRelic("fireward") then 2 else 1) then
 				ignite(spec, "burnt", nil)
 			end
 		end
 		if spec.state == "fire" and spec.nextSpreadAt and t >= spec.nextSpreadAt then
 			spec.nextSpreadAt = t + Config.FireSpreadInterval
 			local isNight = callbacks.isNight == nil or callbacks.isNight()
-			if isNight and fireCount() < Config.MaxFires then
+			if isNight and fireCount() < Config.MaxFires and not GameState.hasRelic("fireward") then
 				local target = nearestSpreadTarget(spec)
 				if target then
 					ignite(target, "spread", spec)
@@ -588,7 +662,7 @@ end
 function Stations.pickSmashTarget(rng: Random)
 	local candidates = {}
 	for _, spec in specs do
-		if BURNABLE[spec.kind] and not spec.locked and not spec.smashed and not spec.targeted and spec.state ~= "fire" then
+		if SMASHABLE[spec.kind] and not spec.locked and not spec.smashed and not spec.targeted and spec.state ~= "fire" then
 			table.insert(candidates, spec)
 		end
 	end
@@ -606,7 +680,7 @@ function Stations.smash(spec)
 		return
 	end
 	spec.smashed = true
-	spec.smashedUntil = now() + Config.SmashDuration
+	spec.smashedUntil = now() + Config.SmashDuration * (if GameState.hasRelic("sturdy") then 0.5 else 1)
 	clearContents(spec)
 	spec.fireAt = nil
 	spec.nextSpreadAt = nil

@@ -3,6 +3,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
+local Players = game:GetService("Players")
 
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Recipes = require(Shared:WaitForChild("Recipes"))
@@ -134,11 +135,16 @@ local function updateStationLabel(part: BasePart, entry)
 			end
 		elseif state == "burnt" then
 			local burntAt = attrN(part, "BurntAt")
-			local left = math.max(0, burntAt + Config.FireDelay - t)
+			local igniteAt = attrN(part, "IgniteAt")
+			if igniteAt <= 0 then
+				igniteAt = burntAt + Config.FireDelay
+			end
+			local left = math.max(0, igniteAt - t)
+			local span = math.max(1, igniteAt - burntAt)
 			entry.status.Text = string.format("💀 탔어요! %d초 뒤 불이 납니다", math.ceil(left))
 			entry.status.TextColor3 = Color3.fromRGB(255, 120, 120)
 			entry.barBg.Visible = true
-			entry.bar.Size = UDim2.new(math.clamp(left / Config.FireDelay, 0, 1), 0, 1, 0)
+			entry.bar.Size = UDim2.new(math.clamp(left / span, 0, 1), 0, 1, 0)
 			entry.bar.BackgroundColor3 = Color3.fromRGB(255, 80, 60)
 		else
 			entry.status.Text = "비어 있음"
@@ -157,6 +163,23 @@ local function updateStationLabel(part: BasePart, entry)
 	elseif kind == "extinguisher" then
 		entry.title.Text = "🧯 " .. label
 		entry.status.Text = "빈손으로 E: 소화기 꺼내기"
+	elseif kind == "mallet" then
+		entry.title.Text = "🥢 " .. label
+		local hits = attrN(part, "Hits")
+		local needed = attrN(part, "HitsNeeded")
+		if state == "pounding" then
+			local last = attrS(part, "LastHitter")
+			entry.status.Text = if last == "" then string.format("쿵! %d/%d · 누구든 E", hits, needed) else string.format("쿵! %d/%d · %s 말고 다른 요리사!", hits, needed, last)
+			entry.status.TextColor3 = Color3.fromRGB(255, 220, 150)
+			entry.barBg.Visible = true
+			entry.bar.Size = UDim2.new(if needed > 0 then hits / needed else 0, 0, 1, 0)
+			entry.bar.BackgroundColor3 = Color3.fromRGB(255, 200, 80)
+		elseif state == "done" then
+			entry.status.Text = "✅ 인절미 완성! 꺼내세요"
+			entry.status.TextColor3 = Color3.fromRGB(150, 255, 160)
+		else
+			entry.status.Text = "밥을 올리고 두 명이 번갈아 치기"
+		end
 	end
 end
 
@@ -210,6 +233,12 @@ end
 
 local function onMoodChanged(entry, mood: string)
 	local root = entry.root
+	if mood ~= "angry" then
+		local aura = root:FindFirstChild("AngryAura")
+		if aura then
+			aura:Destroy()
+		end
+	end
 	if mood == "happy" then
 		startAnim(entry, "hop", 0.7)
 		if fx then
@@ -290,6 +319,13 @@ local function updateCustomerLabel(model: Model, entry)
 		if frac < 0.25 then
 			entry.order.TextColor3 = if math.floor(os.clock() * 4) % 2 == 0 then Color3.fromRGB(255, 120, 100) else Color3.fromRGB(255, 240, 200)
 		end
+		-- 도착 직후 3.5초는 손님의 한마디
+		local line = attrS(model, "Line")
+		local elapsed = total - (deadline - now())
+		if line ~= "" and elapsed < 3.5 then
+			entry.order.Text = "💬 " .. line
+			entry.order.TextColor3 = Color3.fromRGB(230, 225, 255)
+		end
 	elseif mood == "queue" then
 		entry.order.Text = "⏳ 자리 기다리는 중 (" .. entry.ordersText .. ")"
 		entry.order.TextColor3 = Color3.fromRGB(200, 195, 220)
@@ -301,6 +337,14 @@ local function updateCustomerLabel(model: Model, entry)
 	elseif mood == "happy" then
 		entry.order.Text = "💚 잘 먹었다~"
 		entry.order.TextColor3 = Color3.fromRGB(150, 255, 160)
+		entry.barBg.Visible = false
+	elseif mood == "ascend" then
+		entry.order.Text = "✨ 성불합니다… 고마워요"
+		entry.order.TextColor3 = Color3.fromRGB(255, 240, 180)
+		entry.barBg.Visible = false
+	elseif mood == "calm" then
+		entry.order.Text = "🕊️ 진정했다… 돌아갈게요"
+		entry.order.TextColor3 = Color3.fromRGB(200, 230, 255)
 		entry.barBg.Visible = false
 	else
 		entry.order.Text = "🚶 오는 중 (" .. entry.ordersText .. ")"
@@ -417,6 +461,21 @@ local function hintFor(part: BasePart, heldId: string?): (string?, number)
 			return "소화기 넣기", 0
 		end
 		return "손을 비우세요", 0
+	elseif kind == "mallet" then
+		if state == "idle" then
+			return if heldId == Recipes.Pound.input then "밥 올리기" else "밥을 들고 오세요", 0
+		elseif state == "pounding" then
+			if heldId then
+				return "손을 비우고 치세요", 0
+			end
+			local last = attrS(part, "LastHitter")
+			local me = Players.LocalPlayer and Players.LocalPlayer.DisplayName or ""
+			if last == me and #Players:GetPlayers() >= 2 then
+				return "다른 요리사 차례!", 0
+			end
+			return string.format("떡메 치기! (%d/%d)", attrN(part, "Hits"), attrN(part, "HitsNeeded")), 0
+		end
+		return if heldId then "손을 비우고 꺼내세요" else "인절미 꺼내기", 0
 	end
 	return nil, 0
 end
@@ -507,7 +566,7 @@ function Labels.init(map: Instance, heldGetter: () -> string?, fxModule, ordersC
 		for model, entry in customerLabels do
 			if model.Parent then
 				updateCustomerLabel(model, entry)
-				if entry.mood ~= "happy" and entry.mood ~= "angry" then
+				if entry.mood ~= "happy" and entry.mood ~= "angry" and entry.mood ~= "ascend" and entry.mood ~= "calm" then
 					table.insert(list, { name = entry.displayName or model.Name, orders = entry.ordersText or "", fraction = entry.fraction or -1, mood = entry.mood })
 				end
 			else

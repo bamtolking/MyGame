@@ -41,7 +41,7 @@ function Events.get(id: string?): NightEvent?
 end
 
 -- 이번 밤 이벤트 추첨. rng 는 Random 과 같은 인터페이스.
-function Events.pick(night: number, rng: { NextNumber: (any) -> number }, chance: number, minNight: number): NightEvent?
+function Events.pick(night: number, rng: any, chance: number, minNight: number): NightEvent?
 	if night < minNight then
 		return nil
 	end
