@@ -11,7 +11,7 @@ jobs:
       run:
         working-directory: roblox
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: 도구 설치 (rojo, luau, luau-lsp, lune)
         run: bash scripts/setup-tools.sh
       - name: 순수 로직 테스트
