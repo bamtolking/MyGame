@@ -27,7 +27,7 @@ src/server/            Main(진입점), MapBuilder, Stations, Customers, Items, 
 src/client/            Main, Hud, Panels, Labels, Fx, Tutorial, Sfx, SelfTest
 tests/                 *_test.luau (Luau CLI), check_props.py, sim/(Lune 통합 시뮬레이션), studio/(run-in-roblox)
 build/GhostDiner.rbxlx 사용자가 여는 산출물 (커밋함)
-docs/                  DESIGN.md(설계·수치), HANDOFF.md(인수인계)
+docs/                  DESIGN.md(설계·수치), HANDOFF.md(인수인계), CHAT_HISTORY.md(사용자와의 대화 전문)
 ```
 
 ## 코드 관례

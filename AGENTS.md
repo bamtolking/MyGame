@@ -11,6 +11,7 @@
 1. `roblox/AGENTS.md` — 로블록스 프로젝트의 규칙, 도구 설치, 검증 파이프라인, 코드 관례
 2. `roblox/docs/HANDOFF.md` — 지금까지의 상태, 설계 결정, 남은 일
 3. `roblox/README.md`, `roblox/docs/DESIGN.md` — 사용자용 설명과 설계 메모
+4. `roblox/docs/CHAT_HISTORY.md` — 지금까지 사용자와 나눈 대화 전문 (요구사항의 원문과 맥락)
 
 ## 공통 규칙
 - 사용자는 비개발자에 가깝습니다. 보고는 쉬운 한국어로, 결과물은 "다운로드해서 바로 여는 파일" 형태를 유지합니다.
