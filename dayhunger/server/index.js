@@ -67,9 +67,9 @@ class Room {
     const info = this.lobbyInfo();
     for (const ws of this.members.keys()) if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ ...info, youHost: ws === this.hostWs }));
   }
-  join(ws, name, cls) {
+  join(ws, name, cls, meta) {
     if (this.size >= C.MAX_PLAYERS) return { error: '방이 가득 찼어요 (최대 4명)' };
-    const m = { ws, name: String(name || '생존자').slice(0, 10), playerId: null, cls: C.CLASSES[cls] ? cls : C.DEFAULT_CLASS };
+    const m = { ws, name: String(name || '생존자').slice(0, 10), playerId: null, cls: C.CLASSES[cls] ? cls : C.DEFAULT_CLASS, meta: C.clampMeta(meta) };
     this.members.set(ws, m);
     if (!this.hostWs) this.hostWs = ws;
     this.emptySince = null;
@@ -77,7 +77,7 @@ class Room {
     return { member: m };
   }
   spawnMember(m) {
-    const p = this.game.addPlayer(m.name, m.cls);
+    const p = this.game.addPlayer(m.name, m.cls, m.meta);
     m.playerId = p.id;
     m.ws.send(JSON.stringify({ type: 'start', playerId: p.id, code: this.code }));
     m.ws.send(JSON.stringify(this.game.fullState()));
@@ -130,8 +130,9 @@ class Room {
         }
         break;
       case 'class':
-        if (this.state === 'lobby' && C.CLASSES[msg.cls]) { m.cls = msg.cls; this.sendLobby(); }
+        if (this.state === 'lobby' && C.CLASSES[msg.cls]) { m.cls = msg.cls; if (msg.meta) m.meta = C.clampMeta(msg.meta); this.sendLobby(); }
         break;
+      case 'perk': if (g && m.playerId != null) reply(ws, g.choosePerk(m.playerId, String(msg.key))); break;
       case 'restart': if (ws === this.hostWs && this.state === 'playing' && g && g.over) this.restart(); break;
       case 'continue': if (ws === this.hostWs && g && g.over && g.won) { g.continueEndless(); } break;
       case 'input': if (g && m.playerId != null) g.setInput(m.playerId, msg); break;
@@ -171,7 +172,7 @@ wss.on('connection', (ws) => {
       if (ws.room) ws.room.leave(ws);
       const room = new Room(makeCode());
       rooms.set(room.code, room);
-      room.join(ws, msg.name, msg.cls); ws.room = room;
+      room.join(ws, msg.name, msg.cls, msg.meta); ws.room = room;
       room.sendLobby();
       return;
     }
@@ -181,7 +182,7 @@ wss.on('connection', (ws) => {
       if (!room) { ws.send(JSON.stringify({ type: 'error', msg: '그 코드의 방이 없어요' })); return; }
       if (room.game && room.game.over) { ws.send(JSON.stringify({ type: 'error', msg: '이미 끝난 게임이에요' })); return; }
       if (ws.room) ws.room.leave(ws);
-      const r = room.join(ws, msg.name, msg.cls);
+      const r = room.join(ws, msg.name, msg.cls, msg.meta);
       if (r.error) { ws.send(JSON.stringify({ type: 'error', msg: r.error })); return; }
       ws.room = room;
       room.sendLobby();

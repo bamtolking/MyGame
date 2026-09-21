@@ -61,8 +61,12 @@ export class Renderer {
     this.cam.x = view.w * ts > W ? clamp(cx, halfW, view.w - halfW) : view.w / 2;
     this.cam.y = view.h * ts > H ? clamp(cy, halfH, view.h - halfH) : view.h / 2;
     ctx.fillStyle = '#0b1a10'; ctx.fillRect(0, 0, W, H);
+    // 화면 흔들림 (폭발·사망·내 근처 피격)
+    let shake = view.shakeNow();
+    if (me) for (const h of view.hurts) if (tNow - h.t < 300 && Math.hypot(h.x - cx, h.y - cy) < 3) shake = Math.max(shake, 0.2 * (1 - (tNow - h.t) / 300));
+    const shx = shake ? (Math.random() - 0.5) * shake * ts : 0, shy = shake ? (Math.random() - 0.5) * shake * ts : 0;
     ctx.save();
-    ctx.translate(W / 2 - this.cam.x * ts, H / 2 - this.cam.y * ts);
+    ctx.translate(W / 2 - this.cam.x * ts + shx, H / 2 - this.cam.y * ts + shy);
     const x0 = Math.max(0, Math.floor(this.cam.x - halfW) - 1), x1 = Math.min(view.w - 1, Math.ceil(this.cam.x + halfW) + 1);
     const y0 = Math.max(0, Math.floor(this.cam.y - halfH) - 1), y1 = Math.min(view.h - 1, Math.ceil(this.cam.y + halfH) + 1);
     // 바닥
@@ -145,6 +149,13 @@ export class Renderer {
     ctx.restore();
     const dark = view.darkness();
     if (dark > 0.01) this.drawDarkness(view, dark, tNow);
+    // 밤 10초 전 경고: 화면 가장자리 붉은 맥동
+    if (view.phase === 'day' && view.dayTicks - view.cycleT <= 10 * C.TICK_RATE && !view.over) {
+      const a = 0.25 + 0.2 * Math.sin(tNow / 150);
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.7);
+      g.addColorStop(0, 'rgba(180,0,0,0)'); g.addColorStop(1, `rgba(180,0,0,${a})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
     this.drawBaseArrow(view, ts);
     this.drawMinimap(view, myId);
   }
@@ -342,6 +353,7 @@ export class Renderer {
       ctx.fillStyle = '#9e9e9e'; ctx.fillRect(x - r * 0.7, y - r * 0.9, r * 1.4, r * 1.6);
       ctx.fillStyle = '#616161'; ctx.fillRect(x - r * 0.5, y - r * 0.6, r, r * 0.15);
       ctx.font = `${Math.round(Math.max(10, ts * 0.42))}px sans-serif`; ctx.fillStyle = '#eee'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(p.name, x, y - r * 1.1);
+      if (p.reviveT > 0) { ctx.fillStyle = '#fff59d'; ctx.font = `bold ${Math.round(Math.max(10, ts * 0.42))}px sans-serif`; ctx.fillText(`💫 ${Math.ceil(p.reviveT / C.TICK_RATE)}초`, x, y - r * 2.2); }
       return;
     }
     const sw = view.swingOf(p.id);
@@ -457,7 +469,7 @@ export class Renderer {
       g.addColorStop(0, `rgba(0,0,0,${strength})`); g.addColorStop(0.6, `rgba(0,0,0,${strength * 0.6})`); g.addColorStop(1, 'rgba(0,0,0,0)');
       dctx.fillStyle = g; dctx.beginPath(); dctx.arc(sx * dpr, sy * dpr, radius * ts * dpr, 0, Math.PI * 2); dctx.fill();
     };
-    for (const p of view.players) if (p.alive) { const pos = view.pos(p); light(pos.x, pos.y, 4.5, 1); }
+    for (const p of view.players) if (p.alive) { const pos = view.pos(p); light(pos.x, pos.y, 4.5 + 2 * ((p.perks && p.perks.night_eyes) || 0), 1); }
     const x0 = Math.max(0, Math.floor(this.cam.x - this.W / ts)), x1 = Math.min(view.w - 1, Math.ceil(this.cam.x + this.W / ts));
     const y0 = Math.max(0, Math.floor(this.cam.y - this.H / ts)), y1 = Math.min(view.h - 1, Math.ceil(this.cam.y + this.H / ts));
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {

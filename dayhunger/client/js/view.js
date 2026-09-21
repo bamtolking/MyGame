@@ -17,8 +17,12 @@ export class View {
     this.dayTicks = C.MAPS[C.DEFAULT_MAP].dayTicks; this.nightTicks = C.MAPS[C.DEFAULT_MAP].nightTicks;
     this.over = false; this.won = false; this.endless = false; this.score = 0; this.kills = 0; this.pending = 0;
     this.updateAt = 0; this.interval = 100; this.ready = false;
-    this.onEvent = null;
+    this.shakeMag = 0; this.shakeUntil = 0; this.hurts = [];
+    this.nextWave = null;
+    this.onEvent = null; this.onFx = null;
   }
+  shake(mag, ms) { const t = now(); this.shakeMag = Math.max(this.shakeMag * (this.shakeUntil > t ? 1 : 0), mag); this.shakeUntil = Math.max(this.shakeUntil, t + ms); }
+  shakeNow() { const t = now(); if (t >= this.shakeUntil) return 0; return this.shakeMag * ((this.shakeUntil - t) / 400); }
   get mapDef() { return C.MAPS[this.map] || C.MAPS[C.DEFAULT_MAP]; }
   applyFull(f) {
     this.w = f.w; this.h = f.h;
@@ -35,6 +39,7 @@ export class View {
     this.applyDynamic(d, false);
     const tNow = now();
     if (d.shots) for (const s of d.shots) this.shots.push({ ...s, born: tNow });
+    if (d.shots && d.shots.length && this.onFx) this.onFx({ k: 'shot' });
     if (d.fx) for (const f of d.fx) this.spawnFx(f, tNow);
     if (d.events) for (const e of d.events) this.handleEvent(e);
   }
@@ -43,6 +48,7 @@ export class View {
     this.map = d.map || this.map; this.difficulty = d.difficulty || this.difficulty; this.winDay = d.winDay || this.winDay;
     this.dayTicks = d.dayTicks || this.dayTicks; this.nightTicks = d.nightTicks || this.nightTicks;
     this.over = d.over; this.won = d.won; this.endless = d.endless; this.score = d.score; this.kills = d.kills; this.pending = d.pending;
+    if (d.nextWave) this.nextWave = d.nextWave;
     const tNow = now();
     // 휘두르기 시작 감지 (swing 값이 커지면 새 동작)
     for (const p of d.players) {
@@ -106,20 +112,23 @@ export class View {
       case 'heal': text(`+${f.n} ❤️`, '#ff8a80', -0.6); break;
       case 'blood': burst(5, '#c62828', 3, 300, 0.09); break;
       case 'crack': if (f.tile !== undefined) this.shakes.set(f.tile, tNow); burst(4, '#9e9e9e', 2, 300, 0.08, 2); break;
-      case 'hurt': burst(6, '#ff5252', 3, 350, 0.1); text('!', '#ff5252', -0.5, 600); break;
+      case 'hurt': burst(6, '#ff5252', 3, 350, 0.1); text('!', '#ff5252', -0.5, 600); this.hurts.push({ x: f.x, y: f.y, t: tNow }); if (this.hurts.length > 8) this.hurts.shift(); break;
       case 'spithit': burst(6, '#26a69a', 2.5, 350, 0.1); break;
       case 'eat': text('🍎', '#fff', -0.5, 800); break;
       case 'repair': text('🔧', '#8f8', -0.3, 700); break;
       case 'build': burst(8, '#d7ccc8', 2, 400, 0.08, 2); break;
-      case 'death': burst(16, '#ef5350', 4, 700, 0.14); break;
+      case 'death': burst(16, '#ef5350', 4, 700, 0.14); this.shake(0.35, 400); break;
+      case 'revive': burst(14, '#fff59d', 3, 700, 0.1); text('부활!', '#fff59d', -0.8, 1200); break;
+      case 'perk': burst(12, '#ce93d8', 2.5, 700, 0.09); break;
       case 'die': burst(f.big ? 18 : 8, '#6d4c41', f.big ? 4 : 2.5, 600, f.big ? 0.14 : 0.1, 2); break;
       case 'steal': text(`-${f.n} ${C.RES_ICON[f.res] || ''} 도둑!`, '#ffab40', -0.6, 1200); break;
-      case 'explosion': burst(24, '#ff7043', 6, 700, 0.16); burst(12, '#ffd54f', 4, 500, 0.12); P.push({ x: f.x, y: f.y, vx: 0, vy: 0, born: tNow, life: 450, ring: f.r || 1.7, color: '#ffab40' }); break;
+      case 'explosion': burst(24, '#ff7043', 6, 700, 0.16); burst(12, '#ffd54f', 4, 500, 0.12); P.push({ x: f.x, y: f.y, vx: 0, vy: 0, born: tNow, life: 450, ring: f.r || 1.7, color: '#ffab40' }); this.shake(0.6, 400); break;
       case 'summon': burst(10, '#ab47bc', 3, 500, 0.1); break;
       case 'spitfx': burst(3, '#26a69a', 1.5, 250, 0.07); break;
       case 'poof': burst(3, '#cfd8dc', 1.5, 250, 0.06); break;
       default: break;
     }
+    if (this.onFx) this.onFx(f);
   }
   handleEvent(e) {
     let line = null;
@@ -136,6 +145,10 @@ export class View {
       case 'steal': line = `🦝 도둑이 ${e.name}의 ${rn(e.res)} ${e.n}을 훔쳐 달아난다!`; break;
       case 'recover': line = `🎒 ${e.name}이(가) 훔친 ${rn(e.res)} ${e.n}을 되찾음`; break;
       case 'explosion': line = '💣 폭탄병 폭발!'; break;
+      case 'perk': line = `✨ ${e.name}: ${(C.PERKS[e.key] || {}).icon || ''} ${(C.PERKS[e.key] || {}).name || e.key}${e.level > 1 ? ` ${e.level}단계` : ''}`; break;
+      case 'bossloot': line = `🎁 괴수 전리품! 모두에게 ⛓️${e.loot.iron} 🪨${e.loot.stone} 🍎${e.loot.food}`; break;
+      case 'secondchance': line = `💫 ${e.name} 쓰러짐… 5초 뒤 부활`; break;
+      case 'revive': line = `💫 ${e.name} 부활!`; break;
       case 'win': line = `🏆 ${this.winDay}일째 아침! 살아남았다!`; break;
       case 'gameover': line = '☠️ 모두 쓰러졌다…'; break;
       default: break;

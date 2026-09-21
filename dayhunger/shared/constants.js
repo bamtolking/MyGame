@@ -114,9 +114,10 @@ export const CLASSES = {
   BUILDER:    { name: '건축가', icon: '🔨', hp: 90, speed: 4.5, damage: 10, tool: 'hammer', costMul: 0.75, repairBonus: 15, buildRange: 4, desc: '건물 25% 할인, 4칸 거리에서 건설, 수리 +40.' },
 };
 export const DEFAULT_CLASS = 'SURVIVOR';
-// 캐릭터별 건설 비용
-export function costFor(cls, cost) {
-  const mul = (CLASSES[cls] && CLASSES[cls].costMul) || 1;
+// 캐릭터·특전별 건설 비용
+export function costFor(cls, cost, perks) {
+  let mul = (CLASSES[cls] && CLASSES[cls].costMul) || 1;
+  if (perks && perks.build_discount) mul *= 1 - 0.15 * perks.build_discount;
   const out = {};
   for (const [k, v] of Object.entries(cost)) out[k] = Math.max(1, Math.round(v * mul));
   return out;
@@ -194,3 +195,54 @@ export const DEFAULT_MAP = 'MEADOW';
 // ---------- 빠른 채팅 ----------
 export const QUICK_CHAT = ['도와줘!', '여기 벽 짓자', '식량 필요해', '좋아!', '이쪽으로 와', '포탑 세울게', '도둑이다!', '기지로 돌아가'];
 export const CHAT_TICKS = 4 * TR;
+
+// ---------- 새벽 특전: 한 판 안에서 쌓이는 강화 (아침마다 3장 중 1장) ----------
+export const PERKS = {
+  gather_plus:    { name: '풍성한 손', icon: '🧺', max: 3, desc: '채집할 때마다 +1' },
+  gather_fast:    { name: '숙련된 손놀림', icon: '⚡', max: 2, desc: '한 번 찍으면 두 번 친 것으로' },
+  max_hp:         { name: '강인한 체력', icon: '❤️', max: 3, desc: '최대 체력 +25, 즉시 회복' },
+  speed:          { name: '날쌘 발', icon: '👟', max: 3, desc: '이동 속도 +12%' },
+  damage:         { name: '날카로운 일격', icon: '⚔️', max: 3, desc: '공격력 +30%' },
+  range:          { name: '긴 팔', icon: '🦾', max: 2, desc: '공격 사거리 +0.5칸 (활은 +1칸)' },
+  hunger:         { name: '소식가', icon: '🍃', max: 3, desc: '배고픔 25% 느리게' },
+  food_value:     { name: '미식가', icon: '🍲', max: 2, desc: '먹을 때 회복 +50%' },
+  build_discount: { name: '알뜰 건축', icon: '🧱', max: 2, desc: '건물 비용 -15%' },
+  repair:         { name: '수리 달인', icon: '🔧', max: 2, desc: '수리량 +25' },
+  kill_food:      { name: '사냥의 결실', icon: '🍖', max: 2, desc: '적 처치 시 25% 확률로 식량 +1' },
+  night_eyes:     { name: '밤눈', icon: '👁️', max: 2, desc: '밤에 시야 +2칸' },
+  thick_skin:     { name: '두꺼운 살갗', icon: '🛡️', max: 3, desc: '받는 피해 -10%' },
+  campfire:       { name: '따뜻한 불', icon: '🔥', max: 1, desc: '모닥불 근처 회복 2배' },
+  mud_walk:       { name: '늪지 발', icon: '🥾', max: 1, desc: '진흙에서 느려지지 않음' },
+  full_respawn:   { name: '불사조', icon: '🐦‍🔥', max: 1, desc: '아침 부활 시 체력 100%' },
+};
+export const PERK_OFFER_TICKS = 25 * TICK_RATE;   // 협동에서 선택 대기 시간 (지나면 첫 장 자동 선택)
+export const BOSS_LOOT = { iron: 8, food: 4, stone: 6 };  // 괴수 처치 시 살아있는 모두에게
+
+// ---------- 영구 강화: 판을 거듭하며 생존 포인트로 구매 ----------
+export const UPGRADES = {
+  hp:            { name: '튼튼한 몸', icon: '❤️', max: 5, cost: [3, 4, 5, 6, 8], desc: '최대 체력 +10', per: 10 },
+  speed:         { name: '빠른 발', icon: '👟', max: 5, cost: [3, 4, 5, 6, 8], desc: '이동 속도 +3%', per: 0.03 },
+  hunger:        { name: '넉넉한 배', icon: '🍃', max: 5, cost: [3, 4, 5, 6, 8], desc: '배고픔 6% 느리게', per: 0.06 },
+  supply:        { name: '보급 확대', icon: '📦', max: 5, cost: [3, 4, 5, 6, 8], desc: '새벽 보급 +10%', per: 0.10 },
+  start:         { name: '준비된 출발', icon: '🎒', max: 5, cost: [2, 3, 4, 5, 6], desc: '시작 자원 나무 +3, 돌 +2, 식량 +1', per: 1 },
+  damage:        { name: '날카로운 도구', icon: '⚔️', max: 5, cost: [3, 4, 5, 6, 8], desc: '공격력 +6%', per: 0.06 },
+  luck:          { name: '채집 행운', icon: '🍀', max: 5, cost: [4, 5, 6, 7, 9], desc: '채집 시 10% 확률로 +1', per: 0.10 },
+  iron_start:    { name: '철 상자', icon: '⛓️', max: 3, cost: [5, 7, 9], desc: '시작 철 +2', per: 2 },
+  second_chance: { name: '두 번째 기회', icon: '💫', max: 1, cost: [15], desc: '한 판에 한 번, 쓰러지면 5초 뒤 모닥불에서 부활(체력 50%)', per: 1 },
+};
+// 강화 단계 → 게임에 전달할 효과 묶음(meta). 서버는 clampMeta로 범위를 제한합니다.
+export function metaFromUpgrades(levels = {}) {
+  const L = (k) => Math.min(UPGRADES[k].max, Math.max(0, levels[k] | 0));
+  return {
+    hp: L('hp') * UPGRADES.hp.per, speed: L('speed') * UPGRADES.speed.per, hunger: L('hunger') * UPGRADES.hunger.per,
+    supply: L('supply') * UPGRADES.supply.per, start: L('start'), damage: L('damage') * UPGRADES.damage.per,
+    luck: L('luck') * UPGRADES.luck.per, iron: L('iron_start') * UPGRADES.iron_start.per, secondChance: L('second_chance'),
+  };
+}
+export function clampMeta(m) {
+  const full = metaFromUpgrades(Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 99])));
+  const out = {};
+  for (const k of Object.keys(full)) out[k] = Math.min(full[k], Math.max(0, +((m || {})[k]) || 0));
+  return out;
+}
+export const SECOND_CHANCE_TICKS = 5 * TICK_RATE;

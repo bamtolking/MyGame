@@ -20,12 +20,26 @@
     <div class="menu-card">
       <h1>데이헝거</h1>
       <p class="sub">벽 짓고 살아남기 · 낮에는 채집과 건설, 밤에는 습격</p>
+      <div id="profile-chip">
+        <div class="lvl">Lv <b id="pc-level">1</b></div>
+        <div class="bar"><div id="pc-xp"></div></div>
+        <div class="pts">💠 <b id="pc-points">0</b></div>
+      </div>
       <label class="field"><span>이름</span><input id="name" maxlength="10" placeholder="생존자" autocomplete="off" /></label>
-      <button id="btn-solo" class="big">🧍 혼자 하기</button>
-      <button id="btn-create" class="big accent">👥 방 만들기 (협동)</button>
+      <button id="btn-solo" class="big accent">▶ 혼자 하기</button>
       <div class="row">
-        <input id="code" maxlength="4" placeholder="방 코드 4자리" autocomplete="off" autocapitalize="characters" />
+        <button id="btn-create" class="grow">👥 방 만들기</button>
+        <input id="code" maxlength="4" placeholder="코드" autocomplete="off" autocapitalize="characters" />
         <button id="btn-join">참가</button>
+      </div>
+      <div id="daily-card">
+        <div class="dc-text"><b>📆 오늘의 도전</b><span id="daily-desc"></span></div>
+        <button id="btn-daily" class="accent">도전</button>
+      </div>
+      <div class="row three">
+        <button id="btn-profile">📊 프로필</button>
+        <button id="btn-upgrade">💠 강화 <small id="upg-badge" class="badge hidden"></small></button>
+        <button id="btn-settings">⚙️ 설정</button>
       </div>
       <p id="menu-msg" class="msg"></p>
       <details id="server-box" class="help">
@@ -37,24 +51,63 @@
         <ul>
           <li>🌞 <b>낮</b>: 나무·바위·철·열매·버섯·물고기·약초를 채집하고 벽·포탑·함정을 지으세요.</li>
           <li>🌙 <b>밤</b>: 좀비·러너·스피터·도둑·박쥐·파괴자·브루트·폭탄병이 몰려옵니다. 벽을 부수거나 돌아서 들어와요.</li>
-          <li>🍎 <b>배고픔</b>: 계속 줄어듭니다. 0이 되면 체력이 닳아요. 설원은 모닥불 곁이 아니면 더 빨리 고파요.</li>
-          <li>🏆 난이도별 목표 날짜의 아침까지 살아남으면 승리. 중반·마지막 밤엔 괴수가 옵니다.</li>
-          <li>🗺️ <b>전장 5종</b>(초원·설원·사막·늪지·화산), <b>캐릭터 7종</b>. 두 손가락으로 화면을 확대/축소할 수 있어요.</li>
-          <li>👥 <b>협동</b>: 방을 만들고 코드를 친구에게 알려주세요 (최대 4명). 죽어도 동료가 살아 있으면 아침에 부활합니다.</li>
+          <li>✨ <b>새벽 특전</b>: 아침마다 3장 중 1장을 골라 이번 판의 캐릭터를 키웁니다.</li>
+          <li>💠 <b>생존 포인트</b>: 판이 끝나면 경험치와 포인트를 얻고, 강화·해금·업적이 쌓입니다.</li>
+          <li>🗺️ 전장 5종, 캐릭터 7종, 난이도 4단계. 두 손가락으로 화면을 확대/축소할 수 있어요.</li>
         </ul>
       </details>
     </div>
+    <div id="settings-modal" class="modal hidden">
+      <div class="menu-card">
+        <h2>⚙️ 설정</h2>
+        <label class="switch"><span>🔊 효과음</span><input id="set-sound" type="checkbox" checked /></label>
+        <label class="switch"><span>📳 진동</span><input id="set-vibrate" type="checkbox" checked /></label>
+        <button id="set-zoom-reset">🔍 화면 크기 초기화</button>
+        <button id="set-tips-reset">💡 도움말 다시 보기</button>
+        <button id="set-data-reset" class="danger">🗑️ 진행 데이터 초기화</button>
+        <button id="btn-settings-close" class="accent">닫기</button>
+      </div>
+    </div>
   </section>
 
-  <!-- 게임 설정 (혼자 하기) -->
+  <!-- 게임 설정 (혼자 하기 / 오늘의 도전) -->
   <section id="screen-setup" class="screen hidden">
     <div class="menu-card wide">
-      <h2>게임 설정</h2>
+      <h2 id="setup-title">게임 설정</h2>
+      <p id="setup-note" class="sub hidden"></p>
       <h3>🗺️ 전장</h3><div id="setup-map" class="cards"></div>
       <h3>🎚️ 난이도</h3><div id="setup-diff" class="cards"></div>
       <h3>🧑 캐릭터</h3><div id="setup-class" class="cards"></div>
       <button id="setup-start" class="big accent">▶ 시작</button>
       <button id="setup-back">뒤로</button>
+    </div>
+  </section>
+
+  <!-- 프로필 -->
+  <section id="screen-profile" class="screen hidden">
+    <div class="menu-card wide">
+      <h2>📊 프로필</h2>
+      <div id="profile-head">
+        <div class="lvl">Lv <b id="profile-level">1</b></div>
+        <div class="bar"><div id="profile-xp"></div></div>
+        <div class="pts">💠 <b id="profile-points">0</b></div>
+      </div>
+      <div class="tabs"><button id="ptab-stats" class="tab selected">통계</button><button id="ptab-ach" class="tab">업적</button><button id="ptab-runs" class="tab">생존 일지</button></div>
+      <div id="psec-stats" class="psec"><div id="profile-stats" class="statgrid"></div></div>
+      <div id="psec-ach" class="psec hidden"><div id="profile-achievements" class="achlist"></div></div>
+      <div id="psec-runs" class="psec hidden"><div id="profile-runs" class="runlist"></div></div>
+      <button id="profile-back">뒤로</button>
+    </div>
+  </section>
+
+  <!-- 강화 -->
+  <section id="screen-upgrade" class="screen hidden">
+    <div class="menu-card wide">
+      <h2>💠 영구 강화</h2>
+      <p class="sub">판이 끝나면 생존 포인트를 얻습니다. 강화는 혼자·협동 모두에 적용됩니다.</p>
+      <div class="pts big">보유 💠 <b id="upgrade-points">0</b></div>
+      <div id="upgrade-list" class="upglist"></div>
+      <button id="upgrade-back">뒤로</button>
     </div>
   </section>
 
@@ -82,7 +135,9 @@
         <div id="clock">
           <div id="daylabel">1일째 🌞</div>
           <div class="bar"><div id="clockfill"></div></div>
+          <div id="wave-preview"></div>
         </div>
+        <button id="btn-pause" class="round tiny" title="일시정지">⏸</button>
         <div id="res">
           <span id="res-wood">🪵 0</span><span id="res-stone">🪨 0</span><span id="res-iron">⛓️ 0</span><span id="res-food">🍎 0</span>
         </div>
@@ -90,11 +145,13 @@
       <div id="stats">
         <div class="stat"><span id="cls-icon">❤️</span><div class="bar"><div id="hpfill"></div></div></div>
         <div class="stat"><span>🍖</span><div class="bar"><div id="hufill"></div></div></div>
+        <div id="perk-icons"></div>
       </div>
       <canvas id="minimap" width="112" height="112"></canvas>
       <div id="log"></div>
       <div id="toast"></div>
       <div id="hint" class="hidden"></div>
+      <div id="tip" class="hidden"><span id="tip-text"></span><button id="tip-next">확인</button></div>
 
       <div id="joy"><div id="joy-knob"></div></div>
       <div id="buttons">
@@ -113,10 +170,34 @@
         <div id="chatlist"></div>
       </div>
 
-      <div id="overlay" class="hidden">
+      <div id="perkmodal" class="modal hidden">
+        <div class="menu-card wide">
+          <h2>✨ 새벽 특전</h2>
+          <p class="sub">이번 판에서만 유지되는 강화입니다. 하나를 고르세요.</p>
+          <div id="perk-cards" class="cards perks"></div>
+          <div class="bar thin"><div id="perk-timer"></div></div>
+        </div>
+      </div>
+      <div id="pausemodal" class="modal hidden">
         <div class="menu-card">
-          <h2 id="over-title">게임 오버</h2>
-          <p id="over-body"></p>
+          <h2>⏸ 일시정지</h2>
+          <button id="btn-resume" class="big accent">▶ 계속</button>
+          <label class="switch"><span>🔊 효과음</span><input id="pause-sound" type="checkbox" checked /></label>
+          <button id="btn-pause-menu">메뉴로 나가기</button>
+        </div>
+      </div>
+      <div id="overlay" class="modal hidden">
+        <div class="menu-card wide">
+          <h2 id="sum-title">게임 오버</h2>
+          <p id="sum-sub" class="sub"></p>
+          <div id="sum-grid" class="statgrid"></div>
+          <div id="sum-xp">
+            <div class="lvl">Lv <b id="sum-xp-level">1</b></div>
+            <div class="bar"><div id="sum-xpfill"></div></div>
+            <div id="sum-xp-text" class="tag"></div>
+          </div>
+          <div id="sum-points" class="pts"></div>
+          <div id="sum-new"></div>
           <button id="btn-continue" class="big accent hidden">계속하기 (무한 모드)</button>
           <button id="btn-again" class="big">다시 하기</button>
           <button id="btn-menu">메뉴로</button>

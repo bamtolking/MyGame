@@ -342,3 +342,55 @@ test('안정성: 전장 5종 × 2인이 목표 날짜까지 완주하면 승리 
     assert.ok(maxEnemies > 10, map + ' 적 수 ' + maxEnemies);
   }
 });
+
+test('새벽 특전: 아침마다 3장 제시, 선택하면 효과 적용, 협동은 시간 지나면 자동 선택', () => {
+  const g = mk(); const p = g.addPlayer('나');
+  g.phase = 'night'; g.cycleT = g.nightTicks - 1; g.tick();
+  assert.equal(p.perkOffer.length, 3);
+  assert.equal(g.choosePerk(p.id, 'zzz').ok, false);
+  const pick = p.perkOffer.includes('max_hp') ? 'max_hp' : p.perkOffer[0];
+  const hp0 = p.maxHp;
+  assert.equal(g.choosePerk(p.id, pick).ok, true);
+  assert.equal(p.perkOffer.length, 0); assert.equal(p.perks[pick], 1);
+  if (pick === 'max_hp') assert.equal(p.maxHp, hp0 + 25);
+  // 자동 선택
+  g.phase = 'night'; g.cycleT = g.nightTicks - 1; g.tick();
+  assert.equal(p.perkOffer.length, 3);
+  run(g, C.PERK_OFFER_TICKS + 1);
+  assert.equal(p.perkOffer.length, 0); assert.equal(Object.values(p.perks).reduce((a, b) => a + b, 0), 2);
+});
+
+test('특전 효과: 채집 +1·두 배, 건설 할인, 공격력', () => {
+  const g = mk(); const p = g.addPlayer('나'); place(g, p, 20, 20);
+  p.perks = { gather_plus: 2, gather_fast: 1, build_discount: 2, damage: 1 };
+  g.setTile(g.idx(21, 20), T.TREE); p.dx = 1; p.dy = 0;
+  const w0 = p.inv.wood;
+  g.setInput(p.id, { mx: 0, my: 0, action: true }); run(g, C.PLAYER.actionCooldown * 2 + 2); g.setInput(p.id, { mx: 0, my: 0, action: false });
+  assert.equal(p.inv.wood, w0 + 6, '4 + 2, 두 번 만에');
+  assert.deepEqual(C.costFor('SURVIVOR', C.BUILDINGS.IRON_WALL.cost, p.perks), { iron: 2, stone: 1 });
+  g.phase = 'night'; const z = g.spawnEnemy('ZOMBIE', 21.5, 20.5); const hp0 = z.hp;
+  p.actionCd = 0; g.setInput(p.id, { mx: 0, my: 0, action: true }); g.tick();
+  assert.ok(Math.abs((hp0 - z.hp) - 12 * 1.3) < 0.01);
+});
+
+test('영구 강화(meta): 체력·시작 자원·두 번째 기회, 서버 범위 제한', () => {
+  const g = mk(); const p = g.addPlayer('나', 'SURVIVOR', { hp: 30, start: 2, iron: 4, secondChance: 1, luck: 9, speed: 5 });
+  assert.equal(p.maxHp, 130); assert.equal(p.inv.wood, 16); assert.equal(p.inv.iron, 4);
+  assert.ok(p.meta.luck <= 0.5 && p.meta.speed <= 0.15, '범위 제한');
+  p.hp = 0; g.tick();
+  assert.equal(p.alive, false); assert.ok(p.reviveT > 0); assert.equal(g.over, false, '부활 대기 중엔 게임 오버 아님');
+  run(g, C.SECOND_CHANCE_TICKS + 1);
+  assert.equal(p.alive, true); assert.equal(Math.round(p.hp), 65);
+  p.hp = 0; run(g, 3);
+  assert.equal(g.over, true, '두 번째 기회는 한 번뿐');
+});
+
+test('괴수 처치 전리품과 통계', () => {
+  const g = mk(); const p = g.addPlayer('나'); place(g, p, 20, 20, 10);
+  g.phase = 'night'; const b = g.spawnEnemy('BOSS', 24.5, 20.5);
+  const iron0 = p.inv.iron;
+  g.damageEnemy(b, 99999, p);
+  assert.equal(p.inv.iron, iron0 + C.BOSS_LOOT.iron); assert.equal(p.stats.bossKills, 1); assert.equal(p.kills, 1);
+  const d = g.delta(); assert.ok(d.events.some((e) => e.type === 'bossloot'));
+  assert.ok(d.nextWave === null || d.nextWave.count > 0);
+});

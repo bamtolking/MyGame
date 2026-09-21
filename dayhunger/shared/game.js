@@ -246,19 +246,24 @@ export class Game {
   }
 
   // ---------- 플레이어 ----------
-  addPlayer(name = '생존자', cls = C.DEFAULT_CLASS) {
+  addPlayer(name = '생존자', cls = C.DEFAULT_CLASS, meta = null) {
     const id = this.nextId++;
     if (!C.CLASSES[cls]) cls = C.DEFAULT_CLASS;
     const cd = C.CLASSES[cls];
+    const m = C.clampMeta(meta);
     const color = C.PLAYER_COLORS[(this.players.size) % C.PLAYER_COLORS.length];
     const spot = this.findSpawnSpot();
+    const inv = { ...C.PLAYER.startInv };
+    inv.wood += 3 * m.start; inv.stone += 2 * m.start; inv.food += m.start; inv.iron += m.iron;
     const p = {
-      id, name: String(name).slice(0, 10) || '생존자', color, cls,
+      id, name: String(name).slice(0, 10) || '생존자', color, cls, meta: m,
       x: spot.x, y: spot.y, dx: 0, dy: 1,
-      hp: cd.hp, maxHp: cd.hp, hunger: C.PLAYER.maxHunger, alive: true,
-      inv: { ...C.PLAYER.startInv }, kills: 0,
+      hp: cd.hp + m.hp, maxHp: cd.hp + m.hp, hunger: C.PLAYER.maxHunger, alive: true,
+      inv, kills: 0,
       input: { mx: 0, my: 0, action: false },
       actionCd: 0, hungerT: 0, say: '', sayT: 0, swing: 0, swingKind: '', deaths: 0, target: -1, moving: false,
+      perks: {}, perkOffer: [], perkT: 0, secondChance: m.secondChance, reviveT: 0,
+      stats: { gathered: { wood: 0, stone: 0, iron: 0, food: 0 }, fish: 0, herbs: 0, built: 0, repairs: 0, bossKills: 0, eliteKills: 0, recovers: 0, perks: 0, foodEaten: 0, damageTaken: 0 },
     };
     this.players.set(id, p);
     this.events.push({ type: 'join', name: p.name, cls });
@@ -294,6 +299,26 @@ export class Game {
     p.input.mx = mx; p.input.my = my; p.input.action = !!input.action;
   }
   classOf(p) { return C.CLASSES[p.cls] || C.CLASSES[C.DEFAULT_CLASS]; }
+  perkLv(p, key) { return (p.perks && p.perks[key]) || 0; }
+
+  // ---------- 새벽 특전 ----------
+  offerPerks(p) {
+    const pool = Object.keys(C.PERKS).filter((k) => this.perkLv(p, k) < C.PERKS[k].max);
+    const offer = [];
+    while (offer.length < 3 && pool.length) offer.push(pool.splice(Math.floor(this.rng() * pool.length), 1)[0]);
+    p.perkOffer = offer; p.perkT = C.PERK_OFFER_TICKS;
+  }
+  choosePerk(id, key) {
+    const p = this.players.get(id);
+    if (!p || !p.perkOffer.length) return { ok: false, reason: '선택할 특전이 없어요' };
+    if (!p.perkOffer.includes(key)) return { ok: false, reason: '제시된 특전이 아니에요' };
+    p.perks[key] = this.perkLv(p, key) + 1;
+    p.perkOffer = []; p.perkT = 0; p.stats.perks++;
+    if (key === 'max_hp') { p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25); }
+    this.events.push({ type: 'perk', name: p.name, key, level: p.perks[key] });
+    this.fx.push({ x: p.x, y: p.y, k: 'perk' });
+    return { ok: true };
+  }
 
   // ---------- 플레이어 행동 ----------
   canReach(p, tx, ty) {
@@ -320,10 +345,11 @@ export class Game {
     const i = this.idx(tx, ty);
     if (!BUILDABLE_BASE.has(this.tiles[i])) return { ok: false, reason: '여기엔 지을 수 없어요' };
     if (this.tileOccupied(tx, ty)) return { ok: false, reason: '누군가 서 있어요' };
-    const cost = C.costFor(p.cls, b.cost);
+    const cost = C.costFor(p.cls, b.cost, p.perks);
     if (!this.hasCost(p, cost)) return { ok: false, reason: '자원이 부족해요' };
     this.payCost(p, cost);
     this.setTile(i, b.tile);
+    p.stats.built++;
     this.events.push({ type: 'build', key, x: tx, y: ty, by: p.name });
     this.fx.push({ x: tx + 0.5, y: ty + 0.5, k: 'build' });
     return { ok: true };
@@ -339,7 +365,8 @@ export class Game {
     if (this.tileHp[i] >= max) return { ok: false, reason: '이미 멀쩡해요' };
     if (!this.hasCost(p, C.REPAIR_COST)) return { ok: false, reason: '나무가 부족해요' };
     this.payCost(p, C.REPAIR_COST);
-    this.tileHp[i] = Math.min(max, this.tileHp[i] + C.REPAIR_AMOUNT + (this.classOf(p).repairBonus || 0));
+    this.tileHp[i] = Math.min(max, this.tileHp[i] + C.REPAIR_AMOUNT + (this.classOf(p).repairBonus || 0) + 25 * this.perkLv(p, 'repair'));
+    p.stats.repairs++;
     this.markDirty(i); this.flowAge = 999;
     this.fx.push({ x: tx + 0.5, y: ty + 0.5, k: 'repair' });
     return { ok: true };
@@ -363,8 +390,9 @@ export class Game {
     if (p.hunger >= C.PLAYER.maxHunger) return { ok: false, reason: '배가 불러요' };
     p.inv.food--;
     const near = this.nearWarm(p.x, p.y, true);
-    const val = (near ? C.PLAYER.campfireFoodValue : C.PLAYER.foodValue) * (this.classOf(p).foodMul || 1);
+    const val = (near ? C.PLAYER.campfireFoodValue : C.PLAYER.foodValue) * (this.classOf(p).foodMul || 1) * (1 + 0.5 * this.perkLv(p, 'food_value'));
     p.hunger = Math.min(C.PLAYER.maxHunger, p.hunger + val);
+    p.stats.foodEaten++;
     this.fx.push({ x: p.x, y: p.y, k: 'eat' });
     return { ok: true };
   }
@@ -413,6 +441,11 @@ export class Game {
     }
   }
   groundMul(x, y) { return this.tileAt(Math.floor(x), Math.floor(y)) === T.MUD ? C.MUD_SPEED : 1; }
+  playerSpeed(p) {
+    const cd = this.classOf(p);
+    const ground = this.perkLv(p, 'mud_walk') ? 1 : this.groundMul(p.x, p.y);
+    return cd.speed * ground * (1 + p.meta.speed) * (1 + 0.12 * this.perkLv(p, 'speed'));
+  }
 
   // ---------- 틱 ----------
   tick() {
@@ -466,10 +499,11 @@ export class Game {
     const bonus = C.DAWN_BONUS(this.day, this.diff.bonusMul);
     for (const p of this.players.values()) {
       if (!p.alive) {
-        p.alive = true; p.hp = Math.min(p.maxHp, C.PLAYER.respawnHp); p.hunger = Math.max(p.hunger, 50);
+        p.alive = true; p.reviveT = 0; p.hp = this.perkLv(p, 'full_respawn') ? p.maxHp : Math.min(p.maxHp, C.PLAYER.respawnHp); p.hunger = Math.max(p.hunger, 50);
         const s = this.findSpawnSpot(); p.x = s.x; p.y = s.y;
       }
-      for (const [k, v] of Object.entries(bonus)) this.give(p, k, v);
+      for (const [k, v] of Object.entries(bonus)) this.give(p, k, Math.round(v * (1 + p.meta.supply)));
+      this.offerPerks(p);
     }
     this.score += 100;
     this.events.push({ type: 'dawn', day: this.day, bonus });
@@ -478,30 +512,39 @@ export class Game {
 
   hurtPlayer(p, dmg, kind = 'hurt') {
     if (!p.alive) return;
-    const armor = this.classOf(p).armor || 0;
-    p.hp -= dmg * (1 - armor);
+    const armor = Math.min(0.6, (this.classOf(p).armor || 0) + 0.1 * this.perkLv(p, 'thick_skin'));
+    const real = dmg * (1 - armor);
+    p.hp -= real; p.stats.damageTaken += real;
     this.fx.push({ x: p.x, y: p.y, k: kind });
     if (p.hp <= 0) this.killPlayer(p);
   }
   tickPlayer(p) {
     if (p.sayT > 0 && --p.sayT === 0) p.say = '';
     if (p.swing > 0) p.swing--;
-    if (!p.alive) return;
+    if (p.perkOffer.length && --p.perkT <= 0) this.choosePerk(p.id, p.perkOffer[0]); // 협동: 시간 지나면 자동 선택
+    if (!p.alive) {
+      if (p.reviveT > 0 && --p.reviveT === 0) {
+        p.alive = true; p.hp = Math.max(1, Math.round(p.maxHp * 0.5)); p.hunger = Math.max(p.hunger, 40);
+        const s = this.findSpawnSpot(); p.x = s.x; p.y = s.y;
+        this.fx.push({ x: p.x, y: p.y, k: 'revive' }); this.events.push({ type: 'revive', name: p.name });
+      }
+      return;
+    }
     if (p.hp <= 0) { this.killPlayer(p); return; }
     const cd = this.classOf(p);
     // 배고픔 (추운 전장은 모닥불·횃불 근처가 아니면 빨리 고픔)
-    let mul = (this.phase === 'night' ? C.PLAYER.nightHungerMul : 1) * (cd.hungerMul || 1);
+    let mul = (this.phase === 'night' ? C.PLAYER.nightHungerMul : 1) * (cd.hungerMul || 1) * (1 - p.meta.hunger) * (1 - 0.25 * this.perkLv(p, 'hunger'));
     if (this.mapDef.hungerMul !== 1 && !this.nearWarm(p.x, p.y)) mul *= this.mapDef.hungerMul;
     p.hungerT += mul;
     if (p.hungerT >= C.PLAYER.hungerDrainTicks) { p.hungerT -= C.PLAYER.hungerDrainTicks; p.hunger = Math.max(0, p.hunger - 1); }
     if (p.hunger <= 0) p.hp -= C.PLAYER.starveDamagePerSec / C.TICK_RATE;
     else if (p.hunger > 60 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + 0.5 / C.TICK_RATE);
-    if (p.hp < p.maxHp && this.nearWarm(p.x, p.y, true)) p.hp = Math.min(p.maxHp, p.hp + C.PLAYER.campfireRegenPerSec / C.TICK_RATE);
+    if (p.hp < p.maxHp && this.nearWarm(p.x, p.y, true)) p.hp = Math.min(p.maxHp, p.hp + (C.PLAYER.campfireRegenPerSec * (this.perkLv(p, 'campfire') ? 2 : 1)) / C.TICK_RATE);
     // 이동
     const { mx, my } = p.input;
     p.moving = mx !== 0 || my !== 0;
     if (p.moving) {
-      const sp = (cd.speed * this.groundMul(p.x, p.y)) / C.TICK_RATE;
+      const sp = this.playerSpeed(p) / C.TICK_RATE;
       this.moveEntity(p, C.PLAYER.radius, mx * sp, my * sp, solidForPlayer);
       const len = Math.hypot(mx, my); p.dx = mx / len; p.dy = my / len;
     }
@@ -515,16 +558,18 @@ export class Game {
     p.alive = false; p.hp = 0; p.deaths++;
     p.input.mx = p.input.my = 0; p.input.action = false;
     this.fx.push({ x: p.x, y: p.y, k: 'death' });
-    this.events.push({ type: 'death', name: p.name });
+    if (p.secondChance > 0) { p.secondChance--; p.reviveT = C.SECOND_CHANCE_TICKS; this.events.push({ type: 'secondchance', name: p.name }); }
+    else this.events.push({ type: 'death', name: p.name });
   }
   face(p, x, y) { const dx = x - p.x, dy = y - p.y, l = Math.hypot(dx, dy) || 1; p.dx = dx / l; p.dy = dy / l; }
 
   doAction(p) {
     const cd = this.classOf(p);
     p.actionCd = C.PLAYER.actionCooldown;
+    const dmg = cd.damage * (1 + p.meta.damage) * (1 + 0.3 * this.perkLv(p, 'damage'));
     // 1) 적: 원거리 클래스는 사거리 안이면 쏘고, 아니면 근접
     let best = null, bestD = Infinity;
-    const range = cd.ranged ? cd.ranged.range : C.PLAYER.attackRange;
+    const range = (cd.ranged ? cd.ranged.range : C.PLAYER.attackRange) + (cd.ranged ? 1 : 0.5) * this.perkLv(p, 'range');
     for (const e of this.enemies) {
       const d = Math.hypot(e.x - p.x, e.y - p.y) - e.radius;
       if (d <= range && d < bestD) { best = e; bestD = d; }
@@ -534,8 +579,8 @@ export class Game {
       p.swing = 7; p.swingKind = cd.ranged ? 'shoot' : 'attack'; p.target = -1;
       if (cd.ranged) {
         const dx = best.x - p.x, dy = best.y - p.y, l = Math.hypot(dx, dy) || 1, sp = cd.ranged.speed / C.TICK_RATE;
-        this.projs.push({ id: this.nextId++, x: p.x, y: p.y, vx: (dx / l) * sp, vy: (dy / l) * sp, dmg: cd.damage, by: p.id, team: 'p', k: 'arrow', ttl: Math.ceil((cd.ranged.range + 1) / cd.ranged.speed * C.TICK_RATE) });
-      } else this.damageEnemy(best, cd.damage, p);
+        this.projs.push({ id: this.nextId++, x: p.x, y: p.y, vx: (dx / l) * sp, vy: (dy / l) * sp, dmg, by: p.id, team: 'p', k: 'arrow', ttl: Math.ceil((range + 1) / cd.ranged.speed * C.TICK_RATE) });
+      } else this.damageEnemy(best, dmg, p);
       return;
     }
     // 2) 자원 채집: 주변 9칸 중 바라보는 방향 우선
@@ -565,14 +610,16 @@ export class Game {
     const c = this.tileCenter(i);
     p.swing = 7; p.swingKind = r.kind;
     this.fx.push({ x: c.x, y: c.y, k: 'hit', res: r.kind, tile: i });
-    const power = (cd.gather && cd.gather[r.kind]) || 1;
+    const power = ((cd.gather && cd.gather[r.kind]) || 1) + this.perkLv(p, 'gather_fast');
     if (this.tileHp[i] > power) { this.tileHp[i] -= power; this.markDirty(i); return; }
     for (const [k, v] of Object.entries(r.gives)) {
-      const n = v + ((cd.bonus && cd.bonus[k]) || 0);
+      const n = v + ((cd.bonus && cd.bonus[k]) || 0) + this.perkLv(p, 'gather_plus') + (this.rng() < p.meta.luck ? 1 : 0);
       this.give(p, k, n);
+      p.stats.gathered[k] = (p.stats.gathered[k] || 0) + n;
       this.fx.push({ x: c.x, y: c.y, k: 'gain', res: k, n });
     }
-    if (r.heal) { p.hp = Math.min(p.maxHp, p.hp + r.heal); this.fx.push({ x: p.x, y: p.y, k: 'heal', n: r.heal }); }
+    if (r.kind === 'fish') p.stats.fish++;
+    if (r.heal) { p.hp = Math.min(p.maxHp, p.hp + r.heal); p.stats.herbs++; this.fx.push({ x: p.x, y: p.y, k: 'heal', n: r.heal }); }
     this.setTile(i, r.leaves);
     this.fx.push({ x: c.x, y: c.y, k: 'deplete', res: r.kind });
   }
@@ -585,8 +632,17 @@ export class Game {
     if (e.hp <= 0) {
       const def = C.ENEMIES[e.kind];
       this.kills++; this.score += def.score * (e.elite ? 3 : 1);
-      if (by) by.kills++;
-      if (e.loot && by) { this.give(by, e.loot.k, e.loot.n); this.events.push({ type: 'recover', name: by.name, res: e.loot.k, n: e.loot.n }); }
+      if (by) {
+        by.kills++;
+        if (e.elite) by.stats.eliteKills++;
+        if (this.perkLv(by, 'kill_food') && this.rng() < 0.25 * this.perkLv(by, 'kill_food')) { this.give(by, 'food', 1); this.fx.push({ x: e.x, y: e.y, k: 'gain', res: 'food', n: 1 }); }
+      }
+      if (e.kind === 'BOSS') {
+        if (by) by.stats.bossKills++;
+        for (const q of this.players.values()) if (q.alive) for (const [k, v] of Object.entries(C.BOSS_LOOT)) this.give(q, k, v);
+        this.events.push({ type: 'bossloot', loot: C.BOSS_LOOT });
+      }
+      if (e.loot && by) { this.give(by, e.loot.k, e.loot.n); by.stats.recovers++; this.events.push({ type: 'recover', name: by.name, res: e.loot.k, n: e.loot.n }); }
       this.events.push({ type: 'kill', kind: e.kind, by: by ? by.name : null, elite: !!e.elite });
       this.fx.push({ x: e.x, y: e.y, k: 'die', big: e.kind === 'BOSS' || e.kind === 'BRUTE' });
     }
@@ -861,7 +917,7 @@ export class Game {
   checkEnd() {
     if (this.over || this.players.size === 0) return;
     let alive = 0;
-    for (const p of this.players.values()) if (p.alive) alive++;
+    for (const p of this.players.values()) if (p.alive || p.reviveT > 0) alive++;
     if (alive === 0) { this.over = true; this.won = false; this.events.push({ type: 'gameover' }); }
   }
 
@@ -871,10 +927,21 @@ export class Game {
       id: p.id, name: p.name, color: p.color, cls: p.cls, x: round2(p.x), y: round2(p.y), dx: round2(p.dx), dy: round2(p.dy),
       hp: Math.round(p.hp), maxHp: p.maxHp, hunger: Math.round(p.hunger), alive: p.alive, inv: { ...p.inv }, kills: p.kills,
       say: p.say, swing: p.swing, swingKind: p.swingKind, target: p.target, moving: p.moving,
+      perks: p.perks, perkOffer: p.perkOffer, perkT: p.perkT, secondChance: p.secondChance, reviveT: p.reviveT, stats: p.stats, deaths: p.deaths,
     };
+  }
+  // 다음 밤 예고 (예상 마릿수·종류·보스). 하루에 한 번 계산
+  nextWavePreview() {
+    if (this._preview && this._preview.day === this.day) return this._preview;
+    const alive = [...this.players.values()].filter((p) => p.alive).length || 1;
+    const count = Math.max(1, Math.round(C.WAVE_COUNT(this.day, alive) * this.diff.waveMul));
+    const kinds = this.wavePool().sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    this._preview = { day: this.day, count, kinds, boss: this.bossNights.has(this.day) };
+    return this._preview;
   }
   dynamicState() {
     return {
+      nextWave: this.phase === 'day' ? this.nextWavePreview() : null,
       t: this.t, day: this.day, phase: this.phase, cycleT: this.cycleT, over: this.over, won: this.won, endless: this.endless,
       map: this.mapKey, difficulty: this.diffKey, winDay: this.winDay, dayTicks: this.dayTicks, nightTicks: this.nightTicks,
       score: this.score, kills: this.kills, pending: this.spawnQueue.length,

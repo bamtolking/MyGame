@@ -58,16 +58,34 @@ try {
   const p1 = await newPage();
   await p1.fill('#name', '테스터');
   await shot(p1, '01-menu');
+  // 프로필·강화·설정 화면
+  await p1.click('#btn-profile'); await p1.waitForSelector('#screen-profile:not(.hidden)');
+  await p1.click('#ptab-ach'); await shot(p1, '01b-profile-ach');
+  assert((await p1.$$('#profile-achievements .ach')).length >= 20, '업적 목록 표시');
+  await p1.click('#profile-back');
+  await p1.click('#btn-upgrade'); await p1.waitForSelector('#screen-upgrade:not(.hidden)');
+  assert((await p1.$$('#upgrade-list .upg')).length === Object.keys(await p1.evaluate(() => window.__dh.C.UPGRADES)).length, '강화 목록 표시');
+  await p1.evaluate(() => { const pr = window.__dh.profile; pr.data.points = 20; pr.save(); }); await p1.click('#upgrade-back'); await p1.click('#btn-upgrade');
+  await p1.click('#upgrade-list .upg:first-child button');
+  const upg = await p1.evaluate(() => ({ hp: window.__dh.profile.upgradeLevel('hp'), pts: window.__dh.profile.points }));
+  assert(upg.hp === 1 && upg.pts === 17, '강화 구매: ' + JSON.stringify(upg));
+  await shot(p1, '01c-upgrade');
+  await p1.click('#upgrade-back');
+  await p1.click('#btn-settings'); await p1.waitForSelector('#settings-modal:not(.hidden)'); await p1.click('#btn-settings-close');
   await p1.click('#btn-solo');
   await p1.waitForSelector('#screen-setup:not(.hidden)');
-  await p1.click('#setup-map .card[data-key="SWAMP"]');
+  assert(await p1.$eval('#setup-map .card[data-key="SWAMP"]', (b) => b.disabled && b.classList.contains('locked')), '늪지는 처음엔 잠김');
+  assert(await p1.$eval('#setup-class .card[data-key="KNIGHT"]', (b) => b.disabled), '기사는 처음엔 잠김');
+  await p1.click('#setup-map .card[data-key="MEADOW"]');
   await p1.click('#setup-diff .card[data-key="EASY"]');
   await p1.click('#setup-class .card[data-key="LUMBERJACK"]');
   await shot(p1, '00-setup');
   await p1.click('#setup-start');
   await p1.waitForFunction(() => window.__dh && window.__dh.view.ready);
-  const cfg = await p1.evaluate(() => ({ map: window.__dh.view.map, diff: window.__dh.view.difficulty, cls: window.__dh.view.me(window.__dh.S.myId).cls, w: window.__dh.view.w }));
-  assert(cfg.map === 'SWAMP' && cfg.diff === 'EASY' && cfg.cls === 'LUMBERJACK' && cfg.w === 96, `설정 반영: ${JSON.stringify(cfg)}`);
+  const cfg = await p1.evaluate(() => ({ map: window.__dh.view.map, diff: window.__dh.view.difficulty, cls: window.__dh.view.me(window.__dh.S.myId).cls, w: window.__dh.view.w, hp: window.__dh.view.me(window.__dh.S.myId).maxHp }));
+  assert(cfg.map === 'MEADOW' && cfg.diff === 'EASY' && cfg.cls === 'LUMBERJACK' && cfg.w === 96 && cfg.hp === 120, `설정·강화 반영: ${JSON.stringify(cfg)}`);
+  assert(await p1.isVisible('#tip'), '첫 판 도움말 표시');
+  await p1.click('#tip-next');
   await p1.waitForTimeout(500);
   await shot(p1, '02-solo-day');
   const me0 = await p1.evaluate(() => window.__dh.view.me(window.__dh.S.myId));
@@ -126,6 +144,20 @@ try {
   const night = await p1.evaluate(() => ({ phase: window.__dh.view.phase, enemies: window.__dh.view.enemies.length }));
   assert(night.phase === 'night' && night.enemies > 0, `밤 + 적 출현 (${night.enemies}마리)`);
   await shot(p1, '04-solo-night');
+  // 아침 → 특전 모달 (솔로는 게임이 멈춤)
+  await p1.evaluate(() => { const g = window.__dh.S.session.game; const me = g.players.get(window.__dh.S.myId); for (let i = 0; i < g.nightTicks; i++) { me.hp = me.maxHp; me.hunger = 100; g.tick(); } window.__dh.view.applyDelta(g.delta()); });
+  await p1.waitForSelector('#perkmodal:not(.hidden)');
+  assert((await p1.$$('#perk-cards .card')).length === 3, '새벽 특전 3장 제시');
+  assert(await p1.evaluate(() => window.__dh.S.session.paused === true), '특전 고르는 동안 일시정지');
+  await shot(p1, '04b-perk');
+  await p1.click('#perk-cards .card:first-child');
+  await p1.waitForSelector('#perkmodal', { state: 'hidden' });
+  const perks = await p1.evaluate(() => Object.keys(window.__dh.view.me(window.__dh.S.myId).perks).length);
+  assert(perks === 1 && await p1.evaluate(() => window.__dh.S.session.paused === false), '특전 선택 후 재개');
+  // 일시정지
+  await p1.click('#btn-pause'); await p1.waitForSelector('#pausemodal:not(.hidden)');
+  assert(await p1.evaluate(() => window.__dh.S.session.paused), '일시정지');
+  await p1.click('#btn-resume'); await p1.waitForSelector('#pausemodal', { state: 'hidden' });
   // 먹기 / 채팅
   await p1.click('#btn-eat'); await p1.click('#btn-chat'); await p1.click('#chatlist button');
   await p1.waitForTimeout(200);
@@ -135,8 +167,10 @@ try {
   // 게임 오버 → 오버레이
   await p1.evaluate(() => { const g = window.__dh.S.session.game; for (const p of g.players.values()) p.hp = 0; g.tick(); window.__dh.view.applyDelta(g.delta()); });
   await p1.waitForSelector('#overlay:not(.hidden)');
+  await p1.waitForTimeout(1200);
   await shot(p1, '06-solo-gameover');
-  assert(true, '게임 오버 오버레이 표시');
+  const rec = await p1.evaluate(() => ({ runs: window.__dh.profile.data.stats.runs, xp: window.__dh.profile.data.xp + (window.__dh.profile.level - 1) * 1000, text: document.getElementById('sum-points').textContent, ach: Object.keys(window.__dh.profile.data.achievements) }));
+  assert(rec.runs === 1 && rec.text.includes('생존 포인트') && rec.ach.includes('first_night'), '결과 기록: ' + JSON.stringify(rec));
   await p1.click('#btn-again');
   await p1.waitForFunction(() => !window.__dh.view.over);
   assert(true, '다시 하기로 새 게임 시작');
@@ -145,6 +179,7 @@ try {
   console.log('2) 협동 (방 만들기 → 참가 → 시작)');
   const host = await newPage();
   await host.fill('#name', '방장');
+  await host.evaluate(() => { const pr = window.__dh.profile; pr.data.stats.bestDay = 5; pr.save(); }); // 설원 해금 조건
   await host.click('#btn-create');
   await host.waitForSelector('#screen-lobby:not(.hidden)');
   const code = await host.textContent('#lobby-code');
@@ -152,6 +187,7 @@ try {
   await shot(host, '07-lobby-host');
   const guest = await newPage({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   await guest.fill('#name', '친구');
+  await guest.evaluate(() => { const pr = window.__dh.profile; pr.data.stats.kills = 300; pr.save(); }); // 기사 해금 조건
   await guest.fill('#code', code.toLowerCase());
   await guest.click('#btn-join');
   await guest.waitForSelector('#screen-lobby:not(.hidden)');
@@ -164,6 +200,7 @@ try {
   await bad.waitForFunction(() => document.getElementById('menu-msg').textContent.includes('없어요'));
   assert(true, '없는 코드는 오류 메시지');
   await bad.context().close();
+  assert(await host.$eval('#lobby-map .card[data-key="VOLCANO"]', (b) => b.disabled && b.classList.contains('locked')), '방장에게 잠긴 전장은 대기실에서도 잠김');
   await host.click('#lobby-map .card[data-key="SNOW"]');
   await guest.waitForFunction(() => document.querySelector('#lobby-map .card.selected')?.dataset.key === 'SNOW');
   assert(true, '방장의 전장 선택이 참가자에게 동기화됨');
