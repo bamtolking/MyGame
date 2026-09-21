@@ -78,11 +78,12 @@ export function buildWelfare(s: GameState): void {
   dispatch(s, { type: 'hire', staff: 'doctor' });
 }
 export interface BotResult { day: number; prisoners: number; money: number; escapes: number; deaths: number; fights: number; riots: number; chapter: number; mood: number; rep: number; phase: string }
-export function runBot(seed: number, days: number, opts: { cells?: boolean; welfare?: boolean; guards?: number } = {}): { s: GameState; r: BotResult; trace: string[] } {
-  const s = newGame(seed, 'empty'); buildPlan(s); const trace: string[] = [];
+export function runBot(seed: number, days: number, opts: { cells?: boolean; welfare?: boolean; guards?: number; search?: 0 | 1 | 2 } = {}): { s: GameState; r: BotResult; trace: string[] } {
+  const s = newGame(seed, 'empty'); buildPlan(s); const trace: string[] = []; if (opts.search) dispatch(s, { type: 'policy', key: 'search', value: opts.search });
   let cellsDone = false, welfareDone = false; pendingDoors.length = 0;
   for (let hr = 0; hr < days * 24; hr++) {
     run(s, HOUR_SECONDS);
+    if (s.pendingEvent) dispatch(s, { type: 'eventChoice', idx: 0 });
     if (hr === 6) { if (opts.cells !== false) { buildCells(s); cellsDone = true; } }
     if (hr === 30 && opts.cells !== false) { buildCells2(s); pendingDoors.push({ x: 31, y: 22 }); }
     if (hr >= 40) processDoors(s);

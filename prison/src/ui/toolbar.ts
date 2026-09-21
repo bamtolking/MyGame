@@ -3,13 +3,14 @@ import { STRUCTS, type StructType } from '../data/structures';
 import { OBJECTS, type ObjType } from '../data/objects';
 import { ROOMS } from '../data/rooms';
 import { STAFF, type StaffType } from '../data/staff';
+import { STAMPS } from '../data/stamps';
 
-export type CatId = 'select' | 'build' | 'zone' | 'object' | 'staff' | 'manage';
-export type ToolKind = 'select' | 'struct' | 'zone' | 'object' | 'demolish' | 'action';
-export interface Tool { id: string; cat: CatId; name: string; icon: string; cost?: number; desc: string; kind: ToolKind; struct?: StructType; zone?: number; obj?: ObjType; staff?: StaffType; action?: string; color: string }
+export type CatId = 'select' | 'preset' | 'build' | 'zone' | 'object' | 'staff' | 'manage';
+export type ToolKind = 'select' | 'struct' | 'zone' | 'object' | 'demolish' | 'action' | 'stamp';
+export interface Tool { id: string; cat: CatId; name: string; icon: string; cost?: number; desc: string; kind: ToolKind; struct?: StructType; zone?: number; obj?: ObjType; staff?: StaffType; action?: string; stamp?: string; color: string }
 
 export const CATS: { id: CatId; name: string; icon: string }[] = [
-  { id: 'select', name: '선택', icon: '👆' }, { id: 'build', name: '건설', icon: '🧱' }, { id: 'zone', name: '구역', icon: '🟦' },
+  { id: 'select', name: '선택', icon: '👆' }, { id: 'preset', name: '프리셋', icon: '🏗' }, { id: 'build', name: '건설', icon: '🧱' }, { id: 'zone', name: '구역', icon: '🟦' },
   { id: 'object', name: '물건', icon: '🛏' }, { id: 'staff', name: '직원', icon: '👮' }, { id: 'manage', name: '관리', icon: '📋' },
 ];
 const STRUCT_ICON: Record<StructType, string> = { wall: '🧱', fence: '🪵', door: '🚪', jaildoor: '🔐' };
@@ -21,6 +22,7 @@ export const TOOLS: Tool[] = [
   { id: 'security', cat: 'select', name: '보안 보기', icon: '🔒', desc: '외부와 이어진 취약 구역(빨강)을 표시합니다. 탈주는 여기서 시작됩니다.', kind: 'action', action: 'security', color: 'rgb(255,255,255)' },
   { id: 'fit', cat: 'select', name: '전체 보기', icon: '🗺', desc: '지도 전체가 보이도록 화면을 맞춥니다.', kind: 'action', action: 'fit', color: 'rgb(255,255,255)' },
   { id: 'grid', cat: 'select', name: '격자', icon: '▦', desc: '칸 격자를 표시합니다.', kind: 'action', action: 'grid', color: 'rgb(255,255,255)' },
+  ...STAMPS.map<Tool>(st => ({ id: 'stamp:' + st.id, cat: 'preset', name: st.name, icon: st.icon, cost: st.cost, desc: `${st.w}×${st.h} · ${st.desc} 손가락을 끌어 위치를 잡고 놓으세요.`, kind: 'stamp', stamp: st.id, color: 'rgb(255,213,79)' })),
   ...STRUCTS.map<Tool>(sd => ({ id: 'struct:' + sd.id, cat: 'build', name: sd.name, icon: STRUCT_ICON[sd.id], cost: sd.cost, desc: sd.desc, kind: 'struct', struct: sd.id, color: sd.id === 'fence' ? 'rgb(195,154,98)' : sd.id === 'wall' ? 'rgb(200,205,210)' : 'rgb(255,200,120)' })),
   { id: 'demolish', cat: 'build', name: '철거', icon: '🚧', desc: '드래그한 범위의 벽·문·물건을 철거 예약합니다(50% 환불). 예정된 작업은 취소(전액 환불).', kind: 'demolish', color: 'rgb(229,72,77)' },
   ...ROOMS.filter(r => r.id !== 'none').map<Tool>((r, i) => ({ id: 'zone:' + r.id, cat: 'zone', name: r.name, icon: ZONE_ICON[r.id], desc: r.desc, kind: 'zone', zone: ROOMS.indexOf(r), color: hexToRgb(r.color) })),
@@ -33,9 +35,12 @@ export const TOOLS: Tool[] = [
   { id: 'regime', cat: 'manage', name: '일과표', icon: '🕗', desc: '24시간 일과(수면·식사·노동·운동·자유·샤워·감금)를 편집합니다.', kind: 'action', action: 'sheet:regime', color: 'rgb(255,255,255)' },
   { id: 'objectives', cat: 'manage', name: '목표', icon: '🎯', desc: '현재 장의 목표와 보상', kind: 'action', action: 'sheet:objectives', color: 'rgb(255,255,255)' },
   { id: 'report', cat: 'manage', name: '보고서', icon: '📊', desc: '재정·사건·위험 요약', kind: 'action', action: 'sheet:report', color: 'rgb(255,255,255)' },
+  { id: 'policy', cat: 'manage', name: '정책', icon: '⚖', desc: '식사 품질·징벌 시간·감방 수색 정책', kind: 'action', action: 'sheet:policy', color: 'rgb(255,255,255)' },
+  { id: 'search', cat: 'manage', name: '감방 수색', icon: '🔦', desc: '교도관이 모든 감방을 수색해 터널을 찾습니다. 6시간마다 가능. 수감자 자유 욕구 +5.', kind: 'action', action: 'search', color: 'rgb(255,255,255)' },
+  { id: 'skip', cat: 'manage', name: '아침까지', icon: '⏩', desc: '다음 08:00까지 빨리 감기. 사건이 나면 자동으로 멈춥니다.', kind: 'action', action: 'skip', color: 'rgb(255,255,255)' },
   { id: 'lockdown', cat: 'manage', name: '비상 봉쇄', icon: '⛔', desc: '모든 수감자를 감방으로 돌려보내고 문을 잠급니다. 폭동 확산 방지. 자유 욕구 상승.', kind: 'action', action: 'lockdown', color: 'rgb(255,255,255)' },
   { id: 'log', cat: 'manage', name: '기록', icon: '📜', desc: '최근 사건 기록', kind: 'action', action: 'sheet:log', color: 'rgb(255,255,255)' },
 ];
 export const TOOL_BY_ID: Record<string, Tool> = Object.fromEntries(TOOLS.map(t => [t.id, t]));
-export const isDrawKind = (k: ToolKind): boolean => k === 'struct' || k === 'zone' || k === 'object' || k === 'demolish';
+export const isDrawKind = (k: ToolKind): boolean => k === 'struct' || k === 'zone' || k === 'object' || k === 'demolish' || k === 'stamp';
 function hexToRgb(hex: string): string { const n = parseInt(hex.slice(1), 16); return `rgb(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255})`; }

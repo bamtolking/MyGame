@@ -29,8 +29,10 @@ async function run(name, viewport) {
   const st0 = await page.evaluate(() => ({ mode: window.__app.state.mode, money: window.__app.state.money, staff: window.__app.state.staff.length, zoom: window.__app.renderer.cam.zoom }));
   log(`${name}: empty start mode=${st0.mode} money=${st0.money} staff=${st0.staff} zoom=${st0.zoom.toFixed(1)}`);
   await page.screenshot({ path: `e2e-out/${name}-02-empty.png` });
-  // select wall tool
-  await page.tap('#cats button:nth-child(2)'); await page.waitForTimeout(100);
+  const tut = await page.evaluate(() => { const el = document.getElementById('tutcard'); return el && !el.classList.contains('hidden') ? el.textContent.slice(0, 40) : null; });
+  log(`${name}: tutorial card="${tut}"`);
+  // select wall tool (categories: 1 select, 2 preset, 3 build, 4 zone, 5 object, 6 staff, 7 manage)
+  await page.tap('#cats button:nth-child(3)'); await page.waitForTimeout(100);
   await page.tap('#chips button:nth-child(1)'); await page.waitForTimeout(100);
   const toolName = await page.evaluate(() => window.__app.tool.id);
   log(`${name}: tool=${toolName}`);
@@ -57,11 +59,11 @@ async function run(name, viewport) {
   st1 = await page.evaluate(() => ({ jobs: window.__app.state.jobs.length, tool: window.__app.tool.id }));
   log(`${name}: after jail door tap jobs=${st1.jobs} tool=${st1.tool}`);
   // zone: 구역 category → 대기실 (2nd chip: cell is 1st, holding 2nd)
-  await page.tap('#cats button:nth-child(3)'); await page.waitForTimeout(100);
+  await page.tap('#cats button:nth-child(4)'); await page.waitForTimeout(100);
   await page.tap('#chips button:nth-child(2)'); await page.waitForTimeout(100);
   await drag(9, 20, 15, 24);
   // objects: toilet & benches
-  await page.tap('#cats button:nth-child(4)'); await page.waitForTimeout(100);
+  await page.tap('#cats button:nth-child(5)'); await page.waitForTimeout(100);
   await page.tap('#chips button:nth-child(2)'); await page.waitForTimeout(100); // 변기
   const tl = await tileToScreen(15, 20); await page.touchscreen.tap(tl.x, tl.y); await page.waitForTimeout(100);
   await page.tap('#chips button:nth-child(3)'); await page.waitForTimeout(100); // 벤치
@@ -70,7 +72,7 @@ async function run(name, viewport) {
   log(`${name}: planned jobs=${st2.jobs} objects=${st2.objs} rooms=${st2.rooms} money=${st2.money}`);
   await page.screenshot({ path: `e2e-out/${name}-04-planned.png` });
   // hire a guard via staff chips
-  await page.tap('#cats button:nth-child(5)'); await page.waitForTimeout(100);
+  await page.tap('#cats button:nth-child(6)'); await page.waitForTimeout(100);
   await page.tap('#chips button:nth-child(1)'); await page.waitForTimeout(100);
   // 4x speed and wait for construction
   await page.evaluate(() => window.__app.setSpeed(4));
@@ -94,12 +96,47 @@ async function run(name, viewport) {
     const closed = await page.evaluate(() => document.getElementById('sheet').classList.contains('hidden'));
     log(`${name}: sheet ${nm} open=${open} closed=${closed}`);
   }
+  // prefab stamp: cell block placed by dragging (preview follows the finger, release places)
+  await page.tap('#cats button:nth-child(2)'); await page.waitForTimeout(100);
+  await page.tap('#chips button:nth-child(1)'); await page.waitForTimeout(100);
+  const stTool = await page.evaluate(() => window.__app.tool.id);
+  await page.evaluate(() => { const r = window.__app.renderer; r.cam.zoom = 14; r.centerOn(28, 22); });
+  const jobsBefore = await page.evaluate(() => window.__app.state.jobs.length);
+  await drag(26, 20, 28, 22);
+  const stRes = await page.evaluate(() => ({ jobs: window.__app.state.jobs.length, tool: window.__app.tool.id, undo: !!window.__app.undo, cells: window.__app.state.cache.rooms.filter(r => r.zone === 1).length }));
+  log(`${name}: stamp tool=${stTool} jobs ${jobsBefore}→${stRes.jobs} tool_after=${stRes.tool} undo=${stRes.undo} cellRooms=${stRes.cells}`);
+  await page.screenshot({ path: `e2e-out/${name}-06b-stamp.png` });
+  // undo the stamp
+  if (stRes.undo) { await page.tap('#toolhint button.undo'); await page.waitForTimeout(150); const after = await page.evaluate(() => ({ jobs: window.__app.state.jobs.length, cells: window.__app.state.cache.rooms.filter(r => r.zone === 1).length })); log(`${name}: after undo jobs=${after.jobs} cellRooms=${after.cells}`); }
+  // policy sheet + search
+  await page.evaluate(() => window.__app.openSheet('policy')); await page.waitForTimeout(150);
+  await page.screenshot({ path: `e2e-out/${name}-06c-policy.png` });
+  await page.tap('#sheet .opt:nth-of-type(1) button:nth-child(3)').catch(() => {});
+  const pol = await page.evaluate(() => window.__app.state.policy.meal);
+  await page.tap('#sheet .close'); await page.waitForTimeout(100);
+  log(`${name}: policy meal=${pol}`);
+  // event modal: force a pending event and render
+  await page.evaluate(() => { const a = window.__app; a.state.pendingEvent = { id: 'inspection', day: 1 }; a.showModal(window.__app.eventModalFor('inspection')); });
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: `e2e-out/${name}-06d-event.png` });
+  await page.tap('#modal .event-choice:nth-child(1)'); await page.waitForTimeout(150);
+  const evDone = await page.evaluate(() => window.__app.state.pendingEvent === null && !window.__app.modalOpen);
+  log(`${name}: event answered=${evDone}`);
   // --- quick start: run a while and check for incidents/perf ---
   await page.evaluate(() => { window.__app.newRun(4242, 'quick'); });
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(3500); // chapter 1 completes immediately → modal
+  const hadModal = await page.evaluate(() => window.__app.modalOpen);
+  await page.evaluate(() => window.__app.closeModal());
+  await page.evaluate(() => window.__app.startFfwd()); await page.waitForTimeout(200);
+  const ff = await page.evaluate(() => window.__app.ffwd);
+  let ff2 = null; const dl = Date.now() + 30000;
+  while (Date.now() < dl) { ff2 = await page.evaluate(() => ({ ffwd: window.__app.ffwd, time: window.__app.state.time, hour: Math.floor(window.__app.state.time / 8) % 24, day: Math.floor(window.__app.state.time / 8 / 24) + 1, modal: window.__app.modalOpen, minimap: !!document.getElementById('minimap'), reason: window.__app.lastFfwdReason })); if (!ff2.ffwd) break; await page.waitForTimeout(300); }
+  log(`${name}: chapterModal=${hadModal} ffwd started=${ff} stopped at day=${ff2.day} hour=${ff2.hour} time=${ff2.time.toFixed(0)} reason="${ff2.reason}" modal=${ff2.modal} minimap=${ff2.minimap}`);
+  await page.screenshot({ path: `e2e-out/${name}-09b-morning.png` });
+  await page.evaluate(() => window.__app.closeModal());
   await page.tap('#btn-speed'); await page.tap('#btn-speed');
-  await page.waitForTimeout(15000);
-  const st4 = await page.evaluate(() => { const s = window.__app.state; return { day: Math.floor(s.time / 15 / 24) + 1, prisoners: s.prisoners.length, money: Math.round(s.money), escapes: s.stats.escapes, fights: s.stats.fights, chapter: s.chapter, fps: window.__app.fps, save: window.__app.saveStatus, modal: window.__app.modalOpen }; });
+  await page.waitForTimeout(8000);
+  const st4 = await page.evaluate(() => { const s = window.__app.state; return { day: Math.floor(s.time / 8 / 24) + 1, prisoners: s.prisoners.length, money: Math.round(s.money), escapes: s.stats.escapes, fights: s.stats.fights, chapter: s.chapter, fps: window.__app.fps, save: window.__app.saveStatus, modal: window.__app.modalOpen }; });
   log(`${name}: quick after 15s@4x day=${st4.day} prisoners=${st4.prisoners} money=${st4.money} escapes=${st4.escapes} fights=${st4.fights} chapter=${st4.chapter} fps=${st4.fps.toFixed(0)} modal=${st4.modal} save="${st4.save}"`);
   if (st4.modal) { await page.screenshot({ path: `e2e-out/${name}-09-chapter-modal.png` }); await page.evaluate(() => window.__app.closeModal()); }
   await page.evaluate(() => { const r = window.__app.renderer; r.cam.zoom = 22; r.centerOn(18, 20); window.__app.renderer.showSecurity = true; });
@@ -117,7 +154,7 @@ async function run(name, viewport) {
   await page.reload(); await page.waitForSelector('#title');
   const resumeBtn = await page.$('text=이어하기');
   log(`${name}: resume button present=${!!resumeBtn}`);
-  if (resumeBtn) { await resumeBtn.tap(); await page.waitForTimeout(500); const st5 = await page.evaluate(() => ({ day: Math.floor(window.__app.state.time / 15 / 24) + 1, prisoners: window.__app.state.prisoners.length, money: Math.round(window.__app.state.money) })); log(`${name}: resumed day=${st5.day} prisoners=${st5.prisoners} money=${st5.money}`); await page.screenshot({ path: `e2e-out/${name}-12-resumed.png` }); }
+  if (resumeBtn) { await resumeBtn.tap(); await page.waitForTimeout(500); const st5 = await page.evaluate(() => ({ day: Math.floor(window.__app.state.time / 8 / 24) + 1, prisoners: window.__app.state.prisoners.length, money: Math.round(window.__app.state.money) })); log(`${name}: resumed day=${st5.day} prisoners=${st5.prisoners} money=${st5.money}`); await page.screenshot({ path: `e2e-out/${name}-12-resumed.png` }); }
   log(`${name}: errors=${errors.length}${errors.length ? '\n  ' + errors.slice(0, 5).join('\n  ') : ''}`);
   await ctx.close();
   return errors.length;

@@ -24,3 +24,11 @@ export const RIOT_SQUAD_HOURS = 24;
 export const INTAKE_HOUR = 8;
 export const MAX_INTAKE_PER_DAY = 6;
 export const STAFF_FIRE_REFUND = 0;
+
+export type Difficulty = 'easy' | 'normal' | 'hard';
+export const DIFFICULTY: Record<Difficulty, { name: string; money: number; grantMul: number; volatilityMul: number; wageMul: number; maxSecChance: number; desc: string }> = {
+  easy: { name: '쉬움', money: 35000, grantMul: 1.15, volatilityMul: 0.8, wageMul: 0.9, maxSecChance: 0.2, desc: '넉넉한 자금, 온순한 수감자' },
+  normal: { name: '보통', money: 25000, grantMul: 1, volatilityMul: 1, wageMul: 1, maxSecChance: 0.33, desc: '표준' },
+  hard: { name: '어려움', money: 18000, grantMul: 0.9, volatilityMul: 1.25, wageMul: 1.1, maxSecChance: 0.5, desc: '빠듯한 자금, 거친 수감자' },
+};
+export const SEARCH_COOLDOWN_HOURS = 6;

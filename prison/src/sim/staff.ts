@@ -2,7 +2,8 @@
 import type { GameState, Staff, Job, Room } from './types';
 import { STAFF_BY_ID } from '../data/staff';
 import { HOUR_SECONDS } from '../data/regime';
-import { MEALS_PER_COOK_HOUR, MEAL_INGREDIENT_COST } from '../data/economy';
+import { MEALS_PER_COOK_HOUR } from '../data/economy';
+import { MEAL_OPTIONS } from '../data/policy';
 import { S_WALL, S_FENCE, findPath, findPathAdjacent, findPathToEntry, nearestRoom, randomTileIn, roomOf, validRooms, passable, inBounds } from './grid';
 import { moveAlong, setPath, tileX, tileY, ARRIVED, BLOCKED } from './movement';
 import { completeJob, removeStaffNow, releaseStaffObj, log } from './build';
@@ -151,7 +152,7 @@ export function updateStaff(s: GameState, st: Staff, rng: Rng, dt: number): void
       } else if (st.type === 'cook') {
         const ob = st.useObj >= 0 ? s.cache.objIndex.get(st.useObj) : null; const r = ob ? roomOf(s, ob.x, ob.y) : null;
         if (!ob || !r || !r.valid) { releaseStaffObj(s, st); st.state = 'idle'; st.thinkT = 1; break; }
-        if (s.meals < s.mealCap) { const made = MEALS_PER_COOK_HOUR * hrs; s.meals = Math.min(s.mealCap, s.meals + made); const cost = made * MEAL_INGREDIENT_COST; s.money -= cost; s.finance.today.food += cost; }
+        if (s.meals < s.mealCap) { const made = MEALS_PER_COOK_HOUR * hrs; s.meals = Math.min(s.mealCap, s.meals + made); const cost = made * (MEAL_OPTIONS[s.policy.meal] || MEAL_OPTIONS[1]).cost; s.money -= cost; s.finance.today.food += cost; }
         if (st.stateT > 30 * HOUR_SECONDS) { st.state = 'idle'; st.thinkT = 0; }
       } else if (st.type === 'doctor') {
         if (st.stateT > st.patrolT) { st.state = 'idle'; st.thinkT = 0; }

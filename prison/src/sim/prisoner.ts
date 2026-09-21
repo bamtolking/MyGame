@@ -1,10 +1,11 @@
 // Prisoner behaviour: needs, regime-driven activities, misbehaviour (fights, escapes), punishment, release.
-import type { GameState, Prisoner, Room, Vec, GameObject, Intent } from './types';
+import type { GameState, Prisoner, Room, GameObject, Intent } from './types';
 import { NEED_KEYS, NEED_INFO } from './types';
 import type { Activity } from '../data/regime';
 import { HOUR_SECONDS } from '../data/regime';
 import { WORK_INCOME_PER_HOUR, FINE_ESCAPE, FINE_DEATH, RELEASE_BONUS, REP_ESCAPE, REP_DEATH, REP_RELEASE } from '../data/economy';
 import { ROOMS, ZONE_INDEX } from '../data/rooms';
+import { MEAL_OPTIONS, PUNISH_OPTIONS } from '../data/policy';
 import { findPath, findEscapePath, findPathToEntry, isInsecure, nearestRoom, randomTileIn, roomOf, validRooms, isBorder, passable, inBounds } from './grid';
 import { moveAlong, setPath, tileX, tileY, ARRIVED, BLOCKED } from './movement';
 import { log } from './build';
@@ -143,6 +144,7 @@ function tryShower(s: GameState, p: Prisoner, rng: Rng): boolean {
   return goToRoom(s, p, r, 'shower', rng, 'shower') || goToRoom(s, p, r, 'shower', rng);
 }
 function tryYard(s: GameState, p: Prisoner, rng: Rng): boolean {
+  if (s.yardClosedDay === dayOf(s)) return false;
   const r = nearestRoom(s, 'yard', p.x, p.y); if (!r) return false;
   if (p.needs.exercise > 40 && rng.chance(0.5) && goToRoom(s, p, r, 'yard', rng, 'weights')) return true;
   if (rng.chance(0.4) && goToRoom(s, p, r, 'yard', rng, 'bench')) return true;
@@ -235,10 +237,12 @@ export function startRelease(s: GameState, p: Prisoner): void {
 }
 export function subdue(s: GameState, p: Prisoner): void {
   releaseObj(s, p); leaveFight(s, p);
-  setPState(s, p, 'subdued', 'none'); p.path = null; p.target = null; p.rioter = false; p.calmT = 6 * HOUR_SECONDS;
-  p.punishedUntil = s.time + 6 * HOUR_SECONDS; s.stats.subdued++;
+  p.strikes = Math.min(6, (p.strikes || 0) + 1);
+  const hours = Math.round((PUNISH_OPTIONS[s.policy.punish] || PUNISH_OPTIONS[1]).hours * (1 + 0.5 * Math.min(4, p.strikes - 1)));
+  setPState(s, p, 'subdued', 'none'); p.path = null; p.target = null; p.rioter = false; p.calmT = hours * HOUR_SECONDS + 2 * HOUR_SECONDS;
+  p.punishedUntil = s.time + hours * HOUR_SECONDS; s.stats.subdued++;
   for (const st of s.staff) if (st.chaseId === p.id) { st.chaseId = -1; st.state = 'idle'; st.path = null; }
-  log(s, `🔒 ${p.name} 제압됨 → 6시간 징벌`, 'info', p.x, p.y);
+  log(s, `🔒 ${p.name} 제압됨 → ${hours}시간 징벌`, 'info', p.x, p.y);
 }
 
 /** Per-tick update. */
@@ -250,9 +254,13 @@ export function updatePrisoner(s: GameState, p: Prisoner, rng: Rng, dt: number):
   if (p.state !== 'sleep') n.sleep += 4 * hrs;
   n.safety -= 4 * hrs;
   const act = currentActivity(s, p);
-  if (act === 'lockup' || (p.state === 'rest' && (p.intent === 'cell' || p.intent === 'holding' || p.intent === 'solitary'))) n.freedom += 8 * hrs;
+  if (p.punishedUntil > 0 && p.punishedUntil <= s.time) { p.punishedUntil = 0; n.freedom = Math.min(n.freedom, 45); } // time served: resignation, not fury
+  if (p.punishedUntil > s.time) n.freedom = Math.min(75, n.freedom + 4 * hrs);
+  else if (act === 'lockup' || (p.state === 'rest' && (p.intent === 'cell' || p.intent === 'holding' || p.intent === 'solitary'))) n.freedom += 8 * hrs;
   // guard proximity
   for (const st of s.staff) if (st.type === 'guard' && st.state !== 'injured' && Math.abs(st.x - p.x) < 6 && Math.abs(st.y - p.y) < 6) { n.safety -= 10 * hrs; break; }
+  // an angry leader stirs up prisoners around them
+  if (p.anger > 70 && p.calmT <= 0 && p.traits.includes('leader') && p.state !== 'subdued' && p.state !== 'sleep' && p.punishedUntil <= s.time) for (const q of s.prisoners) if (q !== p && q.punishedUntil <= s.time && Math.abs(q.x - p.x) < 4 && Math.abs(q.y - p.y) < 4) q.needs.freedom = Math.min(90, q.needs.freedom + 3 * hrs);
   const here = roomOf(s, tileX(p), tileY(p));
   switch (p.state) {
     case 'idle': if (p.thinkT <= 0) { p.thinkT = 1; think(s, p, rng); } break;
@@ -261,7 +269,7 @@ export function updatePrisoner(s: GameState, p: Prisoner, rng: Rng, dt: number):
       if (z === 'yard') { n.exercise -= 35 * hrs; n.freedom -= 12 * hrs; n.recreation -= (p.useObj >= 0 ? 18 : 12) * hrs; if (p.useObj >= 0 && s.cache.objIndex.get(p.useObj)?.type === 'weights') n.exercise -= 25 * hrs; }
       else if (z === 'common') { n.recreation -= 30 * hrs; n.freedom -= 8 * hrs; }
       else if (z === 'canteen') { n.recreation -= 4 * hrs; }
-      else if (z === 'holding' || z === 'cell') { n.recreation -= 2 * hrs; }
+      else if (z === 'holding' || z === 'cell') { n.recreation -= 2 * hrs; if (z === 'cell' && here) cellComfort(s, p, here, hrs); }
       p.waitT -= dt;
       if (p.waitT <= 0 || (!compatible(p.intent, act) && p.stateT > 3)) { setPState(s, p, 'idle'); p.thinkT = 0; }
       break;
@@ -275,14 +283,15 @@ export function updatePrisoner(s: GameState, p: Prisoner, rng: Rng, dt: number):
     case 'sleep': {
       const inBed = p.useObj >= 0 && s.cache.objIndex.get(p.useObj)?.type === 'bed';
       n.sleep -= (inBed ? 18 : 10) * hrs; n.freedom -= 2 * hrs;
+      if (here && here.zone === ZONE_INDEX.cell) cellComfort(s, p, here, hrs);
       if (n.sleep <= 0) n.sleep = 0;
       if (act !== 'sleep' && (n.sleep < 25 || p.stateT > 2 * HOUR_SECONDS) || (act !== 'sleep' && act !== 'lockup' && p.stateT > 0.5 * HOUR_SECONDS && n.sleep < 60)) { setPState(s, p, 'idle'); p.thinkT = 0; }
       break;
     }
-    case 'eat': if (p.stateT >= 4) { n.hunger = Math.max(0, n.hunger - 75); n.recreation = Math.max(0, n.recreation - 8); p.lastMeal = s.time; setPState(s, p, 'rest'); p.waitT = 3 + rng.next() * 4; } break;
+    case 'eat': if (p.stateT >= 4) { const meal = MEAL_OPTIONS[s.policy.meal] || MEAL_OPTIONS[1]; n.hunger = Math.max(0, n.hunger - meal.hunger); n.recreation = Math.max(0, n.recreation - meal.recreation); p.lastMeal = s.time; setPState(s, p, 'rest'); p.waitT = 3 + rng.next() * 4; } break;
     case 'shower': if (p.stateT >= 4) { n.hygiene = Math.max(0, n.hygiene - 65); setPState(s, p, 'idle'); p.thinkT = 0.5; } break;
     case 'work': {
-      const inc = WORK_INCOME_PER_HOUR * hrs; s.money += inc; s.stats.workIncome += inc; s.finance.today.work += inc; n.recreation -= 4 * hrs; n.freedom -= 4 * hrs;
+      const inc = WORK_INCOME_PER_HOUR * hrs * (p.traits.includes('worker') ? 1.5 : 1); s.money += inc; s.stats.workIncome += inc; s.finance.today.work += inc; n.recreation -= 4 * hrs; n.freedom -= 4 * hrs;
       if (act !== 'work') { setPState(s, p, 'idle'); p.thinkT = 0; }
       break;
     }
@@ -315,6 +324,11 @@ export function updatePrisoner(s: GameState, p: Prisoner, rng: Rng, dt: number):
     if (p.state === 'idle') think(s, p, rng);
   }
 }
+/** Bigger cells and a bookshelf make lockup and sleep less miserable. */
+function cellComfort(s: GameState, p: Prisoner, room: Room, hrs: number): void {
+  if (room.tiles.length >= 6) p.needs.freedom -= 2 * hrs;
+  for (const id of room.objs) { const ob = s.cache.objIndex.get(id); if (ob && ob.type === 'bookshelf') { p.needs.recreation -= 6 * hrs; break; } }
+}
 function compatible(intent: Intent, act: Activity): boolean {
   switch (intent) {
     case 'yard': return act === 'yard' || act === 'free';
@@ -331,7 +345,8 @@ function misbehave(s: GameState, p: Prisoner, rng: Rng): void {
   // opportunistic escape when standing on ground connected to the outside
   if (onInsecure && p.state !== 'escape' && rng.chance(0.004 + p.needs.freedom / 100 * 0.012 + (p.escapist ? 0.01 : 0))) { if (tryEscape(s, p)) return; }
   if (p.anger <= 50 || p.injured) return;
-  const prob = (p.anger - 50) / 50 * 0.03;
+  const t = (p.anger - 50) / 50; let prob = t * t * 0.012;
+  for (const st of s.staff) if (st.type === 'guard' && st.state !== 'injured' && Math.abs(st.x - p.x) < 5 && Math.abs(st.y - p.y) < 5) { prob *= 0.4; break; } // deterrence
   if (!rng.chance(prob)) return;
   if ((p.needs.freedom > 45 || p.escapist) && (onInsecure || p.escapist) && tryEscape(s, p)) return;
   // fight: nearest other prisoner within 4 tiles

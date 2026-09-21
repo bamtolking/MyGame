@@ -1,5 +1,6 @@
 import type { Activity } from '../data/regime';
-import type { SecurityLevel } from '../data/economy';
+import type { SecurityLevel, Difficulty } from '../data/economy';
+import type { Policy } from '../data/policy';
 import type { ObjType } from '../data/objects';
 import type { StaffType } from '../data/staff';
 
@@ -21,8 +22,16 @@ export const NEED_INFO: Record<NeedKey, { name: string; weight: number; icon: st
 export type PState = 'idle' | 'move' | 'sleep' | 'eat' | 'shower' | 'rest' | 'work' | 'fight' | 'escape' | 'subdued' | 'heal' | 'release' | 'wait';
 export type Intent = 'none' | 'sleep' | 'eat' | 'shower' | 'yard' | 'common' | 'work' | 'cell' | 'holding' | 'solitary' | 'infirmary' | 'escape' | 'release' | 'wander' | 'riot';
 
+export type Trait = 'violent' | 'escapist' | 'leader' | 'worker' | 'calm';
+export const TRAIT_INFO: Record<Trait, { name: string; icon: string; desc: string }> = {
+  violent: { name: '폭력적', icon: '👊', desc: '분노가 빨리 쌓임' },
+  escapist: { name: '탈주 성향', icon: '🏃', desc: '기회가 있으면 탈주, 밤에 터널을 팜' },
+  leader: { name: '리더', icon: '👑', desc: '분노하면 주변 수감자를 선동' },
+  worker: { name: '성실', icon: '🔧', desc: '노동 수입 1.5배' },
+  calm: { name: '온순', icon: '🕊', desc: '분노가 천천히 쌓임' },
+};
 export interface Prisoner {
-  id: number; name: string; sec: SecurityLevel; volatility: number; escapist: boolean;
+  id: number; name: string; sec: SecurityLevel; volatility: number; escapist: boolean; traits: Trait[]; tunnel: number; strikes: number;
   x: number; y: number; hp: number; maxHp: number;
   needs: Needs; mood: number; anger: number;
   state: PState; intent: Intent; stateT: number;
@@ -57,9 +66,9 @@ export interface Room { id: number; zone: number; tiles: number[]; objs: number[
 
 export interface Fight { id: number; x: number; y: number; prisoners: number[]; guards: number[]; t: number; riot: boolean; lastHit: number }
 
-export interface DayFinance { day: number; grant: number; wages: number; food: number; build: number; work: number; fines: number; bonus: number }
+export interface DayFinance { day: number; grant: number; wages: number; food: number; build: number; work: number; fines: number; bonus: number; grade: string; mood: number; incidents: number }
 
-export interface Stats { escapes: number; deaths: number; released: number; riots: number; fights: number; workIncome: number; daysNoIncident: number; moodDays: number; todayIncidents: number; moodSamples: number[]; intake: number; subdued: number }
+export interface Stats { escapes: number; deaths: number; released: number; riots: number; fights: number; workIncome: number; daysNoIncident: number; moodDays: number; todayIncidents: number; moodSamples: number[]; intake: number; subdued: number; tunnelsFound: number; todayFights: number; bestGrade: string; searches: number }
 
 export type Phase = 'play' | 'won' | 'bankrupt' | 'fired';
 
@@ -67,7 +76,9 @@ export interface SimEvent { type: string; text?: string; x?: number; y?: number;
 
 export interface GameState {
   version: number; seed: number; rngState: number[];
-  time: number; phase: Phase; mode: 'empty' | 'quick';
+  time: number; phase: Phase; mode: 'empty' | 'quick'; difficulty: Difficulty;
+  policy: Policy; wageMul: number; lastSearch: number; yardClosedDay: number; blackoutDay: number;
+  pendingEvent: { id: string; day: number } | null; lastEventDay: number; eventHour: number; recentEvents: string[];
   w: number; h: number; entry: Vec;
   terrain: Uint8Array; struct: Uint8Array; zone: Uint8Array; objAt: Int32Array;
   objects: GameObject[]; jobs: Job[]; prisoners: Prisoner[]; staff: Staff[]; fights: Fight[];

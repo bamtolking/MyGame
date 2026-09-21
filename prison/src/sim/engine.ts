@@ -15,6 +15,11 @@ import { updateStaff } from './staff';
 import { updateFights, checkRiot } from './incidents';
 import { hourly, daily, doIntake, callRiotSquad } from './economy';
 import { checkObjectives } from './objectives';
+import { doSearch } from './economy';
+import { applyChoice } from './events';
+import { STAMP_BY_ID } from '../data/stamps';
+import type { Policy } from '../data/policy';
+import { isBorder, inBounds, T_ROAD } from './grid';
 
 export const DT = 0.05;
 
@@ -27,7 +32,9 @@ export type Action =
   | { type: 'hire'; staff: StaffType } | { type: 'fire'; id: number }
   | { type: 'intake'; n: number } | { type: 'autoIntake'; on: boolean } | { type: 'mix'; sec: SecurityLevel; on: boolean }
   | { type: 'regime'; hour: number; act: Activity } | { type: 'regimeAll'; regime: Activity[] }
-  | { type: 'lockdown'; on: boolean } | { type: 'riotSquad' };
+  | { type: 'lockdown'; on: boolean } | { type: 'riotSquad' }
+  | { type: 'policy'; key: keyof Policy; value: 0 | 1 | 2 } | { type: 'search' } | { type: 'eventChoice'; idx: number }
+  | { type: 'stamp'; id: string; ax: number; ay: number };
 
 export function getRng(s: GameState): Rng { const r = new Rng(1); r.setState(s.rngState); return r; }
 function norm(a: { x0: number; y0: number; x1: number; y1: number }): [number, number, number, number] { return [Math.min(a.x0, a.x1), Math.min(a.y0, a.y1), Math.max(a.x0, a.x1), Math.max(a.y0, a.y1)]; }
@@ -63,11 +70,32 @@ export function dispatch(s: GameState, a: Action): { ok: boolean; msg?: string; 
       case 'regimeAll': s.regime = [...a.regime]; return { ok: true };
       case 'lockdown': s.lockdown = a.on; log(s, a.on ? '🚨 비상 봉쇄 발령: 모든 수감자 감방 복귀, 문 잠금' : '봉쇄 해제', a.on ? 'warn' : 'info'); return { ok: true };
       case 'riotSquad': { const err = callRiotSquad(s, rng); return err ? { ok: false, msg: err } : { ok: true }; }
+      case 'policy': { s.policy[a.key] = a.value; return { ok: true }; }
+      case 'search': { const n = doSearch(s, rng, true); return n < 0 ? { ok: false } : { ok: true, n }; }
+      case 'eventChoice': { if (!s.pendingEvent) return { ok: false, msg: '진행 중인 사건 없음' }; const msg = applyChoice(s, rng, a.idx); return { ok: true, msg }; }
+      case 'stamp': {
+        const st = STAMP_BY_ID[a.id]; if (!st) return { ok: false, msg: '알 수 없는 프리셋' };
+        const bad = stampConflicts(s, a.id, a.ax, a.ay); if (bad.length) return { ok: false, msg: `놓을 수 없는 칸이 ${bad.length}개 있습니다 (겹침·도로·가장자리)` };
+        if (s.money < st.cost) return { ok: false, msg: `자금 부족 (${st.cost} 필요)` };
+        let n = 0;
+        for (const c of st.cells) { const x = a.ax + c.x, y = a.ay + c.y; if (c.zone !== undefined && !c.struct) setZone(s, x, y, c.zone); if (c.struct) { if (!planStruct(s, x, y, c.struct)) n++; } else if (c.obj) { if (!planObject(s, x, y, c.obj)) n++; } }
+        refresh(s); return { ok: true, n };
+      }
     }
   } finally { s.rngState = rng.getState(); }
   return { ok: false, msg: '알 수 없는 행동' };
 }
 
+/** Tiles of a stamp placement that cannot be built (returns tile indexes). */
+export function stampConflicts(s: GameState, id: string, ax: number, ay: number): number[] {
+  const st = STAMP_BY_ID[id]; if (!st) return []; const bad: number[] = [];
+  for (const c of st.cells) {
+    const x = ax + c.x, y = ay + c.y; const i = y * s.w + x;
+    if (!inBounds(s, x, y) || isBorder(s, x, y) || s.terrain[i] === T_ROAD) { bad.push(i); continue; }
+    if (s.struct[i] !== 0 || s.objAt[i] >= 0 || s.cache.jobAt[i] >= 0) { bad.push(i); continue; }
+  }
+  return bad;
+}
 export function step(s: GameState, dt = DT): void {
   if (s.phase === 'bankrupt' || s.phase === 'fired') return;
   const rng = getRng(s);

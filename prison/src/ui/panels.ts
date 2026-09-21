@@ -1,12 +1,15 @@
 // Sheets, modals and the info card. Each function builds DOM for the App.
 import type { App } from './app';
 import type { Prisoner, Staff, Room, Job } from '../sim/types';
-import { NEED_KEYS, NEED_INFO } from '../sim/types';
+import { NEED_KEYS, NEED_INFO, TRAIT_INFO } from '../sim/types';
 import { h, bar, money, clock } from './dom';
 import { CHAPTERS } from '../data/objectives';
 import { chapterProgress } from '../sim/objectives';
 import { ACTIVITY_INFO, DEFAULT_REGIME, HOUR_SECONDS, type Activity } from '../data/regime';
-import { SECURITY_INFO, RIOT_SQUAD_COST, type SecurityLevel } from '../data/economy';
+import { SECURITY_INFO, RIOT_SQUAD_COST, DIFFICULTY, SEARCH_COOLDOWN_HOURS, type SecurityLevel, type Difficulty } from '../data/economy';
+import { MEAL_OPTIONS, PUNISH_OPTIONS, SEARCH_OPTIONS, POLICY_INFO, type Policy } from '../data/policy';
+import { ACHIEVEMENTS } from '../data/achievements';
+import { EVENT_BY_ID } from '../data/events';
 import { STAFF, STAFF_BY_ID } from '../data/staff';
 import { ROOMS } from '../data/rooms';
 import { OBJ_BY_ID } from '../data/objects';
@@ -102,7 +105,7 @@ export function intakePanel(app: App): HTMLElement {
   c.append(h('div', { class: 'card' }, h('h4', {}, '접수 등급'), mix));
   const list = h('div', { class: 'list' });
   const sorted = [...s.prisoners].sort((a, b) => b.anger - a.anger);
-  for (const p of sorted) list.append(h('div', { class: 'item' }, h('div', { style: `width:10px;height:36px;border-radius:5px;background:${moodColor(p.mood)}` }), h('div', { class: 'grow' }, h('span', {}, p.name, ' ', secBadge(p.sec)), h('small', {}, `${prisonerStateText(p)} · 기분 ${Math.round(p.mood)} · 분노 ${Math.round(p.anger)} · 남은 형기 ${Math.max(0, p.arrivedDay + p.sentence - dayOf(s))}일`)), h('button', { onclick: () => { app.closeSheet(); app.focusOn(p.x, p.y); app.select({ kind: 'prisoner', id: p.id }); } }, '📍')));
+  for (const p of sorted) list.append(h('div', { class: 'item' }, h('div', { style: `width:10px;height:36px;border-radius:5px;background:${moodColor(p.mood)}` }), h('div', { class: 'grow' }, h('span', {}, p.name, ' ', secBadge(p.sec), ' ', p.traits.map(t => TRAIT_INFO[t].icon).join('')), h('small', {}, `${prisonerStateText(p)} · 기분 ${Math.round(p.mood)} · 분노 ${Math.round(p.anger)} · 남은 형기 ${Math.max(0, p.arrivedDay + p.sentence - dayOf(s))}일`)), h('button', { onclick: () => { app.closeSheet(); app.focusOn(p.x, p.y); app.select({ kind: 'prisoner', id: p.id }); } }, '📍')));
   c.append(h('div', { class: 'card' }, h('h4', {}, `수감자 명단 (분노 순)`), s.prisoners.length ? list : h('div', { class: 'sub' }, '아직 수감자가 없습니다.')));
   return sheetFrame(app, '🚌 수감 접수', c);
 }
@@ -122,6 +125,8 @@ export function reportPanel(app: App): HTMLElement {
     row('오늘 자정 예상 보조금', grant), row('오늘 자정 급여', -wages), row('오늘 식재료', -f.food), row('오늘 건설·고용', -f.build), row('오늘 노동 수입', f.work), row('오늘 벌금', -f.fines), row('오늘 보상', f.bonus), row('예상 일일 순수익', grant - wages - f.food - f.build + f.work - f.fines + f.bonus))));
   if (y) c.append(h('div', { class: 'card' }, h('h4', {}, `어제 (${y.day}일차)`), h('table', { class: 'fin' }, row('보조금', y.grant), row('급여', -y.wages), row('식재료', -y.food), row('건설·고용', -y.build), row('노동', y.work), row('벌금', -y.fines), row('보상', y.bonus), row('순수익', y.grant - y.wages - y.food - y.build + y.work - y.fines + y.bonus))));
   const st = s.stats; const mood = s.prisoners.length ? s.prisoners.reduce((a, p) => a + p.mood, 0) / s.prisoners.length : 0;
+  const hist = s.finance.history.slice(-7);
+  c.append(h('div', { class: 'card' }, h('h4', {}, '🏫 일일 성적 (최근 7일)'), hist.length ? h('div', { class: 'grades' }, ...hist.map(f => h('span', { class: f.grade }, f.grade || '-', h('small', { style: 'display:block;font-weight:400;color:var(--muted)' }, `${f.day}일`)))) : h('div', { class: 'sub' }, '아직 없음. 자정마다 기분·사건·인력·식사를 기준으로 S~D 등급을 매깁니다.'), h('div', { class: 'sub', style: 'margin-top:4px' }, `최고 ${st.bestGrade || '-'} · 수색 ${st.searches}회 · 터널 발견 ${st.tunnelsFound}개 · 난이도 ${DIFFICULTY[s.difficulty].name}`)));
   c.append(h('div', { class: 'card' }, h('h4', {}, '📈 통계'), h('div', { class: 'sub' }, `누적 수감 ${st.intake} · 출소 ${st.released} · 탈주 ${st.escapes} · 사망 ${st.deaths} · 싸움 ${st.fights} · 제압 ${st.subdued} · 폭동 ${st.riots}`), h('div', { class: 'sub' }, `무사고 ${st.daysNoIncident}일 연속 · 기분 55+ ${st.moodDays}일 연속 · 노동 수입 누계 ${money(st.workIncome)} · 현재 평균 기분 ${Math.round(mood)} · 식사 재고 ${Math.round(s.meals)}/${s.mealCap}`)));
   // danger summary
   const issues: HTMLElement[] = [];
@@ -151,7 +156,8 @@ export function settingsPanel(app: App): HTMLElement {
   const range = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: st.sfx, oninput: (e: Event) => { st.sfx = parseFloat((e.target as HTMLInputElement).value); app.audio.setVolume(st.sfx); app.saveAll(); } });
   c.append(h('label', {}, '효과음', range));
   const tog = (label: string, get: () => boolean, set: (v: boolean) => void) => { const b = h('button', { class: get() ? 'on' : '', onclick: () => { set(!get()); b.className = get() ? 'on' : ''; b.textContent = get() ? '켜짐' : '꺼짐'; app.saveAll(); app.applySettings(); } }, get() ? '켜짐' : '꺼짐'); return h('label', {}, label, b); };
-  c.append(tog('격자 표시', () => st.showGrid, v => { st.showGrid = v; }), tog('효과 줄이기(저사양)', () => st.lowFx, v => { st.lowFx = v; }), tog('도움말 힌트', () => st.hints, v => { st.hints = v; }));
+  c.append(tog('격자 표시', () => st.showGrid, v => { st.showGrid = v; }), tog('효과 줄이기(저사양)', () => st.lowFx, v => { st.lowFx = v; }), tog('도움말 힌트', () => st.hints, v => { st.hints = v; }), tog('미니맵', () => st.minimap, v => { st.minimap = v; }), tog('진동 알림', () => st.haptics, v => { st.haptics = v; }), tog('일일 성적표 카드', () => st.dayCard, v => { st.dayCard = v; }));
+  c.append(h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'ghost', onclick: () => { st.tutorialDone = false; app.saveAll(); app.tutStep = app.state && app.state.mode === 'empty' ? 0 : -1; app.toast('튜토리얼을 다시 켰습니다 (빈 부지 게임에서 표시)', 'good'); app.updateTutorial(); } }, '튜토리얼 다시 보기'), h('button', { class: 'ghost', onclick: () => app.openSheet('achievements') }, '업적')));
   c.append(h('div', { class: 'card' }, h('div', { class: 'sub' }, `저장: ${app.saveStatus || (store.storageInfo.available ? '브라우저 로컬 저장' : '⚠ 저장 불가: ' + store.storageInfo.reason)}`)));
   if (app.state) c.append(h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { onclick: () => { app.saveRun(); app.toast('저장했습니다', 'good'); } }, '지금 저장'), h('button', { class: 'ghost', onclick: () => app.confirm('타이틀로 돌아갈까요? (진행은 저장됩니다)', () => { app.saveRun(); app.showTitle(); }) }, '타이틀로')));
   c.append(h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'ghost', onclick: () => app.openSheet('export') }, '내보내기/불러오기')));
@@ -186,11 +192,11 @@ export function infoCard(app: App): HTMLElement | null {
   const close = h('button', { class: 'close', onclick: () => app.select(null) }, '✕');
   if (sel.kind === 'prisoner') {
     const p = s.cache.prisonerIndex.get(sel.id); if (!p) return null;
-    const traits: string[] = []; if (p.volatility > 1.3) traits.push('폭력적'); if (p.escapist) traits.push('탈주 성향'); if (p.injured) traits.push('부상');
+    const traits: string[] = p.traits.map(t => TRAIT_INFO[t].icon + TRAIT_INFO[t].name); if (p.injured) traits.push('🩸부상');
     const needs = h('div', { class: 'needs' }, ...NEED_KEYS.map(k => h('div', { class: 'need' }, h('span', {}, NEED_INFO[k].icon + NEED_INFO[k].name), bar(p.needs[k], p.needs[k] > 70 ? '#e5484d' : p.needs[k] > 40 ? '#ffb74d' : '#4caf50'))));
     return h('div', {},
       h('div', { class: 'head' }, h('div', { class: 'name' }, p.name, ' ', secBadge(p.sec)), close),
-      h('div', { class: 'desc' }, `${prisonerStateText(p)} · 형기 ${p.sentence}일 (남은 ${Math.max(0, p.arrivedDay + p.sentence - dayOf(s))}일)${traits.length ? ' · ' + traits.join(', ') : ''}${p.punishedUntil > s.time ? ' · 징벌 중 ' + Math.ceil((p.punishedUntil - s.time) / HOUR_SECONDS) + 'h' : ''}${p.bedId < 0 ? ' · 감방 없음' : ''}`),
+      h('div', { class: 'desc' }, `${prisonerStateText(p)} · 형기 ${p.sentence}일 (남은 ${Math.max(0, p.arrivedDay + p.sentence - dayOf(s))}일)${traits.length ? ' · ' + traits.join(', ') : ''}${p.punishedUntil > s.time ? ' · 징벌 중 ' + Math.ceil((p.punishedUntil - s.time) / HOUR_SECONDS) + 'h' : ''}${p.bedId < 0 ? ' · 감방 없음' : ''}${p.strikes > 0 ? ` · 최근 징벌 ${p.strikes}회` : ''}`),
       h('div', { class: 'row', style: 'margin-top:4px;font-size:11px' }, h('span', { style: 'flex:0 0 auto' }, '기분'), bar(p.mood, moodColor(p.mood), String(Math.round(p.mood))), h('span', { style: 'flex:0 0 auto' }, '분노'), bar(p.anger, '#e5484d', String(Math.round(p.anger))), h('span', { style: 'flex:0 0 auto' }, '체력'), bar(p.hp / p.maxHp * 100, '#4c8dff', String(Math.round(p.hp)))),
       needs,
       h('div', { class: 'btns' }, h('button', { class: app.renderer.follow?.id === p.id ? 'on' : '', onclick: () => app.toggleFollow('prisoner', p.id) }, '📍 따라가기')));
@@ -228,6 +234,46 @@ function roomInfo(app: App, r: Room, full: boolean): HTMLElement {
     full ? h('div', { class: 'desc' }, def.desc) : null);
 }
 
+// ---------- Policy ----------
+export function policyPanel(app: App): HTMLElement {
+  const s = app.state!; const c = h('div');
+  const group = (key: keyof Policy, opts: { name: string; desc: string }[]) => {
+    const row = h('div', { class: 'opt' });
+    const desc = h('div', { class: 'sub' });
+    const render = () => { row.replaceChildren(...opts.map((o, i) => h('button', { class: s.policy[key] === i ? 'on' : '', onclick: () => { app.act({ type: 'policy', key, value: i as 0 | 1 | 2 }); render(); } }, o.name))); desc.textContent = opts[s.policy[key]].desc; };
+    render();
+    return h('div', { class: 'card' }, h('h4', {}, `${POLICY_INFO[key].icon} ${POLICY_INFO[key].name}`), row, desc);
+  };
+  c.append(group('meal', MEAL_OPTIONS), group('punish', PUNISH_OPTIONS), group('search', SEARCH_OPTIONS));
+  const left = Math.max(0, SEARCH_COOLDOWN_HOURS - (s.time - s.lastSearch) / HOUR_SECONDS);
+  c.append(h('div', { class: 'card' }, h('div', { class: 'row' }, h('div', { style: 'flex:2' }, h('h4', {}, '🔦 지금 감방 수색'), h('div', { class: 'sub' }, `교도관이 모든 감방을 뒤져 터널을 찾습니다. 발견 확률은 교도관 수에 비례. 수감자 자유 욕구 +5. ${left > 0 ? `대기 ${Math.ceil(left)}시간` : '지금 가능'}`)), h('button', { class: 'primary', style: 'flex:1', disabled: left > 0, onclick: () => { app.act({ type: 'search' }); app.renderSheet(); } }, '수색'))),
+    h('div', { class: 'card' }, h('h4', {}, '🕳 터널이란?'), h('div', { class: 'sub' }, '탈주 성향이거나 자유 욕구가 높은 수감자는 밤에 자기 감방 바닥을 팝니다. 외부까지 가까울수록 빨리 완성되며, 완성되면 추격 없이 탈주합니다. 정기 수색, 순찰 교도관, 외벽에서 먼 감방 배치로 막을 수 있습니다.')));
+  return sheetFrame(app, '⚖ 정책', c);
+}
+
+// ---------- Achievements ----------
+export function achievementsPanel(app: App): HTMLElement {
+  const got = new Set(app.blob.meta.achievements);
+  const grid = h('div', { class: 'ach' }, ...ACHIEVEMENTS.map(a => h('div', { class: 'a' + (got.has(a.id) ? '' : ' lock') }, h('span', { class: 'ic' }, a.icon), h('div', {}, h('b', {}, a.name), h('small', {}, a.desc)))));
+  return sheetFrame(app, `🏅 업적 ${got.size}/${ACHIEVEMENTS.length}`, h('div', {}, grid));
+}
+
+// ---------- Event modal ----------
+export function eventModal(app: App, id: string): HTMLElement {
+  const ev = EVENT_BY_ID[id]; const s = app.state!;
+  if (!ev) return sheetFrame(app, '사건', h('div', {}, '?'), true);
+  const c = h('div', {},
+    h('div', { class: 'event-head' }, h('span', { class: 'ic' }, ev.icon), h('div', {}, h('div', { style: 'font-weight:800;font-size:16px' }, ev.title), h('div', { class: 'sub' }, `${dayOf(s)}일차 ${clock(hourOf(s))}`))),
+    h('div', { class: 'story', style: 'margin:10px 0' }, ev.text),
+    h('div', { class: 'list' }, ...ev.choices.map((ch, i) => h('button', { class: 'event-choice' + (i === 0 ? ' primary' : ''), onclick: () => { app.closeModal(); const r = app.act({ type: 'eventChoice', idx: i }); if (r.msg) app.toast(r.msg, 'good'); } }, ch.label, ch.hint ? h('small', { style: i === 0 ? 'color:#4a3210' : '' }, ch.hint) : null))));
+  return sheetFrame(app, '📢 사건 발생', c, true);
+}
+export function difficultyPicker(app: App): HTMLElement {
+  const st = app.blob.meta.settings; const seg = h('div', { class: 'seg' });
+  const render = () => seg.replaceChildren(...(['easy', 'normal', 'hard'] as Difficulty[]).map(d => h('button', { class: st.difficulty === d ? 'on' : '', onclick: () => { st.difficulty = d; app.saveAll(); render(); } }, DIFFICULTY[d].name, h('small', { style: 'display:block;font-size:10px;color:inherit;opacity:.8' }, money(DIFFICULTY[d].money)))));
+  render(); return seg;
+}
+
 // ---------- Modals ----------
 export function chapterModal(app: App, doneIdx: number): HTMLElement {
   const ch = CHAPTERS[doneIdx]; const next = CHAPTERS[doneIdx + 1];
@@ -240,6 +286,6 @@ export function gameOverModal(app: App, reason: string): HTMLElement {
   const s = app.state!; const st = s.stats;
   const c = h('div', {}, h('div', { class: 'result-big' }, reason === 'bankrupt' ? '💸 파산' : '📉 해임'), h('div', { class: 'story', style: 'text-align:center' }, reason === 'bankrupt' ? '부채가 한도를 넘었습니다. 보조금(수감자)보다 급여·건설 지출이 컸습니다.' : '탈주·사망·폭동으로 평판이 바닥났습니다.'),
     h('div', { class: 'card' }, h('div', { class: 'sub' }, `${dayOf(s)}일차 · 수감자 ${s.prisoners.length}명 · 달성 장 ${s.chapter}/${CHAPTERS.length}`), h('div', { class: 'sub' }, `탈주 ${st.escapes} · 사망 ${st.deaths} · 출소 ${st.released} · 폭동 ${st.riots}`)),
-    h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'primary', onclick: () => { app.closeModal(); app.newRun((Math.random() * 2 ** 32) >>> 0, s.mode); } }, '새 게임'), h('button', { onclick: () => { app.closeModal(); app.blob.run = null; app.blob.runInfo = null; app.saveAll(); app.showTitle(); } }, '타이틀')));
+    h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'primary', onclick: () => { app.closeModal(); app.newRun((Math.random() * 2 ** 32) >>> 0, s.mode, s.difficulty); } }, '새 게임'), h('button', { onclick: () => { app.closeModal(); app.blob.run = null; app.blob.runInfo = null; app.saveAll(); app.showTitle(); } }, '타이틀')));
   return sheetFrame(app, '게임 종료', c, true);
 }

@@ -2,13 +2,13 @@
 export const SAVE_KEY = 'prison_designer_v1';
 export const SAVE_VERSION = 1;
 
-export interface Settings { sfx: number; showGrid: boolean; lowFx: boolean; hints: boolean }
+export interface Settings { sfx: number; showGrid: boolean; lowFx: boolean; hints: boolean; haptics: boolean; minimap: boolean; difficulty: 'easy' | 'normal' | 'hard'; tutorialDone: boolean; dayCard: boolean }
 export interface Records { runs: number; bestDay: number; bestPrisoners: number; bestChapter: number; wins: number }
-export interface Meta { version: number; settings: Settings; records: Records }
+export interface Meta { version: number; settings: Settings; records: Records; achievements: string[] }
 export interface RunInfo { day: number; prisoners: number; money: number; chapter: number; mode: string }
 export interface SaveBlob { version: number; meta: Meta; run: string | null; runInfo: RunInfo | null; savedAt: number }
 
-export function defaultMeta(): Meta { return { version: SAVE_VERSION, settings: { sfx: 0.7, showGrid: false, lowFx: false, hints: true }, records: { runs: 0, bestDay: 0, bestPrisoners: 0, bestChapter: 0, wins: 0 } }; }
+export function defaultMeta(): Meta { return { version: SAVE_VERSION, settings: { sfx: 0.7, showGrid: false, lowFx: false, hints: true, haptics: true, minimap: true, difficulty: 'normal', tutorialDone: false, dayCard: true }, records: { runs: 0, bestDay: 0, bestPrisoners: 0, bestChapter: 0, wins: 0 }, achievements: [] }; }
 const empty = (): SaveBlob => ({ version: SAVE_VERSION, meta: defaultMeta(), run: null, runInfo: null, savedAt: 0 });
 
 let memory: string | null = null;
@@ -26,7 +26,7 @@ export function load(): { blob: SaveBlob; error: string | null } {
     const o = JSON.parse(raw) as SaveBlob;
     if (!o || o.version !== SAVE_VERSION || !o.meta) { const bk = readBackup(); if (bk) return { blob: bk, error: '저장 버전 불일치 — 백업에서 복구' }; return { blob: empty(), error: `저장 버전이 달라 초기화했습니다 (${o?.version} → ${SAVE_VERSION})` }; }
     const d = defaultMeta();
-    return { blob: { ...o, meta: { ...d, ...o.meta, settings: { ...d.settings, ...(o.meta.settings || {}) }, records: { ...d.records, ...(o.meta.records || {}) } } }, error: null };
+    return { blob: { ...o, meta: { ...d, ...o.meta, settings: { ...d.settings, ...(o.meta.settings || {}) }, records: { ...d.records, ...(o.meta.records || {}) }, achievements: o.meta.achievements || [] } }, error: null };
   } catch (e) { const bk = readBackup(); if (bk) return { blob: bk, error: '저장 데이터 손상 — 백업에서 복구' }; return { blob: empty(), error: '저장 데이터 손상: ' + (e as Error).message }; }
 }
 function readBackup(): SaveBlob | null { try { const raw = localStorage.getItem(SAVE_KEY + '_bak'); if (!raw) return null; const o = JSON.parse(raw); if (o && o.version === SAVE_VERSION && o.meta) return o; } catch { /* ignore */ } return null; }

@@ -2,32 +2,36 @@
 import type { GameState, SimCache, DayFinance, Prisoner, Needs } from './types';
 import { NEED_KEYS } from './types';
 import { DEFAULT_REGIME, HOUR_SECONDS } from '../data/regime';
-import { START_MONEY, SECURITY_INFO, type SecurityLevel } from '../data/economy';
+import { SECURITY_INFO, DIFFICULTY, type SecurityLevel, type Difficulty } from '../data/economy';
+import { DEFAULT_POLICY } from '../data/policy';
+import type { Trait } from './types';
 import { T_GRASS, T_DIRT, T_ROAD, computeSecurity, detectRooms } from './grid';
 import { Rng } from './rng';
 import { rectStruct, rectZone, placeObjectNow, buildStructNow, hireStaff, zoneIndex, rebuildJobIndex } from './build';
 import { SURNAMES, GIVEN, NICKS } from '../data/names';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const MAP_W = 44, MAP_H = 44;
 
-export function emptyFinance(day: number): DayFinance { return { day, grant: 0, wages: 0, food: 0, build: 0, work: 0, fines: 0, bonus: 0 }; }
+export function emptyFinance(day: number): DayFinance { return { day, grant: 0, wages: 0, food: 0, build: 0, work: 0, fines: 0, bonus: 0, grade: '', mood: 0, incidents: 0 }; }
 export function makeCache(w: number, h: number): SimCache {
   return { insecure: new Uint8Array(w * h), rooms: [], roomAt: new Int32Array(w * h).fill(-1), dirtyRooms: true, dirtySecurity: true, objIndex: new Map(), prisonerIndex: new Map(), staffIndex: new Map(), jobAt: new Int32Array(w * h).fill(-1), riotCheckT: 0, objectiveT: 0, hourlyT: 0 };
 }
 
-export function newGame(seed: number, mode: 'empty' | 'quick' = 'empty'): GameState {
-  const rng = new Rng(seed); const w = MAP_W, h = MAP_H;
+export function newGame(seed: number, mode: 'empty' | 'quick' = 'empty', difficulty: Difficulty = 'normal'): GameState {
+  const rng = new Rng(seed); const w = MAP_W, h = MAP_H; const diff = DIFFICULTY[difficulty] || DIFFICULTY.normal;
   const s: GameState = {
-    version: SAVE_VERSION, seed, rngState: [], time: 6 * HOUR_SECONDS, phase: 'play', mode,
+    version: SAVE_VERSION, seed, rngState: [], time: 6 * HOUR_SECONDS, phase: 'play', mode, difficulty,
+    policy: { ...DEFAULT_POLICY }, wageMul: 1, lastSearch: -1e9, yardClosedDay: 0, blackoutDay: 0,
+    pendingEvent: null, lastEventDay: 1, eventHour: 10 + rng.int(7), recentEvents: [],
     w, h, entry: { x: 1, y: Math.floor(h / 2) },
     terrain: new Uint8Array(w * h), struct: new Uint8Array(w * h), zone: new Uint8Array(w * h), objAt: new Int32Array(w * h).fill(-1),
     objects: [], jobs: [], prisoners: [], staff: [], fights: [], nextId: 1,
-    money: START_MONEY, reputation: 50, meals: 0, mealCap: 20,
+    money: diff.money, reputation: 50, meals: 0, mealCap: 20,
     regime: [...DEFAULT_REGIME], autoIntake: false, intakeMix: { min: true, med: true, max: false }, unlocked: ['min', 'med'],
     chapter: 0, chapterDoneAt: -1, lockdown: false, riot: false, riotSquadUntil: 0,
     finance: { today: emptyFinance(1), history: [] },
-    stats: { escapes: 0, deaths: 0, released: 0, riots: 0, fights: 0, workIncome: 0, daysNoIncident: 0, moodDays: 0, todayIncidents: 0, moodSamples: [], intake: 0, subdued: 0 },
+    stats: { escapes: 0, deaths: 0, released: 0, riots: 0, fights: 0, workIncome: 0, daysNoIncident: 0, moodDays: 0, todayIncidents: 0, moodSamples: [], intake: 0, subdued: 0, tunnelsFound: 0, todayFights: 0, bestGrade: '', searches: 0 },
     log: [], lastHour: 6, lastIntakeDay: 0, lastDay: 1,
     cache: makeCache(w, h), events: [],
   };
@@ -85,12 +89,23 @@ export function buildQuickStart(s: GameState, rng: Rng): void {
 
 // ---------- Prisoners ----------
 export function prisonerName(rng: Rng): string { const nick = rng.pick(NICKS); return (nick ? `'${nick}' ` : '') + rng.pick(SURNAMES) + rng.pick(GIVEN); }
-export function makePrisoner(s: GameState, rng: Rng, sec: SecurityLevel): Prisoner {
-  const info = SECURITY_INFO[sec];
+export function rollTraits(rng: Rng, sec: SecurityLevel): Trait[] {
+  const t: Trait[] = [];
+  const P = sec === 'max' ? { violent: 0.35, escapist: 0.4, leader: 0.15, worker: 0.15, calm: 0.05 } : sec === 'med' ? { violent: 0.18, escapist: 0.2, leader: 0.08, worker: 0.2, calm: 0.15 } : { violent: 0.08, escapist: 0.08, leader: 0.03, worker: 0.25, calm: 0.3 };
+  if (rng.chance(P.violent)) t.push('violent'); else if (rng.chance(P.calm)) t.push('calm');
+  if (rng.chance(P.escapist)) t.push('escapist');
+  if (rng.chance(P.leader)) t.push('leader');
+  if (rng.chance(P.worker)) t.push('worker');
+  return t;
+}
+export function makePrisoner(s: GameState, rng: Rng, sec: SecurityLevel, forcedTraits?: Trait[]): Prisoner {
+  const info = SECURITY_INFO[sec]; const diff = DIFFICULTY[s.difficulty] || DIFFICULTY.normal;
   const needs = {} as Needs; for (const k of NEED_KEYS) needs[k] = rng.range(10, 40); needs.safety = 20; needs.freedom = 10;
   const day = Math.floor(s.time / (HOUR_SECONDS * 24)) + 1;
+  const traits = forcedTraits ? [...forcedTraits] : rollTraits(rng, sec);
+  const vol = info.volatility * rng.range(0.8, 1.25) * diff.volatilityMul * (traits.includes('violent') ? 1.35 : 1) * (traits.includes('calm') ? 0.7 : 1);
   const p: Prisoner = {
-    id: s.nextId++, name: prisonerName(rng), sec, volatility: info.volatility * rng.range(0.8, 1.25), escapist: rng.chance(sec === 'max' ? 0.4 : sec === 'med' ? 0.2 : 0.08),
+    id: s.nextId++, name: prisonerName(rng), sec, volatility: vol, escapist: traits.includes('escapist'), traits, tunnel: 0, strikes: 0,
     x: s.entry.x + 0.5, y: s.entry.y + 0.5 + rng.range(-1.5, 1.5), hp: info.hp, maxHp: info.hp,
     needs, mood: 70, anger: 0, state: 'idle', intent: 'none', stateT: 0, path: null, pathI: 0, target: null, useObj: -1, bedId: -1,
     sentence: 4 + rng.int(sec === 'max' ? 20 : sec === 'med' ? 14 : 9), arrivedDay: day, punishedUntil: 0, injured: false, rioter: false, fightId: -1, thinkT: rng.range(0, 1), lastRoom: -1, calmT: 0, waitT: 0, lastMeal: -1e9, toRoom: -1,
@@ -99,6 +114,14 @@ export function makePrisoner(s: GameState, rng: Rng, sec: SecurityLevel): Prison
 }
 
 // ---------- Serialization ----------
+/** Fill fields added in save version 2 with defaults. */
+function migrateV1(o: any): void {
+  o.version = 2; o.difficulty = o.difficulty || 'normal'; o.policy = o.policy || { ...DEFAULT_POLICY }; o.wageMul = o.wageMul ?? 1; o.lastSearch = o.lastSearch ?? -1e9;
+  o.yardClosedDay = o.yardClosedDay ?? 0; o.blackoutDay = o.blackoutDay ?? 0; o.pendingEvent = o.pendingEvent ?? null; o.lastEventDay = o.lastEventDay ?? 1; o.eventHour = o.eventHour ?? 12; o.recentEvents = o.recentEvents || [];
+  for (const p of o.prisoners || []) { p.traits = p.traits || (p.escapist ? ['escapist'] : []); p.tunnel = p.tunnel ?? 0; p.strikes = p.strikes ?? 0; }
+  const st = o.stats || {}; st.tunnelsFound = st.tunnelsFound ?? 0; st.todayFights = st.todayFights ?? 0; st.bestGrade = st.bestGrade ?? ''; st.searches = st.searches ?? 0;
+  if (o.finance) { for (const f of [o.finance.today, ...(o.finance.history || [])]) if (f) { f.grade = f.grade ?? ''; f.mood = f.mood ?? 0; f.incidents = f.incidents ?? 0; } }
+}
 const ARRAY_FIELDS = ['terrain', 'struct', 'zone', 'objAt'] as const;
 export function serialize(s: GameState): string {
   const o: any = {};
@@ -108,6 +131,7 @@ export function serialize(s: GameState): string {
 }
 export function deserialize(json: string): GameState {
   const o = JSON.parse(json);
+  if (o && o.version === 1) migrateV1(o);
   if (!o || o.version !== SAVE_VERSION) throw new Error(`저장 버전 불일치 (${o?.version} ≠ ${SAVE_VERSION})`);
   if (!Array.isArray(o.terrain) || !Array.isArray(o.prisoners) || typeof o.w !== 'number') throw new Error('저장 데이터 형식 오류');
   const s = o as GameState;

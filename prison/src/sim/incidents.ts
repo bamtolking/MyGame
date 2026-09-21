@@ -1,6 +1,7 @@
 // Fights, subduing, riots.
 import type { GameState, Prisoner, Staff, Fight } from './types';
 import { SECURITY_INFO, REP_RIOT } from '../data/economy';
+import { HOUR_SECONDS } from '../data/regime';
 import { STAFF_BY_ID } from '../data/staff';
 import { passable } from './grid';
 import { killPrisoner, subdue, releaseObj, setPState } from './prisoner';
@@ -25,7 +26,7 @@ function joinG(s: GameState, f: Fight, st: Staff): void {
 export function startFight(s: GameState, a: Prisoner, b: Prisoner | null, st: Staff | null): void {
   if (st && st.type !== 'guard') { st.hp -= 25; log(s, `👊 ${a.name}이(가) ${STAFF_BY_ID[st.type].name} ${st.name}을(를) 폭행`, 'warn', a.x, a.y); if (st.hp <= 0) injureStaff(s, st); a.anger = Math.max(0, a.anger - 20); return; }
   let f = fightNear(s, a.x, a.y);
-  if (!f) { f = { id: s.nextId++, x: a.x, y: a.y, prisoners: [], guards: [], t: 0, riot: s.riot, lastHit: 0 }; s.fights.push(f); s.stats.fights++; log(s, `👊 ${a.name}이(가) ${b ? b.name : '교도관 ' + st!.name}에게 싸움을 걺`, 'warn', a.x, a.y); s.events.push({ type: 'fight', x: a.x, y: a.y }); }
+  if (!f) { f = { id: s.nextId++, x: a.x, y: a.y, prisoners: [], guards: [], t: 0, riot: s.riot, lastHit: 0 }; s.fights.push(f); s.stats.fights++; s.stats.todayFights++; log(s, `👊 ${a.name}이(가) ${b ? b.name : '교도관 ' + st!.name}에게 싸움을 걺`, 'warn', a.x, a.y); s.events.push({ type: 'fight', x: a.x, y: a.y }); }
   joinP(s, f, a); if (b) joinP(s, f, b); if (st) joinG(s, f, st);
 }
 export function leaveFight(s: GameState, p: Prisoner): void {
@@ -70,7 +71,7 @@ export function updateFights(s: GameState, rng: Rng, dt: number): void {
       let target: Prisoner | Staff | null = null;
       const nearGuards = gs.filter(g => g.state === 'fight' && Math.hypot(g.x - p.x, g.y - p.y) < 2.5);
       if (nearGuards.length && (p.sec === 'max' || p.rioter || rng.chance(0.35))) target = rng.pick(nearGuards);
-      else { const others = ps.filter(q => q !== p && q.hp > 0); if (others.length) target = others[rng.int(others.length)]; else if (nearGuards.length) target = nearGuards[0]; }
+      else { const others = ps.filter(q => q !== p && q.hp > 0 && q.fightId === f.id && !q.injured); if (others.length) target = others[rng.int(others.length)]; else if (nearGuards.length) target = nearGuards[0]; }
       if (!target) { // no one left to fight
         if (gs.length) continue; leaveFight(s, p); setPState(s, p, 'idle'); p.thinkT = 0; p.anger = Math.max(0, p.anger - 25); continue;
       }
@@ -95,10 +96,10 @@ export function updateFights(s: GameState, rng: Rng, dt: number): void {
       const adjacentGuards = gs.filter(o => o.state === 'fight' && Math.hypot(o.x - near!.x, o.y - near!.y) < 1.6).length;
       const chance = 0.22 + 0.12 * adjacentGuards - (near.sec === 'max' ? 0.08 : 0) - (near.rioter ? 0.05 : 0);
       if (rng.chance(chance)) { subdue(s, near); }
-      else { near.hp -= STAFF_BY_ID.guard.attack * 0.5 * rng.range(0.6, 1.2); if (near.hp <= 0) killPrisoner(s, near, '진압 중 사망'); }
+      else { near.hp = Math.max(10, near.hp - STAFF_BY_ID.guard.attack * 0.5 * rng.range(0.6, 1.2)); if (near.hp <= 15 && !near.injured) { near.injured = true; leaveFight(s, near); setPState(s, near, 'idle'); near.thinkT = 0; near.path = null; near.anger = 0; near.calmT = 4 * HOUR_SECONDS; log(s, `🤕 ${near.name} 진압 과정에서 부상 (의무실 필요)`, 'warn', near.x, near.y); } }
     }
     // bystanders feel unsafe
-    for (const q of s.prisoners) if (q.fightId < 0 && Math.abs(q.x - f.x) < 7 && Math.abs(q.y - f.y) < 7) q.needs.safety = Math.min(100, q.needs.safety + 5);
+    for (const q of s.prisoners) if (q.fightId < 0 && Math.abs(q.x - f.x) < 5 && Math.abs(q.y - f.y) < 5) q.needs.safety = Math.min(100, q.needs.safety + 2);
     if (f.prisoners.length === 0) endFight(s, f);
   }
 }
@@ -113,7 +114,8 @@ export function checkRiot(s: GameState, rng: Rng): void {
   const n = s.prisoners.length; if (n === 0) { if (s.riot) endRiot(s); return; }
   const angry = s.prisoners.filter(p => p.anger > 70 && p.state !== 'subdued' && p.state !== 'heal' && p.punishedUntil <= s.time);
   if (!s.riot) {
-    if (angry.length >= Math.max(4, Math.ceil(0.25 * n))) {
+    const weight = angry.reduce((a, p) => a + (p.traits.includes('leader') ? 2 : 1), 0);
+    if (weight >= Math.max(4, Math.ceil(0.25 * n))) {
       s.riot = true; s.stats.riots++; s.stats.todayIncidents++; s.reputation = Math.max(0, s.reputation + REP_RIOT);
       for (const p of angry) p.rioter = true;
       log(s, `🔥 폭동 발생! 분노한 수감자 ${angry.length}명. 평판 ${REP_RIOT}. 비상 봉쇄·진압대를 고려하세요.`, 'bad');

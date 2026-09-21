@@ -7,9 +7,12 @@ import { STAFF_BY_ID } from '../data/staff';
 import { HOUR_SECONDS } from '../data/regime';
 import { STRUCT_BY_INDEX } from '../data/structures';
 import { OBJ_BY_ID } from '../data/objects';
+import { STAMP_BY_ID } from '../data/stamps';
+import { NEED_KEYS, NEED_INFO } from '../sim/types';
 
 export interface Cam { x: number; y: number; zoom: number }
-export interface SelRect { x0: number; y0: number; x1: number; y1: number; color: string; hollow: boolean }
+export interface SelRect { x0: number; y0: number; x1: number; y1: number; color: string; hollow: boolean; bad?: Set<number>; label?: string }
+export interface StampPreview { id: string; ax: number; ay: number; bad: Set<number>; affordable: boolean }
 export type Selection = { kind: 'prisoner' | 'staff'; id: number } | { kind: 'tile'; x: number; y: number } | null;
 interface Marker { x: number; y: number; t0: number; kind: string }
 
@@ -19,6 +22,7 @@ const C = {
   skin: '#f1c9a5', skin2: '#c98d5f', body: '#333',
 };
 const ZONE_FLOOR: string[] = ROOMS.map(r => r.floor);
+const STRUCT_INDEX_OF: Record<string, number> = { wall: S_WALL, fence: S_FENCE, door: S_DOOR, jaildoor: S_JAILDOOR };
 const ZONE_COLOR: string[] = ROOMS.map(r => r.color);
 
 export class Renderer {
@@ -26,7 +30,7 @@ export class Renderer {
   cam: Cam = { x: 22, y: 22, zoom: 14 };
   cw = 1; ch = 1; dpr = 1;
   showSecurity = false; showGrid = false; lowFx = false;
-  selRect: SelRect | null = null; selection: Selection = null; hoverTile: { x: number; y: number } | null = null;
+  selRect: SelRect | null = null; selection: Selection = null; hoverTile: { x: number; y: number } | null = null; stampPreview: StampPreview | null = null;
   markers: Marker[] = []; follow: { kind: 'prisoner' | 'staff'; id: number } | null = null;
   constructor(canvas: HTMLCanvasElement) { this.canvas = canvas; this.ctx = canvas.getContext('2d', { alpha: false })!; }
 
@@ -79,6 +83,7 @@ export class Renderer {
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       const i = y * s.w + x; const zn = s.zone[i]; if (!zn || s.struct[i] !== S_NONE) continue;
       ctx.fillStyle = ZONE_FLOOR[zn]; ctx.fillRect(px(x), py(y), z + 0.5, z + 0.5);
+      if (z >= 10 && !ROOMS[zn].outdoor && ((x + y) & 1)) { ctx.fillStyle = 'rgba(255,255,255,0.045)'; ctx.fillRect(px(x), py(y), z + 0.5, z + 0.5); }
       const rid = s.cache.roomAt[i]; const room = rid >= 0 ? s.cache.rooms[rid] : null;
       if (room && !room.valid) { ctx.fillStyle = 'rgba(229,72,77,0.16)'; ctx.fillRect(px(x), py(y), z + 0.5, z + 0.5); }
     }
@@ -109,15 +114,38 @@ export class Renderer {
       const X = px(r.cx), Y = py(r.cy);
       if (r.tiles.length >= 4 || !r.valid) { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillText(label, X + 1, Y + 1); ctx.fillStyle = r.valid ? 'rgba(255,255,255,0.85)' : '#ffb3b3'; ctx.fillText((r.valid ? '' : '⚠ ') + label, X, Y); }
     } else for (const r of s.cache.rooms) if (!r.valid && z >= 6) this.icon('⚠', px(r.cx), py(r.cy), 11);
+    // stamp (prefab) preview
+    if (this.stampPreview) {
+      const sp = this.stampPreview; const st = STAMP_BY_ID[sp.id];
+      if (st) {
+        for (const c of st.cells) {
+          const x = sp.ax + c.x, y = sp.ay + c.y; const X = px(x), Y = py(y);
+          if (c.zone !== undefined) { ctx.globalAlpha = 0.55; ctx.fillStyle = ZONE_FLOOR[c.zone]; ctx.fillRect(X, Y, z + 0.5, z + 0.5); ctx.globalAlpha = 1; }
+          if (c.obj) { ctx.globalAlpha = 0.6; this.drawObject(c.obj, X, Y, z); ctx.globalAlpha = 1; }
+          if (c.struct) this.drawStruct(s, STRUCT_INDEX_OF[c.struct], x, y, X, Y, z, 0.6);
+          if (sp.bad.has(y * s.w + x)) { ctx.fillStyle = 'rgba(229,72,77,0.55)'; ctx.fillRect(X, Y, z + 0.5, z + 0.5); }
+        }
+        ctx.strokeStyle = sp.bad.size || !sp.affordable ? '#e5484d' : '#ffd54f'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.strokeRect(px(sp.ax) + 1, py(sp.ay) + 1, st.w * z - 2, st.h * z - 2); ctx.setLineDash([]);
+        this.label(`${st.name} · $${st.cost.toLocaleString('en-US')}${sp.bad.size ? ' · 겹침!' : !sp.affordable ? ' · 자금 부족' : ''}`, px(sp.ax), py(sp.ay) - 4, sp.bad.size || !sp.affordable ? '#e5484d' : '#ffd54f');
+      }
+    }
     // selection rect
     if (this.selRect) {
       const r = this.selRect; const rx0 = Math.min(r.x0, r.x1), ry0 = Math.min(r.y0, r.y1), rx1 = Math.max(r.x0, r.x1), ry1 = Math.max(r.y0, r.y1);
       ctx.fillStyle = r.color.replace(')', ',0.25)').replace('rgb(', 'rgba('); ctx.strokeStyle = r.color; ctx.lineWidth = 2;
-      if (r.hollow) { for (let y = ry0; y <= ry1; y++) for (let x = rx0; x <= rx1; x++) { if (x !== rx0 && x !== rx1 && y !== ry0 && y !== ry1) continue; ctx.fillRect(px(x), py(y), z, z); } }
-      else ctx.fillRect(px(rx0), py(ry0), (rx1 - rx0 + 1) * z, (ry1 - ry0 + 1) * z);
+      for (let y = ry0; y <= ry1; y++) for (let x = rx0; x <= rx1; x++) {
+        if (r.hollow && x !== rx0 && x !== rx1 && y !== ry0 && y !== ry1) continue;
+        if (r.bad && r.bad.has(y * s.w + x)) { ctx.fillStyle = 'rgba(229,72,77,0.5)'; ctx.fillRect(px(x), py(y), z, z); ctx.fillStyle = r.color.replace(')', ',0.25)').replace('rgb(', 'rgba('); }
+        else ctx.fillRect(px(x), py(y), z, z);
+      }
       ctx.strokeRect(px(rx0) + 1, py(ry0) + 1, (rx1 - rx0 + 1) * z - 2, (ry1 - ry0 + 1) * z - 2);
       const wz = rx1 - rx0 + 1, hz = ry1 - ry0 + 1;
-      if (wz > 1 || hz > 1) { ctx.font = '700 12px system-ui'; ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; const t = `${wz}×${hz}`; ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(px(rx0), py(ry0) - 16, ctx.measureText(t).width + 8, 16); ctx.fillStyle = '#fff'; ctx.fillText(t, px(rx0) + 4, py(ry0) - 2); }
+      if (r.label || wz > 1 || hz > 1) this.label(r.label || `${wz}×${hz}`, px(rx0), py(ry0) - 4, '#fff');
+    }
+    // outline of the selected room
+    if (this.selection && this.selection.kind === 'tile') {
+      const rid = s.cache.roomAt[this.selection.y * s.w + this.selection.x];
+      if (rid >= 0) { const room = s.cache.rooms[rid]; const inRoom = (x: number, y: number) => x >= 0 && y >= 0 && x < s.w && y < s.h && s.cache.roomAt[y * s.w + x] === rid; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2; ctx.beginPath(); for (const t of room.tiles) { const x = t % s.w, y = Math.floor(t / s.w); if (x < x0 - 1 || x > x1 + 1 || y < y0 - 1 || y > y1 + 1) continue; if (!inRoom(x, y - 1)) { ctx.moveTo(px(x), py(y)); ctx.lineTo(px(x + 1), py(y)); } if (!inRoom(x, y + 1)) { ctx.moveTo(px(x), py(y + 1)); ctx.lineTo(px(x + 1), py(y + 1)); } if (!inRoom(x - 1, y)) { ctx.moveTo(px(x), py(y)); ctx.lineTo(px(x), py(y + 1)); } if (!inRoom(x + 1, y)) { ctx.moveTo(px(x + 1), py(y)); ctx.lineTo(px(x + 1), py(y + 1)); } } ctx.stroke(); }
     }
     // entities
     const ents: (Prisoner | Staff)[] = [];
@@ -164,6 +192,7 @@ export class Renderer {
     }
   }
 
+  label(txt: string, x: number, y: number, color: string): void { const ctx = this.ctx; ctx.font = '700 12px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; const w = ctx.measureText(txt).width + 10; ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(x, y - 17, w, 17); ctx.fillStyle = color; ctx.fillText(txt, x + 5, y - 2); }
   icon(txt: string, x: number, y: number, size: number): void { const ctx = this.ctx; ctx.font = `${size}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(txt, x, y); }
 
   drawStruct(s: GameState, st: number, tx: number, ty: number, X: number, Y: number, z: number, alpha: number): void {
@@ -173,6 +202,7 @@ export class Renderer {
       ctx.fillStyle = C.wallTop; ctx.fillRect(X, Y, z + 0.5, Math.max(1, z * 0.35));
       const below = ty + 1 < s.h && s.struct[(ty + 1) * s.w + tx] === S_WALL;
       if (!below) { ctx.fillStyle = C.wallEdge; ctx.fillRect(X, Y + z * 0.82, z + 0.5, z * 0.18 + 0.5); }
+      if (z >= 8) { const left = tx > 0 && s.struct[ty * s.w + tx - 1] === S_WALL, right = tx + 1 < s.w && s.struct[ty * s.w + tx + 1] === S_WALL; ctx.fillStyle = 'rgba(0,0,0,0.22)'; if (!left) ctx.fillRect(X, Y, Math.max(1, z * 0.08), z + 0.5); if (!right) ctx.fillRect(X + z - Math.max(1, z * 0.08), Y, Math.max(1, z * 0.08), z + 0.5); }
     } else if (st === S_FENCE) {
       ctx.fillStyle = C.fencePost; ctx.fillRect(X + z * 0.38, Y + z * 0.1, z * 0.24, z * 0.8);
       ctx.strokeStyle = C.fence; ctx.lineWidth = Math.max(1, z * 0.1);
@@ -215,6 +245,7 @@ export class Renderer {
 
   drawPrisoner(s: GameState, p: Prisoner, X: number, Y: number, z: number, now: number): void {
     const ctx = this.ctx; const r = z * 0.32;
+    if (!this.lowFx && (p.state === 'move' || p.state === 'escape')) Y += Math.sin(now / 90 + p.id) * z * 0.04;
     const color = SECURITY_INFO[p.sec].color;
     const lying = p.state === 'sleep' || p.state === 'subdued' || p.state === 'heal';
     if (this.selection && this.selection.kind === 'prisoner' && this.selection.id === p.id) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X, Y, r + 4 + 2 * Math.sin(now / 150), 0, Math.PI * 2); ctx.stroke(); }
@@ -232,12 +263,14 @@ export class Renderer {
       switch (p.state) { case 'sleep': ic = '💤'; break; case 'eat': ic = '🍽'; break; case 'shower': ic = '🚿'; break; case 'fight': ic = '💢'; break; case 'escape': ic = '🏃'; break; case 'subdued': ic = '😵'; break; case 'heal': ic = '🩹'; break; case 'work': ic = '🔧'; break; }
       if (!ic && p.injured) ic = '🩸'; if (!ic && p.rioter) ic = '🔥'; if (!ic && p.anger > 70) ic = '😡'; else if (!ic && p.anger > 50) ic = '😠';
       if (!ic && p.intent === 'release' && p.state === 'move') ic = '🎉';
+      if (!ic && z >= 14 && (p.state === 'rest' || p.state === 'wait' || p.state === 'idle' || p.state === 'move')) { let top: string = ''; let tv = 80; for (const k of NEED_KEYS) if (p.needs[k] > tv) { tv = p.needs[k]; top = k; } if (top) ic = NEED_INFO[top as keyof typeof NEED_INFO].icon; }
       if (ic) this.icon(ic, X, Y - r * 2.1, Math.max(10, z * 0.55));
       if (p.punishedUntil > s.time && !ic) this.icon('🔒', X, Y - r * 2.1, Math.max(10, z * 0.5));
     }
   }
   drawStaff(st: Staff, X: number, Y: number, z: number, now: number): void {
     const ctx = this.ctx; const r = z * 0.32; const def = STAFF_BY_ID[st.type];
+    if (!this.lowFx && (st.state === 'move' || st.state === 'chase' || st.state === 'leave')) Y += Math.sin(now / 90 + st.id) * z * 0.04;
     if (this.selection && this.selection.kind === 'staff' && this.selection.id === st.id) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X, Y, r + 4 + 2 * Math.sin(now / 150), 0, Math.PI * 2); ctx.stroke(); }
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(X, Y + r * 0.7, r * 1.1, r * 0.45, 0, 0, Math.PI * 2); ctx.fill();
     if (st.state === 'injured') { ctx.fillStyle = def.color; ctx.beginPath(); ctx.ellipse(X, Y, r * 1.5, r * 0.75, 0, 0, Math.PI * 2); ctx.fill(); if (z >= 11) this.icon('🤕', X, Y - r * 2, Math.max(10, z * 0.55)); return; }
@@ -255,6 +288,21 @@ export class Renderer {
     }
   }
 
+  /** Draw the minimap into a small canvas: zones, walls, entities and the current viewport. */
+  drawMinimap(mc: HTMLCanvasElement, s: GameState): void {
+    const g = mc.getContext('2d'); if (!g) return; const W = mc.width, H = mc.height; const sc = Math.min(W / s.w, H / s.h);
+    g.fillStyle = '#1b2a1c'; g.fillRect(0, 0, W, H);
+    for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) {
+      const i = y * s.w + x; const st = s.struct[i]; const zn = s.zone[i];
+      let c: string | null = null;
+      if (st === S_WALL) c = '#d0d4d8'; else if (st === S_FENCE) c = '#b08a5a'; else if (st === S_DOOR || st === S_JAILDOOR) c = '#e0b070'; else if (zn) c = ZONE_COLOR[zn]; else if (s.terrain[i] === T_ROAD) c = '#555';
+      if (c) { g.fillStyle = c; g.fillRect(x * sc, y * sc, sc + 0.3, sc + 0.3); }
+    }
+    for (const p of s.prisoners) { g.fillStyle = p.state === 'escape' ? '#ff1744' : p.state === 'fight' ? '#ff5252' : '#ffa726'; g.fillRect(p.x * sc - 1, p.y * sc - 1, 2.4, 2.4); }
+    for (const st of s.staff) { g.fillStyle = st.type === 'guard' ? '#4c8dff' : '#eeeeee'; g.fillRect(st.x * sc - 1, st.y * sc - 1, 2.2, 2.2); }
+    const vx0 = this.cam.x - this.cw / 2 / this.cam.zoom, vy0 = this.cam.y - this.ch / 2 / this.cam.zoom, vw = this.cw / this.cam.zoom, vh = this.ch / this.cam.zoom;
+    g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 1; g.strokeRect(vx0 * sc + 0.5, vy0 * sc + 0.5, vw * sc, vh * sc);
+  }
   /** Nearest entity within 0.7 tiles of a world point. */
   pick(s: GameState, wx: number, wy: number): Selection {
     let best: Selection = null, bd = 0.7 * 0.7;
