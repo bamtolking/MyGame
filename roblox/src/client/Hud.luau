@@ -128,7 +128,8 @@ function Hud.create(playerGui: PlayerGui)
 	end
 
 	-- 버튼 (오른쪽 위)
-	local buttons = mk("Frame", { Name = "Buttons", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 100), Size = UDim2.new(0, 330, 0, 40), BackgroundTransparency = 1 }, gui)
+	-- 오른쪽 위 로블록스 플레이어 목록(리더보드)과 겹치지 않도록 왼쪽으로 띄움
+	local buttons = mk("Frame", { Name = "Buttons", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -372, 0, 100), Size = UDim2.new(0, 330, 0, 40), BackgroundTransparency = 1 }, gui)
 	mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 6) }, buttons)
 	local function button(text: string, width: number): TextButton
 		local b = mk("TextButton", { Size = UDim2.new(0, width, 1, 0), BackgroundColor3 = Color3.fromRGB(90, 50, 150), Text = text, Font = FONT, TextSize = 15, TextColor3 = Color3.fromRGB(255, 255, 255), AutoButtonColor = true }, buttons) :: TextButton
@@ -140,7 +141,7 @@ function Hud.create(playerGui: PlayerGui)
 	self.wardrobeButton = button("🎩 옷장 (C)", 100)
 
 	-- 밤 목표
-	local challengeBox = label(gui, { Name = "Challenge", Visible = false, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 146), Size = UDim2.new(0, 330, 0, 44), TextSize = 15, BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.3, Text = "" })
+	local challengeBox = label(gui, { Name = "Challenge", Visible = false, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -372, 0, 146), Size = UDim2.new(0, 330, 0, 44), TextSize = 15, BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.3, Text = "" })
 	corner(challengeBox, 10)
 	local challengeStroke = mk("UIStroke", { Color = Color3.fromRGB(255, 200, 90), Thickness = 1.5, Transparency = 0.3 }, challengeBox) :: UIStroke
 

@@ -36,7 +36,7 @@ local function panelFrame(gui: Instance, name: string, title: string, side: stri
 		Name = name,
 		Visible = false,
 		AnchorPoint = if side == "left" then Vector2.new(0, 0) else Vector2.new(1, 0),
-		Position = if side == "left" then UDim2.new(0, 12, 0, 96) else UDim2.new(1, -12, 0, 196),
+		Position = if side == "left" then UDim2.new(0, 12, 0, 96) else UDim2.new(1, -372, 0, 196),
 		Size = UDim2.new(0, 380, 1, -210),
 		BackgroundColor3 = Color3.fromRGB(24, 20, 36),
 		BackgroundTransparency = 0.08,

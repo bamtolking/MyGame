@@ -298,6 +298,41 @@ local function makeRunes(parent: Instance)
 	end
 end
 
+-- 주방 소품: 후드, 선반과 병, 걸린 팬, 화분
+local function makeKitchenDecor(parent: Instance)
+	-- 조리 섬 위 후드 + 조명
+	part({ Name = "Hood", Size = Vector3.new(52, 1.4, 7), Position = Vector3.new(-8, 8.3, -30), Color = Color3.fromRGB(70, 72, 78), Material = Enum.Material.Metal, CanCollide = false, Parent = parent })
+	part({ Name = "HoodDuct", Size = Vector3.new(6, 4, 4), Position = Vector3.new(-8, 10.8, -30), Color = Color3.fromRGB(70, 72, 78), Material = Enum.Material.Metal, CanCollide = false, Parent = parent })
+	for _, x in { -26, -8, 10 } do
+		local strip = part({ Name = "HoodLight", Size = Vector3.new(6, 0.2, 1), Position = Vector3.new(x, 7.5, -30), Color = Color3.fromRGB(255, 240, 200), Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+		local light = Instance.new("PointLight")
+		light.Range = 14
+		light.Brightness = 0.7
+		light.Color = Color3.fromRGB(255, 235, 190)
+		light.Shadows = false
+		light.Parent = strip
+	end
+	-- 뒷벽 선반과 알록달록한 병
+	part({ Name = "Shelf", Size = Vector3.new(74, 0.4, 2.2), Position = Vector3.new(0, 5.2, -45.2), Color = Color3.fromRGB(150, 105, 60), Material = Enum.Material.Wood, CanCollide = false, CollisionGroup = "Furniture", Parent = parent })
+	local jarColors = { Color3.fromRGB(200, 40, 40), Color3.fromRGB(240, 190, 60), Color3.fromRGB(80, 160, 90), Color3.fromRGB(120, 90, 200), Color3.fromRGB(240, 130, 60), Color3.fromRGB(70, 140, 220) }
+	local j = 0
+	for x = -34, 34, 4 do
+		j += 1
+		local h = 0.9 + (j % 3) * 0.35
+		part({ Name = "Jar", Size = Vector3.new(h, 1.1, 1.1), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 5.4 + h / 2, -45.2) * UPRIGHT, Color = jarColors[(j % #jarColors) + 1], Material = Enum.Material.Glass, Transparency = 0.15, CanCollide = false, Parent = parent })
+	end
+	-- 왼쪽 벽에 걸린 팬
+	for i, z in { -40, -37, -34 } do
+		part({ Name = "Pan", Size = Vector3.new(0.3, 1.8 - i * 0.2, 1.8 - i * 0.2), Shape = Enum.PartType.Cylinder, Position = Vector3.new(-47.6, 6.8, z), Color = Color3.fromRGB(40, 40, 45), Material = Enum.Material.Metal, CanCollide = false, Parent = parent })
+		part({ Name = "PanHandle", Size = Vector3.new(0.25, 0.25, 1.4), Position = Vector3.new(-47.6, 6.8, z - 1.3), Color = Color3.fromRGB(90, 60, 40), Material = Enum.Material.Wood, CanCollide = false, Parent = parent })
+	end
+	-- 카운터 양끝 화분
+	for _, x in { -39, 39 } do
+		part({ Name = "Pot", Size = Vector3.new(1.3, 1.5, 1.5), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.95, -1) * UPRIGHT, Color = Color3.fromRGB(170, 95, 60), Material = Enum.Material.Concrete, CanCollide = false, CollisionGroup = "Furniture", Parent = parent })
+		part({ Name = "Plant", Size = Vector3.new(2.2, 2.2, 2.2), Shape = Enum.PartType.Ball, Position = Vector3.new(x, 5.4, -1), Color = Color3.fromRGB(70, 150, 80), Material = Enum.Material.Grass, CanCollide = false, CollisionGroup = "Furniture", Parent = parent })
+	end
+end
+
 local function makeLeaderboardBoard(parent: Instance)
 	local board = part({ Name = "LeaderboardBoard", Size = Vector3.new(0.5, 10, 24), Position = Vector3.new(47.7, 7, -23), Color = Color3.fromRGB(30, 26, 40), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = parent })
 	local gui = Instance.new("SurfaceGui")
@@ -541,7 +576,8 @@ function MapBuilder.build(): MapInfo
 	customersFolder.Parent = root
 
 	-- 바닥
-	part({ Name = "KitchenFloor", Size = Vector3.new(96, 1, 46), Position = Vector3.new(0, -0.5, -23), Color = Color3.fromRGB(120, 115, 110), Material = Enum.Material.Slate, Parent = decor })
+	part({ Name = "KitchenFloor", Size = Vector3.new(96, 1, 46), Position = Vector3.new(0, -0.5, -23), Color = Color3.fromRGB(226, 214, 190), Material = Enum.Material.CeramicTiles, Parent = decor })
+	part({ Name = "KitchenTrim", Size = Vector3.new(96, 0.12, 2), Position = Vector3.new(0, 0.06, -3.2), Color = Color3.fromRGB(150, 60, 60), Material = Enum.Material.CeramicTiles, CanCollide = false, Parent = decor })
 	part({ Name = "FrontFloor", Size = Vector3.new(96, 1, 80), Position = Vector3.new(0, -0.5, 40), Color = Color3.fromRGB(62, 58, 75), Material = Enum.Material.Cobblestone, Parent = decor })
 	part({ Name = "Path", Size = Vector3.new(14, 0.2, 60), Position = Vector3.new(0, 0.05, 36), Color = Color3.fromRGB(95, 90, 110), Material = Enum.Material.Concrete, CanCollide = false, Parent = decor })
 
@@ -637,6 +673,7 @@ function MapBuilder.build(): MapInfo
 	makeMist(decor)
 	makeFireflies(decor)
 	makeRunes(decor)
+	makeKitchenDecor(decor)
 	makeLeaderboardBoard(decor)
 	makeMenuBoard(decor)
 
@@ -648,8 +685,8 @@ function MapBuilder.build(): MapInfo
 	spawn.Anchored = true
 	spawn.Neutral = true
 	spawn.Duration = 0
-	spawn.Color = Color3.fromRGB(140, 135, 130)
-	spawn.Material = Enum.Material.Fabric
+	spawn.Color = Color3.fromRGB(150, 60, 60)
+	spawn.Material = Enum.Material.Carpet
 	spawn.TopSurface = Enum.SurfaceType.Smooth
 	spawn.Parent = decor
 
