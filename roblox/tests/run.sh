@@ -4,7 +4,10 @@
 # Roblox 식 require(script.Parent.X) 를 파일 경로 require("./X") 로 바꿔 임시 폴더에서 실행합니다.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LUAU_BIN="${LUAU_BIN:-luau}"
+LUAU_BIN="${LUAU_BIN:-}"
+if [ -z "$LUAU_BIN" ]; then
+  if [ -x "$ROOT/.tools/luau" ]; then LUAU_BIN="$ROOT/.tools/luau"; else LUAU_BIN="luau"; fi
+fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

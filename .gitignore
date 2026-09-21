@@ -2,3 +2,5 @@ node_modules
 dist
 .vite
 e2e-out
+roblox/.tools
+roblox/sourcemap.json

@@ -7,6 +7,8 @@
 | **저승 휴게소** — 귀신 손님을 먹여 살리는 협동 요리 디펜스 (2~6인) | Roblox | [`roblox/`](roblox/README.md) · 바로 열기: `roblox/build/GhostDiner.rbxlx` |
 | **대박수비대: 합성 대폭주** — 랜덤 소환·합성 타워 디펜스 (싱글) | 브라우저(HTML5) | 이 폴더 · 바로 열기: `play/index.html` |
 
+AI 코딩 에이전트(Codex, Claude Code 등)로 이어서 작업하려면 [`AGENTS.md`](AGENTS.md) → [`roblox/AGENTS.md`](roblox/AGENTS.md) → [`roblox/docs/HANDOFF.md`](roblox/docs/HANDOFF.md) 순서로 읽히면 됩니다. 도구 설치는 `bash roblox/scripts/setup-tools.sh` 한 줄입니다.
+
 ---
 
 # 대박수비대: 합성 대폭주 (첫 베타)

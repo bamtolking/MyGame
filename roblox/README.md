@@ -158,8 +158,14 @@ roblox/
 ## 개발자용
 
 ```bash
-# 순수 로직 테스트 (luau CLI 필요: https://github.com/luau-lang/luau/releases)
-LUAU_BIN=/path/to/luau tests/run.sh
+# 도구 설치 (처음 한 번, 인터넷 필요): rojo, luau, luau-lsp, lune 을 roblox/.tools/ 에 받음
+bash scripts/setup-tools.sh
+
+# 전체 검증 (로직 테스트 + 타입 검사 + 속성 검사 + 빌드 + 시뮬레이션)
+./build.sh
+
+# 순수 로직 테스트만 (.tools/luau 를 자동으로 찾음)
+tests/run.sh
 
 # PC 에 Studio 가 있으면: 터미널에서 Studio 를 띄워 무인 시연을 돌리고 자가진단 출력을 받아옴 (Windows/macOS)
 #   run-in-roblox: https://github.com/rojo-rbx/run-in-roblox
@@ -168,11 +174,7 @@ run-in-roblox --place build/GhostDiner.rbxlx --script tests/studio/run_in_studio
 # 헤드리스 통합 시뮬레이션 (Lune 필요: https://github.com/lune-org/lune/releases)
 #   실제 서버·클라이언트 스크립트를 Lune 의 Roblox API 위에서 실행하고, 가짜 요리사 2명이 5밤을 진행하며
 #   서빙·성불·난동·화재·소화·부적·떡메·구미호·정전·보스·유물 투표·상점·옷장·폐업·재시작을 검증합니다 (약 2~3분).
-lune run tests/sim/run.luau .
-
-# 테스트 + Roblox API 타입 검사 + .rbxlx 빌드 (lune 이 있으면 시뮬레이션도)
-#   rojo, luau, luau-lsp(, lune) 바이너리와 luau-lsp 저장소의 scripts/globalTypes.d.luau 를 한 폴더에 두고:
-TOOLS_DIR=/path/to/tools ./build.sh
+.tools/lune run tests/sim/run.luau .
 
 # Studio 와 실시간 동기화 (Rojo 플러그인 설치 후)
 rojo serve default.project.json
