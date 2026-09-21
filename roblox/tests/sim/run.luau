@@ -59,7 +59,9 @@ rbx.startTicker(0.05)
 
 -- ---------- 서버 부팅 ----------
 print("== 서버 시작")
-rbx.runScript(tree.serverMain)
+for _, inst in tree.serverScripts do
+	rbx.runScript(inst)
+end
 local ws = rbx.workspace
 local map = ws:WaitForChild("GhostDinerMap", 5)
 check("지도 생성", map ~= nil)
@@ -84,7 +86,9 @@ local Data = rbx.requireInstance(tree.server.Data)
 
 -- ---------- 클라이언트 부팅 ----------
 print("== 클라이언트 시작")
-rbx.runScript(tree.clientMain)
+for _, inst in tree.clientScripts do
+	rbx.runScript(inst)
+end
 task.wait(0.5)
 local pg = p1:FindFirstChildOfClass("PlayerGui")
 local hud = pg and pg:FindFirstChild("GhostDinerHud")

@@ -20,6 +20,12 @@ Overcooked 식 "주방 대혼란"에 웨이브 디펜스의 긴장감을 합친 
 4. 게시: **파일 > Roblox에 게시**. 게임 설정에서 서버 최대 인원은 6을 권장합니다.
 5. 기록 저장(최고 밤 등)을 Studio에서도 보려면 게임 설정 > 보안 > **"Studio의 API 서비스 접근 허용"**을 켭니다. 꺼져 있어도 게임은 정상 작동합니다.
 
+## Studio 자가 진단 (플레이만 누르면 됩니다)
+
+Studio 에서 ▶ 플레이를 누르면 게임 안에 들어 있는 검사기가 90초 동안 실제 엔진에서 벌어지는 일을 지켜보고, **보기 > 출력** 창에 `[자가진단]` 줄과 마지막 요약(✅/❌)을 남깁니다. 서빙을 한 번 해 보면 "서빙 성공 → 성불" 까지 확인됩니다. 이상이 있으면 `자가진단 요약` 두 블록(서버·클라이언트)을 복사해서 보내 주세요. 게시된 게임에서는 검사기가 동작하지 않습니다.
+
+플레이어 없이 **테스트 > 실행(Run)** 을 눌러도 5초 뒤 무인 시연이 시작되어 손님이 오고, 서빙이 없으니 악귀가 되어 조리대를 부수는 것까지 볼 수 있습니다.
+
 ## 조작
 
 | 조작 | 설명 |
@@ -125,6 +131,7 @@ roblox/
     ItemVisuals   재료·요리·도구 모양(파츠 조립) — 서버(조리대 표시·Tool)와 클라이언트(서빙 연출) 공용
   src/server/   ServerScriptService.GhostDinerServer
     Main          진입점 (지도 → 조리대 → 손님 → 저장 → 상점 → 옷장 → 게임 루프)
+    SelfTest      Studio 전용 자가 진단 (출력 창에 요약)
     MapBuilder    파츠로 휴게소 지도·야시장 장식 조립, 조명(밤/낮/정전), 순위표 벽, 충돌 그룹
     Stations      조리대 상태 기계 (상자/도마/조리대/냄비류/쓰레기통/소화기함/떡메), 화재·번짐·진화, 난동 파손·복구, 조리 연출, 유물 효과
     Customers     손님 NPC 조립·이동·인내심·서빙·난동·구미호 변덕·성불·부적 효과
@@ -133,6 +140,7 @@ roblox/
     Shop / Data(기록·명성·모자·OrderedDataStore) / Wardrobe(모자 조립) / Remotes / GameState
   src/client/   StarterPlayerScripts.GhostDinerClient
     Main          HUD·패널·라벨·연출·튜토리얼·효과음 연결, 서버 알림 처리, 장식 애니메이션, 배경음악
+    SelfTest      Studio 전용 자가 진단 (클라이언트 쪽)
     Hud           상단 상태·평판·콤보·이벤트 배너·주문 목록·밤 목표·준비 버튼·부적 게이지/버튼·유물 투표·밤 요약·결과(리뷰)
     Panels        레시피 책 · 상점 · 옷장
     Labels        조리대·손님 라벨, 손님 둥실거림/점프/떨림 애니메이션, 프롬프트 문구
@@ -141,6 +149,7 @@ roblox/
     Sfx           내장 효과음
   tests/        Roblox 없이 Luau CLI 로 도는 순수 로직 테스트 8종 + 속성 이름 검사(check_props.py)
   tests/sim/    Lune 위에서 실제 게임 코드를 돌리는 헤드리스 통합 시뮬레이션 (rbx.luau 흉내 환경, run.luau 시나리오)
+  tests/studio/ run-in-roblox 로 Studio 를 띄워 무인 시연을 돌리는 스크립트
   build.sh      테스트 + 타입 검사 + 빌드
 ```
 
@@ -151,6 +160,10 @@ roblox/
 ```bash
 # 순수 로직 테스트 (luau CLI 필요: https://github.com/luau-lang/luau/releases)
 LUAU_BIN=/path/to/luau tests/run.sh
+
+# PC 에 Studio 가 있으면: 터미널에서 Studio 를 띄워 무인 시연을 돌리고 자가진단 출력을 받아옴 (Windows/macOS)
+#   run-in-roblox: https://github.com/rojo-rbx/run-in-roblox
+run-in-roblox --place build/GhostDiner.rbxlx --script tests/studio/run_in_studio.luau
 
 # 헤드리스 통합 시뮬레이션 (Lune 필요: https://github.com/lune-org/lune/releases)
 #   실제 서버·클라이언트 스크립트를 Lune 의 Roblox API 위에서 실행하고, 가짜 요리사 2명이 5밤을 진행하며

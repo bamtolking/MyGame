@@ -269,6 +269,9 @@ end)
 roblox.implementMethod("RunService", "IsClient", function()
 	return true
 end)
+roblox.implementMethod("RunService", "IsRunMode", function()
+	return false
+end)
 M.renderSteps = {}
 roblox.implementMethod("RunService", "BindToRenderStep", function(self, name, prio, fn)
 	M.renderSteps[name] = fn
@@ -607,12 +610,15 @@ function M.mountProject(root)
 				pathOf[idOf(inst)] = dir .. "/" .. file
 			end
 		end
-		return folder, mains[1]
+		table.sort(mains, function(a, b)
+			return (if a.Name == "Main" then 0 else 1) < (if b.Name == "Main" then 0 else 1)
+		end)
+		return folder, mains
 	end
 	local shared = mount(root .. "/src/shared", rs, "GhostDiner")
-	local serverFolder, serverMain = mount(root .. "/src/server", sss, "GhostDinerServer")
-	local clientFolder, clientMain = mount(root .. "/src/client", sps, "GhostDinerClient")
-	return { shared = shared, server = serverFolder, serverMain = serverMain, client = clientFolder, clientMain = clientMain }
+	local serverFolder, serverMains = mount(root .. "/src/server", sss, "GhostDinerServer")
+	local clientFolder, clientMains = mount(root .. "/src/client", sps, "GhostDinerClient")
+	return { shared = shared, server = serverFolder, serverMain = serverMains[1], serverScripts = serverMains, client = clientFolder, clientMain = clientMains[1], clientScripts = clientMains }
 end
 
 -- 빌드된 .rbxlx 를 열어 그 안의 스크립트 Source 로 실행 (배포 산출물 검증용)
@@ -623,16 +629,19 @@ function M.mountPlace(path)
 	baseEnv.game = dm
 	baseEnv.workspace = M.workspace
 	local function register(folder)
-		local main = nil
+		local mains = {}
 		for _, inst in folder:GetChildren() do
 			if inst:IsA("LuaSourceContainer") then
 				sourceOf[idOf(inst)] = inst.Source
 				if inst:IsA("Script") then
-					main = inst
+					table.insert(mains, inst)
 				end
 			end
 		end
-		return main
+		table.sort(mains, function(a, b)
+			return (if a.Name == "Main" then 0 else 1) < (if b.Name == "Main" then 0 else 1)
+		end)
+		return mains
 	end
 	local shared = dm:GetService("ReplicatedStorage"):FindFirstChild("GhostDiner")
 	local serverFolder = dm:GetService("ServerScriptService"):FindFirstChild("GhostDinerServer")
@@ -640,9 +649,9 @@ function M.mountPlace(path)
 	local clientFolder = sps and sps:FindFirstChild("GhostDinerClient")
 	assert(shared and serverFolder and clientFolder, "rbxlx 에 GhostDiner 폴더가 없음")
 	register(shared)
-	local serverMain = register(serverFolder)
-	local clientMain = register(clientFolder)
-	return { shared = shared, server = serverFolder, serverMain = serverMain, client = clientFolder, clientMain = clientMain, dataModel = dm }
+	local serverMains = register(serverFolder)
+	local clientMains = register(clientFolder)
+	return { shared = shared, server = serverFolder, serverMain = serverMains[1], serverScripts = serverMains, client = clientFolder, clientMain = clientMains[1], clientScripts = clientMains, dataModel = dm }
 end
 
 -- ---------- 플레이어 ----------

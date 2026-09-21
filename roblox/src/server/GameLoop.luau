@@ -3,6 +3,7 @@
 -- 콤보·명성·순위표·정전·부적 게이지·유물도 여기서 관리합니다.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.GhostDiner.Config)
 local Recipes = require(ReplicatedStorage.GhostDiner.Recipes)
@@ -34,6 +35,15 @@ end
 
 local function playerCount(): number
 	return #Players:GetPlayers()
+end
+
+-- Studio 의 "실행(Run)" 모드처럼 플레이어가 없어도 게임이 돌아가게 (무인 시연·자동 검사용)
+local function unattended(): boolean
+	return RunService:IsStudio() and RunService:IsRunMode()
+end
+
+local function noPlayers(): boolean
+	return playerCount() == 0 and not unattended()
 end
 
 local function challengeText(): string
@@ -114,7 +124,7 @@ local function setPhase(phase: string, duration: number)
 end
 
 local function waitPhase()
-	while now() < GameState.phaseEndsAt and playerCount() > 0 do
+	while now() < GameState.phaseEndsAt and not noPlayers() do
 		task.wait(0.25)
 	end
 end
@@ -411,7 +421,7 @@ local function runNight(night: number): string
 			endBlackout()
 			return "dead"
 		end
-		if playerCount() == 0 then
+		if noPlayers() then
 			endBlackout()
 			return "abandon"
 		end
@@ -505,7 +515,7 @@ local function runDay()
 	setPhase("day", Config.DayLength)
 	MapBuilder.setNight(false)
 	Remotes.notifyAll({ kind = "day", night = GameState.night })
-	while now() < GameState.phaseEndsAt and playerCount() > 0 do
+	while now() < GameState.phaseEndsAt and not noPlayers() do
 		if #GameState.relicOffer > 0 and now() >= GameState.relicVoteEndsAt then
 			resolveRelic()
 		end
@@ -583,8 +593,14 @@ function GameLoop.start()
 			resetRun()
 			setPhase("lobby", 0)
 			MapBuilder.setNight(true)
+			local waited = 0
 			while playerCount() == 0 do
 				task.wait(1)
+				waited += 1
+				if unattended() and waited >= 5 then
+					Remotes.toastAll("🧪 Studio 실행(Run) 모드: 플레이어 없이 무인 시연을 시작합니다", "info")
+					break
+				end
 			end
 
 			setPhase("countdown", Config.StartCountdown)
@@ -601,7 +617,7 @@ function GameLoop.start()
 				end
 				nightCleared(night)
 				runDay()
-				if playerCount() == 0 then
+				if noPlayers() then
 					ended = "abandon"
 					break
 				end
@@ -653,7 +669,7 @@ function GameLoop.start()
 				Data.saveAll()
 				Customers.clear()
 				waitPhase()
-				if playerCount() > 0 then
+				if not noPlayers() then
 					task.wait(1)
 				end
 			end
