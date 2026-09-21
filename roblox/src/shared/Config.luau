@@ -77,6 +77,9 @@ local Config = {
 	MusicId = "",
 	MusicVolume = 0.25,
 
+	-- Studio 자가 진단이 요약을 찍기까지 지켜보는 시간(초)
+	SelfTestDuration = 90,
+
 	-- 저장
 	DataStoreName = "GhostDiner_v1",
 	LeaderboardStoreName = "GhostDiner_BestNight_v1",

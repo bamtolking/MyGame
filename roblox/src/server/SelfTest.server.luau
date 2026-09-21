@@ -11,7 +11,7 @@ local ScriptContext = game:GetService("ScriptContext")
 
 local Config = require(ReplicatedStorage.GhostDiner.Config)
 
-local DURATION = 90
+local DURATION = Config.SelfTestDuration or 90
 local results = {}
 local errors = {}
 local startClock = os.clock()

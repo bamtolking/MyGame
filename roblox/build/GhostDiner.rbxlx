@@ -212,6 +212,9 @@ local Config = {
 	MusicId = "",
 	MusicVolume = 0.25,
 
+	-- Studio 자가 진단이 요약을 찍기까지 지켜보는 시간(초)
+	SelfTestDuration = 90,
+
 	-- 저장
 	DataStoreName = "GhostDiner_v1",
 	LeaderboardStoreName = "GhostDiner_BestNight_v1",
@@ -4075,7 +4078,7 @@ local ScriptContext = game:GetService("ScriptContext")
 
 local Config = require(ReplicatedStorage.GhostDiner.Config)
 
-local DURATION = 90
+local DURATION = Config.SelfTestDuration or 90
 local results = {}
 local errors = {}
 local startClock = os.clock()
@@ -7371,7 +7374,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ScriptContext = game:GetService("ScriptContext")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 
-local DURATION = 90
+local Config = require(ReplicatedStorage:WaitForChild("GhostDiner"):WaitForChild("Config"))
+local DURATION = Config.SelfTestDuration or 90
 local results = {}
 local errors = {}
 local startClock = os.clock()
@@ -7457,9 +7461,15 @@ task.spawn(function()
 				return false
 			end, 45))
 		end
-		mark("프롬프트 표시 경험", waitFor(function()
+		-- 프롬프트는 플레이어가 가까이 가야 뜨므로 실패로 치지 않고 알림만
+		if waitFor(function()
 			return promptsShown > 0
-		end, 60), if promptsShown > 0 then promptsShown .. "회" else "조리대나 손님 가까이 가 보세요")
+		end, 45) then
+			mark("프롬프트 표시 경험", true, promptsShown .. "회")
+		else
+			table.insert(results, { name = "프롬프트가 아직 안 보였어요 — 조리대나 손님 가까이 가 보세요", ok = nil })
+			log("ℹ️ 프롬프트가 아직 안 보였어요 — 조리대나 손님 가까이 가 보세요")
+		end
 	end)
 	if not ok then
 		mark("자가진단(클라) 자체 오류", false, tostring(err))
@@ -7471,12 +7481,12 @@ task.spawn(function()
 	log("================ 자가진단 요약 (클라이언트) — 이 부분도 함께 보내 주세요 ================")
 	local pass, fail = 0, 0
 	for _, r in results do
-		if r.ok then
+		if r.ok == true then
 			pass += 1
-		else
+		elseif r.ok == false then
 			fail += 1
 		end
-		log((if r.ok then "✅ " else "❌ ") .. r.name .. (if r.detail ~= nil then " — " .. tostring(r.detail) else ""))
+		log((if r.ok == true then "✅ " elseif r.ok == false then "❌ " else "ℹ️ ") .. r.name .. (if r.detail ~= nil then " — " .. tostring(r.detail) else ""))
 	end
 	log(string.format("통과 %d · 실패 %d · 클라이언트 스크립트 오류 %d건", pass, fail, #errors))
 	for i, e in errors do

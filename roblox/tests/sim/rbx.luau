@@ -466,6 +466,25 @@ local sourceOf = {} -- .rbxlx 에서 올린 경우 Source 문자열
 local cache = {}
 local loading = {}
 
+M.selfTestSummaries = {}
+M.selfTestFailures = 0
+local function gamePrint(...)
+	local parts = {}
+	for _, v in { ... } do
+		table.insert(parts, tostring(v))
+	end
+	local line = table.concat(parts, " ")
+	if string.find(line, "자가진단 요약 (서버)", 1, true) then
+		M.selfTestSummaries.server = true
+	elseif string.find(line, "자가진단 요약 (클라이언트)", 1, true) then
+		M.selfTestSummaries.client = true
+	end
+	if string.find(line, "[자가진단", 1, true) and string.find(line, "❌", 1, true) then
+		M.selfTestFailures += 1
+	end
+	print(line)
+end
+
 local baseEnv = {
 	game = M.game,
 	workspace = M.workspace,
@@ -487,7 +506,7 @@ local baseEnv = {
 	TweenInfo = TweenInfoShim,
 	Random = RandomShim,
 	task = taskShim,
-	print = print,
+	print = gamePrint,
 	warn = function(...)
 		local parts = {}
 		for _, v in { ... } do

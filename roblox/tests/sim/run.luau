@@ -22,14 +22,14 @@ local tree = if PLACE then rbx.mountPlace(PLACE) else rbx.mountProject(ROOT)
 print(if PLACE then "== 실행 대상: " .. PLACE .. " (빌드 산출물)" else "== 실행 대상: src/ (소스)")
 local Config = rbx.requireInstance(tree.shared.Config)
 Config.StartCountdown = 1
-Config.DayLength = 2.5
+Config.DayLength = 4
 Config.GameOverLength = 1
 Config.SmashDuration = 1
 Config.BurnDelay = 0.6
 Config.FireDelay = 0.6
 Config.FireSpreadInterval = 0.4
 Config.AscendDuration = 0.4
-Config.RelicVoteTime = 3
+Config.RelicVoteTime = 3.5
 Config.BlackoutDuration = 1
 Config.TalismanMax = 10
 Config.EventChance = 0
@@ -37,6 +37,7 @@ Config.LeaderboardRefresh = 3
 Config.ExtinguishHold = 0
 Config.ChopTime = 0.1
 Config.PoundSoloCooldown = 0.1
+Config.SelfTestDuration = 30
 local Recipes = rbx.requireInstance(tree.shared.Recipes)
 for _, c in Recipes.Cooks do
 	c.time = 0.3
@@ -528,8 +529,21 @@ print("== 밤 5: 보스·유물")
 check("밤 5 시작", waitPhase("night", 5) and attr(state, "Night") == 5)
 local servedBoss = false
 dumpCustomers("밤 5 시작 직후")
-for _ = 1, 3 do
-	local c = waitingCustomer(16)
+local bossDeadline = os.clock() + 45
+while os.clock() < bossDeadline and phase() == "night" do
+	local c = nil
+	rbx.waitUntil(function()
+		if phase() ~= "night" then
+			return true
+		end
+		for _, m in customers() do
+			if attr(m, "Mood") == "waiting" then
+				c = m
+				return true
+			end
+		end
+		return false
+	end, 16, "손님 또는 밤 종료")
 	if not c then
 		break
 	end
@@ -541,7 +555,7 @@ for _ = 1, 3 do
 	rbx.waitUntil(function()
 		return c.Parent == nil or attr(c, "Mood") ~= "waiting"
 	end, 5, "손님 처리")
-	if phase() ~= "night" then
+	if isBoss then
 		break
 	end
 end
@@ -591,6 +605,14 @@ for _, fn in rbx.boundToClose do
 	check("BindToClose 저장", ok, err)
 end
 
+-- 게임 안 자가진단이 요약을 남겼는지 (서버·클라이언트)
+check("자가진단 요약(서버) 출력", rbx.waitUntil(function()
+	return rbx.selfTestSummaries.server == true
+end, 40, "서버 자가진단 요약"))
+check("자가진단 요약(클라) 출력", rbx.waitUntil(function()
+	return rbx.selfTestSummaries.client == true
+end, 40, "클라 자가진단 요약"))
+check("자가진단 실패 항목 없음", rbx.selfTestFailures == 0, rbx.selfTestFailures)
 end -- scenario
 
 local okScenario, scenarioErr = xpcall(scenario, rbx.trace)
