@@ -104,7 +104,7 @@ RunService.Heartbeat:Connect(function(dt)
 			Fx.setVignette(0)
 		end
 	end
-	if tutorialAcc >= 0.25 then
+	if tutorialAcc >= 0.1 then
 		tutorialAcc = 0
 		tutorial.update()
 	end

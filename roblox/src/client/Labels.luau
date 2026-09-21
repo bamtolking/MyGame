@@ -357,7 +357,7 @@ end
 local function animateCustomers()
 	local t = os.clock()
 	for _, entry in customerLabels do
-		if #entry.welds == 0 then
+		if #entry.welds == 0 or not entry.model.Parent then
 			continue
 		end
 		local y = math.sin(t * 2.6 + entry.phase) * 0.22

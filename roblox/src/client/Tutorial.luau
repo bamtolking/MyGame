@@ -130,9 +130,16 @@ function Tutorial.create(gui: Instance, state: Instance, map: Instance, getHeld:
 			served = if type(served) == "number" then served else 0,
 			servedAtStart = servedAtStart,
 		}
-		local current = STEPS[step]
-		if current and current.check(ctx) then
-			step += 1
+		-- 빠른 요리사가 단계를 건너뛰어도 따라잡도록, 충족된 가장 뒤 단계까지 한 번에 진행
+		local reached = nil
+		for i = #STEPS, step, -1 do
+			if STEPS[i].check(ctx) then
+				reached = i
+				break
+			end
+		end
+		if reached then
+			step = reached + 1
 			playSound("ui")
 			render()
 			if step > #STEPS then

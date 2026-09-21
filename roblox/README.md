@@ -140,6 +140,7 @@ roblox/
     Tutorial      첫 손님 튜토리얼 체크리스트
     Sfx           내장 효과음
   tests/        Roblox 없이 Luau CLI 로 도는 순수 로직 테스트 8종 + 속성 이름 검사(check_props.py)
+  tests/sim/    Lune 위에서 실제 게임 코드를 돌리는 헤드리스 통합 시뮬레이션 (rbx.luau 흉내 환경, run.luau 시나리오)
   build.sh      테스트 + 타입 검사 + 빌드
 ```
 
@@ -151,17 +152,24 @@ roblox/
 # 순수 로직 테스트 (luau CLI 필요: https://github.com/luau-lang/luau/releases)
 LUAU_BIN=/path/to/luau tests/run.sh
 
-# 테스트 + Roblox API 타입 검사 + .rbxlx 빌드
-#   rojo, luau, luau-lsp 바이너리와 luau-lsp 저장소의 scripts/globalTypes.d.luau 를 한 폴더에 두고:
+# 헤드리스 통합 시뮬레이션 (Lune 필요: https://github.com/lune-org/lune/releases)
+#   실제 서버·클라이언트 스크립트를 Lune 의 Roblox API 위에서 실행하고, 가짜 요리사 2명이 5밤을 진행하며
+#   서빙·성불·난동·화재·소화·부적·떡메·구미호·정전·보스·유물 투표·상점·옷장·폐업·재시작을 검증합니다 (약 2~3분).
+lune run tests/sim/run.luau .
+
+# 테스트 + Roblox API 타입 검사 + .rbxlx 빌드 (lune 이 있으면 시뮬레이션도)
+#   rojo, luau, luau-lsp(, lune) 바이너리와 luau-lsp 저장소의 scripts/globalTypes.d.luau 를 한 폴더에 두고:
 TOOLS_DIR=/path/to/tools ./build.sh
 
 # Studio 와 실시간 동기화 (Rojo 플러그인 설치 후)
 rojo serve default.project.json
 ```
 
+시뮬레이션은 물리·렌더링·네트워크 복제가 없는 흉내 환경(`tests/sim/rbx.luau`)에서 돕니다. 손님 이동은 직선 이동으로, 트윈은 즉시 적용으로 대체되므로 "보기에 어떤가"는 여전히 Studio 에서 확인해야 합니다.
+
 ## 알려진 제한 / 다음 작업
 
-- 이 첫 베타는 **자동 검사(Roblox API 타입 검사, 순수 로직 테스트, Rojo 빌드)까지만** 거쳤습니다. Roblox Studio 실기동은 이 저장소 환경에서 할 수 없어 **사용자가 처음으로 실행**하게 됩니다. 문제가 보이면 Studio 의 **보기 > 출력** 창에 뜨는 빨간 줄을 그대로 알려 주세요.
+- 검증 범위: Roblox API 타입 검사, 순수 로직 테스트 8종, 속성 이름 검사, Rojo 빌드, 그리고 Lune 위에서 실제 서버·클라이언트 코드를 돌린 **헤드리스 통합 시뮬레이션(87개 검증 통과)**. 다만 진짜 Studio 실기동(물리·카메라·렌더링·네트워크)은 이 저장소 환경에서 할 수 없으므로 **보이는 모습과 손맛은 사용자가 처음 확인**하게 됩니다. 문제가 보이면 Studio 의 **보기 > 출력** 창에 뜨는 빨간 줄을 그대로 알려 주세요.
 - 애니메이션 없음(귀신·요괴는 떠다니므로 자연스럽게 보이도록 설계), 그래픽은 파츠 조립, 효과음은 로블록스 내장(rbxasset) 사운드.
 - 저장: 최고 밤·누적 서빙·누적 코인·판 수·명성·모자 (플레이어별) + 전체 순위표. Studio 에서 API 접근을 끄면 순위표 벽에 안내문이 뜹니다.
 - 아이디어 후보: 단골 시스템(만족한 손님이 다음 밤에 팁 보너스), 계절 메뉴, 두 번째 지도(야시장), 개인 서버 난이도 옵션, 유물 조합 시너지.

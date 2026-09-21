@@ -10,15 +10,23 @@ bin() { if [ -n "$TOOLS_DIR" ] && [ -x "$TOOLS_DIR/$1" ]; then echo "$TOOLS_DIR/
 ROJO="$(bin rojo)"; LUAU="$(bin luau)"; LSP="$(bin luau-lsp)"
 DEFS="${DEFS:-${TOOLS_DIR:+$TOOLS_DIR/}globalTypes.d.luau}"
 
-echo "== 1/3 로직 테스트"
+echo "== 1/4 로직 테스트"
 LUAU_BIN="$LUAU" tests/run.sh
 
-echo "== 2/3 타입 검사 (Roblox API 정의 + Rojo 소스맵)"
+echo "== 2/4 타입 검사 (Roblox API 정의 + Rojo 소스맵)"
 "$ROJO" sourcemap default.project.json -o sourcemap.json >/dev/null
 "$LSP" analyze --definitions="$DEFS" --sourcemap=sourcemap.json --base-luaurc .luaurc src/shared/*.luau src/server/*.luau src/client/*.luau
 rm -f sourcemap.json
 
-echo "== 3/3 빌드"
+echo "== 3/4 빌드"
 mkdir -p build
 "$ROJO" build default.project.json -o build/GhostDiner.rbxlx
 echo "완료: build/GhostDiner.rbxlx"
+
+LUNE="$(bin lune)"
+if command -v "$LUNE" >/dev/null 2>&1 || [ -x "$LUNE" ]; then
+  echo "== 4/4 헤드리스 통합 시뮬레이션 (Lune)"
+  "$LUNE" run tests/sim/run.luau .
+else
+  echo "== 4/4 시뮬레이션 건너뜀 (lune 없음)"
+fi
