@@ -13,7 +13,7 @@
     "icons": "node scripts/gen-icons.mjs",
     "android:sync": "npm run build:www && cap sync android",
     "android:open": "cap open android",
-    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug"
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

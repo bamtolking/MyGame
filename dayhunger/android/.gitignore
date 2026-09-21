@@ -99,3 +99,7 @@ app/src/main/assets/public
 app/src/main/assets/capacitor.config.json
 app/src/main/assets/capacitor.plugins.json
 app/src/main/res/xml/config.xml
+
+# 데이헝거 공용 서명 키 (의도적으로 포함)
+!keystore/
+!keystore/dayhunger.jks

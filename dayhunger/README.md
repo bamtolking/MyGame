@@ -144,11 +144,19 @@ GitHub Actions가 `dayhunger/` 아래가 바뀔 때마다 APK를 만들어 릴�
    (같은 Wi-Fi면 `192.168.0.10:8080` 같은 PC 주소, 인터넷이면 배포한 `https://…` 주소).
    앱을 배포하기 전에 `client/js/config.js`의 `DEFAULT_SERVER`에 서버 주소를 적어 두면 사용자가 입력하지 않아도 됩니다.
 
+**"앱이 설치되지 않음"이 뜰 때**
+
+- 예전에 설치한 데이헝거(다른 서명 키로 빌드된 버전)가 남아 있으면 새 APK가 거부됩니다. 기존 앱을 삭제한 뒤 다시 설치하세요. 지금은 모든 빌드가 `android/keystore/dayhunger.jks` 하나로 서명되므로 이후 버전은 그대로 덮어쓰기 설치됩니다.
+- 파일 이름이 `.apk`로 끝나는지, 크기가 4MB쯤 되는지 확인하세요(중간에 끊긴 다운로드는 설치가 안 됩니다).
+- Android 7.0(API 24) 이상이 필요합니다.
+
+**서명 키에 대해**: 저장소에 포함된 키는 지인에게 나눠주는 용도입니다. 저장소가 공개라 누구나 같은 키로 서명할 수 있으니, 스토어에 올리거나 더 안전하게 배포하려면 GitHub 저장소 Settings → Secrets에 `DH_KEYSTORE_B64`(keystore 파일의 base64), `DH_KEYSTORE_PASS`, `DH_KEY_ALIAS`, `DH_KEY_PASS`를 넣으세요. 워크플로가 자동으로 그 키를 대신 씁니다(키를 바꾸면 사용자는 한 번 재설치해야 합니다).
+
 수동으로 빌드하려면(Android Studio 또는 JDK 21 + Android SDK 필요):
 
 ```bash
 npm install
-npm run android:apk        # www/ 생성 → Capacitor 동기화 → android/app/build/outputs/apk/debug/app-debug.apk
+npm run android:apk        # www/ 생성 → Capacitor 동기화 → android/app/build/outputs/apk/release/app-release.apk
 npm run android:open       # Android Studio에서 열기 (스토어용 release 서명은 여기서 Build → Generate Signed Bundle)
 ```
 
