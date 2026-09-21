@@ -99,7 +99,8 @@ export class UI {
     const e = this.el;
     const total = view.phase === 'day' ? view.dayTicks : view.nightTicks;
     const left = Math.max(0, Math.ceil((total - view.cycleT) / C.TICK_RATE));
-    const label = view.phase === 'day' ? `${view.day}일째 🌞 ${left}초` : `${view.day}일째 🌙 ${left}초${view.pending ? ` · 남은 적 ${view.enemies.length + view.pending}` : view.enemies.length ? ` · 적 ${view.enemies.length}` : ''}`;
+    const foes = view.enemies.length + (view.pending || 0);
+    const label = view.phase === 'day' ? `${view.day}일째 🌞 ${left}초` : `${view.day}일째 🌙 ${left}초${foes ? ` · 적 ${foes}` : ''}`;
     this.set('day', e.daylabel, 'textContent', label);
     this.set('clock', e.clockfill.style, 'width', `${Math.round((view.cycleT / total) * 100)}%`);
     e.clockfill.style.background = view.phase === 'day' ? '#ffd54f' : '#7986cb';

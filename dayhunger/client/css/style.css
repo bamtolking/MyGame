@@ -42,8 +42,8 @@ button:disabled { opacity: .5; }
 #hud { position: absolute; inset: 0; pointer-events: none; }
 #hud > * { pointer-events: auto; }
 #top { position: absolute; top: calc(8px + var(--safe-t)); left: calc(8px + var(--safe-l)); right: calc(8px + var(--safe-r)); display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; pointer-events: none; }
-#clock { background: rgba(0,0,0,.5); border-radius: 10px; padding: 6px 10px; min-width: 130px; white-space: nowrap; }
-#daylabel { font-weight: 700; font-size: 15px; }
+#clock { background: rgba(0,0,0,.5); border-radius: 10px; padding: 6px 10px; min-width: 120px; white-space: nowrap; }
+#daylabel { font-weight: 700; font-size: 14px; }
 .bar { height: 8px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; margin-top: 4px; }
 .bar > div { height: 100%; width: 50%; background: var(--accent); transition: width .2s linear; }
 #clockfill { background: #ffd54f; }
