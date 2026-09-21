@@ -3,7 +3,7 @@ name: 데이헝거 Android APK
 on:
   push:
     branches: ['**']
-    paths: ['dayhunger/**', '.github/workflows/dayhunger-android.yml']
+    paths: ['dayhunger/**', '!dayhunger/docs/**', '!dayhunger/README.md', '!dayhunger/AGENTS.md', '.github/workflows/dayhunger-android.yml']
   workflow_dispatch:
 
 permissions:

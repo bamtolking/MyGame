@@ -22,8 +22,14 @@ server.stderr.on('data', (d) => process.stderr.write('[server] ' + d));
 await new Promise((res) => server.stdout.on('data', (d) => { if (String(d).includes('실행 중')) res(); }));
 const URL = `http://127.0.0.1:${PORT}/`;
 
+// 브라우저 찾기: DH_CHROME → PLAYWRIGHT_BROWSERS_PATH/chromium → playwright 캐시 → 시스템 크롬. 없으면 종료 코드 3(건너뜀)
 const launchOpts = { headless: true };
-if (process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync(path.join(process.env.PLAYWRIGHT_BROWSERS_PATH, 'chromium'))) launchOpts.executablePath = path.join(process.env.PLAYWRIGHT_BROWSERS_PATH, 'chromium');
+const candidates = [process.env.DH_CHROME, process.env.PLAYWRIGHT_BROWSERS_PATH && path.join(process.env.PLAYWRIGHT_BROWSERS_PATH, 'chromium')];
+try { candidates.push(chromium.executablePath()); } catch {}
+candidates.push('/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+const exe = candidates.find((c) => c && fs.existsSync(c));
+if (!exe) { server.kill(); console.error('Chromium을 찾지 못해 e2e를 건너뜁니다. 설치: npx --yes playwright@1.63.0 install --with-deps chromium  (또는 DH_CHROME=/path/to/chrome)'); process.exit(3); }
+launchOpts.executablePath = exe;
 const browser = await chromium.launch(launchOpts);
 const errors = [];
 const phone = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
