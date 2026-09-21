@@ -18,6 +18,10 @@ android {
             storePassword dhKeystorePass
             keyAlias dhKeyAlias
             keyPassword dhKeyPass
+            // 구형 안드로이드·에뮬레이터 호환을 위해 v1(JAR)·v2 서명을 모두 사용
+            enableV1Signing true
+            enableV2Signing true
+            enableV3Signing true
         }
     }
     defaultConfig {
