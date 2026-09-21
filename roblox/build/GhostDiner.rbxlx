@@ -17,13 +17,128 @@
       </Properties>
       <Item class="ModuleScript" referent="3">
         <Properties>
+          <string name="Name">Challenges</string>
+          <string name="Source"><![CDATA[--!strict
+-- 밤 목표: 매 밤(2번째 밤부터) 하나씩 주어지는 도전 과제. 달성하면 보너스 코인.
+
+export type Challenge = {
+	id: string,
+	name: string,
+	desc: string,
+	emoji: string,
+	reward: number,
+	stat: string, -- 밤 통계 키
+	target: number,
+	mode: "min" | "max", -- min: stat >= target 이면 성공 / max: 밤 끝까지 stat <= target 유지
+	minNight: number,
+}
+
+export type NightStats = { [string]: any } -- 숫자 통계 + perPlayer 같은 표
+
+local Challenges = {}
+
+local list: { Challenge } = {
+	{ id = "noburn", name = "무사고 영업", desc = "탄 음식 0개로 밤 넘기기", emoji = "🧑‍🍳", reward = 20, stat = "burnt", target = 0, mode = "max", minNight = 2 },
+	{ id = "tips", name = "팁 부자", desc = "팁 5번 받기", emoji = "💸", reward = 25, stat = "tips", target = 5, mode = "min", minNight = 2 },
+	{ id = "combo", name = "연속 서빙", desc = "콤보 x4 달성", emoji = "🔥", reward = 25, stat = "maxCombo", target = 4, mode = "min", minNight = 3 },
+	{ id = "perfect", name = "완벽한 밤", desc = "악귀 0명으로 밤 넘기기", emoji = "🌟", reward = 35, stat = "angry", target = 0, mode = "max", minNight = 3 },
+	{ id = "fast", name = "번개 서빙", desc = "인내심 70% 이상 남았을 때 서빙 4번", emoji = "⚡", reward = 25, stat = "fastServes", target = 4, mode = "min", minNight = 2 },
+	{ id = "nofire", name = "화재 예방", desc = "화재 0건으로 밤 넘기기", emoji = "🧯", reward = 20, stat = "fires", target = 0, mode = "max", minNight = 4 },
+}
+
+Challenges.List = list
+Challenges.ById = {} :: { [string]: Challenge }
+for _, c in list do
+	Challenges.ById[c.id] = c
+end
+
+function Challenges.get(id: string?): Challenge?
+	if not id or id == "" then
+		return nil
+	end
+	return Challenges.ById[id]
+end
+
+function Challenges.pick(night: number, rng: { NextInteger: (any, number, number) -> number }): Challenge?
+	local candidates = {}
+	for _, c in list do
+		if c.minNight <= night then
+			table.insert(candidates, c)
+		end
+	end
+	if #candidates == 0 then
+		return nil
+	end
+	return candidates[rng:NextInteger(1, #candidates)]
+end
+
+function Challenges.value(c: Challenge, stats: NightStats): number
+	local v = stats[c.stat]
+	return if type(v) == "number" then v else 0
+end
+
+-- 지금 시점 기준 달성 여부 (max 모드는 "아직 지키고 있음")
+function Challenges.done(c: Challenge, stats: NightStats): boolean
+	local v = Challenges.value(c, stats)
+	if c.mode == "min" then
+		return v >= c.target
+	end
+	return v <= c.target
+end
+
+-- HUD 문구
+function Challenges.text(c: Challenge, stats: NightStats): string
+	local v = Challenges.value(c, stats)
+	if c.mode == "min" then
+		return string.format("%s %s  %d/%d  (+%d)", c.emoji, c.name, math.min(v, c.target), c.target, c.reward)
+	end
+	if v <= c.target then
+		return string.format("%s %s  유지 중  (+%d)", c.emoji, c.name, c.reward)
+	end
+	return string.format("%s %s  실패", c.emoji, c.name)
+end
+
+return Challenges
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="4">
+        <Properties>
+          <string name="Name">Combo</string>
+          <string name="Source"><![CDATA[--!strict
+-- 연속 서빙 콤보: 정해진 시간 안에 계속 서빙하면 보상 배율이 오릅니다.
+-- 악귀가 생기거나 음식을 태우면 끊깁니다.
+local Combo = {}
+
+-- 콤보 수 → 코인 배율 (2번째 서빙부터 +10%씩, 최대 2배)
+function Combo.multiplier(count: number): number
+	if count <= 1 then
+		return 1
+	end
+	return math.min(2, 1 + 0.1 * (count - 1))
+end
+
+-- 화면 표시용
+function Combo.label(count: number): string
+	if count <= 1 then
+		return ""
+	end
+	return string.format("콤보 x%d  (보상 ×%.1f)", count, Combo.multiplier(count))
+end
+
+return Combo
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="5">
+        <Properties>
           <string name="Name">Config</string>
           <string name="Source"><![CDATA[--!strict
 -- 저승 휴게소: 게임 전체 수치 설정.
 -- 밸런스를 바꾸고 싶으면 이 파일과 Recipes / CustomerTypes / Waves / Upgrades 만 손대면 됩니다.
 
 local Config = {
-	Version = "0.1.0-beta.1",
+	Version = "0.2.0-beta.1",
 	GameName = "저승 휴게소",
 
 	-- 라운드 흐름
@@ -52,15 +167,107 @@ local Config = {
 	BaseWalkSpeed = 16,
 	WalkSpeedPerLevel = 2,
 
+	-- 콤보 (연속 서빙)
+	ComboWindow = 12, -- 이 시간(초) 안에 다음 서빙을 하면 콤보 유지
+
+	-- 화재
+	FireDelay = 8, -- 탄 음식을 이만큼(초) 방치하면 불이 남
+	FireSpreadInterval = 7, -- 불이 옆 조리대로 번지는 간격(초)
+	FireSpreadRange = 9, -- 번지는 거리(스터드)
+	FireSpreadDamage = 3, -- 번질 때마다 깎이는 평판
+	MaxFires = 6, -- 동시에 탈 수 있는 조리대 수
+	ExtinguishHold = 1.2, -- 소화기 사용 시간(초, E 길게)
+
+	-- 밤 이벤트
+	EventChance = 0.45,
+	EventMinNight = 3,
+	BlackoutDuration = 12, -- 정전 지속(초)
+
+	-- 명성(영구 진행)
+	FamePerServe = 1,
+	FamePerNightBase = 5, -- 밤을 넘기면 5 + 밤 수
+
+	-- 순위표
+	LeaderboardRefresh = 90, -- 초
+
+	-- 배경음악: Creator Store 에서 고른 오디오의 ID 를 "rbxassetid://123456" 형태로 넣으면 재생됩니다
+	MusicId = "",
+	MusicVolume = 0.25,
+
 	-- 저장
 	DataStoreName = "GhostDiner_v1",
+	LeaderboardStoreName = "GhostDiner_BestNight_v1",
 }
 
 return Config
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="4">
+      <Item class="ModuleScript" referent="6">
+        <Properties>
+          <string name="Name">Cosmetics</string>
+          <string name="Source"><![CDATA[--!strict
+-- 명성(영구 진행)과 해금 모자. 명성은 서빙·밤 클리어로 쌓이고 저장됩니다.
+
+export type Hat = {
+	id: string,
+	name: string,
+	fame: number, -- 이 명성부터 착용 가능
+	desc: string,
+	emoji: string,
+}
+
+local Cosmetics = {}
+
+local hats: { Hat } = {
+	{ id = "none", name = "맨머리", fame = 0, desc = "아무것도 쓰지 않음", emoji = "🙂" },
+	{ id = "paper", name = "종이 모자", fame = 0, desc = "분식집의 기본", emoji = "🧢" },
+	{ id = "chef", name = "요리사 모자", fame = 50, desc = "밤 5개쯤 넘기면 손에 익는 모자", emoji = "👨‍🍳" },
+	{ id = "bandana", name = "빨간 두건", fame = 120, desc = "불 앞에서 땀을 닦는 자의 것", emoji = "🔴" },
+	{ id = "gat", name = "갓", fame = 250, desc = "저승사자도 인정한 요리사", emoji = "🎩" },
+	{ id = "horn", name = "도깨비 뿔", fame = 400, desc = "도깨비들이 단골이 됐다", emoji = "👹" },
+	{ id = "tigerears", name = "호랑이 귀", fame = 600, desc = "호랑이도 배부르게 보낸 사람", emoji = "🐯" },
+	{ id = "halo", name = "신령의 후광", fame = 900, desc = "산신령의 축복", emoji = "😇" },
+	{ id = "crown", name = "저승 왕관", fame = 1500, desc = "저승 휴게소의 전설", emoji = "👑" },
+}
+
+Cosmetics.Hats = hats
+Cosmetics.ById = {} :: { [string]: Hat }
+for _, h in hats do
+	Cosmetics.ById[h.id] = h
+end
+
+function Cosmetics.get(id: string?): Hat?
+	if not id then
+		return nil
+	end
+	return Cosmetics.ById[id]
+end
+
+function Cosmetics.isUnlocked(id: string, fame: number): boolean
+	local hat = Cosmetics.ById[id]
+	return hat ~= nil and fame >= hat.fame
+end
+
+-- 다음에 해금될 모자
+function Cosmetics.nextUnlock(fame: number): Hat?
+	for _, h in hats do
+		if h.fame > fame then
+			return h
+		end
+	end
+	return nil
+end
+
+function Cosmetics.fameForNight(night: number, base: number): number
+	return base + night
+end
+
+return Cosmetics
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="7">
         <Properties>
           <string name="Name">CustomerTypes</string>
           <string name="Source"><![CDATA[--!strict
@@ -78,6 +285,7 @@ export type CustomerType = {
 	minNight: number, -- 이 밤부터 등장
 	weight: number, -- 등장 가중치(밤에 따라 보정)
 	boss: boolean?,
+	quirk: string?, -- mindChange: 인내심 절반에서 주문을 바꿈
 	look: {
 		body: { number },
 		head: { number },
@@ -140,6 +348,7 @@ local customerList: { CustomerType } = {
 		smash = 1,
 		minNight = 6,
 		weight = 4,
+		quirk = "mindChange",
 		look = { body = { 235, 140, 60 }, head = { 245, 200, 150 }, scale = 1.0, hover = 0.7, feature = "tails" },
 	},
 	{
@@ -207,7 +416,219 @@ return CustomerTypes
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="5">
+      <Item class="ModuleScript" referent="8">
+        <Properties>
+          <string name="Name">Events</string>
+          <string name="Source"><![CDATA[--!strict
+-- 밤 이벤트: 몇몇 밤에는 규칙이 조금 바뀝니다. 밤 시작 때 큰 배너로 알립니다.
+
+export type NightEvent = {
+	id: string,
+	name: string,
+	desc: string,
+	emoji: string,
+	minNight: number,
+	weight: number,
+	countMult: number?, -- 손님 수 배율
+	spawnMult: number?, -- 등장 간격 배율
+	rewardMult: number?, -- 보상 배율
+	tipMult: number?, -- 팁 배율
+	patienceMult: number?, -- 인내심 배율
+	extraOrder: boolean?, -- 모든 손님 주문 +1
+	blackout: boolean?, -- 밤 중 정전 발생
+}
+
+local Events = {}
+
+local list: { NightEvent } = {
+	{ id = "rush", name = "폭주의 밤", desc = "손님이 더 많이, 더 빨리 옵니다. 보상 +30%", emoji = "⚡", minNight = 3, weight = 3, countMult = 1.2, spawnMult = 0.65, rewardMult = 1.3 },
+	{ id = "golden", name = "황금의 밤", desc = "팁이 두 배! 빨리 서빙할수록 이득", emoji = "💰", minNight = 2, weight = 3, tipMult = 2 },
+	{ id = "blackout", name = "정전의 밤", desc = "영업 중 갑자기 불이 꺼집니다. 조리대 위치를 외워 두세요", emoji = "🕯️", minNight = 4, weight = 2, blackout = true },
+	{ id = "patient", name = "느긋한 밤", desc = "손님 인내심 +30%, 대신 보상 -10%", emoji = "🍵", minNight = 2, weight = 2, patienceMult = 1.3, rewardMult = 0.9 },
+	{ id = "picky", name = "까다로운 밤", desc = "모든 손님이 요리를 하나 더 주문합니다. 보상 +25%", emoji = "🧐", minNight = 6, weight = 2, extraOrder = true, rewardMult = 1.25 },
+}
+
+Events.List = list
+Events.ById = {} :: { [string]: NightEvent }
+for _, e in list do
+	Events.ById[e.id] = e
+end
+
+function Events.get(id: string?): NightEvent?
+	if not id or id == "" then
+		return nil
+	end
+	return Events.ById[id]
+end
+
+-- 이번 밤 이벤트 추첨. rng 는 Random 과 같은 인터페이스.
+function Events.pick(night: number, rng: { NextNumber: (any) -> number }, chance: number, minNight: number): NightEvent?
+	if night < minNight then
+		return nil
+	end
+	if rng:NextNumber() >= chance then
+		return nil
+	end
+	local candidates = {}
+	local total = 0
+	for _, e in list do
+		if e.minNight <= night then
+			table.insert(candidates, e)
+			total += e.weight
+		end
+	end
+	if #candidates == 0 then
+		return nil
+	end
+	local r = rng:NextNumber() * total
+	for _, e in candidates do
+		r -= e.weight
+		if r <= 0 then
+			return e
+		end
+	end
+	return candidates[#candidates]
+end
+
+return Events
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="9">
+        <Properties>
+          <string name="Name">ItemVisuals</string>
+          <string name="Source"><![CDATA[--!nonstrict
+-- 재료·요리·도구의 모양(파츠 조립). 서버(조리대 위 표시, Tool)와 클라이언트(서빙 연출) 양쪽에서 씁니다.
+local Recipes = require(script.Parent.Recipes)
+
+local ItemVisuals = {}
+
+local function rgb(c: { number }): Color3
+	return Color3.fromRGB(c[1], c[2], c[3])
+end
+
+local function newPart(size: Vector3, color: Color3, shape: Enum.PartType?): Part
+	local p = Instance.new("Part")
+	p.Size = size
+	p.Color = color
+	p.Material = Enum.Material.SmoothPlastic
+	p.Shape = shape or Enum.PartType.Block
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.Massless = true
+	p.CastShadow = false
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	return p
+end
+
+local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- 실린더를 세움
+ItemVisuals.UPRIGHT_SHAPES = { jar = true, bowl = true, plate = true, tank = true }
+
+-- 아이템 모양을 Model 로 돌려줌. PrimaryPart(Handle) 중심이 원점, 기준점(WorldPivot)은 회전 없는 원점.
+function ItemVisuals.build(itemId: string): Model
+	local item = Recipes.Items[itemId] or Recipes.Items.burnt
+	local color = rgb(item.color)
+	local model = Instance.new("Model")
+	model.Name = itemId
+	local base: Part
+	local shape = item.shape
+	if shape == "box" then
+		base = newPart(Vector3.new(1.2, 0.8, 1.2), color)
+	elseif shape == "ball" then
+		base = newPart(Vector3.new(1, 1, 1), color, Enum.PartType.Ball)
+	elseif shape == "cyl" then
+		base = newPart(Vector3.new(1.6, 0.6, 0.6), color, Enum.PartType.Cylinder)
+	elseif shape == "flat" then
+		base = newPart(Vector3.new(1.4, 0.2, 1.4), color)
+	elseif shape == "bag" then
+		base = newPart(Vector3.new(1, 1.2, 0.7), color)
+	elseif shape == "jar" then
+		base = newPart(Vector3.new(0.9, 0.9, 0.9), color, Enum.PartType.Cylinder)
+		base.CFrame = UPRIGHT
+	elseif shape == "bowl" then
+		base = newPart(Vector3.new(0.6, 1.5, 1.5), Color3.fromRGB(250, 250, 250), Enum.PartType.Cylinder)
+		base.CFrame = UPRIGHT
+		local content = newPart(Vector3.new(0.15, 1.2, 1.2), color, Enum.PartType.Cylinder)
+		content.CFrame = CFrame.new(0, 0.3, 0) * UPRIGHT
+		content.Name = "Content"
+		content.Parent = model
+	elseif shape == "plate" then
+		base = newPart(Vector3.new(0.15, 1.7, 1.7), Color3.fromRGB(250, 250, 250), Enum.PartType.Cylinder)
+		base.CFrame = UPRIGHT
+		local food = newPart(Vector3.new(0.9, 0.5, 0.9), color)
+		food.CFrame = CFrame.new(0, 0.35, 0)
+		food.Name = "Food"
+		food.Parent = model
+	elseif shape == "tank" then
+		base = newPart(Vector3.new(1.6, 0.7, 0.7), color, Enum.PartType.Cylinder)
+		base.CFrame = UPRIGHT
+		local nozzle = newPart(Vector3.new(0.25, 0.5, 0.25), Color3.fromRGB(30, 30, 30))
+		nozzle.CFrame = CFrame.new(0.3, 0.95, 0)
+		nozzle.Name = "Nozzle"
+		nozzle.Parent = model
+		local band = newPart(Vector3.new(0.3, 0.75, 0.75), Color3.fromRGB(240, 240, 240), Enum.PartType.Cylinder)
+		band.CFrame = CFrame.new(0, 0.2, 0) * UPRIGHT
+		band.Name = "Band"
+		band.Parent = model
+	else -- lump
+		base = newPart(Vector3.new(0.9, 0.6, 0.9), color)
+	end
+	base.Name = "Handle"
+	base.Parent = model
+	model.PrimaryPart = base
+	for _, p in model:GetChildren() do
+		if p ~= base and p:IsA("BasePart") then
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = base
+			weld.Part1 = p
+			weld.Parent = p
+		end
+	end
+	model.WorldPivot = CFrame.new()
+	if item.kind == "burnt" then
+		local smoke = Instance.new("Smoke")
+		smoke.Size = 0.4
+		smoke.Opacity = 0.35
+		smoke.RiseVelocity = 2
+		smoke.Color = Color3.fromRGB(40, 40, 40)
+		smoke.Parent = base
+	end
+	if item.kind == "dish" then
+		-- 완성 요리는 은은한 김
+		local steam = Instance.new("ParticleEmitter")
+		steam.Rate = 3
+		steam.Lifetime = NumberRange.new(0.8, 1.4)
+		steam.Speed = NumberRange.new(1, 1.6)
+		steam.Size = NumberSequence.new(0.35, 0.9)
+		steam.Transparency = NumberSequence.new(0.6, 1)
+		steam.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+		steam.LightEmission = 0.3
+		steam.SpreadAngle = Vector2.new(15, 15)
+		steam.Parent = base
+	end
+	return model
+end
+
+-- 고정해서 보여주기 (조리대 위 등)
+function ItemVisuals.display(itemId: string, cframe: CFrame, parent: Instance): Model
+	local model = ItemVisuals.build(itemId)
+	for _, p in model:GetChildren() do
+		if p:IsA("BasePart") then
+			p.Anchored = true
+		end
+	end
+	model:PivotTo(cframe)
+	model.Parent = parent
+	return model
+end
+
+return ItemVisuals
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="10">
         <Properties>
           <string name="Name">Recipes</string>
           <string name="Source"><![CDATA[--!strict
@@ -219,7 +640,7 @@ export type Rgb = { number }
 export type Item = {
 	id: string,
 	name: string,
-	kind: "raw" | "mid" | "dish" | "burnt",
+	kind: "raw" | "mid" | "dish" | "burnt" | "tool",
 	color: Rgb, -- {r, g, b} 0~255
 	shape: string, -- box | ball | cyl | flat | bag | jar | bowl | plate | lump
 	chopTo: string?, -- 도마에서 썰면 되는 것
@@ -243,6 +664,7 @@ Recipes.StationNames = {
 	fryer = "튀김기",
 	ricecooker = "밥솥",
 	trash = "쓰레기통",
+	extinguisher = "소화기함",
 }
 
 local itemList: { Item } = {
@@ -275,6 +697,9 @@ local itemList: { Item } = {
 
 	-- 실패
 	{ id = "burnt", name = "탄 음식", kind = "burnt", color = { 25, 20, 20 }, shape = "lump", emoji = "💀" },
+
+	-- 도구
+	{ id = "extinguisher", name = "소화기", kind = "tool", color = { 220, 40, 40 }, shape = "tank", emoji = "🧯" },
 }
 
 Recipes.List = itemList
@@ -466,7 +891,7 @@ return Recipes
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="6">
+      <Item class="ModuleScript" referent="11">
         <Properties>
           <string name="Name">Upgrades</string>
           <string name="Source"><![CDATA[--!strict
@@ -537,7 +962,7 @@ return Upgrades
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="7">
+      <Item class="ModuleScript" referent="12">
         <Properties>
           <string name="Name">Waves</string>
           <string name="Source"><![CDATA[--!strict
@@ -615,18 +1040,32 @@ local function pickDish(rng: Rng, pool: { string }, night: number): string
 	return weightedPick(rng, entries)
 end
 
-function Waves.plan(night: number, playerCount: number, rng: Rng): Plan
+export type EventMods = { countMult: number?, spawnMult: number?, extraOrder: boolean? }
+
+function Waves.plan(night: number, playerCount: number, rng: Rng, mods: EventMods?): Plan
 	local pool = Recipes.dishesForNight(night)
 	local count = Waves.customerCount(night, playerCount)
 	local interval = Waves.spawnInterval(night)
+	if mods then
+		if mods.countMult then
+			count = math.clamp(math.floor(count * mods.countMult + 0.5), 3, 40)
+		end
+		if mods.spawnMult then
+			interval = math.max(2.5, interval * mods.spawnMult)
+		end
+	end
 	local weights = CustomerTypes.weightsForNight(night)
 	local customers: { CustomerSpec } = {}
 
 	for i = 1, count do
 		local typeId = weightedPick(rng, weights)
 		local ctype = CustomerTypes.get(typeId)
+		local orderCount = ctype.orders
+		if mods and mods.extraOrder then
+			orderCount = math.min(3, orderCount + 1)
+		end
 		local dishes = {}
-		for _ = 1, ctype.orders do
+		for _ = 1, orderCount do
 			table.insert(dishes, pickDish(rng, pool, night))
 		end
 		-- 첫 손님은 바로, 그 뒤는 간격 ± 25%
@@ -658,15 +1097,15 @@ return Waves
       </Item>
     </Item>
   </Item>
-  <Item class="ServerScriptService" referent="8">
+  <Item class="ServerScriptService" referent="13">
     <Properties>
       <string name="Name">ServerScriptService</string>
     </Properties>
-    <Item class="Folder" referent="9">
+    <Item class="Folder" referent="14">
       <Properties>
         <string name="Name">GhostDinerServer</string>
       </Properties>
-      <Item class="ModuleScript" referent="10">
+      <Item class="ModuleScript" referent="15">
         <Properties>
           <string name="Name">Customers</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -1030,6 +1469,34 @@ local function arrived(rec)
 	end
 end
 
+-- 구미호: 인내심이 절반이 되면 주문 하나를 바꿈 (대신 8초를 더 기다려 줌)
+local function changeMind(rec)
+	rec.changedMind = true
+	local pool = rec.pool or {}
+	if #rec.orders == 0 or #pool < 2 then
+		return
+	end
+	local idx = rng:NextInteger(1, #rec.orders)
+	local current = rec.orders[idx]
+	local choices = {}
+	for _, d in pool do
+		if d ~= current then
+			table.insert(choices, d)
+		end
+	end
+	if #choices == 0 then
+		return
+	end
+	local newDish = choices[rng:NextInteger(1, #choices)]
+	rec.orders[idx] = newDish
+	setOrdersAttr(rec)
+	rec.deadlineAt += 8
+	rec.model:SetAttribute("DeadlineAt", rec.deadlineAt)
+	rec.model:SetAttribute("Twist", now())
+	Remotes.toastAll(string.format("🦊 %s이(가) 마음을 바꿨어요! %s 대신 %s을(를) 원해요", rec.ctype.name, Recipes.name(current), Recipes.name(newDish)), "bad")
+	Remotes.soundAll("fox")
+end
+
 local lastTick = 0
 local function update()
 	local t = now()
@@ -1066,6 +1533,8 @@ local function update()
 		elseif st == "waiting" then
 			if t >= rec.deadlineAt then
 				becomeAngry(rec)
+			elseif rec.ctype.quirk == "mindChange" and not rec.changedMind and (rec.deadlineAt - t) / rec.total <= 0.5 then
+				changeMind(rec)
 			end
 		end
 	end
@@ -1098,8 +1567,11 @@ function Customers.tryServe(rec, player: Player)
 	local fraction = math.clamp((rec.deadlineAt - now()) / rec.total, 0, 1)
 	local base = math.floor(Recipes.price(held) * rec.ctype.rewardMult + 0.5)
 	local tip = math.floor(base * Config.TipMax * fraction + 0.5)
-	deps.onServed(rec, player, held, base + tip, tip)
-	Remotes.coinPopup(rec.root.Position + Vector3.new(0, 4, 0), base + tip, tip)
+	local coins = deps.onServed(rec, player, held, base, tip, fraction)
+	local character = player.Character
+	local fromPart = character and character:FindFirstChild("HumanoidRootPart")
+	local from = if fromPart and fromPart:IsA("BasePart") then fromPart.Position else rec.root.Position
+	Remotes.notifyAll({ kind = "serve", from = from, to = rec.root.Position + Vector3.new(0, 2, 0), itemId = held, amount = coins or 0, tip = tip })
 	Remotes.soundAll("serve")
 	setOrdersAttr(rec)
 	if #rec.orders == 0 then
@@ -1113,7 +1585,8 @@ function Customers.init(mapInfo, callbacks)
 	RunService.Heartbeat:Connect(update)
 end
 
-function Customers.spawn(spec, night: number)
+function Customers.spawn(spec, night: number, opts)
+	opts = opts or {}
 	local ctype = CustomerTypes.get(spec.typeId)
 	local model, root, humanoid = buildRig(ctype)
 	seq += 1
@@ -1128,7 +1601,9 @@ function Customers.spawn(spec, night: number)
 		state = "toSpot",
 		spot = nil,
 		target = map.spawnPoint,
-		total = Waves.patienceFor(spec.typeId, night, GameState.level("smile"), Upgrades.patienceMult),
+		total = Waves.patienceFor(spec.typeId, night, GameState.level("smile"), Upgrades.patienceMult) * (opts.patienceMult or 1),
+		pool = opts.pool or Recipes.dishesForNight(night),
+		changedMind = false,
 		deadlineAt = 0,
 		smashLeft = ctype.smash,
 		targetStation = nil,
@@ -1172,7 +1647,7 @@ function Customers.spawn(spec, night: number)
 	end
 	if ctype.boss then
 		Remotes.toastAll("⚠️ " .. ctype.name .. "이(가) 오셨습니다! 요리 " .. #rec.orders .. "개를 주문합니다", "bad")
-		Remotes.soundAll("boss")
+		Remotes.notifyAll({ kind = "boss", name = ctype.name })
 	end
 	return rec
 end
@@ -1223,20 +1698,22 @@ return Customers
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="11">
+      <Item class="ModuleScript" referent="16">
         <Properties>
           <string name="Name">Data</string>
           <string name="Source"><![CDATA[--!nonstrict
--- 플레이어 기록 저장(DataStore) + leaderstats.
+-- 플레이어 기록 저장(DataStore), leaderstats, 전체 순위표(OrderedDataStore).
 -- Studio 에서는 "게임 설정 > 보안 > Studio의 API 서비스 접근 허용" 을 켜야 저장됩니다. 꺼져 있어도 게임은 돌아갑니다.
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.GhostDiner.Config)
+local Cosmetics = require(ReplicatedStorage.GhostDiner.Cosmetics)
 
 local Data = {}
 local store = nil
+local orderedStore = nil
 do
 	local ok, result = pcall(function()
 		return DataStoreService:GetDataStore(Config.DataStoreName)
@@ -1246,16 +1723,32 @@ do
 	else
 		warn("[GhostDiner] DataStore 사용 불가:", result)
 	end
+	local ok2, result2 = pcall(function()
+		return DataStoreService:GetOrderedDataStore(Config.LeaderboardStoreName)
+	end)
+	if ok2 then
+		orderedStore = result2
+	end
 end
 
 local cache: { [number]: { data: any, loaded: boolean } } = {}
+local nameCache: { [number]: string } = {}
 
 local function default()
-	return { bestNight = 0, totalServed = 0, totalCoins = 0, runs = 0 }
+	return { bestNight = 0, totalServed = 0, totalCoins = 0, runs = 0, fame = 0, hat = "paper" }
 end
 
 local function key(player: Player): string
 	return "p_" .. player.UserId
+end
+
+local function stat(player: Player, name: string): IntValue?
+	local ls = player:FindFirstChild("leaderstats")
+	local v = ls and ls:FindFirstChild(name)
+	if v and v:IsA("IntValue") then
+		return v
+	end
+	return nil
 end
 
 local function load(player: Player)
@@ -1278,6 +1771,9 @@ local function load(player: Player)
 			warn("[GhostDiner] 기록 불러오기 실패:", saved)
 		end
 	end
+	if not Cosmetics.isUnlocked(data.hat, data.fame) then
+		data.hat = "paper"
+	end
 	cache[player.UserId] = { data = data, loaded = loaded }
 
 	local ls = Instance.new("Folder")
@@ -1290,7 +1786,15 @@ local function load(player: Player)
 	served.Name = "서빙"
 	served.Value = 0
 	served.Parent = ls
+	local fame = Instance.new("IntValue")
+	fame.Name = "명성"
+	fame.Value = data.fame
+	fame.Parent = ls
 	ls.Parent = player
+	player:SetAttribute("Fame", data.fame)
+	player:SetAttribute("Hat", data.hat)
+	player:SetAttribute("BestNight", data.bestNight)
+	player:SetAttribute("DataLoaded", loaded)
 end
 
 local function save(player: Player)
@@ -1313,21 +1817,14 @@ local function save(player: Player)
 			merged.totalServed = math.max(merged.totalServed, data.totalServed)
 			merged.totalCoins = math.max(merged.totalCoins, data.totalCoins)
 			merged.runs = math.max(merged.runs, data.runs)
+			merged.fame = math.max(merged.fame, data.fame)
+			merged.hat = data.hat
 			return merged
 		end)
 	end)
 	if not ok then
 		warn("[GhostDiner] 기록 저장 실패:", err)
 	end
-end
-
-local function stat(player: Player, name: string): IntValue?
-	local ls = player:FindFirstChild("leaderstats")
-	local v = ls and ls:FindFirstChild(name)
-	if v and v:IsA("IntValue") then
-		return v
-	end
-	return nil
 end
 
 function Data.get(player: Player)
@@ -1353,7 +1850,39 @@ function Data.addCoins(player: Player, n: number)
 	end
 end
 
-function Data.recordNight(player: Player, night: number)
+function Data.addFame(player: Player, n: number)
+	local entry = cache[player.UserId]
+	if not entry then
+		return
+	end
+	entry.data.fame += n
+	local v = stat(player, "명성")
+	if v then
+		v.Value = entry.data.fame
+	end
+	player:SetAttribute("Fame", entry.data.fame)
+end
+
+function Data.getFame(player: Player): number
+	local entry = cache[player.UserId]
+	return entry and entry.data.fame or 0
+end
+
+function Data.getHat(player: Player): string
+	local entry = cache[player.UserId]
+	return entry and entry.data.hat or "paper"
+end
+
+function Data.setHat(player: Player, hatId: string)
+	local entry = cache[player.UserId]
+	if entry then
+		entry.data.hat = hatId
+	end
+	player:SetAttribute("Hat", hatId)
+end
+
+-- 새 최고 기록이면 true
+function Data.recordNight(player: Player, night: number): boolean
 	local entry = cache[player.UserId]
 	if entry and night > entry.data.bestNight then
 		entry.data.bestNight = night
@@ -1361,7 +1890,10 @@ function Data.recordNight(player: Player, night: number)
 		if v then
 			v.Value = night
 		end
+		player:SetAttribute("BestNight", night)
+		return true
 	end
+	return false
 end
 
 function Data.recordRun(player: Player)
@@ -1375,6 +1907,54 @@ function Data.saveAll()
 	for _, player in Players:GetPlayers() do
 		task.spawn(save, player)
 	end
+end
+
+-- ---------- 전체 순위표 ----------
+function Data.updateLeaderboard(player: Player, best: number)
+	if not orderedStore or best <= 0 then
+		return
+	end
+	task.spawn(function()
+		local ok, err = pcall(function()
+			orderedStore:SetAsync(tostring(player.UserId), best)
+		end)
+		if not ok then
+			warn("[GhostDiner] 순위표 갱신 실패:", err)
+		end
+	end)
+end
+
+-- { {name, value}, ... } 또는 nil(사용 불가)
+function Data.fetchLeaderboard(limit: number)
+	if not orderedStore then
+		return nil
+	end
+	local ok, pages = pcall(function()
+		return orderedStore:GetSortedAsync(false, limit)
+	end)
+	if not ok then
+		return nil
+	end
+	local entries = {}
+	local okPage, page = pcall(function()
+		return pages:GetCurrentPage()
+	end)
+	if not okPage then
+		return nil
+	end
+	for _, entry in page do
+		local userId = tonumber(entry.key)
+		local name = userId and nameCache[userId] or nil
+		if not name and userId then
+			local okName, result = pcall(function()
+				return Players:GetNameFromUserIdAsync(userId)
+			end)
+			name = if okName then result else "???"
+			nameCache[userId] = name
+		end
+		table.insert(entries, { name = name or "???", value = entry.value })
+	end
+	return entries
 end
 
 function Data.init()
@@ -1397,11 +1977,12 @@ return Data
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="12">
+      <Item class="ModuleScript" referent="17">
         <Properties>
           <string name="Name">GameLoop</string>
           <string name="Source"><![CDATA[--!nonstrict
--- 게임 흐름: 대기 → 준비 카운트다운 → 밤(손님 웨이브) → 낮(상점) → … → 폐업(결과) → 다시 대기.
+-- 게임 흐름: 대기 → 준비 카운트다운 → 밤(손님 웨이브·이벤트·목표) → 낮(상점·준비 투표) → … → 폐업(결과) → 다시 대기.
+-- 콤보·명성·순위표·정전도 여기서 관리합니다.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -1409,6 +1990,10 @@ local Config = require(ReplicatedStorage.GhostDiner.Config)
 local Recipes = require(ReplicatedStorage.GhostDiner.Recipes)
 local Waves = require(ReplicatedStorage.GhostDiner.Waves)
 local CustomerTypes = require(ReplicatedStorage.GhostDiner.CustomerTypes)
+local Events = require(ReplicatedStorage.GhostDiner.Events)
+local Challenges = require(ReplicatedStorage.GhostDiner.Challenges)
+local Combo = require(ReplicatedStorage.GhostDiner.Combo)
+local Cosmetics = require(ReplicatedStorage.GhostDiner.Cosmetics)
 local GameState = require(script.Parent.GameState)
 local Remotes = require(script.Parent.Remotes)
 local Items = require(script.Parent.Items)
@@ -1425,20 +2010,53 @@ local function now(): number
 	return workspace:GetServerTimeNow()
 end
 
+local function playerCount(): number
+	return #Players:GetPlayers()
+end
+
+local function challengeText(): string
+	local c = Challenges.get(GameState.challengeId)
+	if not c then
+		return ""
+	end
+	return Challenges.text(c, GameState.nightStats)
+end
+
 function GameLoop.publish()
-	Remotes.set("Phase", GameState.phase)
-	Remotes.set("PhaseEndsAt", GameState.phaseEndsAt)
-	Remotes.set("Night", GameState.night)
-	Remotes.set("Hp", GameState.hp)
+	local S = GameState
+	local ns = S.nightStats
+	Remotes.set("Phase", S.phase)
+	Remotes.set("PhaseEndsAt", S.phaseEndsAt)
+	Remotes.set("Night", S.night)
+	Remotes.set("Hp", S.hp)
 	Remotes.set("MaxHp", Config.StartHp)
-	Remotes.set("Coins", GameState.coins)
-	Remotes.set("CustomersTotal", GameState.customersTotal)
-	Remotes.set("CustomersDone", GameState.customersDone)
-	Remotes.set("Served", GameState.stats.served)
-	Remotes.set("Angry", GameState.stats.angry)
-	Remotes.set("Earned", GameState.stats.earned)
-	Remotes.set("RunId", GameState.runId)
-	for id, level in GameState.upgrades do
+	Remotes.set("Coins", S.coins)
+	Remotes.set("CustomersTotal", S.customersTotal)
+	Remotes.set("CustomersDone", S.customersDone)
+	Remotes.set("Served", S.stats.served)
+	Remotes.set("Angry", S.stats.angry)
+	Remotes.set("Earned", S.stats.earned)
+	Remotes.set("RunId", S.runId)
+	Remotes.set("Combo", S.combo)
+	Remotes.set("ComboExpiresAt", S.comboExpiresAt)
+	local event = Events.get(S.eventId)
+	Remotes.set("EventId", S.eventId)
+	Remotes.set("EventName", if event then event.emoji .. " " .. event.name else "")
+	Remotes.set("EventDesc", if event then event.desc else "")
+	local challenge = Challenges.get(S.challengeId)
+	Remotes.set("ChallengeId", S.challengeId)
+	Remotes.set("ChallengeText", challengeText())
+	Remotes.set("ChallengeDone", challenge ~= nil and Challenges.done(challenge, ns))
+	Remotes.set("ReadyCount", S.readyCount)
+	Remotes.set("ReadyTotal", playerCount())
+	Remotes.set("Blackout", S.blackout)
+	Remotes.set("NightServed", ns.served or 0)
+	Remotes.set("NightTips", ns.tips or 0)
+	Remotes.set("NightMaxCombo", ns.maxCombo or 0)
+	Remotes.set("NightAngry", ns.angry or 0)
+	Remotes.set("NightBurnt", ns.burnt or 0)
+	Remotes.set("NightFires", ns.fires or 0)
+	for id, level in S.upgrades do
 		Remotes.set("Upg_" .. id, level)
 	end
 end
@@ -1446,11 +2064,9 @@ end
 local function setPhase(phase: string, duration: number)
 	GameState.phase = phase
 	GameState.phaseEndsAt = if duration > 0 then now() + duration else 0
+	GameState.ready = {}
+	GameState.readyCount = 0
 	GameLoop.publish()
-end
-
-local function playerCount(): number
-	return #Players:GetPlayers()
 end
 
 local function waitPhase()
@@ -1459,26 +2075,75 @@ local function waitPhase()
 	end
 end
 
-local function onServed(rec, player: Player, dishId: string, coins: number, tip: number)
+local function resetCombo(reason: string)
+	if GameState.combo >= 2 then
+		Remotes.toastAll("💔 콤보 끊김 — " .. reason, "bad")
+	end
+	GameState.combo = 0
+	GameState.comboExpiresAt = 0
+end
+
+local function awardFame(player: Player, n: number)
+	Data.addFame(player, n)
+	local fp = GameState.stats.famePerPlayer
+	fp[player.UserId] = (fp[player.UserId] or 0) + n
+end
+
+-- 서빙 성공: 최종 코인을 계산해 돌려줌
+local function onServed(rec, player: Player, dishId: string, base: number, tip: number, fraction: number): number
+	local t = now()
+	if GameState.combo > 0 and t <= GameState.comboExpiresAt then
+		GameState.combo += 1
+	else
+		GameState.combo = 1
+	end
+	GameState.comboExpiresAt = t + Config.ComboWindow
+	local event = Events.get(GameState.eventId)
+	local tipMult = if event and event.tipMult then event.tipMult else 1
+	local rewardMult = if event and event.rewardMult then event.rewardMult else 1
+	local mult = Combo.multiplier(GameState.combo)
+	local coins = math.floor((base + tip * tipMult) * rewardMult * mult + 0.5)
 	GameState.addCoins(coins)
-	GameState.stats.served += 1
-	GameState.stats.tips += tip
-	local per = GameState.stats.perPlayer
-	per[player.UserId] = (per[player.UserId] or 0) + 1
+
+	local S, ns = GameState.stats, GameState.nightStats
+	S.served += 1
+	S.tips += tip
+	ns.served += 1
+	if tip > 0 then
+		ns.tips += 1
+	end
+	if fraction >= 0.7 then
+		ns.fastServes += 1
+	end
+	ns.maxCombo = math.max(ns.maxCombo, GameState.combo)
+	S.maxCombo = math.max(S.maxCombo, GameState.combo)
+	local uid = player.UserId
+	S.perPlayer[uid] = (S.perPlayer[uid] or 0) + 1
+	ns.perPlayer[uid] = (ns.perPlayer[uid] or 0) + 1
 	Data.addServed(player, 1)
 	Data.addCoins(player, coins)
+	awardFame(player, Config.FamePerServe)
+
+	local msg = string.format("%s 서빙! +%d 코인", Recipes.name(dishId), coins)
 	if tip > 0 then
-		Remotes.toast(player, string.format("%s 서빙! +%d 코인 (팁 %d)", Recipes.name(dishId), coins, tip), "good")
-	else
-		Remotes.toast(player, string.format("%s 서빙! +%d 코인", Recipes.name(dishId), coins), "good")
+		msg ..= string.format(" (팁 %d)", tip)
 	end
+	if GameState.combo >= 2 then
+		msg ..= string.format("  🔥 콤보 x%d", GameState.combo)
+		Remotes.notify(player, { kind = "combo", count = GameState.combo })
+	end
+	Remotes.toast(player, msg, "good")
 	GameLoop.publish()
+	return coins
 end
 
 local function onAngry(rec, damage: number)
 	GameState.damage(damage)
 	GameState.stats.angry += 1
+	GameState.nightStats.angry += 1
+	resetCombo("악귀 발생")
 	Remotes.toastAll(string.format("👿 %s이(가) 악귀가 되어 난동을 부립니다! 평판 -%d", rec.ctype.name, damage), "bad")
+	Remotes.notifyAll({ kind = "angry", position = rec.root.Position, damage = damage })
 	GameLoop.publish()
 end
 
@@ -1487,46 +2152,191 @@ local function onResolved(rec)
 	GameLoop.publish()
 end
 
+local stationCallbacks = {
+	onBurnt = function(spec)
+		GameState.nightStats.burnt += 1
+		GameState.stats.burnt += 1
+		resetCombo("음식을 태움")
+		GameLoop.publish()
+	end,
+	onFire = function(spec, reason)
+		GameState.nightStats.fires += 1
+		GameState.stats.fires += 1
+		GameLoop.publish()
+	end,
+	onSpread = function(from, to)
+		GameState.damage(Config.FireSpreadDamage)
+		GameLoop.publish()
+	end,
+	onExtinguish = function(spec, player)
+		Remotes.notifyAll({ kind = "sparkle", position = spec.baseCFrame.Position + Vector3.new(0, 3.5, 0), color = "blue" })
+	end,
+	isNight = function()
+		return GameState.phase == "night"
+	end,
+}
+
+-- ---------- 정전 ----------
+local function endBlackout()
+	if not GameState.blackout then
+		return
+	end
+	GameState.blackout = false
+	MapBuilder.setBlackout(false)
+	Remotes.notifyAll({ kind = "blackout", on = false })
+	Remotes.toastAll("💡 불이 다시 들어왔습니다", "good")
+	GameLoop.publish()
+end
+
+local function startBlackout()
+	GameState.blackout = true
+	MapBuilder.setBlackout(true)
+	Remotes.notifyAll({ kind = "blackout", on = true })
+	Remotes.toastAll("🕯️ 정전! 조리대 위치를 기억하세요…", "bad")
+	GameLoop.publish()
+	local runId = GameState.runId
+	task.delay(Config.BlackoutDuration, function()
+		if GameState.runId == runId then
+			endBlackout()
+		end
+	end)
+end
+
 -- 밤 하나를 진행. "cleared" | "abandon" | "dead"
 local function runNight(night: number): string
+	GameState.resetNight()
 	GameState.night = night
 	local rng = Random.new(GameState.seed + night * 7919)
-	local plan = Waves.plan(night, playerCount(), rng)
+	local event = Events.pick(night, rng, Config.EventChance, Config.EventMinNight)
+	GameState.eventId = if event then event.id else ""
+	local challenge = if night >= 2 then Challenges.pick(night, rng) else nil
+	GameState.challengeId = if challenge then challenge.id else ""
+	local mods = if event then { countMult = event.countMult, spawnMult = event.spawnMult, extraOrder = event.extraOrder } else nil
+	local plan = Waves.plan(night, playerCount(), rng, mods)
+	local pool = Recipes.dishesForNight(night)
 	GameState.customersTotal = plan.total
 	GameState.customersDone = 0
 	setPhase("night", 0)
 	MapBuilder.setNight(true)
 
 	local newDishes = {}
-	for _, dishId in Recipes.dishesForNight(night) do
+	for _, dishId in pool do
 		local item = Recipes.Items[dishId]
 		if item.unlock == night then
 			table.insert(newDishes, dishId)
 		end
 	end
-	Remotes.notifyAll({ kind = "night", night = night, total = plan.total, newDishes = newDishes, boss = CustomerTypes.bossNight(night) })
+	Remotes.notifyAll({
+		kind = "night",
+		night = night,
+		total = plan.total,
+		newDishes = newDishes,
+		boss = CustomerTypes.bossNight(night),
+		event = if event then { id = event.id, name = event.name, desc = event.desc, emoji = event.emoji } else nil,
+		challenge = if challenge then { name = challenge.name, desc = challenge.desc, reward = challenge.reward, emoji = challenge.emoji } else nil,
+	})
 	Remotes.soundAll("night")
+
+	local blackoutAt = nil
+	if event and event.blackout then
+		local totalDelay = 0
+		for _, c in plan.customers do
+			totalDelay += c.delay
+		end
+		blackoutAt = now() + math.max(10, totalDelay * (0.25 + 0.4 * rng:NextNumber()))
+	end
+	local patienceMult = if event and event.patienceMult then event.patienceMult else 1
 
 	local i = 1
 	local nextSpawnAt = now() + plan.customers[1].delay
 	while true do
 		if GameState.hp <= 0 then
+			endBlackout()
 			return "dead"
 		end
 		if playerCount() == 0 then
+			endBlackout()
 			return "abandon"
 		end
 		if i <= plan.total and now() >= nextSpawnAt and Customers.hasSpace() then
-			Customers.spawn(plan.customers[i], night)
+			Customers.spawn(plan.customers[i], night, { patienceMult = patienceMult, pool = pool })
 			i += 1
 			if i <= plan.total then
 				nextSpawnAt = now() + plan.customers[i].delay
 			end
 		end
+		if blackoutAt and now() >= blackoutAt then
+			blackoutAt = nil
+			startBlackout()
+		end
+		if GameState.combo > 0 and now() > GameState.comboExpiresAt then
+			GameState.combo = 0
+			GameState.comboExpiresAt = 0
+			GameLoop.publish()
+		end
 		if i > plan.total and Customers.pendingCount() == 0 then
+			endBlackout()
 			return "cleared"
 		end
 		task.wait(0.2)
+	end
+end
+
+local function nightCleared(night: number)
+	local ns = GameState.nightStats
+	local bonus = Config.NightClearBonus * night
+	GameState.addCoins(bonus)
+
+	local challenge = Challenges.get(GameState.challengeId)
+	local challengeBonus = 0
+	local challengeDone = false
+	if challenge and Challenges.done(challenge, ns) then
+		challengeBonus = challenge.reward
+		challengeDone = true
+		GameState.addCoins(challengeBonus)
+		Remotes.soundAll("challenge")
+	end
+
+	local mvpName, mvpServed = "", 0
+	for userId, n in ns.perPlayer do
+		if n > mvpServed then
+			local p = Players:GetPlayerByUserId(userId)
+			if p then
+				mvpName = p.DisplayName
+				mvpServed = n
+			end
+		end
+	end
+
+	local fame = Cosmetics.fameForNight(night, Config.FamePerNightBase)
+	local newBest = false
+	for _, player in Players:GetPlayers() do
+		if Data.recordNight(player, night) then
+			Data.updateLeaderboard(player, night)
+			newBest = true
+		end
+		awardFame(player, fame)
+	end
+
+	Remotes.notifyAll({
+		kind = "clear",
+		night = night,
+		bonus = bonus,
+		challengeBonus = challengeBonus,
+		challengeDone = challengeDone,
+		challengeName = if challenge then challenge.emoji .. " " .. challenge.name else nil,
+		mvp = mvpName,
+		mvpServed = mvpServed,
+		served = ns.served,
+		tips = ns.tips,
+		maxCombo = ns.maxCombo,
+		angry = ns.angry,
+		burnt = ns.burnt,
+		fame = fame,
+	})
+	Remotes.soundAll("clear")
+	if newBest then
+		GameLoop.refreshLeaderboard()
 	end
 end
 
@@ -1535,17 +2345,58 @@ local function resetRun()
 	Customers.clear()
 	Stations.reset()
 	Items.clearAll()
+	MapBuilder.setBlackout(false)
 	onRunReset()
 	GameLoop.publish()
+end
+
+function GameLoop.refreshLeaderboard()
+	task.spawn(function()
+		local entries = Data.fetchLeaderboard(10)
+		MapBuilder.setLeaderboard(entries)
+	end)
 end
 
 function GameLoop.init(mapInfo, resetCallback: () -> ())
 	map = mapInfo
 	onRunReset = resetCallback
 	Customers.init(map, { onServed = onServed, onAngry = onAngry, onResolved = onResolved })
+	Stations.setCallbacks(stationCallbacks)
+
+	Remotes.Ready.OnServerEvent:Connect(function(player)
+		local phase = GameState.phase
+		if phase ~= "day" and phase ~= "countdown" then
+			return
+		end
+		local uid = player.UserId
+		if GameState.ready[uid] then
+			GameState.ready[uid] = nil
+		else
+			GameState.ready[uid] = true
+		end
+		local n = 0
+		for _, p in Players:GetPlayers() do
+			if GameState.ready[p.UserId] then
+				n += 1
+			end
+		end
+		GameState.readyCount = n
+		if n >= playerCount() and playerCount() > 0 and now() < GameState.phaseEndsAt then
+			GameState.phaseEndsAt = now()
+			Remotes.toastAll("✅ 모두 준비 완료! 바로 시작합니다", "good")
+		end
+		GameLoop.publish()
+	end)
 end
 
 function GameLoop.start()
+	task.spawn(function()
+		while true do
+			GameLoop.refreshLeaderboard()
+			task.wait(Config.LeaderboardRefresh)
+		end
+	end)
+
 	task.spawn(function()
 		while true do
 			resetRun()
@@ -1567,13 +2418,7 @@ function GameLoop.start()
 					ended = result
 					break
 				end
-				local bonus = Config.NightClearBonus * night
-				GameState.addCoins(bonus)
-				Remotes.toastAll(string.format("☀️ %d번째 밤을 넘겼습니다! 보너스 +%d 코인. 낮 동안 상점(B)에서 업그레이드하세요", night, bonus), "good")
-				Remotes.soundAll("clear")
-				for _, player in Players:GetPlayers() do
-					Data.recordNight(player, night)
-				end
+				nightCleared(night)
 				setPhase("day", Config.DayLength)
 				MapBuilder.setNight(false)
 				Remotes.notifyAll({ kind = "day", night = night })
@@ -1589,8 +2434,13 @@ function GameLoop.start()
 				setPhase("gameover", Config.GameOverLength)
 				Remotes.soundAll("gameover")
 				local perPlayer = {}
+				local mvpName, mvpServed = "", 0
 				for _, player in Players:GetPlayers() do
-					table.insert(perPlayer, { name = player.DisplayName, served = GameState.stats.perPlayer[player.UserId] or 0 })
+					local served = GameState.stats.perPlayer[player.UserId] or 0
+					table.insert(perPlayer, { name = player.DisplayName, served = served, fame = GameState.stats.famePerPlayer[player.UserId] or 0 })
+					if served > mvpServed then
+						mvpName, mvpServed = player.DisplayName, served
+					end
 					Data.recordRun(player)
 				end
 				table.sort(perPlayer, function(a, b)
@@ -1603,6 +2453,10 @@ function GameLoop.start()
 					angry = GameState.stats.angry,
 					earned = GameState.stats.earned,
 					tips = GameState.stats.tips,
+					maxCombo = GameState.stats.maxCombo,
+					burnt = GameState.stats.burnt,
+					fires = GameState.stats.fires,
+					mvp = mvpName,
 					players = perPlayer,
 				})
 				Data.saveAll()
@@ -1620,7 +2474,7 @@ return GameLoop
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="13">
+      <Item class="ModuleScript" referent="18">
         <Properties>
           <string name="Name">GameState</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -1638,16 +2492,22 @@ local GameState = {
 	upgrades = {}, -- id → 단계
 	customersTotal = 0,
 	customersDone = 0,
-	stats = {
-		served = 0,
-		angry = 0,
-		earned = 0,
-		tips = 0,
-		perPlayer = {}, -- userId → 서빙 수
-	},
+	stats = {} :: { [string]: any }, -- 한 판 누적
+	nightStats = {} :: { [string]: any }, -- 이번 밤
+	combo = 0,
+	comboExpiresAt = 0,
+	eventId = "",
+	challengeId = "",
+	ready = {}, -- userId → true
+	readyCount = 0,
+	blackout = false,
 	seed = 0,
 	runId = 0,
 }
+
+function GameState.resetNight()
+	GameState.nightStats = { served = 0, burnt = 0, tips = 0, maxCombo = 0, angry = 0, fastServes = 0, fires = 0, perPlayer = {} }
+end
 
 function GameState.resetRun()
 	GameState.phase = "lobby"
@@ -1661,7 +2521,15 @@ function GameState.resetRun()
 	end
 	GameState.customersTotal = 0
 	GameState.customersDone = 0
-	GameState.stats = { served = 0, angry = 0, earned = 0, tips = 0, perPlayer = {} }
+	GameState.stats = { served = 0, angry = 0, earned = 0, tips = 0, maxCombo = 0, burnt = 0, fires = 0, perPlayer = {}, famePerPlayer = {} }
+	GameState.resetNight()
+	GameState.combo = 0
+	GameState.comboExpiresAt = 0
+	GameState.eventId = ""
+	GameState.challengeId = ""
+	GameState.ready = {}
+	GameState.readyCount = 0
+	GameState.blackout = false
 	GameState.seed = math.random(1, 2 ^ 30)
 	GameState.runId += 1
 end
@@ -1696,114 +2564,21 @@ return GameState
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="14">
+      <Item class="ModuleScript" referent="19">
         <Properties>
           <string name="Name">Items</string>
           <string name="Source"><![CDATA[--!nonstrict
--- 재료·요리의 모양(파츠 조립)과 플레이어 손에 들리는 Tool 관리.
+-- 플레이어 손에 들리는 Tool 관리. 모양은 shared/ItemVisuals 가 만듭니다.
 -- 규칙: 플레이어는 한 번에 한 가지만 들 수 있고, Backpack UI 는 클라이언트에서 숨깁니다.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Recipes = require(ReplicatedStorage.GhostDiner.Recipes)
+local ItemVisuals = require(ReplicatedStorage.GhostDiner.ItemVisuals)
 
 local Items = {}
 
-local function rgb(c: { number }): Color3
-	return Color3.fromRGB(c[1], c[2], c[3])
-end
-
-local function newPart(size: Vector3, color: Color3, shape: Enum.PartType?): Part
-	local p = Instance.new("Part")
-	p.Size = size
-	p.Color = color
-	p.Material = Enum.Material.SmoothPlastic
-	p.Shape = shape or Enum.PartType.Block
-	p.CanCollide = false
-	p.CanTouch = false
-	p.CanQuery = false
-	p.Massless = true
-	p.CastShadow = false
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	return p
-end
-
-local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- 실린더를 세움
-
--- 아이템 모양을 만들어 Model 로 돌려줌. PrimaryPart(Handle) 중심이 원점.
-function Items.buildVisual(itemId: string): Model
-	local item = Recipes.Items[itemId] or Recipes.Items.burnt
-	local color = rgb(item.color)
-	local model = Instance.new("Model")
-	model.Name = itemId
-	local base: Part
-	local shape = item.shape
-	if shape == "box" then
-		base = newPart(Vector3.new(1.2, 0.8, 1.2), color)
-	elseif shape == "ball" then
-		base = newPart(Vector3.new(1, 1, 1), color, Enum.PartType.Ball)
-	elseif shape == "cyl" then
-		base = newPart(Vector3.new(1.6, 0.6, 0.6), color, Enum.PartType.Cylinder)
-	elseif shape == "flat" then
-		base = newPart(Vector3.new(1.4, 0.2, 1.4), color)
-	elseif shape == "bag" then
-		base = newPart(Vector3.new(1, 1.2, 0.7), color)
-	elseif shape == "jar" then
-		base = newPart(Vector3.new(0.9, 0.9, 0.9), color, Enum.PartType.Cylinder)
-		base.CFrame = UPRIGHT
-	elseif shape == "bowl" then
-		base = newPart(Vector3.new(0.6, 1.5, 1.5), Color3.fromRGB(250, 250, 250), Enum.PartType.Cylinder)
-		base.CFrame = UPRIGHT
-		local content = newPart(Vector3.new(0.15, 1.2, 1.2), color, Enum.PartType.Cylinder)
-		content.CFrame = CFrame.new(0, 0.3, 0) * UPRIGHT
-		content.Name = "Content"
-		content.Parent = model
-	elseif shape == "plate" then
-		base = newPart(Vector3.new(0.15, 1.7, 1.7), Color3.fromRGB(250, 250, 250), Enum.PartType.Cylinder)
-		base.CFrame = UPRIGHT
-		local food = newPart(Vector3.new(0.9, 0.5, 0.9), color)
-		food.CFrame = CFrame.new(0, 0.35, 0)
-		food.Name = "Food"
-		food.Parent = model
-	else -- lump
-		base = newPart(Vector3.new(0.9, 0.6, 0.9), color)
-	end
-	base.Name = "Handle"
-	base.Parent = model
-	model.PrimaryPart = base
-	for _, p in model:GetChildren() do
-		if p ~= base and p:IsA("BasePart") then
-			local weld = Instance.new("WeldConstraint")
-			weld.Part0 = base
-			weld.Part1 = p
-			weld.Parent = p
-		end
-	end
-	-- 회전한 파츠(세운 실린더 등)가 PivotTo 뒤에도 방향을 유지하도록 기준점을 회전 없는 원점으로
-	model.WorldPivot = CFrame.new()
-	if item.kind == "burnt" then
-		local smoke = Instance.new("Smoke")
-		smoke.Size = 0.4
-		smoke.Opacity = 0.35
-		smoke.RiseVelocity = 2
-		smoke.Color = Color3.fromRGB(40, 40, 40)
-		smoke.Parent = base
-	end
-	return model
-end
-
--- 조리대 위 등에 고정해서 보여주는 모양
-function Items.display(itemId: string, cframe: CFrame, parent: Instance): Model
-	local model = Items.buildVisual(itemId)
-	for _, p in model:GetChildren() do
-		if p:IsA("BasePart") then
-			p.Anchored = true
-		end
-	end
-	model:PivotTo(cframe)
-	model.Parent = parent
-	return model
-end
+Items.buildVisual = ItemVisuals.build
+Items.display = ItemVisuals.display
 
 local function findTool(player: Player): Tool?
 	local character = player.Character
@@ -1817,7 +2592,6 @@ local function findTool(player: Player): Tool?
 	if backpack then
 		local tool = backpack:FindFirstChildOfClass("Tool")
 		if tool then
-			-- 어떤 이유로 손에서 내려놨다면 다시 들게 함
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 			if humanoid then
 				humanoid:EquipTool(tool)
@@ -1856,14 +2630,14 @@ function Items.give(player: Player, itemId: string): boolean
 	tool.CanBeDropped = false
 	tool.ManualActivationOnly = true
 	tool:SetAttribute("ItemId", itemId)
-	local visual = Items.buildVisual(itemId)
+	local visual = ItemVisuals.build(itemId)
 	for _, p in visual:GetChildren() do
 		p.Parent = tool
 	end
 	visual:Destroy()
 	local item = Recipes.Items[itemId]
-	local shape = item and item.shape or "lump"
-	if shape == "jar" or shape == "bowl" or shape == "plate" then
+	local shape = if item then item.shape else "lump"
+	if ItemVisuals.UPRIGHT_SHAPES[shape] then
 		-- 세운 실린더(축이 X)를 손에서도 위로 향하게
 		tool.Grip = CFrame.new(0, -0.1, 0) * CFrame.Angles(0, 0, math.rad(90))
 	else
@@ -1911,12 +2685,12 @@ return Items
 ]]></string>
         </Properties>
       </Item>
-      <Item class="Script" referent="15">
+      <Item class="Script" referent="20">
         <Properties>
           <string name="Name">Main</string>
           <token name="RunContext">0</token>
           <string name="Source"><![CDATA[--!nonstrict
--- 서버 진입점. 지도 생성 → 조리대·손님·저장·상점 초기화 → 게임 루프 시작.
+-- 서버 진입점. 지도 생성 → 조리대·손님·저장·상점·옷장 초기화 → 게임 루프 시작.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -1926,6 +2700,7 @@ local Stations = require(script.Parent.Stations)
 local GameLoop = require(script.Parent.GameLoop)
 local Data = require(script.Parent.Data)
 local Shop = require(script.Parent.Shop)
+local Wardrobe = require(script.Parent.Wardrobe)
 
 local map = MapBuilder.build()
 Stations.init(map)
@@ -1934,6 +2709,7 @@ GameLoop.init(map, function()
 end)
 Data.init()
 Shop.init(GameLoop.publish)
+Wardrobe.init()
 
 local function onCharacter(player: Player, character: Model)
 	for _, d in character:GetDescendants() do
@@ -1969,7 +2745,7 @@ print("[GhostDiner] 저승 휴게소 서버 시작 v" .. Config.Version)
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="16">
+      <Item class="ModuleScript" referent="21">
         <Properties>
           <string name="Name">MapBuilder</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -2006,8 +2782,9 @@ export type MapInfo = {
 	queue: { Vector3 },
 	spawnPoint: Vector3,
 	exitPoint: Vector3,
-	lanterns: { PointLight },
 }
+
+local UPRIGHT = CFrame.Angles(0, 0, math.rad(90))
 
 local function part(props: { [string]: any }): Part
 	local p = Instance.new("Part")
@@ -2034,6 +2811,7 @@ local function setupCollisionGroups()
 	end)
 end
 
+-- ---------- 조명 ----------
 local NIGHT = {
 	ClockTime = 0.5,
 	Brightness = 1.2,
@@ -2052,9 +2830,22 @@ local DAY = {
 	FogEnd = 700,
 	ExposureCompensation = 0,
 }
+local BLACKOUT = {
+	ClockTime = 0.5,
+	Brightness = 0.08,
+	Ambient = Color3.fromRGB(12, 10, 22),
+	OutdoorAmbient = Color3.fromRGB(14, 12, 28),
+	FogColor = Color3.fromRGB(6, 4, 12),
+	FogEnd = 110,
+	ExposureCompensation = -0.4,
+}
 
 local atmosphere: Atmosphere? = nil
-local lanternLights: { PointLight } = {}
+local lanternLamps: { { light: PointLight, part: Part } } = {}
+local bulbLights: { { light: PointLight, part: Part } } = {}
+local leaderboardLabel: TextLabel? = nil
+local isNightNow = true
+local blackoutActive = false
 
 local function setupLighting()
 	for k, v in NIGHT do
@@ -2076,18 +2867,56 @@ local function setupLighting()
 	atmosphere = atm
 end
 
+local function applyLanterns()
+	for _, l in lanternLamps do
+		local on = isNightNow and not blackoutActive
+		l.light.Enabled = on
+		l.part.Material = if on then Enum.Material.Neon else Enum.Material.SmoothPlastic
+	end
+end
+
 function MapBuilder.setNight(isNight: boolean)
+	isNightNow = isNight
+	if blackoutActive then
+		return
+	end
 	local target = if isNight then NIGHT else DAY
 	local info = TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 	TweenService:Create(Lighting, info, target):Play()
 	if atmosphere then
 		TweenService:Create(atmosphere, info, { Density = if isNight then 0.32 else 0.18 }):Play()
 	end
-	for _, light in lanternLights do
-		light.Enabled = isNight
+	applyLanterns()
+end
+
+function MapBuilder.setBlackout(on: boolean)
+	if blackoutActive == on then
+		return
+	end
+	blackoutActive = on
+	for _, b in bulbLights do
+		b.light.Enabled = not on
+		b.part.Material = if on then Enum.Material.SmoothPlastic else Enum.Material.Neon
+	end
+	applyLanterns()
+	if on then
+		for k, v in BLACKOUT do
+			(Lighting :: any)[k] = v
+		end
+		if atmosphere then
+			atmosphere.Density = 0.45
+		end
+	else
+		local target = if isNightNow then NIGHT else DAY
+		local info = TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+		TweenService:Create(Lighting, info, target):Play()
+		if atmosphere then
+			TweenService:Create(atmosphere, info, { Density = if isNightNow then 0.32 else 0.18 }):Play()
+		end
 	end
 end
 
+-- ---------- 장식 ----------
 local function makeLantern(parent: Instance, x: number, z: number)
 	part({ Name = "LanternPost", Size = Vector3.new(0.5, 7, 0.5), Position = Vector3.new(x, 3.5, z), Color = Color3.fromRGB(60, 45, 35), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = parent })
 	local lamp = part({ Name = "Lantern", Size = Vector3.new(1.4, 1.8, 1.4), Position = Vector3.new(x, 7.6, z), Color = Color3.fromRGB(255, 120, 60), Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
@@ -2097,7 +2926,7 @@ local function makeLantern(parent: Instance, x: number, z: number)
 	light.Color = Color3.fromRGB(255, 150, 90)
 	light.Shadows = false
 	light.Parent = lamp
-	table.insert(lanternLights, light)
+	table.insert(lanternLamps, { light = light, part = lamp })
 end
 
 local function makeBulb(parent: Instance, x: number, y: number, z: number)
@@ -2108,8 +2937,169 @@ local function makeBulb(parent: Instance, x: number, y: number, z: number)
 	light.Color = Color3.fromRGB(255, 235, 190)
 	light.Shadows = false
 	light.Parent = bulb
+	table.insert(bulbLights, { light = light, part = bulb })
 end
 
+local LANTERN_COLORS = { Color3.fromRGB(255, 80, 60), Color3.fromRGB(255, 150, 50), Color3.fromRGB(200, 90, 255) }
+
+local function makeLanternStrings(parent: Instance)
+	for row, z in { 16, 34, 52 } do
+		part({ Name = "StringWire", Size = Vector3.new(86, 0.08, 0.08), Position = Vector3.new(0, 11, z), Color = Color3.fromRGB(30, 30, 30), CanCollide = false, Parent = parent })
+		local i = 0
+		for x = -40, 40, 8 do
+			i += 1
+			local color = LANTERN_COLORS[((i + row) % #LANTERN_COLORS) + 1]
+			part({ Name = "StringCord", Size = Vector3.new(0.08, 1.2, 0.08), Position = Vector3.new(x, 10.4, z), Color = Color3.fromRGB(30, 30, 30), CanCollide = false, Parent = parent })
+			local lamp = part({ Name = "PaperLantern", Size = Vector3.new(1.5, 1.9, 1.5), Shape = Enum.PartType.Ball, Position = Vector3.new(x, 9.1, z), Color = color, Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+			if i % 3 == 1 then
+				local light = Instance.new("PointLight")
+				light.Range = 16
+				light.Brightness = 0.8
+				light.Color = color
+				light.Shadows = false
+				light.Parent = lamp
+				table.insert(lanternLamps, { light = light, part = lamp })
+			end
+		end
+	end
+end
+
+local function makeNeonSign(parent: Instance)
+	local board = part({ Name = "NeonSign", Size = Vector3.new(32, 5.5, 0.6), Position = Vector3.new(0, 8.6, -1), Color = Color3.fromRGB(28, 22, 36), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = parent })
+	for _, face in { Enum.NormalId.Front, Enum.NormalId.Back } do
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = face
+		gui.CanvasSize = Vector2.new(1280, 220)
+		gui.LightInfluence = 0
+		gui.Brightness = 2
+		gui.Parent = board
+		local text = Instance.new("TextLabel")
+		text.Size = UDim2.new(1, 0, 1, 0)
+		text.BackgroundTransparency = 1
+		text.Text = "🏮 저승 휴게소 🏮"
+		text.TextColor3 = Color3.fromRGB(255, 120, 200)
+		text.TextStrokeColor3 = Color3.fromRGB(120, 20, 80)
+		text.TextStrokeTransparency = 0.2
+		text.Font = Enum.Font.GothamBlack
+		text.TextSize = 150
+		text.Parent = gui
+	end
+	local neon = Color3.fromRGB(255, 90, 200)
+	part({ Name = "SignNeon", Size = Vector3.new(33, 0.3, 0.8), Position = Vector3.new(0, 11.5, -1), Color = neon, Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+	part({ Name = "SignNeon", Size = Vector3.new(33, 0.3, 0.8), Position = Vector3.new(0, 5.7, -1), Color = neon, Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+	part({ Name = "SignNeon", Size = Vector3.new(0.3, 6.1, 0.8), Position = Vector3.new(-16.5, 8.6, -1), Color = neon, Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+	part({ Name = "SignNeon", Size = Vector3.new(0.3, 6.1, 0.8), Position = Vector3.new(16.5, 8.6, -1), Color = neon, Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+	local light = Instance.new("PointLight")
+	light.Range = 30
+	light.Brightness = 1
+	light.Color = neon
+	light.Parent = board
+end
+
+local function makeMoon(parent: Instance)
+	part({ Name = "Moon", Size = Vector3.new(28, 28, 28), Shape = Enum.PartType.Ball, Position = Vector3.new(110, 130, 230), Color = Color3.fromRGB(250, 245, 210), Material = Enum.Material.Neon, CanCollide = false, CanQuery = false, CastShadow = false, Parent = parent })
+	part({ Name = "MoonGlow", Size = Vector3.new(40, 40, 40), Shape = Enum.PartType.Ball, Position = Vector3.new(110, 130, 230), Color = Color3.fromRGB(250, 245, 210), Material = Enum.Material.Neon, Transparency = 0.88, CanCollide = false, CanQuery = false, CastShadow = false, Parent = parent })
+end
+
+local function makeTree(parent: Instance, x: number, z: number)
+	part({ Name = "Trunk", Size = Vector3.new(1.2, 4, 1.2), Position = Vector3.new(x, 2, z), Color = Color3.fromRGB(55, 40, 45), Material = Enum.Material.Wood, Parent = parent })
+	local canopy = Color3.fromRGB(45, 62, 72)
+	part({ Name = "Canopy", Size = Vector3.new(7, 3, 7), Position = Vector3.new(x, 5.5, z), Color = canopy, Parent = parent })
+	part({ Name = "Canopy", Size = Vector3.new(5.4, 3, 5.4), CFrame = CFrame.new(x, 8.5, z) * CFrame.Angles(0, math.rad(45), 0), Color = canopy, Parent = parent })
+	part({ Name = "Canopy", Size = Vector3.new(3.6, 3, 3.6), Position = Vector3.new(x, 11.5, z), Color = canopy, Parent = parent })
+end
+
+local function makeMist(parent: Instance)
+	local volume = part({ Name = "MistVolume", Size = Vector3.new(90, 1, 72), Position = Vector3.new(0, 0.6, 40), Transparency = 1, CanCollide = false, CanQuery = false, Parent = parent })
+	local mist = Instance.new("ParticleEmitter")
+	mist.Rate = 5
+	mist.Lifetime = NumberRange.new(6, 9)
+	mist.Speed = NumberRange.new(0.3, 0.8)
+	mist.Size = NumberSequence.new(8, 13)
+	mist.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.3, 0.86), NumberSequenceKeypoint.new(1, 1) })
+	mist.Color = ColorSequence.new(Color3.fromRGB(150, 140, 190))
+	mist.Rotation = NumberRange.new(0, 360)
+	mist.RotSpeed = NumberRange.new(-5, 5)
+	mist.SpreadAngle = Vector2.new(60, 60)
+	mist.Parent = volume
+end
+
+local function makeFireflies(parent: Instance)
+	local volume = part({ Name = "FireflyVolume", Size = Vector3.new(88, 6, 70), Position = Vector3.new(0, 5, 40), Transparency = 1, CanCollide = false, CanQuery = false, Parent = parent })
+	local fly = Instance.new("ParticleEmitter")
+	fly.Rate = 5
+	fly.Lifetime = NumberRange.new(5, 8)
+	fly.Speed = NumberRange.new(0.5, 1.5)
+	fly.Size = NumberSequence.new(0.22)
+	fly.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.2, 0), NumberSequenceKeypoint.new(0.5, 1), NumberSequenceKeypoint.new(0.8, 0), NumberSequenceKeypoint.new(1, 1) })
+	fly.Color = ColorSequence.new(Color3.fromRGB(220, 255, 140))
+	fly.LightEmission = 1
+	fly.Acceleration = Vector3.new(0, 0.2, 0)
+	fly.SpreadAngle = Vector2.new(180, 180)
+	fly.Parent = volume
+end
+
+local function makeRunes(parent: Instance)
+	local i = 0
+	for z = 12, 66, 9 do
+		i += 1
+		local x = if i % 2 == 0 then 3 else -3
+		part({ Name = "Rune", Size = Vector3.new(2.4, 0.12, 2.4), CFrame = CFrame.new(x, 0.14, z) * CFrame.Angles(0, math.rad(45), 0), Color = Color3.fromRGB(170, 90, 255), Material = Enum.Material.Neon, Transparency = 0.35, CanCollide = false, CanQuery = false, Parent = parent })
+	end
+end
+
+local function makeLeaderboardBoard(parent: Instance)
+	local board = part({ Name = "LeaderboardBoard", Size = Vector3.new(0.5, 10, 24), Position = Vector3.new(47.7, 7, -23), Color = Color3.fromRGB(30, 26, 40), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = parent })
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Left
+	gui.CanvasSize = Vector2.new(960, 400)
+	gui.LightInfluence = 0
+	gui.Brightness = 1.5
+	gui.Parent = board
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0, 60)
+	title.BackgroundTransparency = 1
+	title.Text = "🏆 최고 밤 순위표 (전체 서버)"
+	title.TextColor3 = Color3.fromRGB(255, 220, 150)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 40
+	title.Parent = gui
+	local body = Instance.new("TextLabel")
+	body.Position = UDim2.new(0, 30, 0, 66)
+	body.Size = UDim2.new(1, -60, 1, -76)
+	body.BackgroundTransparency = 1
+	body.Text = "불러오는 중…"
+	body.TextColor3 = Color3.fromRGB(240, 235, 250)
+	body.Font = Enum.Font.Gotham
+	body.TextSize = 28
+	body.TextXAlignment = Enum.TextXAlignment.Left
+	body.TextYAlignment = Enum.TextYAlignment.Top
+	body.TextWrapped = true
+	body.Parent = gui
+	leaderboardLabel = body
+end
+
+function MapBuilder.setLeaderboard(entries)
+	if not leaderboardLabel then
+		return
+	end
+	if entries == nil then
+		leaderboardLabel.Text = "순위표를 불러올 수 없어요.\n(게임 설정 > 보안 > Studio의 API 서비스 접근 허용)"
+		return
+	end
+	if #entries == 0 then
+		leaderboardLabel.Text = "아직 기록이 없습니다. 첫 기록의 주인공이 되어 보세요!"
+		return
+	end
+	local lines = {}
+	for i, e in entries do
+		local medal = if i == 1 then "🥇" elseif i == 2 then "🥈" elseif i == 3 then "🥉" else string.format("%2d.", i)
+		table.insert(lines, string.format("%s %s — %d번째 밤", medal, e.name, e.value))
+	end
+	leaderboardLabel.Text = table.concat(lines, "\n")
+end
+
+-- ---------- 조리대 ----------
 local STATION_STYLE = {
 	crate = { color = Color3.fromRGB(140, 100, 60), material = Enum.Material.WoodPlanks },
 	board = { color = Color3.fromRGB(180, 180, 185), material = Enum.Material.Slate },
@@ -2119,6 +3109,7 @@ local STATION_STYLE = {
 	fryer = { color = Color3.fromRGB(170, 170, 175), material = Enum.Material.DiamondPlate },
 	ricecooker = { color = Color3.fromRGB(235, 235, 240), material = Enum.Material.SmoothPlastic },
 	trash = { color = Color3.fromRGB(50, 90, 60), material = Enum.Material.Metal },
+	extinguisher = { color = Color3.fromRGB(210, 40, 40), material = Enum.Material.SmoothPlastic },
 }
 
 local function makeStation(parent: Folder, kind: string, index: number, x: number, z: number, crateItem: string?, locked: boolean): StationSpec
@@ -2145,7 +3136,7 @@ local function makeStation(parent: Folder, kind: string, index: number, x: numbe
 		part({ Name = "Knife", Size = Vector3.new(1.4, 0.1, 0.3), Position = Vector3.new(x + 0.6, 3.35, z + 1.4), Color = Color3.fromRGB(220, 220, 230), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 2.4, 0)
 	elseif kind == "pot" then
-		part({ Name = "Pot", Size = Vector3.new(1.3, 2.8, 2.8), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.65, z) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(35, 35, 40), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		part({ Name = "Pot", Size = Vector3.new(1.3, 2.8, 2.8), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.65, z) * UPRIGHT, Color = Color3.fromRGB(35, 35, 40), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 3.6, 0)
 	elseif kind == "griddle" then
 		part({ Name = "Plate", Size = Vector3.new(3.4, 0.3, 3.4), Position = Vector3.new(x, 3.15, z), Color = Color3.fromRGB(30, 30, 30), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
@@ -2154,19 +3145,26 @@ local function makeStation(parent: Folder, kind: string, index: number, x: numbe
 		part({ Name = "Oil", Size = Vector3.new(3, 0.3, 3), Position = Vector3.new(x, 3.15, z), Color = Color3.fromRGB(240, 200, 90), Material = Enum.Material.Glass, Transparency = 0.2, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 2.5, 0)
 	elseif kind == "ricecooker" then
-		part({ Name = "Cooker", Size = Vector3.new(2, 2.6, 2.6), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 4, z) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(245, 245, 250), Material = Enum.Material.SmoothPlastic, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		part({ Name = "Cooker", Size = Vector3.new(2, 2.6, 2.6), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 4, z) * UPRIGHT, Color = Color3.fromRGB(245, 245, 250), Material = Enum.Material.SmoothPlastic, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		part({ Name = "Button", Size = Vector3.new(0.5, 0.5, 0.2), Position = Vector3.new(x, 4, z + 1.35), Color = Color3.fromRGB(230, 60, 60), Material = Enum.Material.Neon, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 4.1, 0)
 	elseif kind == "trash" then
 		base.Shape = Enum.PartType.Cylinder
 		base.Size = Vector3.new(3.2, 3, 3)
-		base.CFrame = CFrame.new(x, 1.6, z) * CFrame.Angles(0, 0, math.rad(90))
-		part({ Name = "Rim", Size = Vector3.new(0.2, 3.2, 3.2), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.2, z) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(35, 60, 40), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		base.CFrame = CFrame.new(x, 1.6, z) * UPRIGHT
+		part({ Name = "Rim", Size = Vector3.new(0.2, 3.2, 3.2), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.2, z) * UPRIGHT, Color = Color3.fromRGB(35, 60, 40), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 	elseif kind == "combine" then
 		part({ Name = "Top", Size = Vector3.new(4.2, 0.2, 4.2), Position = Vector3.new(x, 3.1, z), Color = Color3.fromRGB(200, 205, 215), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 2.3, 0)
+	elseif kind == "extinguisher" then
+		-- 벽에 붙은 빨간 소화기함
+		base.Size = Vector3.new(1.2, 2.6, 2.2)
+		base.CFrame = CFrame.new(x, 4.2, z)
+		local inward = if x < 0 then 1 else -1
+		part({ Name = "Stripe", Size = Vector3.new(1.25, 0.5, 2.25), Position = Vector3.new(x, 4.2, z), Color = Color3.fromRGB(250, 250, 250), CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		part({ Name = "Tank", Size = Vector3.new(1.4, 0.55, 0.55), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x + inward * 0.9, 4.0, z) * UPRIGHT, Color = Color3.fromRGB(230, 50, 50), CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		part({ Name = "Nozzle", Size = Vector3.new(0.2, 0.5, 0.2), Position = Vector3.new(x + inward * 1.1, 4.9, z), Color = Color3.fromRGB(30, 30, 30), CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 	end
-	-- 잠긴 조리대는 반투명
 	if locked then
 		for _, p in base:GetDescendants() do
 			if p:IsA("BasePart") then
@@ -2303,7 +3301,6 @@ function MapBuilder.build(): MapInfo
 	-- 카운터 (주방과 손님 구역을 가름. 손님(귀신)은 통과, 플레이어는 못 넘음)
 	part({ Name = "Counter", Size = Vector3.new(74, 3, 2), Position = Vector3.new(0, 1.5, -1), Color = Color3.fromRGB(110, 75, 45), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = decor })
 	part({ Name = "CounterTop", Size = Vector3.new(74.6, 0.3, 2.8), Position = Vector3.new(0, 3.15, -1), Color = Color3.fromRGB(190, 150, 100), Material = Enum.Material.WoodPlanks, CollisionGroup = "Furniture", Parent = decor })
-	-- 카운터 양끝을 막는 기둥 (플레이어가 손님 구역으로 못 나가게)
 	part({ Name = "CounterEndL", Size = Vector3.new(12, 3, 2), Position = Vector3.new(-43, 1.5, -1), Color = Color3.fromRGB(110, 75, 45), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = decor })
 	part({ Name = "CounterEndR", Size = Vector3.new(12, 3, 2), Position = Vector3.new(43, 1.5, -1), Color = Color3.fromRGB(110, 75, 45), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = decor })
 
@@ -2335,7 +3332,7 @@ function MapBuilder.build(): MapInfo
 	portalLight.Color = Color3.fromRGB(170, 100, 255)
 	portalLight.Parent = portal
 	local portalFx = Instance.new("ParticleEmitter")
-	portalFx.Rate = 12
+	portalFx.Rate = 14
 	portalFx.Lifetime = NumberRange.new(1.5, 3)
 	portalFx.Speed = NumberRange.new(1, 2)
 	portalFx.Size = NumberSequence.new(0.6, 0)
@@ -2344,8 +3341,18 @@ function MapBuilder.build(): MapInfo
 	portalFx.LightEmission = 0.8
 	portalFx.SpreadAngle = Vector2.new(60, 60)
 	portalFx.Parent = portal
+	local portalSwirl = Instance.new("ParticleEmitter")
+	portalSwirl.Rate = 6
+	portalSwirl.Lifetime = NumberRange.new(2, 3)
+	portalSwirl.Speed = NumberRange.new(0.2, 0.6)
+	portalSwirl.Size = NumberSequence.new(3, 0)
+	portalSwirl.Transparency = NumberSequence.new(0.7, 1)
+	portalSwirl.Color = ColorSequence.new(Color3.fromRGB(120, 60, 220))
+	portalSwirl.RotSpeed = NumberRange.new(60, 120)
+	portalSwirl.LightEmission = 0.5
+	portalSwirl.Parent = portal
 
-	-- 등불
+	-- 등불·장식
 	for _, z in { 6, 24, 42, 58 } do
 		makeLantern(decor, -16, z)
 		makeLantern(decor, 16, z)
@@ -2354,9 +3361,21 @@ function MapBuilder.build(): MapInfo
 		makeBulb(decor, x, 9.5, -9)
 		makeBulb(decor, x, 9.5, -37)
 	end
-	for _, z in { -8, -37 } do
-		part({ Name = "Wire", Size = Vector3.new(84, 0.1, 0.1), Position = Vector3.new(0, 9.8, z + (if z == -8 then -1 else 0)), Color = Color3.fromRGB(30, 30, 30), CanCollide = false, Parent = decor })
+	for _, z in { -9, -37 } do
+		part({ Name = "Wire", Size = Vector3.new(84, 0.1, 0.1), Position = Vector3.new(0, 9.8, z), Color = Color3.fromRGB(30, 30, 30), CanCollide = false, Parent = decor })
 	end
+	makeLanternStrings(decor)
+	makeNeonSign(decor)
+	makeMoon(decor)
+	for _, z in { 10, 24, 38, 52, 66, 78 } do
+		makeTree(decor, -44, z)
+		makeTree(decor, 44, z)
+	end
+	makeMist(decor)
+	makeFireflies(decor)
+	makeRunes(decor)
+	makeLeaderboardBoard(decor)
+	makeMenuBoard(decor)
 
 	-- 플레이어 스폰
 	local spawn = Instance.new("SpawnLocation")
@@ -2371,8 +3390,6 @@ function MapBuilder.build(): MapInfo
 	spawn.TopSurface = Enum.SurfaceType.Smooth
 	spawn.Parent = decor
 
-	makeMenuBoard(decor)
-
 	-- 조리대 배치
 	local stations: { StationSpec } = {}
 	local function add(kind: string, index: number, x: number, z: number, crateItem: string?, locked: boolean?)
@@ -2382,12 +3399,14 @@ function MapBuilder.build(): MapInfo
 	for i, itemId in Recipes.CrateItems do
 		add("crate", i, -32 + (i - 1) * 8, -42, itemId)
 	end
-	-- 왼쪽 벽: 도마 2, 쓰레기통 / 오른쪽 벽: 밥솥(1 + 잠금 1), 쓰레기통
+	-- 왼쪽 벽: 도마 2, 소화기함, 쓰레기통 / 오른쪽 벽: 밥솥(1 + 잠금 1), 소화기함, 쓰레기통
 	add("board", 1, -42, -32)
 	add("board", 2, -42, -26)
+	add("extinguisher", 1, -46.8, -20)
 	add("trash", 1, -42, -14)
 	add("ricecooker", 1, 42, -32)
 	add("ricecooker", 2, 42, -26, nil, true)
+	add("extinguisher", 2, 46.8, -20)
 	add("trash", 2, 42, -14)
 	-- 가운데 섬 A(Z=-30): 튀김기(1+1), 냄비(1+2), 화덕(1+1)
 	add("fryer", 1, -30, -30)
@@ -2413,7 +3432,6 @@ function MapBuilder.build(): MapInfo
 		queue = queue,
 		spawnPoint = Vector3.new(0, 3, 72),
 		exitPoint = Vector3.new(0, 3, 74),
-		lanterns = lanternLights,
 	}
 end
 
@@ -2421,14 +3439,14 @@ return MapBuilder
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="17">
+      <Item class="ModuleScript" referent="22">
         <Properties>
           <string name="Name">Remotes</string>
           <string name="Source"><![CDATA[--!nonstrict
 -- 클라이언트와 주고받는 통로.
 --  * GhostDinerState 폴더의 Attribute: 게임 상태(자동 복제, 늦게 들어온 플레이어도 바로 읽음)
---  * Notify(RemoteEvent): 알림·효과음·코인 연출·결과 화면
---  * Buy(RemoteFunction): 상점 구매 요청
+--  * Notify(RemoteEvent 서버→클라): 알림·효과음·연출·결과 화면
+--  * Buy(RemoteFunction): 상점 구매 / SetHat(RemoteFunction): 모자 착용 / Ready(RemoteEvent 클라→서버): 준비 완료
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = {}
@@ -2437,20 +3455,29 @@ local folder = Instance.new("Folder")
 folder.Name = "GhostDinerRemotes"
 folder.Parent = ReplicatedStorage
 
-local notify = Instance.new("RemoteEvent")
-notify.Name = "Notify"
-notify.Parent = folder
+local function remoteEvent(name: string): RemoteEvent
+	local r = Instance.new("RemoteEvent")
+	r.Name = name
+	r.Parent = folder
+	return r
+end
 
-local buy = Instance.new("RemoteFunction")
-buy.Name = "Buy"
-buy.Parent = folder
+local function remoteFunction(name: string): RemoteFunction
+	local r = Instance.new("RemoteFunction")
+	r.Name = name
+	r.Parent = folder
+	return r
+end
 
+local notify = remoteEvent("Notify")
 local state = Instance.new("Folder")
 state.Name = "GhostDinerState"
 state.Parent = ReplicatedStorage
 
 Remotes.Notify = notify
-Remotes.Buy = buy
+Remotes.Buy = remoteFunction("Buy")
+Remotes.SetHat = remoteFunction("SetHat")
+Remotes.Ready = remoteEvent("Ready")
 Remotes.State = state
 
 function Remotes.set(key: string, value: any)
@@ -2481,15 +3508,11 @@ function Remotes.sound(player: Player, name: string)
 	notify:FireClient(player, { kind = "sound", name = name })
 end
 
-function Remotes.coinPopup(position: Vector3, amount: number, tip: number?)
-	notify:FireAllClients({ kind = "coin", position = position, amount = amount, tip = tip or 0 })
-end
-
 return Remotes
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="18">
+      <Item class="ModuleScript" referent="23">
         <Properties>
           <string name="Name">Shop</string>
           <string name="Source"><![CDATA[--!nonstrict
@@ -2572,11 +3595,12 @@ return Shop
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="19">
+      <Item class="ModuleScript" referent="24">
         <Properties>
           <string name="Name">Stations</string>
           <string name="Source"><![CDATA[--!nonstrict
--- 조리대 동작: 재료 상자 / 도마 / 조리대(합치기) / 냄비·화덕·튀김기·밥솥 / 쓰레기통.
+-- 조리대 동작: 재료 상자 / 도마 / 조리대(합치기) / 냄비·화덕·튀김기·밥솥 / 쓰레기통 / 소화기함.
+-- 화재: 탄 음식을 방치하면 불이 나고 옆 조리대로 번집니다. 소화기를 들고 E 를 길게 눌러 끕니다.
 -- 상태는 파츠 Attribute 로 복제되고, 클라이언트가 그걸 읽어 진행 바와 라벨을 그립니다.
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -2593,8 +3617,10 @@ local Stations = {}
 local specs = {} -- MapBuilder.StationSpec + 런타임 필드
 local byKind: { [string]: { any } } = {}
 local COOKERS = { pot = true, griddle = true, fryer = true, ricecooker = true }
-local SMASHABLE = { board = true, combine = true, pot = true, griddle = true, fryer = true, ricecooker = true }
+local FLAME_COOKERS = { pot = true, griddle = true, fryer = true }
+local BURNABLE = { board = true, combine = true, pot = true, griddle = true, fryer = true, ricecooker = true }
 local UNLOCK_BY_UPGRADE = { pot = "pot", griddle = "griddle", fryer = "fryer", ricecooker = "ricecooker" }
+local callbacks: { [string]: any } = {} -- onBurnt(spec) / onFire(spec, reason) / onSpread(from, to) / onExtinguish(spec, player) / isNight()
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -2611,6 +3637,54 @@ local function clearDisplays(spec)
 	spec.displays = {}
 end
 
+local function clearContents(spec)
+	spec.state = "idle"
+	spec.item = nil
+	spec.output = nil
+	spec.startAt = nil
+	spec.doneAt = nil
+	spec.burnAt = nil
+	spec.burntAt = nil
+	spec.contents = {}
+end
+
+local function applyEffects(spec)
+	local state = spec.state
+	local cooking = state == "cooking" or state == "done"
+	if spec.fire then
+		if state == "fire" then
+			spec.fire.Enabled = true
+			spec.fire.Size = 9
+			spec.fire.Heat = 12
+		elseif cooking and FLAME_COOKERS[spec.kind] then
+			spec.fire.Enabled = true
+			spec.fire.Size = 4
+			spec.fire.Heat = 6
+		else
+			spec.fire.Enabled = false
+		end
+	end
+	if spec.smoke then
+		spec.smoke.Enabled = state == "burnt" or state == "fire"
+	end
+	if spec.fireLight then
+		spec.fireLight.Enabled = state == "fire"
+	end
+	if spec.readyLight then
+		spec.readyLight.Enabled = state == "done"
+	end
+	if spec.bubbles then
+		spec.bubbles.Enabled = state == "cooking"
+	end
+	if spec.steam then
+		spec.steam.Enabled = cooking
+	end
+	if spec.plate then
+		spec.plate.Material = if cooking then Enum.Material.Neon else Enum.Material.Metal
+		spec.plate.Color = if cooking then Color3.fromRGB(255, 110, 40) else Color3.fromRGB(30, 30, 30)
+	end
+end
+
 local function refresh(spec)
 	local partRef: BasePart = spec.part
 	partRef:SetAttribute("State", spec.state)
@@ -2619,6 +3693,7 @@ local function refresh(spec)
 	partRef:SetAttribute("StartAt", spec.startAt or 0)
 	partRef:SetAttribute("DoneAt", spec.doneAt or 0)
 	partRef:SetAttribute("BurnAt", spec.burnAt or 0)
+	partRef:SetAttribute("BurntAt", spec.burntAt or 0)
 	partRef:SetAttribute("Locked", spec.locked)
 	partRef:SetAttribute("Smashed", spec.smashed)
 	partRef:SetAttribute("ChopTime", chopTime())
@@ -2635,12 +3710,7 @@ local function refresh(spec)
 		table.insert(spec.displays, Items.display(spec.item, CFrame.new(base + spec.displayOffset), partRef))
 	end
 
-	if spec.fire then
-		spec.fire.Enabled = spec.state == "cooking" or spec.state == "done"
-	end
-	if spec.smoke then
-		spec.smoke.Enabled = spec.state == "burnt"
-	end
+	applyEffects(spec)
 	if spec.prompt then
 		spec.prompt.Enabled = (not spec.locked) and (not spec.smashed)
 		if spec.kind == "board" then
@@ -2653,8 +3723,71 @@ local function toast(player: Player, text: string, style: string?)
 	Remotes.toast(player, text, style or "info")
 end
 
-local function onCrate(spec, player: Player)
-	if Items.getHeldId(player) then
+-- ---------- 화재 ----------
+local function fireCount(): number
+	local n = 0
+	for _, spec in specs do
+		if spec.state == "fire" then
+			n += 1
+		end
+	end
+	return n
+end
+
+local function nearestSpreadTarget(spec)
+	local best, bestD = nil, nil
+	for _, other in specs do
+		if other ~= spec and BURNABLE[other.kind] and not other.locked and other.state ~= "fire" then
+			local d = (other.baseCFrame.Position - spec.baseCFrame.Position).Magnitude
+			if d <= Config.FireSpreadRange and (bestD == nil or d < bestD) then
+				best, bestD = other, d
+			end
+		end
+	end
+	return best
+end
+
+local function ignite(spec, reason: string, fromSpec)
+	if spec.state == "fire" or spec.locked then
+		return
+	end
+	clearContents(spec)
+	spec.state = "fire"
+	spec.fireAt = now()
+	spec.nextSpreadAt = now() + Config.FireSpreadInterval
+	refresh(spec)
+	if reason == "burnt" then
+		Remotes.toastAll("🔥 " .. spec.label .. "의 탄 음식에 불이 붙었어요! 소화기함에서 소화기를 가져오세요", "bad")
+	else
+		Remotes.toastAll("🔥 불이 " .. spec.label .. "(으)로 번졌어요! 평판 -" .. Config.FireSpreadDamage, "bad")
+	end
+	Remotes.notifyAll({ kind = "fire", position = spec.baseCFrame.Position })
+	if callbacks.onFire then
+		callbacks.onFire(spec, reason)
+	end
+	if reason == "spread" and callbacks.onSpread then
+		callbacks.onSpread(fromSpec, spec)
+	end
+end
+
+local function extinguish(spec, player: Player)
+	clearContents(spec)
+	spec.fireAt = nil
+	spec.nextSpreadAt = nil
+	refresh(spec)
+	if spec.puff then
+		spec.puff:Emit(30)
+	end
+	Remotes.soundAll("extinguish")
+	toast(player, "불을 껐어요! 👍", "good")
+	if callbacks.onExtinguish then
+		callbacks.onExtinguish(spec, player)
+	end
+end
+
+-- ---------- 상호작용 ----------
+local function onCrate(spec, player: Player, held: string?)
+	if held then
 		toast(player, "손이 비어 있어야 재료를 꺼낼 수 있어요")
 		return
 	end
@@ -2663,8 +3796,7 @@ local function onCrate(spec, player: Player)
 	end
 end
 
-local function onBoard(spec, player: Player)
-	local held = Items.getHeldId(player)
+local function onBoard(spec, player: Player, held: string?)
 	if not held then
 		toast(player, "썰 재료를 들고 오세요 (야채)")
 		return
@@ -2678,11 +3810,14 @@ local function onBoard(spec, player: Player)
 	Remotes.sound(player, "chop")
 end
 
-local function onCombine(spec, player: Player)
-	local held = Items.getHeldId(player)
+local function onCombine(spec, player: Player, held: string?)
 	if held then
 		if held == "burnt" then
 			toast(player, "탄 음식은 쓰레기통에 버리세요")
+			return
+		end
+		if held == "extinguisher" then
+			toast(player, "소화기는 소화기함에 돌려놓으세요")
 			return
 		end
 		if #spec.contents >= Config.CombineSlots then
@@ -2696,6 +3831,7 @@ local function onCombine(spec, player: Player)
 			spec.contents = { combo.output }
 			Remotes.sound(player, "combine")
 			toast(player, Recipes.name(combo.output) .. " 완성!", "good")
+			Remotes.notifyAll({ kind = "sparkle", position = spec.baseCFrame.Position + Vector3.new(0, 3.5, 0), color = "green" })
 		else
 			Remotes.sound(player, "put")
 		end
@@ -2712,8 +3848,7 @@ local function onCombine(spec, player: Player)
 	end
 end
 
-local function onCooker(spec, player: Player)
-	local held = Items.getHeldId(player)
+local function onCooker(spec, player: Player, held: string?)
 	if spec.state == "idle" then
 		if not held then
 			toast(player, "익힐 재료를 들고 오세요")
@@ -2744,23 +3879,32 @@ local function onCooker(spec, player: Player)
 		local out = if spec.state == "burnt" then "burnt" else spec.output
 		if Items.give(player, out) then
 			Remotes.sound(player, "pick")
-			spec.state = "idle"
-			spec.item = nil
-			spec.output = nil
-			spec.startAt = nil
-			spec.doneAt = nil
-			spec.burnAt = nil
+			clearContents(spec)
 			refresh(spec)
 		end
 	end
 end
 
-local function onTrash(spec, player: Player)
-	local held = Items.take(player)
+local function onTrash(spec, player: Player, held: string?)
 	if held then
+		Items.take(player)
 		Remotes.sound(player, "trash")
 	else
 		toast(player, "버릴 것이 없어요")
+	end
+end
+
+local function onExtinguisherBox(spec, player: Player, held: string?)
+	if not held then
+		if Items.give(player, "extinguisher") then
+			Remotes.sound(player, "pick")
+			toast(player, "🧯 소화기를 들었어요. 불난 조리대 앞에서 E를 길게 누르세요")
+		end
+	elseif held == "extinguisher" then
+		Items.take(player)
+		Remotes.sound(player, "put")
+	else
+		toast(player, "손을 비우고 소화기를 꺼내세요")
 	end
 end
 
@@ -2772,23 +3916,47 @@ local function onTriggered(spec, player: Player)
 		toast(player, "잠시 후 영업을 시작합니다")
 		return
 	end
+	local held = Items.getHeldId(player)
+	if spec.state == "fire" then
+		if held == "extinguisher" then
+			extinguish(spec, player)
+		else
+			toast(player, "🔥 불이 났어요! 소화기함에서 소화기를 가져오세요", "bad")
+		end
+		return
+	end
 	if spec.kind == "crate" then
-		onCrate(spec, player)
+		onCrate(spec, player, held)
 	elseif spec.kind == "board" then
-		onBoard(spec, player)
+		onBoard(spec, player, held)
 	elseif spec.kind == "combine" then
-		onCombine(spec, player)
+		onCombine(spec, player, held)
 	elseif COOKERS[spec.kind] then
-		onCooker(spec, player)
+		onCooker(spec, player, held)
 	elseif spec.kind == "trash" then
-		onTrash(spec, player)
+		onTrash(spec, player, held)
+	elseif spec.kind == "extinguisher" then
+		onExtinguisherBox(spec, player, held)
 	end
 end
 
+-- ---------- 설정 ----------
+local function fxPart(spec, offset: Vector3, name: string): Part
+	local fx = Instance.new("Part")
+	fx.Name = name
+	fx.Size = Vector3.new(1, 1, 1)
+	fx.Transparency = 1
+	fx.Anchored = true
+	fx.CanCollide = false
+	fx.CanQuery = false
+	fx.CanTouch = false
+	fx.CFrame = CFrame.new(spec.baseCFrame.Position + offset)
+	fx.Parent = spec.part
+	return fx
+end
+
 local function setup(spec)
-	spec.state = "idle"
-	spec.item = nil
-	spec.contents = {}
+	clearContents(spec)
 	spec.displays = {}
 	spec.smashed = false
 	spec.smashedUntil = nil
@@ -2813,17 +3981,8 @@ local function setup(spec)
 	end)
 	spec.prompt = prompt
 
-	if spec.kind == "pot" or spec.kind == "griddle" or spec.kind == "fryer" then
-		local fx = Instance.new("Part")
-		fx.Name = "Burner"
-		fx.Size = Vector3.new(1, 1, 1)
-		fx.Transparency = 1
-		fx.Anchored = true
-		fx.CanCollide = false
-		fx.CanQuery = false
-		fx.CanTouch = false
-		fx.CFrame = CFrame.new(spec.baseCFrame.Position + Vector3.new(0, 1.7, 0))
-		fx.Parent = partRef
+	if BURNABLE[spec.kind] then
+		local fx = fxPart(spec, Vector3.new(0, if COOKERS[spec.kind] then 1.7 else 1.6, 0), "Burner")
 		local fire = Instance.new("Fire")
 		fire.Size = 4
 		fire.Heat = 6
@@ -2838,25 +3997,58 @@ local function setup(spec)
 		smoke.Enabled = false
 		smoke.Parent = fx
 		spec.smoke = smoke
-	elseif spec.kind == "ricecooker" then
-		local fx = Instance.new("Part")
-		fx.Name = "Steam"
-		fx.Size = Vector3.new(1, 1, 1)
-		fx.Transparency = 1
-		fx.Anchored = true
-		fx.CanCollide = false
-		fx.CanQuery = false
-		fx.CanTouch = false
-		fx.CFrame = CFrame.new(spec.baseCFrame.Position + Vector3.new(0, 5.4, 0))
-		fx.Parent = partRef
-		local smoke = Instance.new("Smoke")
-		smoke.Size = 0.6
-		smoke.Opacity = 0.25
-		smoke.RiseVelocity = 3
-		smoke.Color = Color3.fromRGB(240, 240, 240)
-		smoke.Enabled = false
-		smoke.Parent = fx
-		spec.fire = smoke -- 조리 중 표시로 김을 씀
+		local fireLight = Instance.new("PointLight")
+		fireLight.Color = Color3.fromRGB(255, 120, 40)
+		fireLight.Range = 16
+		fireLight.Brightness = 2.5
+		fireLight.Enabled = false
+		fireLight.Parent = fx
+		spec.fireLight = fireLight
+		local puff = Instance.new("ParticleEmitter")
+		puff.Rate = 0
+		puff.Lifetime = NumberRange.new(0.6, 1.2)
+		puff.Speed = NumberRange.new(4, 8)
+		puff.Size = NumberSequence.new(1.6, 0)
+		puff.Transparency = NumberSequence.new(0.2, 1)
+		puff.Color = ColorSequence.new(Color3.fromRGB(240, 240, 250))
+		puff.SpreadAngle = Vector2.new(180, 180)
+		puff.Parent = fx
+		spec.puff = puff
+	end
+	if COOKERS[spec.kind] then
+		local top = fxPart(spec, Vector3.new(0, if spec.kind == "ricecooker" then 5.4 elseif spec.kind == "pot" then 3.9 else 3.3, 0), "Top")
+		local readyLight = Instance.new("PointLight")
+		readyLight.Color = Color3.fromRGB(120, 255, 140)
+		readyLight.Range = 9
+		readyLight.Brightness = 1.5
+		readyLight.Enabled = false
+		readyLight.Parent = top
+		spec.readyLight = readyLight
+		if spec.kind == "pot" or spec.kind == "fryer" then
+			local bubbles = Instance.new("ParticleEmitter")
+			bubbles.Rate = 14
+			bubbles.Lifetime = NumberRange.new(0.5, 0.9)
+			bubbles.Speed = NumberRange.new(1, 2.2)
+			bubbles.Size = NumberSequence.new(0.28, 0.1)
+			bubbles.Transparency = NumberSequence.new(0.2, 1)
+			bubbles.Color = ColorSequence.new(if spec.kind == "pot" then Color3.fromRGB(255, 255, 255) else Color3.fromRGB(255, 230, 150))
+			bubbles.LightEmission = 0.3
+			bubbles.SpreadAngle = Vector2.new(25, 25)
+			bubbles.Enabled = false
+			bubbles.Parent = top
+			spec.bubbles = bubbles
+		elseif spec.kind == "ricecooker" then
+			local steam = Instance.new("Smoke")
+			steam.Size = 0.6
+			steam.Opacity = 0.25
+			steam.RiseVelocity = 3
+			steam.Color = Color3.fromRGB(240, 240, 240)
+			steam.Enabled = false
+			steam.Parent = top
+			spec.steam = steam
+		elseif spec.kind == "griddle" then
+			spec.plate = partRef:FindFirstChild("Plate")
+		end
 	end
 
 	local dust = Instance.new("ParticleEmitter")
@@ -2906,9 +4098,25 @@ local function update()
 			elseif spec.state == "done" and spec.burnAt and t >= spec.burnAt then
 				spec.state = "burnt"
 				spec.item = "burnt"
-				Remotes.toastAll(spec.label .. "의 " .. Recipes.name(spec.output) .. "이(가) 탔어요! 쓰레기통에 버리세요", "bad")
+				spec.burntAt = t
+				Remotes.toastAll(string.format("💀 %s의 %s이(가) 탔어요! %d초 안에 꺼내지 않으면 불이 납니다", spec.label, Recipes.name(spec.output or ""), Config.FireDelay), "bad")
 				Remotes.soundAll("burn")
 				refresh(spec)
+				if callbacks.onBurnt then
+					callbacks.onBurnt(spec)
+				end
+			elseif spec.state == "burnt" and spec.burntAt and t >= spec.burntAt + Config.FireDelay then
+				ignite(spec, "burnt", nil)
+			end
+		end
+		if spec.state == "fire" and spec.nextSpreadAt and t >= spec.nextSpreadAt then
+			spec.nextSpreadAt = t + Config.FireSpreadInterval
+			local isNight = callbacks.isNight == nil or callbacks.isNight()
+			if isNight and fireCount() < Config.MaxFires then
+				local target = nearestSpreadTarget(spec)
+				if target then
+					ignite(target, "spread", spec)
+				end
 			end
 		end
 	end
@@ -2921,22 +4129,23 @@ function Stations.init(map)
 	RunService.Heartbeat:Connect(update)
 end
 
+function Stations.setCallbacks(t)
+	callbacks = t or {}
+end
+
 -- 한 판 시작 상태로 되돌림
 function Stations.reset()
 	for _, spec in specs do
-		spec.state = "idle"
-		spec.item = nil
-		spec.output = nil
-		spec.startAt = nil
-		spec.doneAt = nil
-		spec.burnAt = nil
-		spec.contents = {}
+		clearContents(spec)
+		spec.fireAt = nil
+		spec.nextSpreadAt = nil
+		spec.targeted = false
 		spec.locked = spec.baseLocked
 		if spec.smashed then
 			restore(spec)
 		end
 		for _, p in spec.part:GetDescendants() do
-			if p:IsA("BasePart") and p.Name ~= "Burner" and p.Name ~= "Steam" then
+			if p:IsA("BasePart") and p.Name ~= "Burner" and p.Name ~= "Top" then
 				p.Transparency = if spec.locked then 0.6 else (if p.Name == "Oil" then 0.2 else 0)
 			end
 		end
@@ -2959,11 +4168,12 @@ function Stations.applyUpgrades()
 						spec.locked = false
 						spec.part.Transparency = 0
 						for _, p in spec.part:GetDescendants() do
-							if p:IsA("BasePart") and p.Name ~= "Burner" and p.Name ~= "Steam" then
+							if p:IsA("BasePart") and p.Name ~= "Burner" and p.Name ~= "Top" then
 								p.Transparency = if p.Name == "Oil" then 0.2 else 0
 							end
 						end
 						Remotes.soundAll("unlock")
+						Remotes.notifyAll({ kind = "sparkle", position = spec.baseCFrame.Position + Vector3.new(0, 3.5, 0), color = "gold" })
 					end
 				end
 			end
@@ -2978,7 +4188,7 @@ end
 function Stations.pickSmashTarget(rng: Random)
 	local candidates = {}
 	for _, spec in specs do
-		if SMASHABLE[spec.kind] and not spec.locked and not spec.smashed and not spec.targeted then
+		if BURNABLE[spec.kind] and not spec.locked and not spec.smashed and not spec.targeted and spec.state ~= "fire" then
 			table.insert(candidates, spec)
 		end
 	end
@@ -2997,22 +4207,23 @@ function Stations.smash(spec)
 	end
 	spec.smashed = true
 	spec.smashedUntil = now() + Config.SmashDuration
-	spec.state = "idle"
-	spec.item = nil
-	spec.output = nil
-	spec.startAt = nil
-	spec.doneAt = nil
-	spec.burnAt = nil
-	spec.contents = {}
+	clearContents(spec)
+	spec.fireAt = nil
+	spec.nextSpreadAt = nil
 	spec.part.CFrame = spec.baseCFrame * CFrame.Angles(0, 0, math.rad(14))
 	spec.dust.Enabled = true
 	spec.dust:Emit(30)
 	Remotes.soundAll("smash")
+	Remotes.notifyAll({ kind = "smash", position = spec.baseCFrame.Position })
 	refresh(spec)
 end
 
 function Stations.untarget(spec)
 	spec.targeted = false
+end
+
+function Stations.fireCount(): number
+	return fireCount()
 end
 
 function Stations.all()
@@ -3023,39 +4234,457 @@ return Stations
 ]]></string>
         </Properties>
       </Item>
+      <Item class="ModuleScript" referent="25">
+        <Properties>
+          <string name="Name">Wardrobe</string>
+          <string name="Source"><![CDATA[--!nonstrict
+-- 옷장: 명성으로 해금한 모자를 플레이어 머리에 씌웁니다 (파츠 조립, 에셋 불필요).
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Cosmetics = require(ReplicatedStorage.GhostDiner.Cosmetics)
+local Data = require(script.Parent.Data)
+local Remotes = require(script.Parent.Remotes)
+
+local Wardrobe = {}
+
+local UPRIGHT = CFrame.Angles(0, 0, math.rad(90))
+
+local function newPart(name: string, size: Vector3, color: Color3, shape: Enum.PartType?, material: Enum.Material?): Part
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Size = size
+	p.Color = color
+	p.Shape = shape or Enum.PartType.Block
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.Massless = true
+	p.CastShadow = false
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	return p
+end
+
+local function attach(model: Model, head: BasePart, p: BasePart, offset: CFrame)
+	p.CFrame = head.CFrame * offset
+	local weld = Instance.new("Weld")
+	weld.Part0 = head
+	weld.Part1 = p
+	weld.C0 = offset
+	weld.Parent = p
+	p.Parent = model
+end
+
+local WHITE = Color3.fromRGB(250, 250, 250)
+local BLACK = Color3.fromRGB(20, 20, 20)
+
+local function buildHat(hatId: string, head: BasePart): Model?
+	local model = Instance.new("Model")
+	model.Name = "GhostDinerHat"
+	local top = head.Size.Y / 2
+	if hatId == "paper" then
+		attach(model, head, newPart("Hat", Vector3.new(0.9, 1.5, 1.5), WHITE, Enum.PartType.Cylinder), CFrame.new(0, top + 0.4, 0) * UPRIGHT)
+		attach(model, head, newPart("Band", Vector3.new(0.14, 1.56, 1.56), Color3.fromRGB(215, 215, 220), Enum.PartType.Cylinder), CFrame.new(0, top + 0.05, 0) * UPRIGHT)
+	elseif hatId == "chef" then
+		attach(model, head, newPart("Hat", Vector3.new(1.4, 1.35, 1.35), WHITE, Enum.PartType.Cylinder), CFrame.new(0, top + 0.65, 0) * UPRIGHT)
+		attach(model, head, newPart("Puff", Vector3.new(1.65, 1.65, 1.65), WHITE, Enum.PartType.Ball), CFrame.new(0, top + 1.55, 0))
+		attach(model, head, newPart("Band", Vector3.new(0.16, 1.5, 1.5), Color3.fromRGB(200, 200, 205), Enum.PartType.Cylinder), CFrame.new(0, top + 0.05, 0) * UPRIGHT)
+	elseif hatId == "bandana" then
+		attach(model, head, newPart("Band", Vector3.new(0.38, 1.45, 1.45), Color3.fromRGB(215, 40, 50), Enum.PartType.Cylinder, Enum.Material.Fabric), CFrame.new(0, top - 0.15, 0) * UPRIGHT)
+		attach(model, head, newPart("Knot", Vector3.new(0.5, 0.35, 0.5), Color3.fromRGB(215, 40, 50), nil, Enum.Material.Fabric), CFrame.new(0, top - 0.15, 0.78))
+		attach(model, head, newPart("Tail", Vector3.new(0.25, 0.7, 0.2), Color3.fromRGB(190, 30, 40), nil, Enum.Material.Fabric), CFrame.new(0.2, top - 0.5, 0.85) * CFrame.Angles(0, 0, math.rad(-20)))
+	elseif hatId == "gat" then
+		local brim = newPart("Brim", Vector3.new(0.1, 2.8, 2.8), BLACK, Enum.PartType.Cylinder)
+		brim.Transparency = 0.15
+		attach(model, head, brim, CFrame.new(0, top + 0.05, 0) * UPRIGHT)
+		local crown = newPart("Crown", Vector3.new(1.1, 1.5, 1.5), BLACK, Enum.PartType.Cylinder)
+		crown.Transparency = 0.15
+		attach(model, head, crown, CFrame.new(0, top + 0.6, 0) * UPRIGHT)
+	elseif hatId == "horn" then
+		attach(model, head, newPart("Band", Vector3.new(0.3, 1.45, 1.45), Color3.fromRGB(70, 150, 80), Enum.PartType.Cylinder), CFrame.new(0, top - 0.1, 0) * UPRIGHT)
+		attach(model, head, newPart("Horn", Vector3.new(0.9, 0.42, 0.42), Color3.fromRGB(240, 210, 120), Enum.PartType.Cylinder), CFrame.new(0, top + 0.5, 0) * UPRIGHT)
+		attach(model, head, newPart("Tip", Vector3.new(0.3, 0.3, 0.3), Color3.fromRGB(250, 235, 170), Enum.PartType.Ball), CFrame.new(0, top + 0.98, 0))
+	elseif hatId == "tigerears" then
+		for _, x in { -0.55, 0.55 } do
+			attach(model, head, newPart("Ear", Vector3.new(0.7, 0.7, 0.7), Color3.fromRGB(235, 150, 40), Enum.PartType.Ball), CFrame.new(x, top + 0.2, 0))
+			attach(model, head, newPart("Inner", Vector3.new(0.36, 0.36, 0.36), Color3.fromRGB(40, 30, 30), Enum.PartType.Ball), CFrame.new(x, top + 0.22, -0.22))
+		end
+	elseif hatId == "halo" then
+		local ring = newPart("Halo", Vector3.new(0.12, 1.7, 1.7), Color3.fromRGB(255, 235, 120), Enum.PartType.Cylinder, Enum.Material.Neon)
+		ring.Transparency = 0.25
+		attach(model, head, ring, CFrame.new(0, top + 1.0, 0) * UPRIGHT)
+		local light = Instance.new("PointLight")
+		light.Color = Color3.fromRGB(255, 235, 150)
+		light.Range = 10
+		light.Brightness = 1.2
+		light.Parent = ring
+		local sparkle = Instance.new("ParticleEmitter")
+		sparkle.Rate = 6
+		sparkle.Lifetime = NumberRange.new(0.6, 1.2)
+		sparkle.Speed = NumberRange.new(0.5, 1.5)
+		sparkle.Size = NumberSequence.new(0.25, 0)
+		sparkle.Color = ColorSequence.new(Color3.fromRGB(255, 240, 170))
+		sparkle.LightEmission = 1
+		sparkle.SpreadAngle = Vector2.new(180, 180)
+		sparkle.Parent = ring
+	elseif hatId == "crown" then
+		attach(model, head, newPart("Band", Vector3.new(0.55, 1.45, 1.45), Color3.fromRGB(255, 200, 60), Enum.PartType.Cylinder, Enum.Material.Metal), CFrame.new(0, top + 0.2, 0) * UPRIGHT)
+		for i = 0, 3 do
+			local angle = i * math.pi / 2
+			local x, z = math.cos(angle) * 0.62, math.sin(angle) * 0.62
+			attach(model, head, newPart("Spike", Vector3.new(0.26, 0.55, 0.26), Color3.fromRGB(255, 200, 60), nil, Enum.Material.Metal), CFrame.new(x, top + 0.7, z))
+			attach(model, head, newPart("Gem", Vector3.new(0.26, 0.26, 0.26), Color3.fromRGB(200, 90, 255), Enum.PartType.Ball, Enum.Material.Neon), CFrame.new(x, top + 1.02, z))
+		end
+		local sparkle = Instance.new("ParticleEmitter")
+		sparkle.Rate = 8
+		sparkle.Lifetime = NumberRange.new(0.6, 1.4)
+		sparkle.Speed = NumberRange.new(0.5, 2)
+		sparkle.Size = NumberSequence.new(0.3, 0)
+		sparkle.Color = ColorSequence.new(Color3.fromRGB(220, 150, 255))
+		sparkle.LightEmission = 1
+		sparkle.SpreadAngle = Vector2.new(180, 180)
+		sparkle.Parent = model:FindFirstChild("Band")
+	else
+		model:Destroy()
+		return nil
+	end
+	return model
+end
+
+function Wardrobe.equip(player: Player)
+	local character = player.Character
+	if not character then
+		return
+	end
+	local head = character:FindFirstChild("Head")
+	if not head or not head:IsA("BasePart") then
+		return
+	end
+	local old = character:FindFirstChild("GhostDinerHat")
+	if old then
+		old:Destroy()
+	end
+	local hatId = Data.getHat(player)
+	if hatId == "none" then
+		return
+	end
+	local model = buildHat(hatId, head)
+	if model then
+		model.Parent = character
+	end
+end
+
+local function onCharacter(player: Player, character: Model)
+	task.spawn(function()
+		local head = character:WaitForChild("Head", 15)
+		if head then
+			task.wait(0.2)
+			Wardrobe.equip(player)
+		end
+	end)
+end
+
+function Wardrobe.init()
+	Players.PlayerAdded:Connect(function(player)
+		player.CharacterAdded:Connect(function(character)
+			onCharacter(player, character)
+		end)
+	end)
+	for _, player in Players:GetPlayers() do
+		player.CharacterAdded:Connect(function(character)
+			onCharacter(player, character)
+		end)
+		if player.Character then
+			onCharacter(player, player.Character)
+		end
+	end
+
+	Remotes.SetHat.OnServerInvoke = function(player, hatId)
+		if type(hatId) ~= "string" then
+			return false, "잘못된 요청"
+		end
+		local hat = Cosmetics.get(hatId)
+		if not hat then
+			return false, "없는 모자"
+		end
+		if not Cosmetics.isUnlocked(hatId, Data.getFame(player)) then
+			return false, string.format("명성 %d이 필요해요", hat.fame)
+		end
+		Data.setHat(player, hatId)
+		Wardrobe.equip(player)
+		Remotes.sound(player, "hat")
+		return true, hat.name .. " 착용!"
+	end
+end
+
+return Wardrobe
+]]></string>
+        </Properties>
+      </Item>
     </Item>
   </Item>
-  <Item class="SoundService" referent="20">
+  <Item class="SoundService" referent="26">
     <Properties>
       <string name="Name">SoundService</string>
       <bool name="RespectFilteringEnabled">true</bool>
     </Properties>
   </Item>
-  <Item class="StarterPlayer" referent="21">
+  <Item class="StarterPlayer" referent="27">
     <Properties>
       <string name="Name">StarterPlayer</string>
       <float name="CameraMaxZoomDistance">60</float>
       <float name="CameraMinZoomDistance">8</float>
     </Properties>
-    <Item class="StarterPlayerScripts" referent="22">
+    <Item class="StarterPlayerScripts" referent="28">
       <Properties>
         <string name="Name">StarterPlayerScripts</string>
       </Properties>
-      <Item class="Folder" referent="23">
+      <Item class="Folder" referent="29">
         <Properties>
           <string name="Name">GhostDinerClient</string>
         </Properties>
-        <Item class="ModuleScript" referent="24">
+        <Item class="ModuleScript" referent="30">
+          <Properties>
+            <string name="Name">Fx</string>
+            <string name="Source"><![CDATA[--!nonstrict
+-- 화면·월드 연출: 카메라 흔들림, 요리 날아가기, 파티클 폭죽, 번개, 정전 오버레이, 저체력 비네트.
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
+local ItemVisuals = require(Shared:WaitForChild("ItemVisuals"))
+
+local Fx = {}
+
+local rng = Random.new()
+local flashFrame: Frame
+local blackoutFrame: Frame
+local vignetteFrames: { Frame } = {}
+local shakeUntil, shakeDuration, shakeIntensity = 0, 1, 0
+
+Fx.Colors = {
+	gold = Color3.fromRGB(255, 215, 80),
+	green = Color3.fromRGB(120, 255, 150),
+	blue = Color3.fromRGB(120, 200, 255),
+	red = Color3.fromRGB(255, 80, 80),
+	purple = Color3.fromRGB(200, 120, 255),
+	pink = Color3.fromRGB(255, 130, 200),
+	orange = Color3.fromRGB(255, 160, 60),
+	white = Color3.fromRGB(255, 255, 255),
+}
+
+local function mk(className: string, props: { [string]: any }, parent: Instance?): Instance
+	local inst = Instance.new(className)
+	for k, v in props do
+		(inst :: any)[k] = v
+	end
+	if parent then
+		inst.Parent = parent
+	end
+	return inst
+end
+
+local function tempPart(position: Vector3): Part
+	return mk("Part", { Anchored = true, CanCollide = false, CanQuery = false, CanTouch = false, Transparency = 1, Size = Vector3.new(0.5, 0.5, 0.5), Position = position }, workspace) :: Part
+end
+
+local function shakeStep()
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	local t = os.clock()
+	if t < shakeUntil then
+		local k = shakeIntensity * ((shakeUntil - t) / shakeDuration)
+		camera.CFrame = camera.CFrame * CFrame.new(rng:NextNumber(-k, k), rng:NextNumber(-k, k), 0) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(-k, k) * 1.5))
+	end
+end
+
+function Fx.init(playerGui: PlayerGui)
+	local under = mk("ScreenGui", { Name = "GhostDinerFxUnder", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 0 }, playerGui)
+	local over = mk("ScreenGui", { Name = "GhostDinerFxOver", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 20 }, playerGui)
+	blackoutFrame = mk("Frame", { Name = "Blackout", Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0 }, under) :: Frame
+	flashFrame = mk("Frame", { Name = "Flash", Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 1, BorderSizePixel = 0 }, over) :: Frame
+	-- 비네트(가장자리 빨간 기운): 네 변에 그라데이션 프레임
+	local sides = {
+		{ Position = UDim2.new(0, 0, 0, 0), Size = UDim2.new(1, 0, 0.28, 0), Rotation = 90 },
+		{ Position = UDim2.new(0, 0, 0.72, 0), Size = UDim2.new(1, 0, 0.28, 0), Rotation = -90 },
+		{ Position = UDim2.new(0, 0, 0, 0), Size = UDim2.new(0.22, 0, 1, 0), Rotation = 0 },
+		{ Position = UDim2.new(0.78, 0, 0, 0), Size = UDim2.new(0.22, 0, 1, 0), Rotation = 180 },
+	}
+	for _, s in sides do
+		local f = mk("Frame", { Position = s.Position, Size = s.Size, BackgroundColor3 = Color3.fromRGB(200, 20, 30), BackgroundTransparency = 1, BorderSizePixel = 0 }, under) :: Frame
+		mk("UIGradient", { Rotation = s.Rotation, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) }) }, f)
+		table.insert(vignetteFrames, f)
+	end
+	RunService:BindToRenderStep("GhostDinerShake", Enum.RenderPriority.Camera.Value + 1, shakeStep)
+end
+
+function Fx.shake(intensity: number, duration: number)
+	local t = os.clock()
+	if t < shakeUntil and shakeIntensity > intensity then
+		return
+	end
+	shakeIntensity = intensity
+	shakeDuration = math.max(0.05, duration)
+	shakeUntil = t + duration
+end
+
+-- 거리에 따라 약해지는 흔들림
+function Fx.shakeAt(position: Vector3, intensity: number, duration: number)
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	local d = (camera.CFrame.Position - position).Magnitude
+	local k = math.clamp(1 - d / 70, 0, 1)
+	if k > 0.05 then
+		Fx.shake(intensity * k, duration)
+	end
+end
+
+function Fx.burst(position: Vector3, color: Color3, count: number, size: number?, speed: number?)
+	local p = tempPart(position)
+	local e = mk("ParticleEmitter", {
+		Rate = 0,
+		Lifetime = NumberRange.new(0.5, 1.1),
+		Speed = NumberRange.new(speed or 6, (speed or 6) * 1.7),
+		Size = NumberSequence.new(size or 0.5, 0),
+		Color = ColorSequence.new(color),
+		LightEmission = 1,
+		SpreadAngle = Vector2.new(180, 180),
+		Transparency = NumberSequence.new(0, 1),
+		Acceleration = Vector3.new(0, -6, 0),
+	}, p) :: ParticleEmitter
+	e:Emit(count)
+	task.delay(2, function()
+		p:Destroy()
+	end)
+end
+
+function Fx.sparkle(position: Vector3, colorName: string?)
+	Fx.burst(position, Fx.Colors[colorName or "gold"] or Fx.Colors.gold, 24)
+end
+
+-- 요리가 요리사 손에서 손님에게 포물선으로 날아감
+function Fx.serveFly(from: Vector3, to: Vector3, itemId: string, onArrive: (() -> ())?)
+	local model = ItemVisuals.build(itemId)
+	for _, p in model:GetDescendants() do
+		if p:IsA("BasePart") then
+			p.Anchored = true
+		end
+	end
+	model.Parent = workspace
+	local start = os.clock()
+	local duration = 0.45
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local u = math.clamp((os.clock() - start) / duration, 0, 1)
+		local pos = from:Lerp(to, u) + Vector3.new(0, math.sin(u * math.pi) * 4, 0)
+		model:PivotTo(CFrame.new(pos) * CFrame.Angles(0, u * math.pi * 2, 0))
+		if u >= 1 then
+			conn:Disconnect()
+			model:Destroy()
+			if onArrive then
+				onArrive()
+			end
+		end
+	end)
+end
+
+function Fx.floatText(position: Vector3, text: string, color: Color3, textSize: number?)
+	local p = tempPart(position)
+	local gui = mk("BillboardGui", { Size = UDim2.new(0, 240, 0, 50), AlwaysOnTop = true, LightInfluence = 0 }, p)
+	local label = mk("TextLabel", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Font = Enum.Font.GothamBlack, TextSize = textSize or 26, TextColor3 = color, TextStrokeTransparency = 0.2, Text = text }, gui)
+	TweenService:Create(p, TweenInfo.new(1.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = position + Vector3.new(0, 4.5, 0) }):Play()
+	TweenService:Create(label, TweenInfo.new(1.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+	task.delay(1.4, function()
+		p:Destroy()
+	end)
+end
+
+function Fx.confetti(center: Vector3)
+	local colors = { Fx.Colors.gold, Fx.Colors.pink, Fx.Colors.blue, Fx.Colors.green }
+	for i, color in colors do
+		local p = tempPart(center + Vector3.new((i - 2.5) * 7, 0, 0))
+		local e = mk("ParticleEmitter", {
+			Rate = 0,
+			Lifetime = NumberRange.new(1.6, 2.6),
+			Speed = NumberRange.new(14, 22),
+			Size = NumberSequence.new(0.55, 0.3),
+			Color = ColorSequence.new(color),
+			SpreadAngle = Vector2.new(70, 70),
+			Acceleration = Vector3.new(0, -26, 0),
+			Rotation = NumberRange.new(0, 360),
+			RotSpeed = NumberRange.new(-240, 240),
+			LightEmission = 0.5,
+		}, p) :: ParticleEmitter
+		e:Emit(45)
+		task.delay(3.5, function()
+			p:Destroy()
+		end)
+	end
+end
+
+function Fx.flash(color: Color3, alpha: number, duration: number)
+	flashFrame.BackgroundColor3 = color
+	flashFrame.BackgroundTransparency = 1 - alpha
+	TweenService:Create(flashFrame, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 1 }):Play()
+end
+
+function Fx.lightning()
+	Fx.flash(Fx.Colors.white, 0.85, 0.35)
+	task.delay(0.18, function()
+		Fx.flash(Fx.Colors.white, 0.5, 0.6)
+	end)
+	Fx.shake(0.7, 0.6)
+end
+
+function Fx.setBlackout(on: boolean)
+	if on then
+		task.spawn(function()
+			for i = 1, 6 do
+				blackoutFrame.BackgroundTransparency = if i % 2 == 0 then 0.95 else 0.4
+				task.wait(0.07)
+			end
+			blackoutFrame.BackgroundTransparency = 0.72
+		end)
+	else
+		TweenService:Create(blackoutFrame, TweenInfo.new(1.2), { BackgroundTransparency = 1 }):Play()
+	end
+end
+
+-- 0(없음)~1(최대) 비네트 강도
+function Fx.setVignette(alpha: number)
+	for _, f in vignetteFrames do
+		f.BackgroundTransparency = 1 - math.clamp(alpha, 0, 0.75)
+	end
+end
+
+return Fx
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="31">
           <Properties>
             <string name="Name">Hud</string>
             <string name="Source"><![CDATA[--!nonstrict
--- 화면 HUD: 상단 상태(밤·타이머·손님), 평판·코인, 손에 든 것, 알림, 큰 안내, 결과 화면.
+-- 화면 HUD: 상단 상태, 평판·코인, 콤보, 이벤트 배너, 주문 목록, 밤 목표, 준비 버튼, 손에 든 것, 알림, 큰 안내, 밤 요약, 결과.
 local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
+local Combo = require(Shared:WaitForChild("Combo"))
+local Config = require(Shared:WaitForChild("Config"))
 
 local Hud = {}
 
 local FONT = Enum.Font.GothamBold
 local FONT_REG = Enum.Font.Gotham
+local FONT_BLACK = Enum.Font.GothamBlack
 
 local function mk(className: string, props: { [string]: any }, parent: Instance?): Instance
 	local inst = Instance.new(className)
@@ -3088,6 +4717,24 @@ local function label(parent: Instance, props: { [string]: any }): TextLabel
 	return mk("TextLabel", base, parent) :: TextLabel
 end
 
+local function attrS(inst: Instance, name: string): string
+	local v = inst:GetAttribute(name)
+	return if v == nil then "" else tostring(v)
+end
+
+local function attrN(inst: Instance, name: string): number
+	local v = inst:GetAttribute(name)
+	return if type(v) == "number" then v else 0
+end
+
+local function attrB(inst: Instance, name: string): boolean
+	return inst:GetAttribute(name) == true
+end
+
+local function now(): number
+	return workspace:GetServerTimeNow()
+end
+
 local PHASE_TEXT = {
 	lobby = "요리사를 기다리는 중",
 	countdown = "개장 준비",
@@ -3098,15 +4745,17 @@ local PHASE_TEXT = {
 
 function Hud.create(playerGui: PlayerGui)
 	local self = {}
-	local gui = mk("ScreenGui", { Name = "GhostDinerHud", ResetOnSpawn = false, IgnoreGuiInset = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling }, playerGui)
+	local gui = mk("ScreenGui", { Name = "GhostDinerHud", ResetOnSpawn = false, IgnoreGuiInset = false, DisplayOrder = 5, ZIndexBehavior = Enum.ZIndexBehavior.Sibling }, playerGui)
 	self.gui = gui
+	self.onReady = function() end
 
 	-- 상단 바
 	local top = mk("Frame", { Name = "Top", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.new(0, 640, 0, 62), BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.25 }, gui)
 	corner(top, 14)
 	mk("UIStroke", { Color = Color3.fromRGB(150, 90, 220), Thickness = 1.5, Transparency = 0.3 }, top)
-	local nightLabel = label(top, { Name = "Night", Position = UDim2.new(0, 14, 0, 6), Size = UDim2.new(0, 200, 0, 28), TextSize = 22, TextXAlignment = Enum.TextXAlignment.Left, Text = "🏮 저승 휴게소" })
-	local phaseLabel = label(top, { Name = "Phase", Position = UDim2.new(0, 14, 0, 34), Size = UDim2.new(0, 200, 0, 22), TextSize = 15, Font = FONT_REG, TextColor3 = Color3.fromRGB(200, 190, 220), TextXAlignment = Enum.TextXAlignment.Left })
+	mk("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(170, 160, 200)) }, top)
+	local nightLabel = label(top, { Name = "Night", Position = UDim2.new(0, 14, 0, 6), Size = UDim2.new(0, 220, 0, 28), TextSize = 22, TextXAlignment = Enum.TextXAlignment.Left, Text = "🏮 저승 휴게소" })
+	local phaseLabel = label(top, { Name = "Phase", Position = UDim2.new(0, 14, 0, 34), Size = UDim2.new(0, 220, 0, 22), TextSize = 15, Font = FONT_REG, TextColor3 = Color3.fromRGB(200, 190, 220), TextXAlignment = Enum.TextXAlignment.Left })
 	local timerLabel = label(top, { Name = "Timer", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 6), Size = UDim2.new(0, 160, 0, 50), TextSize = 30, Text = "" })
 	local custLabel = label(top, { Name = "Customers", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 6), Size = UDim2.new(0, 200, 0, 28), TextSize = 20, TextXAlignment = Enum.TextXAlignment.Right })
 	local coinLabel = label(top, { Name = "Coins", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 34), Size = UDim2.new(0, 200, 0, 22), TextSize = 17, TextColor3 = Color3.fromRGB(255, 215, 110), TextXAlignment = Enum.TextXAlignment.Right })
@@ -3116,44 +4765,102 @@ function Hud.create(playerGui: PlayerGui)
 	corner(hpFrame, 9)
 	local hpFill = mk("Frame", { Name = "Fill", Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(230, 70, 90), BorderSizePixel = 0 }, hpFrame)
 	corner(hpFill, 9)
+	mk("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(150, 150, 150)) }, hpFill)
 	local hpText = label(hpFrame, { Size = UDim2.new(1, 0, 1, 0), TextSize = 13, Text = "평판 100 / 100", ZIndex = 2 })
 
-	-- 손에 든 것
-	local held = label(gui, { Name = "Held", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -110), Size = UDim2.new(0, 360, 0, 30), TextSize = 18, BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.35, Text = "🖐 빈손" })
-	corner(held, 8)
+	-- 콤보
+	local comboFrame = mk("Frame", { Name = "Combo", Visible = false, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 96), Size = UDim2.new(0, 260, 0, 30), BackgroundTransparency = 1 }, gui)
+	local comboScale = mk("UIScale", { Scale = 1 }, comboFrame) :: UIScale
+	local comboLabel = label(comboFrame, { Size = UDim2.new(1, 0, 0, 22), TextSize = 19, Font = FONT_BLACK, TextColor3 = Color3.fromRGB(255, 170, 60), TextStrokeTransparency = 0.4, Text = "" })
+	local comboBarBg = mk("Frame", { Position = UDim2.new(0.2, 0, 0, 24), Size = UDim2.new(0.6, 0, 0, 5), BackgroundColor3 = Color3.fromRGB(40, 30, 30), BorderSizePixel = 0 }, comboFrame)
+	corner(comboBarBg, 3)
+	local comboBar = mk("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(255, 170, 60), BorderSizePixel = 0 }, comboBarBg)
+	corner(comboBar, 3)
 
-	-- 힌트
-	local hint = label(gui, { Name = "Hint", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -76), Size = UDim2.new(0, 620, 0, 28), TextSize = 15, Font = FONT_REG, TextColor3 = Color3.fromRGB(215, 205, 235), Text = "" })
+	-- 이벤트 배너
+	local eventBanner = label(gui, { Name = "Event", Visible = false, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 128), Size = UDim2.new(0, 600, 0, 26), TextSize = 15, BackgroundColor3 = Color3.fromRGB(90, 40, 120), BackgroundTransparency = 0.2, TextColor3 = Color3.fromRGB(255, 235, 200), Text = "" })
+	corner(eventBanner, 8)
 
-	-- 버튼
-	-- 모바일 점프 버튼(오른쪽 아래)과 겹치지 않도록 오른쪽 위에 둠
-	local buttons = mk("Frame", { Name = "Buttons", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 100), Size = UDim2.new(0, 260, 0, 40), BackgroundTransparency = 1 }, gui)
-	mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 8) }, buttons)
-	local function button(text: string): TextButton
-		local b = mk("TextButton", { Size = UDim2.new(0, 122, 1, 0), BackgroundColor3 = Color3.fromRGB(90, 50, 150), Text = text, Font = FONT, TextSize = 17, TextColor3 = Color3.fromRGB(255, 255, 255), AutoButtonColor = true }, buttons) :: TextButton
+	-- 주문 목록 (왼쪽)
+	local orders = mk("Frame", { Name = "Orders", Position = UDim2.new(0, 12, 0, 100), Size = UDim2.new(0, 250, 0, 30), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.35 }, gui)
+	corner(orders, 10)
+	mk("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6) }, orders)
+	mk("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder }, orders)
+	local ordersTitle = label(orders, { Size = UDim2.new(1, 0, 0, 20), TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, Text = "🍽 주문 없음", LayoutOrder = 0 })
+	local orderRows = {}
+	for i = 1, 6 do
+		local row = mk("Frame", { Visible = false, Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, LayoutOrder = i }, orders)
+		local text = label(row, { Size = UDim2.new(1, 0, 0, 20), TextSize = 14, Font = FONT_REG, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = "" })
+		local barBg = mk("Frame", { Position = UDim2.new(0, 0, 0, 22), Size = UDim2.new(1, 0, 0, 4), BackgroundColor3 = Color3.fromRGB(40, 35, 55), BorderSizePixel = 0 }, row)
+		corner(barBg, 2)
+		local bar = mk("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(120, 230, 120), BorderSizePixel = 0 }, barBg)
+		corner(bar, 2)
+		orderRows[i] = { row = row, text = text, bar = bar, barBg = barBg }
+	end
+
+	-- 버튼 (오른쪽 위)
+	local buttons = mk("Frame", { Name = "Buttons", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 100), Size = UDim2.new(0, 330, 0, 40), BackgroundTransparency = 1 }, gui)
+	mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 6) }, buttons)
+	local function button(text: string, width: number): TextButton
+		local b = mk("TextButton", { Size = UDim2.new(0, width, 1, 0), BackgroundColor3 = Color3.fromRGB(90, 50, 150), Text = text, Font = FONT, TextSize = 15, TextColor3 = Color3.fromRGB(255, 255, 255), AutoButtonColor = true }, buttons) :: TextButton
 		corner(b, 10)
 		return b
 	end
-	self.recipeButton = button("📖 레시피 (R)")
-	self.shopButton = button("🛒 상점 (B)")
+	self.recipeButton = button("📖 레시피 (R)", 110)
+	self.shopButton = button("🛒 상점 (B)", 100)
+	self.wardrobeButton = button("🎩 옷장 (C)", 100)
+
+	-- 밤 목표
+	local challengeBox = label(gui, { Name = "Challenge", Visible = false, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 146), Size = UDim2.new(0, 330, 0, 44), TextSize = 15, BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.3, Text = "" })
+	corner(challengeBox, 10)
+	local challengeStroke = mk("UIStroke", { Color = Color3.fromRGB(255, 200, 90), Thickness = 1.5, Transparency = 0.3 }, challengeBox) :: UIStroke
+
+	-- 준비 완료 버튼
+	local readyButton = mk("TextButton", { Name = "Ready", Visible = false, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -150), Size = UDim2.new(0, 260, 0, 40), BackgroundColor3 = Color3.fromRGB(40, 120, 80), Font = FONT, TextSize = 17, TextColor3 = Color3.fromRGB(255, 255, 255), Text = "✅ 준비 완료", AutoButtonColor = true }, gui) :: TextButton
+	corner(readyButton, 10)
+	local readyLocal = false
+	readyButton.MouseButton1Click:Connect(function()
+		readyLocal = not readyLocal
+		self.onReady()
+	end)
+
+	-- 손에 든 것 / 힌트
+	local held = label(gui, { Name = "Held", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -110), Size = UDim2.new(0, 360, 0, 30), TextSize = 18, BackgroundColor3 = Color3.fromRGB(20, 16, 30), BackgroundTransparency = 0.35, Text = "🖐 빈손" })
+	corner(held, 8)
+	local hint = label(gui, { Name = "Hint", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -76), Size = UDim2.new(0, 620, 0, 28), TextSize = 15, Font = FONT_REG, TextColor3 = Color3.fromRGB(215, 205, 235), Text = "" })
 
 	-- 알림(토스트)
-	local toasts = mk("Frame", { Name = "Toasts", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 100), Size = UDim2.new(0, 560, 0, 200), BackgroundTransparency = 1 }, gui)
+	local toasts = mk("Frame", { Name = "Toasts", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 160), Size = UDim2.new(0, 560, 0, 200), BackgroundTransparency = 1 }, gui)
 	mk("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, toasts)
 
 	-- 큰 안내
-	local announce = label(gui, { Name = "Announce", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.32, 0), Size = UDim2.new(0, 700, 0, 70), TextSize = 44, TextTransparency = 1, TextStrokeTransparency = 1, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
-	local announceSub = label(gui, { Name = "AnnounceSub", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.32, 48), Size = UDim2.new(0, 700, 0, 34), TextSize = 22, Font = FONT_REG, TextTransparency = 1, TextColor3 = Color3.fromRGB(255, 220, 150) })
+	local announceBar = mk("Frame", { Name = "AnnounceBar", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.32, 0), Size = UDim2.new(1, 0, 0, 110), BackgroundColor3 = Color3.fromRGB(10, 8, 18), BackgroundTransparency = 1, BorderSizePixel = 0 }, gui)
+	mk("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.2, 0), NumberSequenceKeypoint.new(0.8, 0), NumberSequenceKeypoint.new(1, 1) }) }, announceBar)
+	local announce = label(gui, { Name = "Announce", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.32, -8), Size = UDim2.new(0, 760, 0, 70), TextSize = 46, Font = FONT_BLACK, TextTransparency = 1, TextStrokeTransparency = 1, TextStrokeColor3 = Color3.fromRGB(0, 0, 0) })
+	local announceSub = label(gui, { Name = "AnnounceSub", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.32, 36), Size = UDim2.new(0, 760, 0, 34), TextSize = 21, Font = FONT_REG, TextTransparency = 1, TextColor3 = Color3.fromRGB(255, 220, 150) })
+
+	-- 밤 요약
+	local summary = mk("Frame", { Name = "Summary", Visible = false, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 440, 0, 300), BackgroundColor3 = Color3.fromRGB(28, 22, 40), BackgroundTransparency = 0.05, ZIndex = 15 }, gui)
+	corner(summary, 16)
+	mk("UIStroke", { Color = Color3.fromRGB(255, 200, 90), Thickness = 2 }, summary)
+	local summaryTitle = label(summary, { Position = UDim2.new(0, 0, 0, 14), Size = UDim2.new(1, 0, 0, 40), TextSize = 28, Text = "", ZIndex = 16 })
+	local summaryBody = label(summary, { Position = UDim2.new(0, 28, 0, 62), Size = UDim2.new(1, -56, 1, -100), TextSize = 18, Font = FONT_REG, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, RichText = true, ZIndex = 16 })
+	local summaryClose = mk("TextButton", { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -12), Size = UDim2.new(0, 140, 0, 30), BackgroundColor3 = Color3.fromRGB(90, 50, 150), Font = FONT, TextSize = 15, TextColor3 = Color3.fromRGB(255, 255, 255), Text = "닫기", ZIndex = 16 }, summary) :: TextButton
+	corner(summaryClose, 8)
+	summaryClose.MouseButton1Click:Connect(function()
+		summary.Visible = false
+	end)
 
 	-- 결과 화면
 	local result = mk("Frame", { Name = "Result", Visible = false, Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(10, 8, 16), BackgroundTransparency = 0.25, ZIndex = 20 }, gui)
-	local resultBox = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 520, 0, 420), BackgroundColor3 = Color3.fromRGB(28, 22, 40), ZIndex = 21 }, result)
+	local resultBox = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 540, 0, 460), BackgroundColor3 = Color3.fromRGB(28, 22, 40), ZIndex = 21 }, result)
 	corner(resultBox, 16)
 	mk("UIStroke", { Color = Color3.fromRGB(200, 80, 120), Thickness = 2 }, resultBox)
-	local resultTitle = label(resultBox, { Position = UDim2.new(0, 0, 0, 18), Size = UDim2.new(1, 0, 0, 48), TextSize = 36, Text = "💀 폐업", ZIndex = 22 })
-	local resultBody = label(resultBox, { Position = UDim2.new(0, 30, 0, 80), Size = UDim2.new(1, -60, 1, -120), TextSize = 19, Font = FONT_REG, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 22, RichText = true })
-	local resultFoot = label(resultBox, { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -14), Size = UDim2.new(1, -40, 0, 24), TextSize = 15, Font = FONT_REG, TextColor3 = Color3.fromRGB(200, 190, 220), Text = "잠시 후 새 영업이 시작됩니다", ZIndex = 22 })
+	local resultTitle = label(resultBox, { Position = UDim2.new(0, 0, 0, 18), Size = UDim2.new(1, 0, 0, 48), TextSize = 34, Text = "💀 폐업", ZIndex = 22 })
+	local resultBody = label(resultBox, { Position = UDim2.new(0, 30, 0, 78), Size = UDim2.new(1, -60, 1, -118), TextSize = 18, Font = FONT_REG, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 22, RichText = true })
+	label(resultBox, { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -14), Size = UDim2.new(1, -40, 0, 24), TextSize = 15, Font = FONT_REG, TextColor3 = Color3.fromRGB(200, 190, 220), Text = "잠시 후 새 영업이 시작됩니다", ZIndex = 22 })
 
+	-- ---------- 동작 ----------
 	local toastCount = 0
 	function self.toast(text: string, style: string?)
 		toastCount += 1
@@ -3166,15 +4873,16 @@ function Hud.create(playerGui: PlayerGui)
 		local t = label(toasts, { Size = UDim2.new(1, 0, 0, 30), AutomaticSize = Enum.AutomaticSize.Y, TextSize = 16, Font = FONT_REG, BackgroundColor3 = color, BackgroundTransparency = 0.15, Text = text, LayoutOrder = toastCount })
 		corner(t, 8)
 		mk("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4) }, t)
-		local children = toasts:GetChildren()
+		local scale = mk("UIScale", { Scale = 0.7 }, t)
+		TweenService:Create(scale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 		local count = 0
-		for _, c in children do
+		for _, c in toasts:GetChildren() do
 			if c:IsA("TextLabel") then
 				count += 1
 			end
 		end
 		if count > 4 then
-			for _, c in children do
+			for _, c in toasts:GetChildren() do
 				if c:IsA("TextLabel") then
 					c:Destroy()
 					break
@@ -3195,12 +4903,15 @@ function Hud.create(playerGui: PlayerGui)
 		announce.TextColor3 = color or Color3.fromRGB(255, 255, 255)
 		announceSub.Text = sub or ""
 		local show = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		TweenService:Create(announce, show, { TextTransparency = 0, TextStrokeTransparency = 0.5 }):Play()
+		announce.Position = UDim2.new(0.5, 0, 0.32, -24)
+		TweenService:Create(announce, show, { TextTransparency = 0, TextStrokeTransparency = 0.5, Position = UDim2.new(0.5, 0, 0.32, -8) }):Play()
 		TweenService:Create(announceSub, show, { TextTransparency = 0 }):Play()
+		TweenService:Create(announceBar, show, { BackgroundTransparency = 0.35 }):Play()
 		task.delay(3.2, function()
 			local hide = TweenInfo.new(0.8)
 			TweenService:Create(announce, hide, { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
 			TweenService:Create(announceSub, hide, { TextTransparency = 1 }):Play()
+			TweenService:Create(announceBar, hide, { BackgroundTransparency = 1 }):Play()
 		end)
 	end
 
@@ -3212,17 +4923,94 @@ function Hud.create(playerGui: PlayerGui)
 		hint.Text = text
 	end
 
+	-- 주문 목록: { {name, orders, fraction(-1 이면 대기 안 함), mood} }
+	function self.updateOrders(list)
+		table.sort(list, function(a, b)
+			local fa = if a.fraction < 0 then 2 else a.fraction
+			local fb = if b.fraction < 0 then 2 else b.fraction
+			return fa < fb
+		end)
+		local waiting = 0
+		for _, e in list do
+			if e.fraction >= 0 then
+				waiting += 1
+			end
+		end
+		ordersTitle.Text = if #list == 0 then "🍽 주문 없음" else string.format("🍽 주문 %d개 (대기 %d)", #list, waiting)
+		for i, r in orderRows do
+			local e = list[i]
+			if e then
+				r.row.Visible = true
+				r.text.Text = string.format("%s · %s", e.orders, e.name)
+				if e.fraction >= 0 then
+					r.barBg.Visible = true
+					r.bar.Size = UDim2.new(e.fraction, 0, 1, 0)
+					r.bar.BackgroundColor3 = if e.fraction > 0.5 then Color3.fromRGB(120, 230, 120) elseif e.fraction > 0.25 then Color3.fromRGB(255, 200, 80) else Color3.fromRGB(255, 70, 60)
+					r.text.TextColor3 = Color3.fromRGB(245, 240, 235)
+				else
+					r.barBg.Visible = false
+					r.text.TextColor3 = Color3.fromRGB(170, 165, 185)
+				end
+			else
+				r.row.Visible = false
+			end
+		end
+	end
+
+	local lastHp = nil
+	function self.hpHit()
+		hpFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		TweenService:Create(hpFill, TweenInfo.new(0.5), { BackgroundColor3 = Color3.fromRGB(230, 70, 90) }):Play()
+		hpFrame.Position = UDim2.new(0.5, 6, 0, 74)
+		TweenService:Create(hpFrame, TweenInfo.new(0.3, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), { Position = UDim2.new(0.5, 0, 0, 74) }):Play()
+	end
+
+	function self.showSummary(p)
+		summaryTitle.Text = string.format("☀️ %d번째 밤 종료!", p.night or 0)
+		local lines = {
+			string.format("서빙 <b>%d</b> · 팁 <b>%d</b>회 · 최대 콤보 <b>x%d</b>", p.served or 0, p.tips or 0, p.maxCombo or 0),
+			string.format("악귀 <b>%d</b> · 탄 음식 <b>%d</b>", p.angry or 0, p.burnt or 0),
+			string.format("밤 보너스 <font color=\"#FFD27F\">+%d 코인</font>", p.bonus or 0),
+		}
+		if p.challengeName then
+			if p.challengeDone then
+				table.insert(lines, string.format("밤 목표 %s: <font color=\"#9AF0A0\">달성! +%d 코인</font>", p.challengeName, p.challengeBonus or 0))
+			else
+				table.insert(lines, string.format("밤 목표 %s: <font color=\"#FF9090\">실패</font>", p.challengeName))
+			end
+		end
+		if p.mvp and p.mvp ~= "" then
+			table.insert(lines, string.format("🏆 이번 밤 MVP: <b>%s</b> (%d 서빙)", p.mvp, p.mvpServed or 0))
+		end
+		table.insert(lines, string.format("✨ 명성 +%d (모두)", p.fame or 0))
+		summaryBody.Text = table.concat(lines, "\n")
+		summary.Visible = true
+		local scale = summary:FindFirstChildOfClass("UIScale") or mk("UIScale", { Scale = 1 }, summary)
+		scale.Scale = 0.8
+		TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+		task.delay(9, function()
+			summary.Visible = false
+		end)
+	end
+
+	function self.hideSummary()
+		summary.Visible = false
+	end
+
 	function self.showResult(data)
 		resultTitle.Text = string.format("💀 폐업 — %d번째 밤에 무너짐", data.night or 0)
 		local lines = {
-			string.format("서빙한 요리: <b>%d</b>", data.served or 0),
-			string.format("악귀가 된 손님: <b>%d</b>", data.angry or 0),
+			string.format("서빙한 요리: <b>%d</b>  ·  최대 콤보: <b>x%d</b>", data.served or 0, data.maxCombo or 0),
+			string.format("악귀가 된 손님: <b>%d</b>  ·  탄 음식: <b>%d</b>  ·  화재: <b>%d</b>", data.angry or 0, data.burnt or 0, data.fires or 0),
 			string.format("번 코인: <b>%d</b> (팁 %d)", data.earned or 0, data.tips or 0),
-			"",
-			"<b>요리사별 서빙</b>",
 		}
+		if data.mvp and data.mvp ~= "" then
+			table.insert(lines, string.format("🏆 이번 판 MVP: <b>%s</b>", data.mvp))
+		end
+		table.insert(lines, "")
+		table.insert(lines, "<b>요리사별 서빙 · 얻은 명성</b>")
 		for _, p in data.players or {} do
-			table.insert(lines, string.format("  %s — %d", p.name, p.served))
+			table.insert(lines, string.format("  %s — 서빙 %d · 명성 +%d", p.name, p.served, p.fame or 0))
 		end
 		resultBody.Text = table.concat(lines, "\n")
 		result.Visible = true
@@ -3232,20 +5020,32 @@ function Hud.create(playerGui: PlayerGui)
 		result.Visible = false
 	end
 
-	function self.setResultFoot(text: string)
-		resultFoot.Text = text
-	end
+	local displayedCoins = 0
+	local lastCombo = 0
+	local lastPhase = ""
 
 	-- 상태 폴더의 Attribute 를 읽어 화면 갱신
 	function self.update(state: Instance)
-		local phase = state:GetAttribute("Phase") or "lobby"
-		local night = state:GetAttribute("Night") or 0
-		local hp = state:GetAttribute("Hp") or 0
-		local maxHp = state:GetAttribute("MaxHp") or 100
-		local coins = state:GetAttribute("Coins") or 0
-		local total = state:GetAttribute("CustomersTotal") or 0
-		local done = state:GetAttribute("CustomersDone") or 0
-		local endsAt = state:GetAttribute("PhaseEndsAt") or 0
+		local phase = attrS(state, "Phase")
+		if phase == "" then
+			phase = "lobby"
+		end
+		local night = attrN(state, "Night")
+		local hp = attrN(state, "Hp")
+		local maxHp = attrN(state, "MaxHp")
+		if maxHp <= 0 then
+			maxHp = 100
+		end
+		local coins = attrN(state, "Coins")
+		local total = attrN(state, "CustomersTotal")
+		local done = attrN(state, "CustomersDone")
+		local endsAt = attrN(state, "PhaseEndsAt")
+		local t = now()
+
+		if phase ~= lastPhase then
+			lastPhase = phase
+			readyLocal = false
+		end
 
 		if phase == "night" then
 			nightLabel.Text = string.format("🌙 %d번째 밤", night)
@@ -3256,21 +5056,73 @@ function Hud.create(playerGui: PlayerGui)
 		end
 		phaseLabel.Text = PHASE_TEXT[phase] or phase
 		if endsAt > 0 then
-			local left = math.max(0, endsAt - workspace:GetServerTimeNow())
-			timerLabel.Text = string.format("%d", math.ceil(left))
+			timerLabel.Text = string.format("%d", math.ceil(math.max(0, endsAt - t)))
 		else
 			timerLabel.Text = if phase == "night" then "🔥" else ""
 		end
-		if phase == "night" then
-			custLabel.Text = string.format("손님 %d / %d", done, total)
-		else
-			custLabel.Text = ""
+		custLabel.Text = if phase == "night" then string.format("손님 %d / %d", done, total) else ""
+
+		displayedCoins += (coins - displayedCoins) * 0.4
+		if math.abs(coins - displayedCoins) < 1 then
+			displayedCoins = coins
 		end
-		coinLabel.Text = string.format("🪙 %d 코인", coins)
-		local frac = if maxHp > 0 then math.clamp(hp / maxHp, 0, 1) else 0
+		coinLabel.Text = string.format("🪙 %d 코인", math.floor(displayedCoins + 0.5))
+
+		local frac = math.clamp(hp / maxHp, 0, 1)
 		hpFill.Size = UDim2.new(frac, 0, 1, 0)
-		hpFill.BackgroundColor3 = if frac > 0.5 then Color3.fromRGB(230, 70, 90) elseif frac > 0.25 then Color3.fromRGB(235, 140, 60) else Color3.fromRGB(255, 40, 40)
+		if lastHp ~= nil and hp < lastHp then
+			self.hpHit()
+		else
+			hpFill.BackgroundColor3 = if frac > 0.5 then Color3.fromRGB(230, 70, 90) elseif frac > 0.25 then Color3.fromRGB(235, 140, 60) else Color3.fromRGB(255, 40, 40)
+		end
+		lastHp = hp
 		hpText.Text = string.format("평판 %d / %d", hp, maxHp)
+
+		-- 콤보
+		local combo = attrN(state, "Combo")
+		local comboEnds = attrN(state, "ComboExpiresAt")
+		if combo >= 2 and comboEnds > t then
+			comboFrame.Visible = true
+			comboLabel.Text = "🔥 " .. Combo.label(combo)
+			comboBar.Size = UDim2.new(math.clamp((comboEnds - t) / Config.ComboWindow, 0, 1), 0, 1, 0)
+			if combo > lastCombo then
+				comboScale.Scale = 1.35
+				TweenService:Create(comboScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+			end
+		else
+			comboFrame.Visible = false
+		end
+		lastCombo = combo
+
+		-- 이벤트
+		local eventName = attrS(state, "EventName")
+		if eventName ~= "" and phase == "night" then
+			eventBanner.Visible = true
+			eventBanner.Text = eventName .. " — " .. attrS(state, "EventDesc")
+		else
+			eventBanner.Visible = false
+		end
+
+		-- 밤 목표
+		local challengeText = attrS(state, "ChallengeText")
+		if challengeText ~= "" and (phase == "night" or phase == "day") then
+			challengeBox.Visible = true
+			challengeBox.Text = "🎯 밤 목표: " .. challengeText
+			local ok = attrB(state, "ChallengeDone")
+			challengeStroke.Color = if ok then Color3.fromRGB(120, 255, 150) else Color3.fromRGB(255, 200, 90)
+			challengeBox.TextColor3 = if ok then Color3.fromRGB(190, 255, 200) else Color3.fromRGB(245, 240, 235)
+		else
+			challengeBox.Visible = false
+		end
+
+		-- 준비 버튼
+		if phase == "day" or phase == "countdown" then
+			readyButton.Visible = true
+			readyButton.Text = string.format("%s 준비 완료 (%d/%d)", if readyLocal then "☑" else "✅", attrN(state, "ReadyCount"), attrN(state, "ReadyTotal"))
+			readyButton.BackgroundColor3 = if readyLocal then Color3.fromRGB(30, 160, 100) else Color3.fromRGB(40, 110, 80)
+		else
+			readyButton.Visible = false
+		end
 	end
 
 	return self
@@ -3280,24 +5132,27 @@ return Hud
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="25">
+        <Item class="ModuleScript" referent="32">
           <Properties>
             <string name="Name">Labels</string>
             <string name="Source"><![CDATA[--!nonstrict
--- 월드 라벨: 조리대 위 상태/진행 바, 손님 머리 위 주문/인내심 바, 프롬프트 문구 맞춤.
+-- 월드 라벨과 손님 애니메이션: 조리대 상태/진행 바, 손님 머리 위 주문/인내심 바, 둥실거림·기쁨 점프·분노 떨림, 프롬프트 문구 맞춤.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
-local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Recipes = require(Shared:WaitForChild("Recipes"))
+local Config = require(Shared:WaitForChild("Config"))
 
 local Labels = {}
 
 local FONT = Enum.Font.GothamBold
 local FONT_REG = Enum.Font.Gotham
 local COOKERS = { pot = true, griddle = true, fryer = true, ricecooker = true }
+local rng = Random.new()
+local fx = nil
+local onOrders: (any) -> () = function() end
 
 local function mk(className: string, props: { [string]: any }, parent: Instance?): Instance
 	local inst = Instance.new(className)
@@ -3346,7 +5201,7 @@ local function names(ids: { string }): string
 end
 
 -- ---------- 조리대 라벨 ----------
-local stationLabels = {} -- part → { gui, title, status, barBg, bar }
+local stationLabels = {}
 
 local function makeStationLabel(part: BasePart)
 	local gui = mk("BillboardGui", { Name = "StationLabel", Adornee = part, Size = UDim2.new(0, 150, 0, 58), StudsOffsetWorldSpace = Vector3.new(0, 4.6, 0), AlwaysOnTop = false, MaxDistance = 70, LightInfluence = 0 }, part)
@@ -3388,6 +5243,11 @@ local function updateStationLabel(part: BasePart, entry)
 		entry.status.TextColor3 = Color3.fromRGB(255, 120, 120)
 		return
 	end
+	if state == "fire" then
+		entry.status.Text = "🔥🔥 불이야! 소화기 필요"
+		entry.status.TextColor3 = Color3.fromRGB(255, 110, 60)
+		return
+	end
 	entry.status.TextColor3 = Color3.fromRGB(220, 215, 235)
 	if COOKERS[kind] then
 		local t = now()
@@ -3410,8 +5270,13 @@ local function updateStationLabel(part: BasePart, entry)
 				entry.bar.BackgroundColor3 = if frac > 0.4 then Color3.fromRGB(120, 230, 120) else Color3.fromRGB(255, 80, 60)
 			end
 		elseif state == "burnt" then
-			entry.status.Text = "💀 탔어요! 꺼내서 버리세요"
+			local burntAt = attrN(part, "BurntAt")
+			local left = math.max(0, burntAt + Config.FireDelay - t)
+			entry.status.Text = string.format("💀 탔어요! %d초 뒤 불이 납니다", math.ceil(left))
 			entry.status.TextColor3 = Color3.fromRGB(255, 120, 120)
+			entry.barBg.Visible = true
+			entry.bar.Size = UDim2.new(math.clamp(left / Config.FireDelay, 0, 1), 0, 1, 0)
+			entry.bar.BackgroundColor3 = Color3.fromRGB(255, 80, 60)
 		else
 			entry.status.Text = "비어 있음"
 		end
@@ -3426,26 +5291,91 @@ local function updateStationLabel(part: BasePart, entry)
 		entry.status.Text = string.format("야채를 들고 E 길게 (%.1f초)", chopTime)
 	elseif kind == "trash" then
 		entry.status.Text = "실패한 음식 버리기"
+	elseif kind == "extinguisher" then
+		entry.title.Text = "🧯 " .. label
+		entry.status.Text = "빈손으로 E: 소화기 꺼내기"
 	end
 end
 
--- ---------- 손님 라벨 ----------
-local customerLabels = {} -- model → entry
+-- ---------- 손님 라벨 + 애니메이션 ----------
+local customerLabels = {}
+
+local function gatherWelds(entry)
+	entry.welds = {}
+	for _, d in entry.model:GetDescendants() do
+		if d:IsA("Weld") and d.Part0 == entry.root then
+			table.insert(entry.welds, { weld = d, c0 = d.C0 })
+		end
+	end
+end
 
 local function makeCustomerLabel(model: Model)
 	local root = model:WaitForChild("HumanoidRootPart", 5)
-	if not root then
+	if not root or not model.Parent then
 		return
 	end
-	local scale = 1
-	local gui = mk("BillboardGui", { Name = "CustomerLabel", Adornee = root, Size = UDim2.new(0, 190, 0, 78), StudsOffsetWorldSpace = Vector3.new(0, 5.2 * scale, 0), AlwaysOnTop = true, MaxDistance = 90, LightInfluence = 0 }, root)
+	local gui = mk("BillboardGui", { Name = "CustomerLabel", Adornee = root, Size = UDim2.new(0, 200, 0, 80), StudsOffsetWorldSpace = Vector3.new(0, 5.4, 0), AlwaysOnTop = true, MaxDistance = 90, LightInfluence = 0 }, root)
 	local name = mk("TextLabel", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20), Font = FONT, TextSize = 15, TextColor3 = Color3.fromRGB(230, 220, 255), TextStrokeTransparency = 0.3, Text = model.Name }, gui) :: TextLabel
-	local order = mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 20), Size = UDim2.new(1, 0, 0, 36), Font = FONT, TextSize = 17, TextWrapped = true, TextColor3 = Color3.fromRGB(255, 240, 200), TextStrokeTransparency = 0.2, Text = "" }, gui) :: TextLabel
-	local barBg = mk("Frame", { Position = UDim2.new(0.1, 0, 0, 62), Size = UDim2.new(0.8, 0, 0, 10), BackgroundColor3 = Color3.fromRGB(20, 20, 30), BackgroundTransparency = 0.2, BorderSizePixel = 0 }, gui) :: Frame
+	local order = mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 20), Size = UDim2.new(1, 0, 0, 38), Font = FONT, TextSize = 17, TextWrapped = true, TextColor3 = Color3.fromRGB(255, 240, 200), TextStrokeTransparency = 0.2, Text = "" }, gui) :: TextLabel
+	local barBg = mk("Frame", { Position = UDim2.new(0.1, 0, 0, 64), Size = UDim2.new(0.8, 0, 0, 10), BackgroundColor3 = Color3.fromRGB(20, 20, 30), BackgroundTransparency = 0.2, BorderSizePixel = 0 }, gui) :: Frame
 	mk("UICorner", { CornerRadius = UDim.new(0, 5) }, barBg)
 	local bar = mk("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(120, 230, 120), BorderSizePixel = 0 }, barBg) :: Frame
 	mk("UICorner", { CornerRadius = UDim.new(0, 5) }, bar)
-	customerLabels[model] = { gui = gui, name = name, order = order, barBg = barBg, bar = bar, root = root }
+	local entry = {
+		gui = gui,
+		name = name,
+		order = order,
+		barBg = barBg,
+		bar = bar,
+		root = root,
+		model = model,
+		phase = rng:NextNumber(0, math.pi * 2),
+		welds = {},
+		mood = "",
+		anim = nil,
+		lastTwist = attrN(model, "Twist"),
+		lastFraction = -1,
+		weldTries = 0,
+	}
+	gatherWelds(entry)
+	customerLabels[model] = entry
+end
+
+local function startAnim(entry, kind: string, duration: number)
+	entry.anim = { kind = kind, startAt = os.clock(), duration = duration }
+end
+
+local function onMoodChanged(entry, mood: string)
+	local root = entry.root
+	if mood == "happy" then
+		startAnim(entry, "hop", 0.7)
+		if fx then
+			fx.burst(root.Position + Vector3.new(0, 3, 0), fx.Colors.pink, 16, 0.5, 4)
+			fx.floatText(root.Position + Vector3.new(0, 4, 0), "💚 잘 먹었다!", fx.Colors.green, 22)
+		end
+	elseif mood == "angry" then
+		startAnim(entry, "rage", 0.8)
+		for _, p in entry.model:GetDescendants() do
+			if p:IsA("BasePart") and p.Name == "Eye" then
+				p.Material = Enum.Material.Neon
+				p.Color = Color3.fromRGB(255, 40, 40)
+			end
+		end
+		mk("ParticleEmitter", {
+			Name = "AngryAura",
+			Rate = 14,
+			Lifetime = NumberRange.new(0.8, 1.4),
+			Speed = NumberRange.new(2, 4),
+			Size = NumberSequence.new(1.3, 0),
+			Transparency = NumberSequence.new(0.3, 1),
+			Color = ColorSequence.new(Color3.fromRGB(255, 40, 40), Color3.fromRGB(60, 0, 0)),
+			LightEmission = 0.6,
+			SpreadAngle = Vector2.new(180, 180),
+		}, root)
+		if fx then
+			fx.floatText(root.Position + Vector3.new(0, 4.5, 0), "👿 악귀!", fx.Colors.red, 26)
+		end
+	end
 end
 
 local function updateCustomerLabel(model: Model, entry)
@@ -3453,6 +5383,24 @@ local function updateCustomerLabel(model: Model, entry)
 	if mood == "" then
 		mood = "walking"
 	end
+	if #entry.welds == 0 and entry.weldTries < 20 then
+		entry.weldTries += 1
+		gatherWelds(entry)
+	end
+	if mood ~= entry.mood then
+		entry.mood = mood
+		onMoodChanged(entry, mood)
+	end
+	local twist = attrN(model, "Twist")
+	if twist ~= entry.lastTwist then
+		entry.lastTwist = twist
+		startAnim(entry, "twist", 0.8)
+		if fx then
+			fx.floatText(entry.root.Position + Vector3.new(0, 4.5, 0), "❗ 주문 변경!", fx.Colors.orange, 24)
+			fx.burst(entry.root.Position + Vector3.new(0, 3, 0), fx.Colors.orange, 14, 0.45, 4)
+		end
+	end
+
 	local orders = split(attrS(model, "Orders"))
 	local boss = attrB(model, "Boss")
 	local displayName = attrS(model, "DisplayName")
@@ -3460,8 +5408,11 @@ local function updateCustomerLabel(model: Model, entry)
 		displayName = model.Name
 	end
 	entry.name.Text = (if boss then "👑 " else "") .. displayName
+	entry.fraction = -1
+	entry.ordersText = names(orders)
+	entry.displayName = displayName
 	if mood == "waiting" then
-		entry.order.Text = "🍽 " .. names(orders)
+		entry.order.Text = "🍽 " .. entry.ordersText
 		entry.order.TextColor3 = Color3.fromRGB(255, 240, 200)
 		entry.barBg.Visible = true
 		local deadline = attrN(model, "DeadlineAt")
@@ -3470,10 +5421,14 @@ local function updateCustomerLabel(model: Model, entry)
 			total = 1
 		end
 		local frac = math.clamp((deadline - now()) / total, 0, 1)
+		entry.fraction = frac
 		entry.bar.Size = UDim2.new(frac, 0, 1, 0)
 		entry.bar.BackgroundColor3 = if frac > 0.5 then Color3.fromRGB(120, 230, 120) elseif frac > 0.25 then Color3.fromRGB(255, 200, 80) else Color3.fromRGB(255, 70, 60)
+		if frac < 0.25 then
+			entry.order.TextColor3 = if math.floor(os.clock() * 4) % 2 == 0 then Color3.fromRGB(255, 120, 100) else Color3.fromRGB(255, 240, 200)
+		end
 	elseif mood == "queue" then
-		entry.order.Text = "⏳ 자리 기다리는 중 (" .. names(orders) .. ")"
+		entry.order.Text = "⏳ 자리 기다리는 중 (" .. entry.ordersText .. ")"
 		entry.order.TextColor3 = Color3.fromRGB(200, 195, 220)
 		entry.barBg.Visible = false
 	elseif mood == "angry" then
@@ -3485,22 +5440,46 @@ local function updateCustomerLabel(model: Model, entry)
 		entry.order.TextColor3 = Color3.fromRGB(150, 255, 160)
 		entry.barBg.Visible = false
 	else
-		entry.order.Text = "🚶 오는 중 (" .. names(orders) .. ")"
+		entry.order.Text = "🚶 오는 중 (" .. entry.ordersText .. ")"
 		entry.order.TextColor3 = Color3.fromRGB(200, 195, 220)
 		entry.barBg.Visible = false
 	end
 end
 
--- ---------- 코인 연출 ----------
-function Labels.coinPopup(position: Vector3, amount: number, tip: number)
-	local anchor = mk("Part", { Anchored = true, CanCollide = false, CanQuery = false, CanTouch = false, Transparency = 1, Size = Vector3.new(0.2, 0.2, 0.2), Position = position }, workspace)
-	local gui = mk("BillboardGui", { Size = UDim2.new(0, 160, 0, 40), AlwaysOnTop = true, LightInfluence = 0 }, anchor)
-	local text = mk("TextLabel", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Font = FONT, TextSize = 24, TextColor3 = Color3.fromRGB(255, 220, 90), TextStrokeTransparency = 0.2, Text = if tip > 0 then string.format("+%d 🪙 (팁 %d)", amount, tip) else string.format("+%d 🪙", amount) }, gui) :: TextLabel
-	TweenService:Create(anchor, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = position + Vector3.new(0, 4, 0) }):Play()
-	TweenService:Create(text, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
-	task.delay(1.3, function()
-		anchor:Destroy()
-	end)
+-- 매 프레임: 둥실거림 + 애니메이션 (Weld C0 를 로컬에서만 바꿈)
+local function animateCustomers()
+	local t = os.clock()
+	for _, entry in customerLabels do
+		if #entry.welds == 0 then
+			continue
+		end
+		local y = math.sin(t * 2.6 + entry.phase) * 0.22
+		local x, z = 0, 0
+		local rotY = 0
+		if entry.mood == "angry" then
+			x = rng:NextNumber(-0.09, 0.09)
+			z = rng:NextNumber(-0.09, 0.09)
+		end
+		local anim = entry.anim
+		if anim then
+			local u = (t - anim.startAt) / anim.duration
+			if u >= 1 then
+				entry.anim = nil
+			elseif anim.kind == "hop" then
+				y += math.abs(math.sin(u * math.pi * 2)) * 1.3 * (1 - u * 0.5)
+				rotY = math.sin(u * math.pi) * 0.6
+			elseif anim.kind == "twist" then
+				x += math.sin(u * math.pi * 6) * 0.25
+			elseif anim.kind == "rage" then
+				y += math.sin(u * math.pi) * 0.9
+				rotY = math.sin(u * math.pi * 4) * 0.35
+			end
+		end
+		local offset = CFrame.new(x, y, z) * CFrame.Angles(0, rotY, 0)
+		for _, w in entry.welds do
+			w.weld.C0 = offset * w.c0
+		end
+	end
 end
 
 -- ---------- 프롬프트 문구 ----------
@@ -3509,56 +5488,74 @@ local getHeldId: () -> string? = function()
 end
 local shownPrompts: { [ProximityPrompt]: boolean } = {}
 
-local function hintFor(part: BasePart, heldId: string?): (string?, string?, boolean)
+-- 반환: 행동 문구, 길게 누르는 시간(초)
+local function hintFor(part: BasePart, heldId: string?): (string?, number)
 	local kind = attrS(part, "Kind")
 	local heldName = if heldId then Recipes.name(heldId) else nil
+	local state = attrS(part, "State")
+	if state == "" then
+		state = "idle"
+	end
+	if kind ~= "customer" and state == "fire" then
+		if heldId == "extinguisher" then
+			return "🧯 불 끄기 (길게)", Config.ExtinguishHold
+		end
+		return "🔥 소화기가 필요해요!", 0
+	end
 	if kind == "customer" then
 		local model = part.Parent
 		local orders = split(if model then attrS(model, "Orders") else "")
 		if heldId and table.find(orders, heldId) then
-			return nil, "서빙: " .. heldName, true
+			return "서빙: " .. heldName, 0
 		end
-		return nil, "주문: " .. names(orders), true
+		return "주문: " .. names(orders), 0
 	elseif kind == "crate" then
 		local crateItem = attrS(part, "CrateItem")
-		return nil, if heldId then "손이 비어야 꺼낼 수 있음" else "꺼내기: " .. Recipes.name(crateItem), true
+		return if heldId then "손이 비어야 꺼낼 수 있음" else "꺼내기: " .. Recipes.name(crateItem), 0
 	elseif kind == "board" then
 		local item = heldId and Recipes.Items[heldId]
 		if item and item.chopTo then
-			return nil, "썰기 (길게 누르기)", true
+			local chopTime = attrN(part, "ChopTime")
+			if chopTime <= 0 then
+				chopTime = 2.5
+			end
+			return "썰기 (길게 누르기)", chopTime
 		end
-		return nil, "야채를 들고 오세요", false
+		return "야채를 들고 오세요", 0
 	elseif kind == "combine" then
 		if heldId then
-			return nil, "올리기: " .. heldName, true
+			return "올리기: " .. heldName, 0
 		end
 		local contents = split(attrS(part, "Contents"))
 		if #contents > 0 then
-			return nil, "집기: " .. Recipes.name(contents[#contents]), true
+			return "집기: " .. Recipes.name(contents[#contents]), 0
 		end
-		return nil, "재료를 들고 와서 올리세요", true
+		return "재료를 들고 와서 올리세요", 0
 	elseif COOKERS[kind] then
-		local state = attrS(part, "State")
-		if state == "" then
-			state = "idle"
-		end
 		if state == "idle" then
 			if heldId then
 				local cook = Recipes.cookFor(heldId, kind)
-				return nil, if cook then "넣기: " .. heldName else heldName .. "은(는) 못 넣어요", true
+				return if cook then "넣기: " .. heldName else heldName .. "은(는) 못 넣어요", 0
 			end
-			return nil, "익힐 재료를 들고 오세요", true
+			return "익힐 재료를 들고 오세요", 0
 		elseif state == "cooking" then
-			return nil, "익는 중…", true
+			return "익는 중…", 0
 		elseif state == "done" then
-			return nil, if heldId then "손을 비우고 꺼내세요" else "꺼내기: " .. Recipes.name(attrS(part, "Item")), true
+			return if heldId then "손을 비우고 꺼내세요" else "꺼내기: " .. Recipes.name(attrS(part, "Item")), 0
 		else
-			return nil, "탄 음식 꺼내기", true
+			return "탄 음식 꺼내기 (서둘러요!)", 0
 		end
 	elseif kind == "trash" then
-		return nil, if heldId then "버리기: " .. heldName else "버릴 것이 없어요", true
+		return if heldId then "버리기: " .. heldName else "버릴 것이 없어요", 0
+	elseif kind == "extinguisher" then
+		if heldId == nil then
+			return "소화기 꺼내기", 0
+		elseif heldId == "extinguisher" then
+			return "소화기 넣기", 0
+		end
+		return "손을 비우세요", 0
 	end
-	return nil, nil, true
+	return nil, 0
 end
 
 local function applyHint(prompt: ProximityPrompt)
@@ -3566,17 +5563,12 @@ local function applyHint(prompt: ProximityPrompt)
 	if not part or not part:IsA("BasePart") then
 		return
 	end
-	local heldId = getHeldId()
-	local _, action, holdOk = hintFor(part, heldId)
+	local action, hold = hintFor(part, getHeldId())
 	if action then
 		prompt.ActionText = action
 	end
-	if attrS(part, "Kind") == "board" then
-		local chopTime = attrN(part, "ChopTime")
-		if chopTime <= 0 then
-			chopTime = 2.5
-		end
-		prompt.HoldDuration = if holdOk then chopTime else 0
+	if attrS(part, "Kind") ~= "customer" then
+		prompt.HoldDuration = hold
 	end
 end
 
@@ -3590,8 +5582,10 @@ function Labels.refreshPrompts()
 	end
 end
 
-function Labels.init(map: Instance, heldGetter: () -> string?)
+function Labels.init(map: Instance, heldGetter: () -> string?, fxModule, ordersCallback)
 	getHeldId = heldGetter
+	fx = fxModule
+	onOrders = ordersCallback or onOrders
 	local stationsFolder = map:WaitForChild("Stations")
 	local customersFolder = map:WaitForChild("Customers")
 
@@ -3633,6 +5627,7 @@ function Labels.init(map: Instance, heldGetter: () -> string?)
 
 	local acc = 0
 	RunService.RenderStepped:Connect(function(dt)
+		animateCustomers()
 		acc += dt
 		if acc < 0.1 then
 			return
@@ -3645,13 +5640,18 @@ function Labels.init(map: Instance, heldGetter: () -> string?)
 				stationLabels[part] = nil
 			end
 		end
+		local list = {}
 		for model, entry in customerLabels do
 			if model.Parent then
 				updateCustomerLabel(model, entry)
+				if entry.mood ~= "happy" and entry.mood ~= "angry" then
+					table.insert(list, { name = entry.displayName or model.Name, orders = entry.ordersText or "", fraction = entry.fraction or -1, mood = entry.mood })
+				end
 			else
 				customerLabels[model] = nil
 			end
 		end
+		onOrders(list)
 		Labels.refreshPrompts()
 	end)
 end
@@ -3660,27 +5660,33 @@ return Labels
 ]]></string>
           </Properties>
         </Item>
-        <Item class="LocalScript" referent="26">
+        <Item class="LocalScript" referent="33">
           <Properties>
             <string name="Name">Main</string>
             <string name="Source"><![CDATA[--!nonstrict
--- 클라이언트 진입점: HUD·패널·라벨·효과음을 만들고 서버 알림을 받습니다.
+-- 클라이언트 진입점: HUD·패널·라벨·연출·튜토리얼·효과음을 만들고 서버 알림을 받습니다.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Hud = require(script.Parent:WaitForChild("Hud"))
 local Panels = require(script.Parent:WaitForChild("Panels"))
 local Labels = require(script.Parent:WaitForChild("Labels"))
 local Sfx = require(script.Parent:WaitForChild("Sfx"))
+local Fx = require(script.Parent:WaitForChild("Fx"))
+local Tutorial = require(script.Parent:WaitForChild("Tutorial"))
 
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Recipes = require(Shared:WaitForChild("Recipes"))
+local Config = require(Shared:WaitForChild("Config"))
 local remotes = ReplicatedStorage:WaitForChild("GhostDinerRemotes")
 local notify = remotes:WaitForChild("Notify") :: RemoteEvent
 local buyRemote = remotes:WaitForChild("Buy") :: RemoteFunction
+local setHatRemote = remotes:WaitForChild("SetHat") :: RemoteFunction
+local readyRemote = remotes:WaitForChild("Ready") :: RemoteEvent
 local state = ReplicatedStorage:WaitForChild("GhostDinerState")
 local map = workspace:WaitForChild("GhostDinerMap")
 
@@ -3701,7 +5707,8 @@ task.spawn(function()
 end)
 
 local hud = Hud.create(playerGui)
-local panels = Panels.create(hud.gui, state, buyRemote, hud.toast)
+Fx.init(playerGui)
+local panels = Panels.create(hud.gui, state, { buy = buyRemote, setHat = setHatRemote }, player, hud.toast)
 
 -- 손에 든 것 추적
 local heldId: string? = nil
@@ -3732,7 +5739,8 @@ if player.Character then
 end
 player.CharacterAdded:Connect(watchCharacter)
 
-Labels.init(map, heldGetter)
+Labels.init(map, heldGetter, Fx, hud.updateOrders)
+local tutorial = Tutorial.create(hud.gui, state, map, heldGetter, Sfx.play)
 
 -- 상태 갱신
 local function refreshAll()
@@ -3741,16 +5749,34 @@ local function refreshAll()
 end
 state.AttributeChanged:Connect(refreshAll)
 refreshAll()
-local acc = 0
+local acc, tutorialAcc = 0, 0
 RunService.Heartbeat:Connect(function(dt)
 	acc += dt
-	if acc >= 0.25 then
+	tutorialAcc += dt
+	if acc >= 0.2 then
 		acc = 0
 		hud.update(state)
+		-- 평판이 낮으면 화면 가장자리가 붉게 맥동
+		local hp = state:GetAttribute("Hp")
+		local maxHp = state:GetAttribute("MaxHp")
+		if type(hp) == "number" and type(maxHp) == "number" and maxHp > 0 and hp / maxHp < 0.3 and state:GetAttribute("Phase") == "night" then
+			local danger = 1 - (hp / maxHp) / 0.3
+			Fx.setVignette(0.25 + 0.25 * danger + 0.15 * math.sin(os.clock() * 4))
+		else
+			Fx.setVignette(0)
+		end
+	end
+	if tutorialAcc >= 0.25 then
+		tutorialAcc = 0
+		tutorial.update()
 	end
 end)
 
 -- 버튼·단축키
+hud.onReady = function()
+	Sfx.play("ready")
+	readyRemote:FireServer()
+end
 hud.recipeButton.MouseButton1Click:Connect(function()
 	Sfx.play("ui")
 	panels.toggleRecipes()
@@ -3758,6 +5784,10 @@ end)
 hud.shopButton.MouseButton1Click:Connect(function()
 	Sfx.play("ui")
 	panels.toggleShop()
+end)
+hud.wardrobeButton.MouseButton1Click:Connect(function()
+	Sfx.play("ui")
+	panels.toggleWardrobe()
 end)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then
@@ -3769,8 +5799,13 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	elseif input.KeyCode == Enum.KeyCode.B then
 		Sfx.play("ui")
 		panels.toggleShop()
+	elseif input.KeyCode == Enum.KeyCode.C then
+		Sfx.play("ui")
+		panels.toggleWardrobe()
 	end
 end)
+
+local KITCHEN_CENTER = Vector3.new(0, 12, -22)
 
 -- 서버 알림
 notify.OnClientEvent:Connect(function(payload)
@@ -3782,10 +5817,48 @@ notify.OnClientEvent:Connect(function(payload)
 		hud.toast(payload.text, payload.style)
 	elseif kind == "sound" then
 		Sfx.play(payload.name)
-	elseif kind == "coin" then
-		Labels.coinPopup(payload.position, payload.amount, payload.tip or 0)
+	elseif kind == "serve" then
+		local to = payload.to
+		Fx.serveFly(payload.from, to, payload.itemId, function()
+			Fx.sparkle(to, "gold")
+			local amount = payload.amount or 0
+			local text = if (payload.tip or 0) > 0 then string.format("+%d 🪙 (팁 %d)", amount, payload.tip) else string.format("+%d 🪙", amount)
+			Fx.floatText(to + Vector3.new(0, 1.5, 0), text, Fx.Colors.gold, 26)
+		end)
+	elseif kind == "combo" then
+		local count = payload.count or 2
+		Sfx.play("combo", math.min(2.2, 1 + 0.08 * count))
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			Fx.floatText(root.Position + Vector3.new(0, 4, 0), string.format("🔥 콤보 x%d", count), Fx.Colors.orange, 30)
+		end
+	elseif kind == "sparkle" then
+		Fx.sparkle(payload.position, payload.color)
+	elseif kind == "fire" then
+		Sfx.play("fire")
+		Fx.shakeAt(payload.position, 0.5, 0.4)
+		Fx.flash(Fx.Colors.orange, 0.25, 0.5)
+		Fx.burst(payload.position + Vector3.new(0, 3, 0), Fx.Colors.orange, 30, 0.8, 8)
+	elseif kind == "smash" then
+		Fx.shakeAt(payload.position, 0.9, 0.5)
+		Fx.burst(payload.position + Vector3.new(0, 2, 0), Fx.Colors.purple, 24, 0.7, 7)
+	elseif kind == "angry" then
+		Fx.flash(Fx.Colors.red, 0.3, 0.5)
+		Fx.shakeAt(payload.position, 0.5, 0.4)
+	elseif kind == "boss" then
+		Sfx.play("boss")
+		Fx.lightning()
+		hud.announce("👑 " .. tostring(payload.name or "산신령") .. " 등장!", "요리 3개를 주문합니다. 실망시키면 크게 후회합니다", Color3.fromRGB(255, 220, 120))
+	elseif kind == "blackout" then
+		Sfx.play("blackout")
+		Fx.setBlackout(payload.on == true)
+		if payload.on then
+			hud.announce("🕯️ 정전!", "불이 다시 들어올 때까지 감으로 요리하세요", Color3.fromRGB(200, 200, 255))
+		end
 	elseif kind == "night" then
 		hud.hideResult()
+		hud.hideSummary()
 		panels.closeAll()
 		local sub = string.format("손님 %d명이 옵니다", payload.total or 0)
 		if payload.newDishes and #payload.newDishes > 0 then
@@ -3800,12 +5873,35 @@ notify.OnClientEvent:Connect(function(payload)
 			sub ..= "  ·  👑 산신령이 옵니다!"
 		end
 		hud.announce(string.format("🌙 %d번째 밤", payload.night or 0), sub, Color3.fromRGB(200, 170, 255))
+		if payload.event then
+			task.delay(3.6, function()
+				hud.announce(payload.event.emoji .. " " .. payload.event.name, payload.event.desc, Color3.fromRGB(255, 200, 120))
+				Sfx.play("night")
+			end)
+		end
+		if payload.challenge then
+			hud.toast(string.format("🎯 밤 목표: %s — %s (+%d 코인)", payload.challenge.name, payload.challenge.desc, payload.challenge.reward), "info")
+		end
 		panels.rebuildRecipes()
+		if (payload.night or 0) == 1 and tutorial.shouldShow(player) then
+			tutorial.start()
+		end
+	elseif kind == "clear" then
+		Fx.confetti(KITCHEN_CENTER)
+		Fx.flash(Fx.Colors.gold, 0.2, 0.8)
+		hud.showSummary(payload)
 	elseif kind == "day" then
-		hud.announce("☀️ 낮이 되었습니다", "상점에서 업그레이드하고 재료를 미리 준비하세요", Color3.fromRGB(255, 230, 150))
-		panels.openShop()
+		hud.announce("☀️ 낮이 되었습니다", "상점에서 업그레이드하고 재료를 미리 준비하세요 · 모두 준비되면 바로 시작", Color3.fromRGB(255, 230, 150))
+		task.delay(1.5, function()
+			if state:GetAttribute("Phase") == "day" then
+				panels.openShop()
+			end
+		end)
 	elseif kind == "result" then
 		panels.closeAll()
+		hud.hideSummary()
+		Fx.flash(Fx.Colors.red, 0.5, 1.5)
+		Fx.shake(1.2, 0.8)
 		hud.showResult(payload)
 	end
 end)
@@ -3817,22 +5913,58 @@ state:GetAttributeChangedSignal("Phase"):Connect(function()
 		hud.hideResult()
 	end
 	if phase == "countdown" then
-		hud.announce("🏮 개장 준비", "재료를 미리 꺼내 두면 첫 손님을 빨리 받을 수 있어요", Color3.fromRGB(255, 230, 150))
+		hud.announce("🏮 개장 준비", "재료를 미리 꺼내 두면 첫 손님을 빨리 받을 수 있어요 · 준비되면 ✅ 버튼", Color3.fromRGB(255, 230, 150))
 	end
 end)
+
+-- 평판이 깎이면 화면이 붉게 번쩍
+local lastHp = nil
+state:GetAttributeChangedSignal("Hp"):Connect(function()
+	local hp = state:GetAttribute("Hp")
+	if type(hp) == "number" and lastHp ~= nil and hp < lastHp then
+		Fx.flash(Fx.Colors.red, 0.3, 0.5)
+	end
+	lastHp = hp
+end)
+
+-- 장식 애니메이션 (클라이언트에서만): 룬 맥동, 저승 문 빛 맥동
+task.spawn(function()
+	local decor = map:WaitForChild("Decor", 10)
+	if not decor then
+		return
+	end
+	local i = 0
+	for _, d in decor:GetChildren() do
+		if d:IsA("BasePart") and d.Name == "Rune" then
+			i += 1
+			local tween = TweenService:Create(d, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, i * 0.2), { Transparency = 0.75 })
+			tween:Play()
+		elseif d:IsA("BasePart") and d.Name == "Portal" then
+			local light = d:FindFirstChildOfClass("PointLight")
+			if light then
+				TweenService:Create(light, TweenInfo.new(2.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Brightness = 2.2 }):Play()
+			end
+		end
+	end
+end)
+
+-- 배경음악 (Config.MusicId 에 오디오 ID 를 넣으면 재생)
+Sfx.startMusic(Config.MusicId, Config.MusicVolume)
 
 -- 도움말 순환
 local HINTS = {
 	"E: 조리대 사용 · 손에는 한 가지만 들 수 있어요",
-	"익힌 음식을 오래 두면 타요! 완성되면 바로 꺼내세요",
-	"인내심이 많이 남았을 때 서빙하면 팁을 더 받아요",
+	"익힌 음식을 오래 두면 타고, 탄 음식을 방치하면 불이 나요!",
+	"인내심이 많이 남았을 때 서빙하면 팁을 더 받아요 · 12초 안에 연속 서빙하면 콤보!",
 	"역할을 나누세요: 재료 담당 · 조리 담당 · 서빙 담당",
 	"화난 손님은 조리대를 부숩니다 — 잠시 못 써요",
-	"낮에는 상점(B)에서 팀 업그레이드 · 급하면 밤에도 살 수 있어요",
+	"낮에는 상점(B)에서 팀 업그레이드 · 모두 ✅ 준비 완료면 바로 다음 밤",
 	"조리대(합치기)에 재료를 올리면 레시피가 맞을 때 자동으로 합쳐져요",
-	"잘못된 요리를 내밀면 손님 인내심이 줄어요 — 주문을 확인하세요",
-	"손님 머리 위의 초록 바가 인내심이에요. 빨개지면 서둘러요!",
+	"잘못된 요리를 내밀면 손님 인내심이 줄어요 — 주문 목록(왼쪽)을 확인하세요",
+	"불이 나면 벽의 🧯 소화기함에서 소화기를 꺼내 E를 길게 누르세요",
 	"밥솥의 밥은 타지 않아요. 미리 지어 두세요",
+	"명성을 모으면 옷장(C)에서 새 모자를 쓸 수 있어요",
+	"구미호는 기다리다 마음을 바꿉니다 — 주문이 바뀌면 ❗ 표시",
 }
 task.spawn(function()
 	local i = 1
@@ -3845,16 +5977,17 @@ end)
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="27">
+        <Item class="ModuleScript" referent="34">
           <Properties>
             <string name="Name">Panels</string>
             <string name="Source"><![CDATA[--!nonstrict
--- 레시피 책과 상점 패널.
+-- 레시피 책, 상점, 옷장 패널.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Recipes = require(Shared:WaitForChild("Recipes"))
 local Upgrades = require(Shared:WaitForChild("Upgrades"))
+local Cosmetics = require(Shared:WaitForChild("Cosmetics"))
 
 local Panels = {}
 
@@ -3876,13 +6009,17 @@ local function corner(parent: Instance, radius: number?)
 	mk("UICorner", { CornerRadius = UDim.new(0, radius or 10) }, parent)
 end
 
+local function num(v: any, default: number): number
+	return if type(v) == "number" then v else default
+end
+
 local function panelFrame(gui: Instance, name: string, title: string, side: string): (Frame, ScrollingFrame)
 	local frame = mk("Frame", {
 		Name = name,
 		Visible = false,
 		AnchorPoint = if side == "left" then Vector2.new(0, 0) else Vector2.new(1, 0),
-		Position = if side == "left" then UDim2.new(0, 12, 0, 96) else UDim2.new(1, -12, 0, 146),
-		Size = UDim2.new(0, 380, 1, -160),
+		Position = if side == "left" then UDim2.new(0, 12, 0, 96) else UDim2.new(1, -12, 0, 196),
+		Size = UDim2.new(0, 380, 1, -210),
 		BackgroundColor3 = Color3.fromRGB(24, 20, 36),
 		BackgroundTransparency = 0.08,
 		ZIndex = 10,
@@ -3890,7 +6027,7 @@ local function panelFrame(gui: Instance, name: string, title: string, side: stri
 	corner(frame, 14)
 	mk("UISizeConstraint", { MaxSize = Vector2.new(380, 560), MinSize = Vector2.new(260, 220) }, frame)
 	mk("UIStroke", { Color = Color3.fromRGB(150, 90, 220), Thickness = 1.5, Transparency = 0.2 }, frame)
-	mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 14, 0, 8), Size = UDim2.new(1, -28, 0, 34), Font = FONT, TextSize = 22, TextColor3 = Color3.fromRGB(255, 225, 160), TextXAlignment = Enum.TextXAlignment.Left, Text = title, ZIndex = 11 }, frame)
+	mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 14, 0, 8), Size = UDim2.new(1, -60, 0, 34), Font = FONT, TextSize = 20, TextColor3 = Color3.fromRGB(255, 225, 160), TextXAlignment = Enum.TextXAlignment.Left, Text = title, ZIndex = 11 }, frame)
 	local close = mk("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 10), Size = UDim2.new(0, 30, 0, 30), BackgroundColor3 = Color3.fromRGB(90, 40, 60), Font = FONT, TextSize = 16, Text = "✕", TextColor3 = Color3.fromRGB(255, 255, 255), ZIndex = 11 }, frame) :: TextButton
 	corner(close, 8)
 	close.MouseButton1Click:Connect(function()
@@ -3911,16 +6048,15 @@ local function panelFrame(gui: Instance, name: string, title: string, side: stri
 	return frame, scroll
 end
 
-function Panels.create(gui: Instance, state: Instance, buyRemote: RemoteFunction, toast: (string, string?) -> ())
+function Panels.create(gui: Instance, state: Instance, remotes, player: Player, toast: (string, string?) -> ())
 	local self = {}
 
-	-- 레시피 책
+	-- ---------- 레시피 책 ----------
 	local recipeFrame, recipeScroll = panelFrame(gui, "RecipePanel", "📖 레시피 책", "left")
 	self.recipeFrame = recipeFrame
 	local lastNight = -1
 	local function rebuildRecipes()
-		local rawNight = state:GetAttribute("Night")
-		local night = if type(rawNight) == "number" then math.max(1, rawNight) else 1
+		local night = math.max(1, num(state:GetAttribute("Night"), 1))
 		if night == lastNight then
 			return
 		end
@@ -3942,9 +6078,8 @@ function Panels.create(gui: Instance, state: Instance, buyRemote: RemoteFunction
 				titleText ..= string.format("  (🔒 %d번째 밤부터)", item.unlock or 1)
 			end
 			mk("TextLabel", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 24), Font = FONT, TextSize = 18, TextColor3 = if unlocked then Color3.fromRGB(255, 230, 170) else Color3.fromRGB(150, 140, 160), TextXAlignment = Enum.TextXAlignment.Left, Text = titleText, LayoutOrder = 1, ZIndex = 13 }, card)
-			local steps = Recipes.describe(dishId)
 			local body = {}
-			for _, s in steps do
+			for _, s in Recipes.describe(dishId) do
 				if not string.find(s, "재료 상자") then
 					table.insert(body, "• " .. s)
 				end
@@ -3954,16 +6089,14 @@ function Panels.create(gui: Instance, state: Instance, buyRemote: RemoteFunction
 	end
 	self.rebuildRecipes = rebuildRecipes
 
-	-- 상점
+	-- ---------- 상점 ----------
 	local shopFrame, shopScroll = panelFrame(gui, "ShopPanel", "🛒 상점 (팀 코인으로 구매)", "right")
 	self.shopFrame = shopFrame
 	local rows = {}
 	local function refreshShop()
-		local rawCoins = state:GetAttribute("Coins")
-		local coins = if type(rawCoins) == "number" then rawCoins else 0
+		local coins = num(state:GetAttribute("Coins"), 0)
 		for id, row in rows do
-			local rawLevel = state:GetAttribute("Upg_" .. id)
-			local level = if type(rawLevel) == "number" then rawLevel else 0
+			local level = num(state:GetAttribute("Upg_" .. id), 0)
 			local u = row.upgrade
 			local cost = Upgrades.cost(id, level)
 			if u.max < 99 then
@@ -3992,7 +6125,7 @@ function Panels.create(gui: Instance, state: Instance, buyRemote: RemoteFunction
 			buy.Text = "…"
 			task.spawn(function()
 				local ok, success, message = pcall(function()
-					return buyRemote:InvokeServer(u.id)
+					return remotes.buy:InvokeServer(u.id)
 				end)
 				if not ok then
 					toast("구매 요청 실패", "bad")
@@ -4005,28 +6138,95 @@ function Panels.create(gui: Instance, state: Instance, buyRemote: RemoteFunction
 		rows[u.id] = { name = name, buy = buy, upgrade = u }
 	end
 
+	-- ---------- 옷장 ----------
+	local wardrobeFrame, wardrobeScroll = panelFrame(gui, "WardrobePanel", "🎩 옷장 (명성으로 해금)", "right")
+	self.wardrobeFrame = wardrobeFrame
+	local fameLabel = mk("TextLabel", { BackgroundTransparency = 1, Size = UDim2.new(1, -6, 0, 40), Font = FONT_REG, TextSize = 15, TextWrapped = true, TextColor3 = Color3.fromRGB(255, 235, 190), TextXAlignment = Enum.TextXAlignment.Left, Text = "", LayoutOrder = 0, ZIndex = 12 }, wardrobeScroll) :: TextLabel
+	local hatRows = {}
+	local function refreshWardrobe()
+		local fame = num(player:GetAttribute("Fame"), 0)
+		local current = player:GetAttribute("Hat")
+		local nextHat = Cosmetics.nextUnlock(fame)
+		fameLabel.Text = if nextHat
+			then string.format("✨ 내 명성 %d  ·  다음 해금: %s %s (명성 %d)\n명성은 서빙(+1)과 밤 넘기기(+5+밤)로 쌓입니다", fame, nextHat.emoji, nextHat.name, nextHat.fame)
+			else string.format("✨ 내 명성 %d  ·  모든 모자를 해금했습니다!", fame)
+		for id, row in hatRows do
+			local hat = row.hat
+			local unlocked = Cosmetics.isUnlocked(id, fame)
+			if id == current then
+				row.button.Text = "착용 중"
+				row.button.BackgroundColor3 = Color3.fromRGB(30, 140, 90)
+			elseif unlocked then
+				row.button.Text = "착용"
+				row.button.BackgroundColor3 = Color3.fromRGB(90, 50, 150)
+			else
+				row.button.Text = string.format("🔒 명성 %d", hat.fame)
+				row.button.BackgroundColor3 = Color3.fromRGB(70, 60, 80)
+			end
+			row.name.TextColor3 = if unlocked then Color3.fromRGB(255, 230, 170) else Color3.fromRGB(150, 140, 160)
+		end
+	end
+	self.refreshWardrobe = refreshWardrobe
+	for i, hat in Cosmetics.Hats do
+		local row = mk("Frame", { Size = UDim2.new(1, -6, 0, 58), BackgroundColor3 = Color3.fromRGB(45, 38, 62), BackgroundTransparency = 0.1, LayoutOrder = i, ZIndex = 12 }, wardrobeScroll)
+		corner(row, 10)
+		local name = mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 10, 0, 6), Size = UDim2.new(1, -130, 0, 24), Font = FONT, TextSize = 17, TextColor3 = Color3.fromRGB(255, 230, 170), TextXAlignment = Enum.TextXAlignment.Left, Text = hat.emoji .. " " .. hat.name, ZIndex = 13 }, row) :: TextLabel
+		mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 10, 0, 30), Size = UDim2.new(1, -130, 0, 24), Font = FONT_REG, TextSize = 13, TextWrapped = true, TextColor3 = Color3.fromRGB(215, 210, 225), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = hat.desc, ZIndex = 13 }, row)
+		local button = mk("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.new(0, 108, 0, 40), BackgroundColor3 = Color3.fromRGB(90, 50, 150), Font = FONT, TextSize = 14, TextColor3 = Color3.fromRGB(255, 255, 255), Text = "", ZIndex = 13 }, row) :: TextButton
+		corner(button, 8)
+		button.MouseButton1Click:Connect(function()
+			task.spawn(function()
+				local ok, success, message = pcall(function()
+					return remotes.setHat:InvokeServer(hat.id)
+				end)
+				if not ok then
+					toast("요청 실패", "bad")
+				elseif not success then
+					toast(tostring(message), "bad")
+				else
+					toast(tostring(message), "good")
+				end
+				refreshWardrobe()
+			end)
+		end)
+		hatRows[hat.id] = { name = name, button = button, hat = hat }
+	end
+	player:GetAttributeChangedSignal("Fame"):Connect(refreshWardrobe)
+	player:GetAttributeChangedSignal("Hat"):Connect(refreshWardrobe)
+
+	-- ---------- 열고 닫기 ----------
 	function self.toggleRecipes()
 		rebuildRecipes()
 		recipeFrame.Visible = not recipeFrame.Visible
 	end
 
 	function self.toggleShop()
-		self.refreshShop()
+		refreshShop()
+		wardrobeFrame.Visible = false
 		shopFrame.Visible = not shopFrame.Visible
 	end
 
+	function self.toggleWardrobe()
+		refreshWardrobe()
+		shopFrame.Visible = false
+		wardrobeFrame.Visible = not wardrobeFrame.Visible
+	end
+
 	function self.openShop()
-		self.refreshShop()
+		refreshShop()
+		wardrobeFrame.Visible = false
 		shopFrame.Visible = true
 	end
 
 	function self.closeAll()
 		recipeFrame.Visible = false
 		shopFrame.Visible = false
+		wardrobeFrame.Visible = false
 	end
 
 	rebuildRecipes()
-	self.refreshShop()
+	refreshShop()
+	refreshWardrobe()
 	return self
 end
 
@@ -4034,7 +6234,7 @@ return Panels
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="28">
+        <Item class="ModuleScript" referent="35">
           <Properties>
             <string name="Name">Sfx</string>
             <string name="Source"><![CDATA[--!nonstrict
@@ -4060,12 +6260,21 @@ local SOUNDS = {
 	unlock = { id = "rbxasset://sounds/switch3.wav", volume = 0.6 },
 	clear = { id = "rbxasset://sounds/victory.wav", volume = 0.6 },
 	night = { id = "rbxasset://sounds/HalloweenLightning.wav", volume = 0.45 },
-	boss = { id = "rbxasset://sounds/HalloweenLightning.wav", volume = 0.8, pitch = 0.7 },
+	boss = { id = "rbxasset://sounds/HalloweenLightning.wav", volume = 0.9, pitch = 0.7 },
 	gameover = { id = "rbxasset://sounds/uuhhh.wav", volume = 0.8, pitch = 0.6 },
 	ui = { id = "rbxasset://sounds/clickfast.wav", volume = 0.4 },
+	fire = { id = "rbxasset://sounds/swoosh.wav", volume = 0.8, pitch = 0.55 },
+	extinguish = { id = "rbxasset://sounds/impact_water.mp3", volume = 0.7, pitch = 0.8 },
+	fox = { id = "rbxasset://sounds/snap.wav", volume = 0.6, pitch = 0.7 },
+	challenge = { id = "rbxasset://sounds/victory.wav", volume = 0.5, pitch = 1.2 },
+	hat = { id = "rbxasset://sounds/switch.wav", volume = 0.6, pitch = 1.3 },
+	combo = { id = "rbxasset://sounds/electronicpingshort.wav", volume = 0.5, pitch = 1.0 },
+	ready = { id = "rbxasset://sounds/button.wav", volume = 0.5, pitch = 1.2 },
+	blackout = { id = "rbxasset://sounds/switch.wav", volume = 0.8, pitch = 0.5 },
 }
 
-function Sfx.play(name: string)
+-- pitchMult: 기본 음높이에 곱함 (콤보 등)
+function Sfx.play(name: string, pitchMult: number?)
 	local def = SOUNDS[name]
 	if not def then
 		return
@@ -4073,7 +6282,7 @@ function Sfx.play(name: string)
 	local sound = Instance.new("Sound")
 	sound.SoundId = def.id
 	sound.Volume = def.volume
-	sound.PlaybackSpeed = def.pitch or 1
+	sound.PlaybackSpeed = (def.pitch or 1) * (pitchMult or 1)
 	sound.Parent = SoundService
 	sound.Ended:Once(function()
 		sound:Destroy()
@@ -4086,14 +6295,185 @@ function Sfx.play(name: string)
 	end)
 end
 
+local music: Sound? = nil
+function Sfx.startMusic(id: string, volume: number)
+	if id == nil or id == "" then
+		return
+	end
+	if music then
+		music:Destroy()
+	end
+	local s = Instance.new("Sound")
+	s.Name = "GhostDinerMusic"
+	s.SoundId = id
+	s.Volume = volume
+	s.Looped = true
+	s.Parent = SoundService
+	s:Play()
+	music = s
+end
+
 return Sfx
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="36">
+          <Properties>
+            <string name="Name">Tutorial</string>
+            <string name="Source"><![CDATA[--!nonstrict
+-- 첫 손님 튜토리얼: 처음 온 요리사에게 어묵탕 한 그릇을 서빙하는 4단계를 체크리스트로 안내합니다.
+local Tutorial = {}
+
+local FONT = Enum.Font.GothamBold
+local FONT_REG = Enum.Font.Gotham
+
+local function mk(className: string, props: { [string]: any }, parent: Instance?): Instance
+	local inst = Instance.new(className)
+	for k, v in props do
+		(inst :: any)[k] = v
+	end
+	if parent then
+		inst.Parent = parent
+	end
+	return inst
+end
+
+local STEPS = {
+	{ text = "📦 어묵 상자 앞에서 E — 어묵 꺼내기", check = function(ctx)
+		return ctx.held == "eomuk_raw"
+	end },
+	{ text = "🍲 냄비 앞에서 E — 어묵 넣기", check = function(ctx)
+		return ctx.potBusy
+	end },
+	{ text = "✅ 완성되면 빈손으로 E — 어묵탕 꺼내기 (10초 안에!)", check = function(ctx)
+		return ctx.held == "eomuk"
+	end },
+	{ text = "🍽 카운터 너머 손님 앞에서 E — 서빙!", check = function(ctx)
+		return ctx.served > ctx.servedAtStart
+	end },
+}
+
+function Tutorial.create(gui: Instance, state: Instance, map: Instance, getHeld: () -> string?, playSound: (string) -> ())
+	local self = {}
+	local frame = mk("Frame", { Name = "Tutorial", Visible = false, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 12, 1, -150), Size = UDim2.new(0, 340, 0, 176), BackgroundColor3 = Color3.fromRGB(24, 20, 36), BackgroundTransparency = 0.1, ZIndex = 8 }, gui) :: Frame
+	mk("UICorner", { CornerRadius = UDim.new(0, 12) }, frame)
+	mk("UIStroke", { Color = Color3.fromRGB(255, 200, 90), Thickness = 1.5, Transparency = 0.2 }, frame)
+	local title = mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 8), Size = UDim2.new(1, -60, 0, 26), Font = FONT, TextSize = 18, TextColor3 = Color3.fromRGB(255, 220, 140), TextXAlignment = Enum.TextXAlignment.Left, Text = "👋 첫 손님 튜토리얼", ZIndex = 9 }, frame) :: TextLabel
+	local skip = mk("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 8), Size = UDim2.new(0, 46, 0, 24), BackgroundColor3 = Color3.fromRGB(70, 60, 90), Font = FONT_REG, TextSize = 13, TextColor3 = Color3.fromRGB(230, 225, 240), Text = "건너뛰기", ZIndex = 9 }, frame) :: TextButton
+	mk("UICorner", { CornerRadius = UDim.new(0, 6) }, skip)
+	local lines = {}
+	for i, step in STEPS do
+		local l = mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 36 + (i - 1) * 32), Size = UDim2.new(1, -24, 0, 30), Font = FONT_REG, TextSize = 15, TextWrapped = true, TextColor3 = Color3.fromRGB(200, 195, 215), TextXAlignment = Enum.TextXAlignment.Left, Text = "○ " .. step.text, ZIndex = 9 }, frame) :: TextLabel
+		table.insert(lines, l)
+	end
+
+	local active = false
+	local step = 1
+	local servedAtStart = 0
+	local finished = false
+
+	local function render()
+		for i, l in lines do
+			if i < step then
+				l.Text = "✅ " .. STEPS[i].text
+				l.TextColor3 = Color3.fromRGB(140, 230, 150)
+			elseif i == step then
+				l.Text = "👉 " .. STEPS[i].text
+				l.TextColor3 = Color3.fromRGB(255, 240, 200)
+			else
+				l.Text = "○ " .. STEPS[i].text
+				l.TextColor3 = Color3.fromRGB(160, 155, 175)
+			end
+		end
+	end
+
+	function self.shouldShow(player: Player): boolean
+		local best = player:GetAttribute("BestNight")
+		local fame = player:GetAttribute("Fame")
+		return (best == nil or best == 0) and (fame == nil or fame < 5) and not finished
+	end
+
+	function self.start()
+		if finished then
+			return
+		end
+		active = true
+		step = 1
+		local served = state:GetAttribute("Served")
+		servedAtStart = if type(served) == "number" then served else 0
+		title.Text = "👋 첫 손님 튜토리얼"
+		frame.Visible = true
+		render()
+	end
+
+	function self.finish(skipped: boolean)
+		active = false
+		finished = true
+		if skipped then
+			frame.Visible = false
+			return
+		end
+		title.Text = "🎉 튜토리얼 완료! 이제 진짜 영업입니다"
+		playSound("challenge")
+		task.delay(3.5, function()
+			frame.Visible = false
+		end)
+	end
+
+	skip.MouseButton1Click:Connect(function()
+		self.finish(true)
+	end)
+
+	local function potBusy(): boolean
+		local stationsFolder = map:FindFirstChild("Stations")
+		if not stationsFolder then
+			return false
+		end
+		for _, part in stationsFolder:GetChildren() do
+			if part:GetAttribute("Kind") == "pot" then
+				local st = part:GetAttribute("State")
+				local item = part:GetAttribute("Item")
+				if (st == "cooking" or st == "done") and (item == "eomuk_raw" or item == "eomuk") then
+					return true
+				end
+			end
+		end
+		return false
+	end
+
+	function self.update()
+		if not active then
+			return
+		end
+		local served = state:GetAttribute("Served")
+		local ctx = {
+			held = getHeld(),
+			potBusy = potBusy(),
+			served = if type(served) == "number" then served else 0,
+			servedAtStart = servedAtStart,
+		}
+		local current = STEPS[step]
+		if current and current.check(ctx) then
+			step += 1
+			playSound("ui")
+			render()
+			if step > #STEPS then
+				self.finish(false)
+			end
+		end
+	end
+
+	return self
+end
+
+return Tutorial
 ]]></string>
           </Properties>
         </Item>
       </Item>
     </Item>
   </Item>
-  <Item class="Workspace" referent="29">
+  <Item class="Workspace" referent="37">
     <Properties>
       <string name="Name">Workspace</string>
       <bool name="NeedsPivotMigration">false</bool>

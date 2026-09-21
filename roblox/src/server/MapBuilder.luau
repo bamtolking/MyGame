@@ -32,8 +32,9 @@ export type MapInfo = {
 	queue: { Vector3 },
 	spawnPoint: Vector3,
 	exitPoint: Vector3,
-	lanterns: { PointLight },
 }
+
+local UPRIGHT = CFrame.Angles(0, 0, math.rad(90))
 
 local function part(props: { [string]: any }): Part
 	local p = Instance.new("Part")
@@ -60,6 +61,7 @@ local function setupCollisionGroups()
 	end)
 end
 
+-- ---------- 조명 ----------
 local NIGHT = {
 	ClockTime = 0.5,
 	Brightness = 1.2,
@@ -78,9 +80,22 @@ local DAY = {
 	FogEnd = 700,
 	ExposureCompensation = 0,
 }
+local BLACKOUT = {
+	ClockTime = 0.5,
+	Brightness = 0.08,
+	Ambient = Color3.fromRGB(12, 10, 22),
+	OutdoorAmbient = Color3.fromRGB(14, 12, 28),
+	FogColor = Color3.fromRGB(6, 4, 12),
+	FogEnd = 110,
+	ExposureCompensation = -0.4,
+}
 
 local atmosphere: Atmosphere? = nil
-local lanternLights: { PointLight } = {}
+local lanternLamps: { { light: PointLight, part: Part } } = {}
+local bulbLights: { { light: PointLight, part: Part } } = {}
+local leaderboardLabel: TextLabel? = nil
+local isNightNow = true
+local blackoutActive = false
 
 local function setupLighting()
 	for k, v in NIGHT do
@@ -102,18 +117,56 @@ local function setupLighting()
 	atmosphere = atm
 end
 
+local function applyLanterns()
+	for _, l in lanternLamps do
+		local on = isNightNow and not blackoutActive
+		l.light.Enabled = on
+		l.part.Material = if on then Enum.Material.Neon else Enum.Material.SmoothPlastic
+	end
+end
+
 function MapBuilder.setNight(isNight: boolean)
+	isNightNow = isNight
+	if blackoutActive then
+		return
+	end
 	local target = if isNight then NIGHT else DAY
 	local info = TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 	TweenService:Create(Lighting, info, target):Play()
 	if atmosphere then
 		TweenService:Create(atmosphere, info, { Density = if isNight then 0.32 else 0.18 }):Play()
 	end
-	for _, light in lanternLights do
-		light.Enabled = isNight
+	applyLanterns()
+end
+
+function MapBuilder.setBlackout(on: boolean)
+	if blackoutActive == on then
+		return
+	end
+	blackoutActive = on
+	for _, b in bulbLights do
+		b.light.Enabled = not on
+		b.part.Material = if on then Enum.Material.SmoothPlastic else Enum.Material.Neon
+	end
+	applyLanterns()
+	if on then
+		for k, v in BLACKOUT do
+			(Lighting :: any)[k] = v
+		end
+		if atmosphere then
+			atmosphere.Density = 0.45
+		end
+	else
+		local target = if isNightNow then NIGHT else DAY
+		local info = TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+		TweenService:Create(Lighting, info, target):Play()
+		if atmosphere then
+			TweenService:Create(atmosphere, info, { Density = if isNightNow then 0.32 else 0.18 }):Play()
+		end
 	end
 end
 
+-- ---------- 장식 ----------
 local function makeLantern(parent: Instance, x: number, z: number)
 	part({ Name = "LanternPost", Size = Vector3.new(0.5, 7, 0.5), Position = Vector3.new(x, 3.5, z), Color = Color3.fromRGB(60, 45, 35), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = parent })
 	local lamp = part({ Name = "Lantern", Size = Vector3.new(1.4, 1.8, 1.4), Position = Vector3.new(x, 7.6, z), Color = Color3.fromRGB(255, 120, 60), Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
@@ -123,7 +176,7 @@ local function makeLantern(parent: Instance, x: number, z: number)
 	light.Color = Color3.fromRGB(255, 150, 90)
 	light.Shadows = false
 	light.Parent = lamp
-	table.insert(lanternLights, light)
+	table.insert(lanternLamps, { light = light, part = lamp })
 end
 
 local function makeBulb(parent: Instance, x: number, y: number, z: number)
@@ -134,8 +187,169 @@ local function makeBulb(parent: Instance, x: number, y: number, z: number)
 	light.Color = Color3.fromRGB(255, 235, 190)
 	light.Shadows = false
 	light.Parent = bulb
+	table.insert(bulbLights, { light = light, part = bulb })
 end
 
+local LANTERN_COLORS = { Color3.fromRGB(255, 80, 60), Color3.fromRGB(255, 150, 50), Color3.fromRGB(200, 90, 255) }
+
+local function makeLanternStrings(parent: Instance)
+	for row, z in { 16, 34, 52 } do
+		part({ Name = "StringWire", Size = Vector3.new(86, 0.08, 0.08), Position = Vector3.new(0, 11, z), Color = Color3.fromRGB(30, 30, 30), CanCollide = false, Parent = parent })
+		local i = 0
+		for x = -40, 40, 8 do
+			i += 1
+			local color = LANTERN_COLORS[((i + row) % #LANTERN_COLORS) + 1]
+			part({ Name = "StringCord", Size = Vector3.new(0.08, 1.2, 0.08), Position = Vector3.new(x, 10.4, z), Color = Color3.fromRGB(30, 30, 30), CanCollide = false, Parent = parent })
+			local lamp = part({ Name = "PaperLantern", Size = Vector3.new(1.5, 1.9, 1.5), Shape = Enum.PartType.Ball, Position = Vector3.new(x, 9.1, z), Color = color, Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+			if i % 3 == 1 then
+				local light = Instance.new("PointLight")
+				light.Range = 16
+				light.Brightness = 0.8
+				light.Color = color
+				light.Shadows = false
+				light.Parent = lamp
+				table.insert(lanternLamps, { light = light, part = lamp })
+			end
+		end
+	end
+end
+
+local function makeNeonSign(parent: Instance)
+	local board = part({ Name = "NeonSign", Size = Vector3.new(32, 5.5, 0.6), Position = Vector3.new(0, 8.6, -1), Color = Color3.fromRGB(28, 22, 36), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = parent })
+	for _, face in { Enum.NormalId.Front, Enum.NormalId.Back } do
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = face
+		gui.CanvasSize = Vector2.new(1280, 220)
+		gui.LightInfluence = 0
+		gui.Brightness = 2
+		gui.Parent = board
+		local text = Instance.new("TextLabel")
+		text.Size = UDim2.new(1, 0, 1, 0)
+		text.BackgroundTransparency = 1
+		text.Text = "🏮 저승 휴게소 🏮"
+		text.TextColor3 = Color3.fromRGB(255, 120, 200)
+		text.TextStrokeColor3 = Color3.fromRGB(120, 20, 80)
+		text.TextStrokeTransparency = 0.2
+		text.Font = Enum.Font.GothamBlack
+		text.TextSize = 150
+		text.Parent = gui
+	end
+	local neon = Color3.fromRGB(255, 90, 200)
+	part({ Name = "SignNeon", Size = Vector3.new(33, 0.3, 0.8), Position = Vector3.new(0, 11.5, -1), Color = neon, Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+	part({ Name = "SignNeon", Size = Vector3.new(33, 0.3, 0.8), Position = Vector3.new(0, 5.7, -1), Color = neon, Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+	part({ Name = "SignNeon", Size = Vector3.new(0.3, 6.1, 0.8), Position = Vector3.new(-16.5, 8.6, -1), Color = neon, Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+	part({ Name = "SignNeon", Size = Vector3.new(0.3, 6.1, 0.8), Position = Vector3.new(16.5, 8.6, -1), Color = neon, Material = Enum.Material.Neon, CanCollide = false, Parent = parent })
+	local light = Instance.new("PointLight")
+	light.Range = 30
+	light.Brightness = 1
+	light.Color = neon
+	light.Parent = board
+end
+
+local function makeMoon(parent: Instance)
+	part({ Name = "Moon", Size = Vector3.new(28, 28, 28), Shape = Enum.PartType.Ball, Position = Vector3.new(110, 130, 230), Color = Color3.fromRGB(250, 245, 210), Material = Enum.Material.Neon, CanCollide = false, CanQuery = false, CastShadow = false, Parent = parent })
+	part({ Name = "MoonGlow", Size = Vector3.new(40, 40, 40), Shape = Enum.PartType.Ball, Position = Vector3.new(110, 130, 230), Color = Color3.fromRGB(250, 245, 210), Material = Enum.Material.Neon, Transparency = 0.88, CanCollide = false, CanQuery = false, CastShadow = false, Parent = parent })
+end
+
+local function makeTree(parent: Instance, x: number, z: number)
+	part({ Name = "Trunk", Size = Vector3.new(1.2, 4, 1.2), Position = Vector3.new(x, 2, z), Color = Color3.fromRGB(55, 40, 45), Material = Enum.Material.Wood, Parent = parent })
+	local canopy = Color3.fromRGB(45, 62, 72)
+	part({ Name = "Canopy", Size = Vector3.new(7, 3, 7), Position = Vector3.new(x, 5.5, z), Color = canopy, Parent = parent })
+	part({ Name = "Canopy", Size = Vector3.new(5.4, 3, 5.4), CFrame = CFrame.new(x, 8.5, z) * CFrame.Angles(0, math.rad(45), 0), Color = canopy, Parent = parent })
+	part({ Name = "Canopy", Size = Vector3.new(3.6, 3, 3.6), Position = Vector3.new(x, 11.5, z), Color = canopy, Parent = parent })
+end
+
+local function makeMist(parent: Instance)
+	local volume = part({ Name = "MistVolume", Size = Vector3.new(90, 1, 72), Position = Vector3.new(0, 0.6, 40), Transparency = 1, CanCollide = false, CanQuery = false, Parent = parent })
+	local mist = Instance.new("ParticleEmitter")
+	mist.Rate = 5
+	mist.Lifetime = NumberRange.new(6, 9)
+	mist.Speed = NumberRange.new(0.3, 0.8)
+	mist.Size = NumberSequence.new(8, 13)
+	mist.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.3, 0.86), NumberSequenceKeypoint.new(1, 1) })
+	mist.Color = ColorSequence.new(Color3.fromRGB(150, 140, 190))
+	mist.Rotation = NumberRange.new(0, 360)
+	mist.RotSpeed = NumberRange.new(-5, 5)
+	mist.SpreadAngle = Vector2.new(60, 60)
+	mist.Parent = volume
+end
+
+local function makeFireflies(parent: Instance)
+	local volume = part({ Name = "FireflyVolume", Size = Vector3.new(88, 6, 70), Position = Vector3.new(0, 5, 40), Transparency = 1, CanCollide = false, CanQuery = false, Parent = parent })
+	local fly = Instance.new("ParticleEmitter")
+	fly.Rate = 5
+	fly.Lifetime = NumberRange.new(5, 8)
+	fly.Speed = NumberRange.new(0.5, 1.5)
+	fly.Size = NumberSequence.new(0.22)
+	fly.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.2, 0), NumberSequenceKeypoint.new(0.5, 1), NumberSequenceKeypoint.new(0.8, 0), NumberSequenceKeypoint.new(1, 1) })
+	fly.Color = ColorSequence.new(Color3.fromRGB(220, 255, 140))
+	fly.LightEmission = 1
+	fly.Acceleration = Vector3.new(0, 0.2, 0)
+	fly.SpreadAngle = Vector2.new(180, 180)
+	fly.Parent = volume
+end
+
+local function makeRunes(parent: Instance)
+	local i = 0
+	for z = 12, 66, 9 do
+		i += 1
+		local x = if i % 2 == 0 then 3 else -3
+		part({ Name = "Rune", Size = Vector3.new(2.4, 0.12, 2.4), CFrame = CFrame.new(x, 0.14, z) * CFrame.Angles(0, math.rad(45), 0), Color = Color3.fromRGB(170, 90, 255), Material = Enum.Material.Neon, Transparency = 0.35, CanCollide = false, CanQuery = false, Parent = parent })
+	end
+end
+
+local function makeLeaderboardBoard(parent: Instance)
+	local board = part({ Name = "LeaderboardBoard", Size = Vector3.new(0.5, 10, 24), Position = Vector3.new(47.7, 7, -23), Color = Color3.fromRGB(30, 26, 40), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = parent })
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Left
+	gui.CanvasSize = Vector2.new(960, 400)
+	gui.LightInfluence = 0
+	gui.Brightness = 1.5
+	gui.Parent = board
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0, 60)
+	title.BackgroundTransparency = 1
+	title.Text = "🏆 최고 밤 순위표 (전체 서버)"
+	title.TextColor3 = Color3.fromRGB(255, 220, 150)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 40
+	title.Parent = gui
+	local body = Instance.new("TextLabel")
+	body.Position = UDim2.new(0, 30, 0, 66)
+	body.Size = UDim2.new(1, -60, 1, -76)
+	body.BackgroundTransparency = 1
+	body.Text = "불러오는 중…"
+	body.TextColor3 = Color3.fromRGB(240, 235, 250)
+	body.Font = Enum.Font.Gotham
+	body.TextSize = 28
+	body.TextXAlignment = Enum.TextXAlignment.Left
+	body.TextYAlignment = Enum.TextYAlignment.Top
+	body.TextWrapped = true
+	body.Parent = gui
+	leaderboardLabel = body
+end
+
+function MapBuilder.setLeaderboard(entries)
+	if not leaderboardLabel then
+		return
+	end
+	if entries == nil then
+		leaderboardLabel.Text = "순위표를 불러올 수 없어요.\n(게임 설정 > 보안 > Studio의 API 서비스 접근 허용)"
+		return
+	end
+	if #entries == 0 then
+		leaderboardLabel.Text = "아직 기록이 없습니다. 첫 기록의 주인공이 되어 보세요!"
+		return
+	end
+	local lines = {}
+	for i, e in entries do
+		local medal = if i == 1 then "🥇" elseif i == 2 then "🥈" elseif i == 3 then "🥉" else string.format("%2d.", i)
+		table.insert(lines, string.format("%s %s — %d번째 밤", medal, e.name, e.value))
+	end
+	leaderboardLabel.Text = table.concat(lines, "\n")
+end
+
+-- ---------- 조리대 ----------
 local STATION_STYLE = {
 	crate = { color = Color3.fromRGB(140, 100, 60), material = Enum.Material.WoodPlanks },
 	board = { color = Color3.fromRGB(180, 180, 185), material = Enum.Material.Slate },
@@ -145,6 +359,7 @@ local STATION_STYLE = {
 	fryer = { color = Color3.fromRGB(170, 170, 175), material = Enum.Material.DiamondPlate },
 	ricecooker = { color = Color3.fromRGB(235, 235, 240), material = Enum.Material.SmoothPlastic },
 	trash = { color = Color3.fromRGB(50, 90, 60), material = Enum.Material.Metal },
+	extinguisher = { color = Color3.fromRGB(210, 40, 40), material = Enum.Material.SmoothPlastic },
 }
 
 local function makeStation(parent: Folder, kind: string, index: number, x: number, z: number, crateItem: string?, locked: boolean): StationSpec
@@ -171,7 +386,7 @@ local function makeStation(parent: Folder, kind: string, index: number, x: numbe
 		part({ Name = "Knife", Size = Vector3.new(1.4, 0.1, 0.3), Position = Vector3.new(x + 0.6, 3.35, z + 1.4), Color = Color3.fromRGB(220, 220, 230), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 2.4, 0)
 	elseif kind == "pot" then
-		part({ Name = "Pot", Size = Vector3.new(1.3, 2.8, 2.8), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.65, z) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(35, 35, 40), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		part({ Name = "Pot", Size = Vector3.new(1.3, 2.8, 2.8), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.65, z) * UPRIGHT, Color = Color3.fromRGB(35, 35, 40), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 3.6, 0)
 	elseif kind == "griddle" then
 		part({ Name = "Plate", Size = Vector3.new(3.4, 0.3, 3.4), Position = Vector3.new(x, 3.15, z), Color = Color3.fromRGB(30, 30, 30), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
@@ -180,19 +395,26 @@ local function makeStation(parent: Folder, kind: string, index: number, x: numbe
 		part({ Name = "Oil", Size = Vector3.new(3, 0.3, 3), Position = Vector3.new(x, 3.15, z), Color = Color3.fromRGB(240, 200, 90), Material = Enum.Material.Glass, Transparency = 0.2, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 2.5, 0)
 	elseif kind == "ricecooker" then
-		part({ Name = "Cooker", Size = Vector3.new(2, 2.6, 2.6), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 4, z) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(245, 245, 250), Material = Enum.Material.SmoothPlastic, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		part({ Name = "Cooker", Size = Vector3.new(2, 2.6, 2.6), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 4, z) * UPRIGHT, Color = Color3.fromRGB(245, 245, 250), Material = Enum.Material.SmoothPlastic, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		part({ Name = "Button", Size = Vector3.new(0.5, 0.5, 0.2), Position = Vector3.new(x, 4, z + 1.35), Color = Color3.fromRGB(230, 60, 60), Material = Enum.Material.Neon, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 4.1, 0)
 	elseif kind == "trash" then
 		base.Shape = Enum.PartType.Cylinder
 		base.Size = Vector3.new(3.2, 3, 3)
-		base.CFrame = CFrame.new(x, 1.6, z) * CFrame.Angles(0, 0, math.rad(90))
-		part({ Name = "Rim", Size = Vector3.new(0.2, 3.2, 3.2), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.2, z) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(35, 60, 40), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		base.CFrame = CFrame.new(x, 1.6, z) * UPRIGHT
+		part({ Name = "Rim", Size = Vector3.new(0.2, 3.2, 3.2), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x, 3.2, z) * UPRIGHT, Color = Color3.fromRGB(35, 60, 40), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 	elseif kind == "combine" then
 		part({ Name = "Top", Size = Vector3.new(4.2, 0.2, 4.2), Position = Vector3.new(x, 3.1, z), Color = Color3.fromRGB(200, 205, 215), Material = Enum.Material.Metal, CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 		displayOffset = Vector3.new(0, 2.3, 0)
+	elseif kind == "extinguisher" then
+		-- 벽에 붙은 빨간 소화기함
+		base.Size = Vector3.new(1.2, 2.6, 2.2)
+		base.CFrame = CFrame.new(x, 4.2, z)
+		local inward = if x < 0 then 1 else -1
+		part({ Name = "Stripe", Size = Vector3.new(1.25, 0.5, 2.25), Position = Vector3.new(x, 4.2, z), Color = Color3.fromRGB(250, 250, 250), CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		part({ Name = "Tank", Size = Vector3.new(1.4, 0.55, 0.55), Shape = Enum.PartType.Cylinder, CFrame = CFrame.new(x + inward * 0.9, 4.0, z) * UPRIGHT, Color = Color3.fromRGB(230, 50, 50), CanCollide = false, CollisionGroup = "Furniture", Parent = base })
+		part({ Name = "Nozzle", Size = Vector3.new(0.2, 0.5, 0.2), Position = Vector3.new(x + inward * 1.1, 4.9, z), Color = Color3.fromRGB(30, 30, 30), CanCollide = false, CollisionGroup = "Furniture", Parent = base })
 	end
-	-- 잠긴 조리대는 반투명
 	if locked then
 		for _, p in base:GetDescendants() do
 			if p:IsA("BasePart") then
@@ -329,7 +551,6 @@ function MapBuilder.build(): MapInfo
 	-- 카운터 (주방과 손님 구역을 가름. 손님(귀신)은 통과, 플레이어는 못 넘음)
 	part({ Name = "Counter", Size = Vector3.new(74, 3, 2), Position = Vector3.new(0, 1.5, -1), Color = Color3.fromRGB(110, 75, 45), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = decor })
 	part({ Name = "CounterTop", Size = Vector3.new(74.6, 0.3, 2.8), Position = Vector3.new(0, 3.15, -1), Color = Color3.fromRGB(190, 150, 100), Material = Enum.Material.WoodPlanks, CollisionGroup = "Furniture", Parent = decor })
-	-- 카운터 양끝을 막는 기둥 (플레이어가 손님 구역으로 못 나가게)
 	part({ Name = "CounterEndL", Size = Vector3.new(12, 3, 2), Position = Vector3.new(-43, 1.5, -1), Color = Color3.fromRGB(110, 75, 45), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = decor })
 	part({ Name = "CounterEndR", Size = Vector3.new(12, 3, 2), Position = Vector3.new(43, 1.5, -1), Color = Color3.fromRGB(110, 75, 45), Material = Enum.Material.Wood, CollisionGroup = "Furniture", Parent = decor })
 
@@ -361,7 +582,7 @@ function MapBuilder.build(): MapInfo
 	portalLight.Color = Color3.fromRGB(170, 100, 255)
 	portalLight.Parent = portal
 	local portalFx = Instance.new("ParticleEmitter")
-	portalFx.Rate = 12
+	portalFx.Rate = 14
 	portalFx.Lifetime = NumberRange.new(1.5, 3)
 	portalFx.Speed = NumberRange.new(1, 2)
 	portalFx.Size = NumberSequence.new(0.6, 0)
@@ -370,8 +591,18 @@ function MapBuilder.build(): MapInfo
 	portalFx.LightEmission = 0.8
 	portalFx.SpreadAngle = Vector2.new(60, 60)
 	portalFx.Parent = portal
+	local portalSwirl = Instance.new("ParticleEmitter")
+	portalSwirl.Rate = 6
+	portalSwirl.Lifetime = NumberRange.new(2, 3)
+	portalSwirl.Speed = NumberRange.new(0.2, 0.6)
+	portalSwirl.Size = NumberSequence.new(3, 0)
+	portalSwirl.Transparency = NumberSequence.new(0.7, 1)
+	portalSwirl.Color = ColorSequence.new(Color3.fromRGB(120, 60, 220))
+	portalSwirl.RotSpeed = NumberRange.new(60, 120)
+	portalSwirl.LightEmission = 0.5
+	portalSwirl.Parent = portal
 
-	-- 등불
+	-- 등불·장식
 	for _, z in { 6, 24, 42, 58 } do
 		makeLantern(decor, -16, z)
 		makeLantern(decor, 16, z)
@@ -380,9 +611,21 @@ function MapBuilder.build(): MapInfo
 		makeBulb(decor, x, 9.5, -9)
 		makeBulb(decor, x, 9.5, -37)
 	end
-	for _, z in { -8, -37 } do
-		part({ Name = "Wire", Size = Vector3.new(84, 0.1, 0.1), Position = Vector3.new(0, 9.8, z + (if z == -8 then -1 else 0)), Color = Color3.fromRGB(30, 30, 30), CanCollide = false, Parent = decor })
+	for _, z in { -9, -37 } do
+		part({ Name = "Wire", Size = Vector3.new(84, 0.1, 0.1), Position = Vector3.new(0, 9.8, z), Color = Color3.fromRGB(30, 30, 30), CanCollide = false, Parent = decor })
 	end
+	makeLanternStrings(decor)
+	makeNeonSign(decor)
+	makeMoon(decor)
+	for _, z in { 10, 24, 38, 52, 66, 78 } do
+		makeTree(decor, -44, z)
+		makeTree(decor, 44, z)
+	end
+	makeMist(decor)
+	makeFireflies(decor)
+	makeRunes(decor)
+	makeLeaderboardBoard(decor)
+	makeMenuBoard(decor)
 
 	-- 플레이어 스폰
 	local spawn = Instance.new("SpawnLocation")
@@ -397,8 +640,6 @@ function MapBuilder.build(): MapInfo
 	spawn.TopSurface = Enum.SurfaceType.Smooth
 	spawn.Parent = decor
 
-	makeMenuBoard(decor)
-
 	-- 조리대 배치
 	local stations: { StationSpec } = {}
 	local function add(kind: string, index: number, x: number, z: number, crateItem: string?, locked: boolean?)
@@ -408,12 +649,14 @@ function MapBuilder.build(): MapInfo
 	for i, itemId in Recipes.CrateItems do
 		add("crate", i, -32 + (i - 1) * 8, -42, itemId)
 	end
-	-- 왼쪽 벽: 도마 2, 쓰레기통 / 오른쪽 벽: 밥솥(1 + 잠금 1), 쓰레기통
+	-- 왼쪽 벽: 도마 2, 소화기함, 쓰레기통 / 오른쪽 벽: 밥솥(1 + 잠금 1), 소화기함, 쓰레기통
 	add("board", 1, -42, -32)
 	add("board", 2, -42, -26)
+	add("extinguisher", 1, -46.8, -20)
 	add("trash", 1, -42, -14)
 	add("ricecooker", 1, 42, -32)
 	add("ricecooker", 2, 42, -26, nil, true)
+	add("extinguisher", 2, 46.8, -20)
 	add("trash", 2, 42, -14)
 	-- 가운데 섬 A(Z=-30): 튀김기(1+1), 냄비(1+2), 화덕(1+1)
 	add("fryer", 1, -30, -30)
@@ -439,7 +682,6 @@ function MapBuilder.build(): MapInfo
 		queue = queue,
 		spawnPoint = Vector3.new(0, 3, 72),
 		exitPoint = Vector3.new(0, 3, 74),
-		lanterns = lanternLights,
 	}
 end
 

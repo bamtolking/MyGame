@@ -1,5 +1,5 @@
 --!nonstrict
--- 서버 진입점. 지도 생성 → 조리대·손님·저장·상점 초기화 → 게임 루프 시작.
+-- 서버 진입점. 지도 생성 → 조리대·손님·저장·상점·옷장 초기화 → 게임 루프 시작.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -9,6 +9,7 @@ local Stations = require(script.Parent.Stations)
 local GameLoop = require(script.Parent.GameLoop)
 local Data = require(script.Parent.Data)
 local Shop = require(script.Parent.Shop)
+local Wardrobe = require(script.Parent.Wardrobe)
 
 local map = MapBuilder.build()
 Stations.init(map)
@@ -17,6 +18,7 @@ GameLoop.init(map, function()
 end)
 Data.init()
 Shop.init(GameLoop.publish)
+Wardrobe.init()
 
 local function onCharacter(player: Player, character: Model)
 	for _, d in character:GetDescendants() do

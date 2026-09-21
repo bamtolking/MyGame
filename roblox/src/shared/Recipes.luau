@@ -7,7 +7,7 @@ export type Rgb = { number }
 export type Item = {
 	id: string,
 	name: string,
-	kind: "raw" | "mid" | "dish" | "burnt",
+	kind: "raw" | "mid" | "dish" | "burnt" | "tool",
 	color: Rgb, -- {r, g, b} 0~255
 	shape: string, -- box | ball | cyl | flat | bag | jar | bowl | plate | lump
 	chopTo: string?, -- 도마에서 썰면 되는 것
@@ -31,6 +31,7 @@ Recipes.StationNames = {
 	fryer = "튀김기",
 	ricecooker = "밥솥",
 	trash = "쓰레기통",
+	extinguisher = "소화기함",
 }
 
 local itemList: { Item } = {
@@ -63,6 +64,9 @@ local itemList: { Item } = {
 
 	-- 실패
 	{ id = "burnt", name = "탄 음식", kind = "burnt", color = { 25, 20, 20 }, shape = "lump", emoji = "💀" },
+
+	-- 도구
+	{ id = "extinguisher", name = "소화기", kind = "tool", color = { 220, 40, 40 }, shape = "tank", emoji = "🧯" },
 }
 
 Recipes.List = itemList

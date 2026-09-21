@@ -13,6 +13,7 @@ export type CustomerType = {
 	minNight: number, -- 이 밤부터 등장
 	weight: number, -- 등장 가중치(밤에 따라 보정)
 	boss: boolean?,
+	quirk: string?, -- mindChange: 인내심 절반에서 주문을 바꿈
 	look: {
 		body: { number },
 		head: { number },
@@ -75,6 +76,7 @@ local customerList: { CustomerType } = {
 		smash = 1,
 		minNight = 6,
 		weight = 4,
+		quirk = "mindChange",
 		look = { body = { 235, 140, 60 }, head = { 245, 200, 150 }, scale = 1.0, hover = 0.7, feature = "tails" },
 	},
 	{

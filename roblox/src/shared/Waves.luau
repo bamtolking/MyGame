@@ -73,18 +73,32 @@ local function pickDish(rng: Rng, pool: { string }, night: number): string
 	return weightedPick(rng, entries)
 end
 
-function Waves.plan(night: number, playerCount: number, rng: Rng): Plan
+export type EventMods = { countMult: number?, spawnMult: number?, extraOrder: boolean? }
+
+function Waves.plan(night: number, playerCount: number, rng: Rng, mods: EventMods?): Plan
 	local pool = Recipes.dishesForNight(night)
 	local count = Waves.customerCount(night, playerCount)
 	local interval = Waves.spawnInterval(night)
+	if mods then
+		if mods.countMult then
+			count = math.clamp(math.floor(count * mods.countMult + 0.5), 3, 40)
+		end
+		if mods.spawnMult then
+			interval = math.max(2.5, interval * mods.spawnMult)
+		end
+	end
 	local weights = CustomerTypes.weightsForNight(night)
 	local customers: { CustomerSpec } = {}
 
 	for i = 1, count do
 		local typeId = weightedPick(rng, weights)
 		local ctype = CustomerTypes.get(typeId)
+		local orderCount = ctype.orders
+		if mods and mods.extraOrder then
+			orderCount = math.min(3, orderCount + 1)
+		end
 		local dishes = {}
-		for _ = 1, ctype.orders do
+		for _ = 1, orderCount do
 			table.insert(dishes, pickDish(rng, pool, night))
 		end
 		-- 첫 손님은 바로, 그 뒤는 간격 ± 25%

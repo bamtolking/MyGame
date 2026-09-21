@@ -359,6 +359,34 @@ local function arrived(rec)
 	end
 end
 
+-- 구미호: 인내심이 절반이 되면 주문 하나를 바꿈 (대신 8초를 더 기다려 줌)
+local function changeMind(rec)
+	rec.changedMind = true
+	local pool = rec.pool or {}
+	if #rec.orders == 0 or #pool < 2 then
+		return
+	end
+	local idx = rng:NextInteger(1, #rec.orders)
+	local current = rec.orders[idx]
+	local choices = {}
+	for _, d in pool do
+		if d ~= current then
+			table.insert(choices, d)
+		end
+	end
+	if #choices == 0 then
+		return
+	end
+	local newDish = choices[rng:NextInteger(1, #choices)]
+	rec.orders[idx] = newDish
+	setOrdersAttr(rec)
+	rec.deadlineAt += 8
+	rec.model:SetAttribute("DeadlineAt", rec.deadlineAt)
+	rec.model:SetAttribute("Twist", now())
+	Remotes.toastAll(string.format("🦊 %s이(가) 마음을 바꿨어요! %s 대신 %s을(를) 원해요", rec.ctype.name, Recipes.name(current), Recipes.name(newDish)), "bad")
+	Remotes.soundAll("fox")
+end
+
 local lastTick = 0
 local function update()
 	local t = now()
@@ -395,6 +423,8 @@ local function update()
 		elseif st == "waiting" then
 			if t >= rec.deadlineAt then
 				becomeAngry(rec)
+			elseif rec.ctype.quirk == "mindChange" and not rec.changedMind and (rec.deadlineAt - t) / rec.total <= 0.5 then
+				changeMind(rec)
 			end
 		end
 	end
@@ -427,8 +457,11 @@ function Customers.tryServe(rec, player: Player)
 	local fraction = math.clamp((rec.deadlineAt - now()) / rec.total, 0, 1)
 	local base = math.floor(Recipes.price(held) * rec.ctype.rewardMult + 0.5)
 	local tip = math.floor(base * Config.TipMax * fraction + 0.5)
-	deps.onServed(rec, player, held, base + tip, tip)
-	Remotes.coinPopup(rec.root.Position + Vector3.new(0, 4, 0), base + tip, tip)
+	local coins = deps.onServed(rec, player, held, base, tip, fraction)
+	local character = player.Character
+	local fromPart = character and character:FindFirstChild("HumanoidRootPart")
+	local from = if fromPart and fromPart:IsA("BasePart") then fromPart.Position else rec.root.Position
+	Remotes.notifyAll({ kind = "serve", from = from, to = rec.root.Position + Vector3.new(0, 2, 0), itemId = held, amount = coins or 0, tip = tip })
 	Remotes.soundAll("serve")
 	setOrdersAttr(rec)
 	if #rec.orders == 0 then
@@ -442,7 +475,8 @@ function Customers.init(mapInfo, callbacks)
 	RunService.Heartbeat:Connect(update)
 end
 
-function Customers.spawn(spec, night: number)
+function Customers.spawn(spec, night: number, opts)
+	opts = opts or {}
 	local ctype = CustomerTypes.get(spec.typeId)
 	local model, root, humanoid = buildRig(ctype)
 	seq += 1
@@ -457,7 +491,9 @@ function Customers.spawn(spec, night: number)
 		state = "toSpot",
 		spot = nil,
 		target = map.spawnPoint,
-		total = Waves.patienceFor(spec.typeId, night, GameState.level("smile"), Upgrades.patienceMult),
+		total = Waves.patienceFor(spec.typeId, night, GameState.level("smile"), Upgrades.patienceMult) * (opts.patienceMult or 1),
+		pool = opts.pool or Recipes.dishesForNight(night),
+		changedMind = false,
 		deadlineAt = 0,
 		smashLeft = ctype.smash,
 		targetStation = nil,
@@ -501,7 +537,7 @@ function Customers.spawn(spec, night: number)
 	end
 	if ctype.boss then
 		Remotes.toastAll("⚠️ " .. ctype.name .. "이(가) 오셨습니다! 요리 " .. #rec.orders .. "개를 주문합니다", "bad")
-		Remotes.soundAll("boss")
+		Remotes.notifyAll({ kind = "boss", name = ctype.name })
 	end
 	return rec
 end

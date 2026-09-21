@@ -1,8 +1,8 @@
 --!nonstrict
 -- 클라이언트와 주고받는 통로.
 --  * GhostDinerState 폴더의 Attribute: 게임 상태(자동 복제, 늦게 들어온 플레이어도 바로 읽음)
---  * Notify(RemoteEvent): 알림·효과음·코인 연출·결과 화면
---  * Buy(RemoteFunction): 상점 구매 요청
+--  * Notify(RemoteEvent 서버→클라): 알림·효과음·연출·결과 화면
+--  * Buy(RemoteFunction): 상점 구매 / SetHat(RemoteFunction): 모자 착용 / Ready(RemoteEvent 클라→서버): 준비 완료
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = {}
@@ -11,20 +11,29 @@ local folder = Instance.new("Folder")
 folder.Name = "GhostDinerRemotes"
 folder.Parent = ReplicatedStorage
 
-local notify = Instance.new("RemoteEvent")
-notify.Name = "Notify"
-notify.Parent = folder
+local function remoteEvent(name: string): RemoteEvent
+	local r = Instance.new("RemoteEvent")
+	r.Name = name
+	r.Parent = folder
+	return r
+end
 
-local buy = Instance.new("RemoteFunction")
-buy.Name = "Buy"
-buy.Parent = folder
+local function remoteFunction(name: string): RemoteFunction
+	local r = Instance.new("RemoteFunction")
+	r.Name = name
+	r.Parent = folder
+	return r
+end
 
+local notify = remoteEvent("Notify")
 local state = Instance.new("Folder")
 state.Name = "GhostDinerState"
 state.Parent = ReplicatedStorage
 
 Remotes.Notify = notify
-Remotes.Buy = buy
+Remotes.Buy = remoteFunction("Buy")
+Remotes.SetHat = remoteFunction("SetHat")
+Remotes.Ready = remoteEvent("Ready")
 Remotes.State = state
 
 function Remotes.set(key: string, value: any)
@@ -53,10 +62,6 @@ end
 
 function Remotes.sound(player: Player, name: string)
 	notify:FireClient(player, { kind = "sound", name = name })
-end
-
-function Remotes.coinPopup(position: Vector3, amount: number, tip: number?)
-	notify:FireAllClients({ kind = "coin", position = position, amount = amount, tip = tip or 0 })
 end
 
 return Remotes

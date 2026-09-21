@@ -15,11 +15,15 @@ end
 
 -- 32비트 LCG. Roblox 의 Random:NextNumber()/NextInteger(a,b) 와 같은 형태
 function TestUtil.rng(seed)
-	local state = (seed or 1) % 2147483647
+	local state = ((seed or 1) * 7919 + 12345) % 2147483647
 	local self = {}
 	local function step()
 		state = (state * 48271) % 2147483647
 		return state
+	end
+	-- 작은 시드끼리 첫 값이 비슷해지는 것을 막기 위해 몇 번 돌림
+	for _ = 1, 5 do
+		step()
 	end
 	function self:NextNumber(a, b)
 		local v = step() / 2147483647

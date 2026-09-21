@@ -1,21 +1,27 @@
 --!nonstrict
--- 클라이언트 진입점: HUD·패널·라벨·효과음을 만들고 서버 알림을 받습니다.
+-- 클라이언트 진입점: HUD·패널·라벨·연출·튜토리얼·효과음을 만들고 서버 알림을 받습니다.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Hud = require(script.Parent:WaitForChild("Hud"))
 local Panels = require(script.Parent:WaitForChild("Panels"))
 local Labels = require(script.Parent:WaitForChild("Labels"))
 local Sfx = require(script.Parent:WaitForChild("Sfx"))
+local Fx = require(script.Parent:WaitForChild("Fx"))
+local Tutorial = require(script.Parent:WaitForChild("Tutorial"))
 
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Recipes = require(Shared:WaitForChild("Recipes"))
+local Config = require(Shared:WaitForChild("Config"))
 local remotes = ReplicatedStorage:WaitForChild("GhostDinerRemotes")
 local notify = remotes:WaitForChild("Notify") :: RemoteEvent
 local buyRemote = remotes:WaitForChild("Buy") :: RemoteFunction
+local setHatRemote = remotes:WaitForChild("SetHat") :: RemoteFunction
+local readyRemote = remotes:WaitForChild("Ready") :: RemoteEvent
 local state = ReplicatedStorage:WaitForChild("GhostDinerState")
 local map = workspace:WaitForChild("GhostDinerMap")
 
@@ -36,7 +42,8 @@ task.spawn(function()
 end)
 
 local hud = Hud.create(playerGui)
-local panels = Panels.create(hud.gui, state, buyRemote, hud.toast)
+Fx.init(playerGui)
+local panels = Panels.create(hud.gui, state, { buy = buyRemote, setHat = setHatRemote }, player, hud.toast)
 
 -- 손에 든 것 추적
 local heldId: string? = nil
@@ -67,7 +74,8 @@ if player.Character then
 end
 player.CharacterAdded:Connect(watchCharacter)
 
-Labels.init(map, heldGetter)
+Labels.init(map, heldGetter, Fx, hud.updateOrders)
+local tutorial = Tutorial.create(hud.gui, state, map, heldGetter, Sfx.play)
 
 -- 상태 갱신
 local function refreshAll()
@@ -76,16 +84,34 @@ local function refreshAll()
 end
 state.AttributeChanged:Connect(refreshAll)
 refreshAll()
-local acc = 0
+local acc, tutorialAcc = 0, 0
 RunService.Heartbeat:Connect(function(dt)
 	acc += dt
-	if acc >= 0.25 then
+	tutorialAcc += dt
+	if acc >= 0.2 then
 		acc = 0
 		hud.update(state)
+		-- 평판이 낮으면 화면 가장자리가 붉게 맥동
+		local hp = state:GetAttribute("Hp")
+		local maxHp = state:GetAttribute("MaxHp")
+		if type(hp) == "number" and type(maxHp) == "number" and maxHp > 0 and hp / maxHp < 0.3 and state:GetAttribute("Phase") == "night" then
+			local danger = 1 - (hp / maxHp) / 0.3
+			Fx.setVignette(0.25 + 0.25 * danger + 0.15 * math.sin(os.clock() * 4))
+		else
+			Fx.setVignette(0)
+		end
+	end
+	if tutorialAcc >= 0.25 then
+		tutorialAcc = 0
+		tutorial.update()
 	end
 end)
 
 -- 버튼·단축키
+hud.onReady = function()
+	Sfx.play("ready")
+	readyRemote:FireServer()
+end
 hud.recipeButton.MouseButton1Click:Connect(function()
 	Sfx.play("ui")
 	panels.toggleRecipes()
@@ -93,6 +119,10 @@ end)
 hud.shopButton.MouseButton1Click:Connect(function()
 	Sfx.play("ui")
 	panels.toggleShop()
+end)
+hud.wardrobeButton.MouseButton1Click:Connect(function()
+	Sfx.play("ui")
+	panels.toggleWardrobe()
 end)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then
@@ -104,8 +134,13 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	elseif input.KeyCode == Enum.KeyCode.B then
 		Sfx.play("ui")
 		panels.toggleShop()
+	elseif input.KeyCode == Enum.KeyCode.C then
+		Sfx.play("ui")
+		panels.toggleWardrobe()
 	end
 end)
+
+local KITCHEN_CENTER = Vector3.new(0, 12, -22)
 
 -- 서버 알림
 notify.OnClientEvent:Connect(function(payload)
@@ -117,10 +152,48 @@ notify.OnClientEvent:Connect(function(payload)
 		hud.toast(payload.text, payload.style)
 	elseif kind == "sound" then
 		Sfx.play(payload.name)
-	elseif kind == "coin" then
-		Labels.coinPopup(payload.position, payload.amount, payload.tip or 0)
+	elseif kind == "serve" then
+		local to = payload.to
+		Fx.serveFly(payload.from, to, payload.itemId, function()
+			Fx.sparkle(to, "gold")
+			local amount = payload.amount or 0
+			local text = if (payload.tip or 0) > 0 then string.format("+%d 🪙 (팁 %d)", amount, payload.tip) else string.format("+%d 🪙", amount)
+			Fx.floatText(to + Vector3.new(0, 1.5, 0), text, Fx.Colors.gold, 26)
+		end)
+	elseif kind == "combo" then
+		local count = payload.count or 2
+		Sfx.play("combo", math.min(2.2, 1 + 0.08 * count))
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			Fx.floatText(root.Position + Vector3.new(0, 4, 0), string.format("🔥 콤보 x%d", count), Fx.Colors.orange, 30)
+		end
+	elseif kind == "sparkle" then
+		Fx.sparkle(payload.position, payload.color)
+	elseif kind == "fire" then
+		Sfx.play("fire")
+		Fx.shakeAt(payload.position, 0.5, 0.4)
+		Fx.flash(Fx.Colors.orange, 0.25, 0.5)
+		Fx.burst(payload.position + Vector3.new(0, 3, 0), Fx.Colors.orange, 30, 0.8, 8)
+	elseif kind == "smash" then
+		Fx.shakeAt(payload.position, 0.9, 0.5)
+		Fx.burst(payload.position + Vector3.new(0, 2, 0), Fx.Colors.purple, 24, 0.7, 7)
+	elseif kind == "angry" then
+		Fx.flash(Fx.Colors.red, 0.3, 0.5)
+		Fx.shakeAt(payload.position, 0.5, 0.4)
+	elseif kind == "boss" then
+		Sfx.play("boss")
+		Fx.lightning()
+		hud.announce("👑 " .. tostring(payload.name or "산신령") .. " 등장!", "요리 3개를 주문합니다. 실망시키면 크게 후회합니다", Color3.fromRGB(255, 220, 120))
+	elseif kind == "blackout" then
+		Sfx.play("blackout")
+		Fx.setBlackout(payload.on == true)
+		if payload.on then
+			hud.announce("🕯️ 정전!", "불이 다시 들어올 때까지 감으로 요리하세요", Color3.fromRGB(200, 200, 255))
+		end
 	elseif kind == "night" then
 		hud.hideResult()
+		hud.hideSummary()
 		panels.closeAll()
 		local sub = string.format("손님 %d명이 옵니다", payload.total or 0)
 		if payload.newDishes and #payload.newDishes > 0 then
@@ -135,12 +208,35 @@ notify.OnClientEvent:Connect(function(payload)
 			sub ..= "  ·  👑 산신령이 옵니다!"
 		end
 		hud.announce(string.format("🌙 %d번째 밤", payload.night or 0), sub, Color3.fromRGB(200, 170, 255))
+		if payload.event then
+			task.delay(3.6, function()
+				hud.announce(payload.event.emoji .. " " .. payload.event.name, payload.event.desc, Color3.fromRGB(255, 200, 120))
+				Sfx.play("night")
+			end)
+		end
+		if payload.challenge then
+			hud.toast(string.format("🎯 밤 목표: %s — %s (+%d 코인)", payload.challenge.name, payload.challenge.desc, payload.challenge.reward), "info")
+		end
 		panels.rebuildRecipes()
+		if (payload.night or 0) == 1 and tutorial.shouldShow(player) then
+			tutorial.start()
+		end
+	elseif kind == "clear" then
+		Fx.confetti(KITCHEN_CENTER)
+		Fx.flash(Fx.Colors.gold, 0.2, 0.8)
+		hud.showSummary(payload)
 	elseif kind == "day" then
-		hud.announce("☀️ 낮이 되었습니다", "상점에서 업그레이드하고 재료를 미리 준비하세요", Color3.fromRGB(255, 230, 150))
-		panels.openShop()
+		hud.announce("☀️ 낮이 되었습니다", "상점에서 업그레이드하고 재료를 미리 준비하세요 · 모두 준비되면 바로 시작", Color3.fromRGB(255, 230, 150))
+		task.delay(1.5, function()
+			if state:GetAttribute("Phase") == "day" then
+				panels.openShop()
+			end
+		end)
 	elseif kind == "result" then
 		panels.closeAll()
+		hud.hideSummary()
+		Fx.flash(Fx.Colors.red, 0.5, 1.5)
+		Fx.shake(1.2, 0.8)
 		hud.showResult(payload)
 	end
 end)
@@ -152,22 +248,58 @@ state:GetAttributeChangedSignal("Phase"):Connect(function()
 		hud.hideResult()
 	end
 	if phase == "countdown" then
-		hud.announce("🏮 개장 준비", "재료를 미리 꺼내 두면 첫 손님을 빨리 받을 수 있어요", Color3.fromRGB(255, 230, 150))
+		hud.announce("🏮 개장 준비", "재료를 미리 꺼내 두면 첫 손님을 빨리 받을 수 있어요 · 준비되면 ✅ 버튼", Color3.fromRGB(255, 230, 150))
 	end
 end)
+
+-- 평판이 깎이면 화면이 붉게 번쩍
+local lastHp = nil
+state:GetAttributeChangedSignal("Hp"):Connect(function()
+	local hp = state:GetAttribute("Hp")
+	if type(hp) == "number" and lastHp ~= nil and hp < lastHp then
+		Fx.flash(Fx.Colors.red, 0.3, 0.5)
+	end
+	lastHp = hp
+end)
+
+-- 장식 애니메이션 (클라이언트에서만): 룬 맥동, 저승 문 빛 맥동
+task.spawn(function()
+	local decor = map:WaitForChild("Decor", 10)
+	if not decor then
+		return
+	end
+	local i = 0
+	for _, d in decor:GetChildren() do
+		if d:IsA("BasePart") and d.Name == "Rune" then
+			i += 1
+			local tween = TweenService:Create(d, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, i * 0.2), { Transparency = 0.75 })
+			tween:Play()
+		elseif d:IsA("BasePart") and d.Name == "Portal" then
+			local light = d:FindFirstChildOfClass("PointLight")
+			if light then
+				TweenService:Create(light, TweenInfo.new(2.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Brightness = 2.2 }):Play()
+			end
+		end
+	end
+end)
+
+-- 배경음악 (Config.MusicId 에 오디오 ID 를 넣으면 재생)
+Sfx.startMusic(Config.MusicId, Config.MusicVolume)
 
 -- 도움말 순환
 local HINTS = {
 	"E: 조리대 사용 · 손에는 한 가지만 들 수 있어요",
-	"익힌 음식을 오래 두면 타요! 완성되면 바로 꺼내세요",
-	"인내심이 많이 남았을 때 서빙하면 팁을 더 받아요",
+	"익힌 음식을 오래 두면 타고, 탄 음식을 방치하면 불이 나요!",
+	"인내심이 많이 남았을 때 서빙하면 팁을 더 받아요 · 12초 안에 연속 서빙하면 콤보!",
 	"역할을 나누세요: 재료 담당 · 조리 담당 · 서빙 담당",
 	"화난 손님은 조리대를 부숩니다 — 잠시 못 써요",
-	"낮에는 상점(B)에서 팀 업그레이드 · 급하면 밤에도 살 수 있어요",
+	"낮에는 상점(B)에서 팀 업그레이드 · 모두 ✅ 준비 완료면 바로 다음 밤",
 	"조리대(합치기)에 재료를 올리면 레시피가 맞을 때 자동으로 합쳐져요",
-	"잘못된 요리를 내밀면 손님 인내심이 줄어요 — 주문을 확인하세요",
-	"손님 머리 위의 초록 바가 인내심이에요. 빨개지면 서둘러요!",
+	"잘못된 요리를 내밀면 손님 인내심이 줄어요 — 주문 목록(왼쪽)을 확인하세요",
+	"불이 나면 벽의 🧯 소화기함에서 소화기를 꺼내 E를 길게 누르세요",
 	"밥솥의 밥은 타지 않아요. 미리 지어 두세요",
+	"명성을 모으면 옷장(C)에서 새 모자를 쓸 수 있어요",
+	"구미호는 기다리다 마음을 바꿉니다 — 주문이 바뀌면 ❗ 표시",
 }
 task.spawn(function()
 	local i = 1

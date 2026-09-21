@@ -3,7 +3,7 @@
 -- 밸런스를 바꾸고 싶으면 이 파일과 Recipes / CustomerTypes / Waves / Upgrades 만 손대면 됩니다.
 
 local Config = {
-	Version = "0.1.0-beta.1",
+	Version = "0.2.0-beta.1",
 	GameName = "저승 휴게소",
 
 	-- 라운드 흐름
@@ -32,8 +32,36 @@ local Config = {
 	BaseWalkSpeed = 16,
 	WalkSpeedPerLevel = 2,
 
+	-- 콤보 (연속 서빙)
+	ComboWindow = 12, -- 이 시간(초) 안에 다음 서빙을 하면 콤보 유지
+
+	-- 화재
+	FireDelay = 8, -- 탄 음식을 이만큼(초) 방치하면 불이 남
+	FireSpreadInterval = 7, -- 불이 옆 조리대로 번지는 간격(초)
+	FireSpreadRange = 9, -- 번지는 거리(스터드)
+	FireSpreadDamage = 3, -- 번질 때마다 깎이는 평판
+	MaxFires = 6, -- 동시에 탈 수 있는 조리대 수
+	ExtinguishHold = 1.2, -- 소화기 사용 시간(초, E 길게)
+
+	-- 밤 이벤트
+	EventChance = 0.45,
+	EventMinNight = 3,
+	BlackoutDuration = 12, -- 정전 지속(초)
+
+	-- 명성(영구 진행)
+	FamePerServe = 1,
+	FamePerNightBase = 5, -- 밤을 넘기면 5 + 밤 수
+
+	-- 순위표
+	LeaderboardRefresh = 90, -- 초
+
+	-- 배경음악: Creator Store 에서 고른 오디오의 ID 를 "rbxassetid://123456" 형태로 넣으면 재생됩니다
+	MusicId = "",
+	MusicVolume = 0.25,
+
 	-- 저장
 	DataStoreName = "GhostDiner_v1",
+	LeaderboardStoreName = "GhostDiner_BestNight_v1",
 }
 
 return Config

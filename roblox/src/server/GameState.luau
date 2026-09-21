@@ -13,16 +13,22 @@ local GameState = {
 	upgrades = {}, -- id → 단계
 	customersTotal = 0,
 	customersDone = 0,
-	stats = {
-		served = 0,
-		angry = 0,
-		earned = 0,
-		tips = 0,
-		perPlayer = {}, -- userId → 서빙 수
-	},
+	stats = {} :: { [string]: any }, -- 한 판 누적
+	nightStats = {} :: { [string]: any }, -- 이번 밤
+	combo = 0,
+	comboExpiresAt = 0,
+	eventId = "",
+	challengeId = "",
+	ready = {}, -- userId → true
+	readyCount = 0,
+	blackout = false,
 	seed = 0,
 	runId = 0,
 }
+
+function GameState.resetNight()
+	GameState.nightStats = { served = 0, burnt = 0, tips = 0, maxCombo = 0, angry = 0, fastServes = 0, fires = 0, perPlayer = {} }
+end
 
 function GameState.resetRun()
 	GameState.phase = "lobby"
@@ -36,7 +42,15 @@ function GameState.resetRun()
 	end
 	GameState.customersTotal = 0
 	GameState.customersDone = 0
-	GameState.stats = { served = 0, angry = 0, earned = 0, tips = 0, perPlayer = {} }
+	GameState.stats = { served = 0, angry = 0, earned = 0, tips = 0, maxCombo = 0, burnt = 0, fires = 0, perPlayer = {}, famePerPlayer = {} }
+	GameState.resetNight()
+	GameState.combo = 0
+	GameState.comboExpiresAt = 0
+	GameState.eventId = ""
+	GameState.challengeId = ""
+	GameState.ready = {}
+	GameState.readyCount = 0
+	GameState.blackout = false
 	GameState.seed = math.random(1, 2 ^ 30)
 	GameState.runId += 1
 end

@@ -21,12 +21,21 @@ local SOUNDS = {
 	unlock = { id = "rbxasset://sounds/switch3.wav", volume = 0.6 },
 	clear = { id = "rbxasset://sounds/victory.wav", volume = 0.6 },
 	night = { id = "rbxasset://sounds/HalloweenLightning.wav", volume = 0.45 },
-	boss = { id = "rbxasset://sounds/HalloweenLightning.wav", volume = 0.8, pitch = 0.7 },
+	boss = { id = "rbxasset://sounds/HalloweenLightning.wav", volume = 0.9, pitch = 0.7 },
 	gameover = { id = "rbxasset://sounds/uuhhh.wav", volume = 0.8, pitch = 0.6 },
 	ui = { id = "rbxasset://sounds/clickfast.wav", volume = 0.4 },
+	fire = { id = "rbxasset://sounds/swoosh.wav", volume = 0.8, pitch = 0.55 },
+	extinguish = { id = "rbxasset://sounds/impact_water.mp3", volume = 0.7, pitch = 0.8 },
+	fox = { id = "rbxasset://sounds/snap.wav", volume = 0.6, pitch = 0.7 },
+	challenge = { id = "rbxasset://sounds/victory.wav", volume = 0.5, pitch = 1.2 },
+	hat = { id = "rbxasset://sounds/switch.wav", volume = 0.6, pitch = 1.3 },
+	combo = { id = "rbxasset://sounds/electronicpingshort.wav", volume = 0.5, pitch = 1.0 },
+	ready = { id = "rbxasset://sounds/button.wav", volume = 0.5, pitch = 1.2 },
+	blackout = { id = "rbxasset://sounds/switch.wav", volume = 0.8, pitch = 0.5 },
 }
 
-function Sfx.play(name: string)
+-- pitchMult: 기본 음높이에 곱함 (콤보 등)
+function Sfx.play(name: string, pitchMult: number?)
 	local def = SOUNDS[name]
 	if not def then
 		return
@@ -34,7 +43,7 @@ function Sfx.play(name: string)
 	local sound = Instance.new("Sound")
 	sound.SoundId = def.id
 	sound.Volume = def.volume
-	sound.PlaybackSpeed = def.pitch or 1
+	sound.PlaybackSpeed = (def.pitch or 1) * (pitchMult or 1)
 	sound.Parent = SoundService
 	sound.Ended:Once(function()
 		sound:Destroy()
@@ -45,6 +54,24 @@ function Sfx.play(name: string)
 			sound:Destroy()
 		end
 	end)
+end
+
+local music: Sound? = nil
+function Sfx.startMusic(id: string, volume: number)
+	if id == nil or id == "" then
+		return
+	end
+	if music then
+		music:Destroy()
+	end
+	local s = Instance.new("Sound")
+	s.Name = "GhostDinerMusic"
+	s.SoundId = id
+	s.Volume = volume
+	s.Looped = true
+	s.Parent = SoundService
+	s:Play()
+	music = s
 end
 
 return Sfx

@@ -1,10 +1,11 @@
 --!nonstrict
--- 레시피 책과 상점 패널.
+-- 레시피 책, 상점, 옷장 패널.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("GhostDiner")
 local Recipes = require(Shared:WaitForChild("Recipes"))
 local Upgrades = require(Shared:WaitForChild("Upgrades"))
+local Cosmetics = require(Shared:WaitForChild("Cosmetics"))
 
 local Panels = {}
 
@@ -26,13 +27,17 @@ local function corner(parent: Instance, radius: number?)
 	mk("UICorner", { CornerRadius = UDim.new(0, radius or 10) }, parent)
 end
 
+local function num(v: any, default: number): number
+	return if type(v) == "number" then v else default
+end
+
 local function panelFrame(gui: Instance, name: string, title: string, side: string): (Frame, ScrollingFrame)
 	local frame = mk("Frame", {
 		Name = name,
 		Visible = false,
 		AnchorPoint = if side == "left" then Vector2.new(0, 0) else Vector2.new(1, 0),
-		Position = if side == "left" then UDim2.new(0, 12, 0, 96) else UDim2.new(1, -12, 0, 146),
-		Size = UDim2.new(0, 380, 1, -160),
+		Position = if side == "left" then UDim2.new(0, 12, 0, 96) else UDim2.new(1, -12, 0, 196),
+		Size = UDim2.new(0, 380, 1, -210),
 		BackgroundColor3 = Color3.fromRGB(24, 20, 36),
 		BackgroundTransparency = 0.08,
 		ZIndex = 10,
@@ -40,7 +45,7 @@ local function panelFrame(gui: Instance, name: string, title: string, side: stri
 	corner(frame, 14)
 	mk("UISizeConstraint", { MaxSize = Vector2.new(380, 560), MinSize = Vector2.new(260, 220) }, frame)
 	mk("UIStroke", { Color = Color3.fromRGB(150, 90, 220), Thickness = 1.5, Transparency = 0.2 }, frame)
-	mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 14, 0, 8), Size = UDim2.new(1, -28, 0, 34), Font = FONT, TextSize = 22, TextColor3 = Color3.fromRGB(255, 225, 160), TextXAlignment = Enum.TextXAlignment.Left, Text = title, ZIndex = 11 }, frame)
+	mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 14, 0, 8), Size = UDim2.new(1, -60, 0, 34), Font = FONT, TextSize = 20, TextColor3 = Color3.fromRGB(255, 225, 160), TextXAlignment = Enum.TextXAlignment.Left, Text = title, ZIndex = 11 }, frame)
 	local close = mk("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 10), Size = UDim2.new(0, 30, 0, 30), BackgroundColor3 = Color3.fromRGB(90, 40, 60), Font = FONT, TextSize = 16, Text = "✕", TextColor3 = Color3.fromRGB(255, 255, 255), ZIndex = 11 }, frame) :: TextButton
 	corner(close, 8)
 	close.MouseButton1Click:Connect(function()
@@ -61,16 +66,15 @@ local function panelFrame(gui: Instance, name: string, title: string, side: stri
 	return frame, scroll
 end
 
-function Panels.create(gui: Instance, state: Instance, buyRemote: RemoteFunction, toast: (string, string?) -> ())
+function Panels.create(gui: Instance, state: Instance, remotes, player: Player, toast: (string, string?) -> ())
 	local self = {}
 
-	-- 레시피 책
+	-- ---------- 레시피 책 ----------
 	local recipeFrame, recipeScroll = panelFrame(gui, "RecipePanel", "📖 레시피 책", "left")
 	self.recipeFrame = recipeFrame
 	local lastNight = -1
 	local function rebuildRecipes()
-		local rawNight = state:GetAttribute("Night")
-		local night = if type(rawNight) == "number" then math.max(1, rawNight) else 1
+		local night = math.max(1, num(state:GetAttribute("Night"), 1))
 		if night == lastNight then
 			return
 		end
@@ -92,9 +96,8 @@ function Panels.create(gui: Instance, state: Instance, buyRemote: RemoteFunction
 				titleText ..= string.format("  (🔒 %d번째 밤부터)", item.unlock or 1)
 			end
 			mk("TextLabel", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 24), Font = FONT, TextSize = 18, TextColor3 = if unlocked then Color3.fromRGB(255, 230, 170) else Color3.fromRGB(150, 140, 160), TextXAlignment = Enum.TextXAlignment.Left, Text = titleText, LayoutOrder = 1, ZIndex = 13 }, card)
-			local steps = Recipes.describe(dishId)
 			local body = {}
-			for _, s in steps do
+			for _, s in Recipes.describe(dishId) do
 				if not string.find(s, "재료 상자") then
 					table.insert(body, "• " .. s)
 				end
@@ -104,16 +107,14 @@ function Panels.create(gui: Instance, state: Instance, buyRemote: RemoteFunction
 	end
 	self.rebuildRecipes = rebuildRecipes
 
-	-- 상점
+	-- ---------- 상점 ----------
 	local shopFrame, shopScroll = panelFrame(gui, "ShopPanel", "🛒 상점 (팀 코인으로 구매)", "right")
 	self.shopFrame = shopFrame
 	local rows = {}
 	local function refreshShop()
-		local rawCoins = state:GetAttribute("Coins")
-		local coins = if type(rawCoins) == "number" then rawCoins else 0
+		local coins = num(state:GetAttribute("Coins"), 0)
 		for id, row in rows do
-			local rawLevel = state:GetAttribute("Upg_" .. id)
-			local level = if type(rawLevel) == "number" then rawLevel else 0
+			local level = num(state:GetAttribute("Upg_" .. id), 0)
 			local u = row.upgrade
 			local cost = Upgrades.cost(id, level)
 			if u.max < 99 then
@@ -142,7 +143,7 @@ function Panels.create(gui: Instance, state: Instance, buyRemote: RemoteFunction
 			buy.Text = "…"
 			task.spawn(function()
 				local ok, success, message = pcall(function()
-					return buyRemote:InvokeServer(u.id)
+					return remotes.buy:InvokeServer(u.id)
 				end)
 				if not ok then
 					toast("구매 요청 실패", "bad")
@@ -155,28 +156,95 @@ function Panels.create(gui: Instance, state: Instance, buyRemote: RemoteFunction
 		rows[u.id] = { name = name, buy = buy, upgrade = u }
 	end
 
+	-- ---------- 옷장 ----------
+	local wardrobeFrame, wardrobeScroll = panelFrame(gui, "WardrobePanel", "🎩 옷장 (명성으로 해금)", "right")
+	self.wardrobeFrame = wardrobeFrame
+	local fameLabel = mk("TextLabel", { BackgroundTransparency = 1, Size = UDim2.new(1, -6, 0, 40), Font = FONT_REG, TextSize = 15, TextWrapped = true, TextColor3 = Color3.fromRGB(255, 235, 190), TextXAlignment = Enum.TextXAlignment.Left, Text = "", LayoutOrder = 0, ZIndex = 12 }, wardrobeScroll) :: TextLabel
+	local hatRows = {}
+	local function refreshWardrobe()
+		local fame = num(player:GetAttribute("Fame"), 0)
+		local current = player:GetAttribute("Hat")
+		local nextHat = Cosmetics.nextUnlock(fame)
+		fameLabel.Text = if nextHat
+			then string.format("✨ 내 명성 %d  ·  다음 해금: %s %s (명성 %d)\n명성은 서빙(+1)과 밤 넘기기(+5+밤)로 쌓입니다", fame, nextHat.emoji, nextHat.name, nextHat.fame)
+			else string.format("✨ 내 명성 %d  ·  모든 모자를 해금했습니다!", fame)
+		for id, row in hatRows do
+			local hat = row.hat
+			local unlocked = Cosmetics.isUnlocked(id, fame)
+			if id == current then
+				row.button.Text = "착용 중"
+				row.button.BackgroundColor3 = Color3.fromRGB(30, 140, 90)
+			elseif unlocked then
+				row.button.Text = "착용"
+				row.button.BackgroundColor3 = Color3.fromRGB(90, 50, 150)
+			else
+				row.button.Text = string.format("🔒 명성 %d", hat.fame)
+				row.button.BackgroundColor3 = Color3.fromRGB(70, 60, 80)
+			end
+			row.name.TextColor3 = if unlocked then Color3.fromRGB(255, 230, 170) else Color3.fromRGB(150, 140, 160)
+		end
+	end
+	self.refreshWardrobe = refreshWardrobe
+	for i, hat in Cosmetics.Hats do
+		local row = mk("Frame", { Size = UDim2.new(1, -6, 0, 58), BackgroundColor3 = Color3.fromRGB(45, 38, 62), BackgroundTransparency = 0.1, LayoutOrder = i, ZIndex = 12 }, wardrobeScroll)
+		corner(row, 10)
+		local name = mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 10, 0, 6), Size = UDim2.new(1, -130, 0, 24), Font = FONT, TextSize = 17, TextColor3 = Color3.fromRGB(255, 230, 170), TextXAlignment = Enum.TextXAlignment.Left, Text = hat.emoji .. " " .. hat.name, ZIndex = 13 }, row) :: TextLabel
+		mk("TextLabel", { BackgroundTransparency = 1, Position = UDim2.new(0, 10, 0, 30), Size = UDim2.new(1, -130, 0, 24), Font = FONT_REG, TextSize = 13, TextWrapped = true, TextColor3 = Color3.fromRGB(215, 210, 225), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = hat.desc, ZIndex = 13 }, row)
+		local button = mk("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.new(0, 108, 0, 40), BackgroundColor3 = Color3.fromRGB(90, 50, 150), Font = FONT, TextSize = 14, TextColor3 = Color3.fromRGB(255, 255, 255), Text = "", ZIndex = 13 }, row) :: TextButton
+		corner(button, 8)
+		button.MouseButton1Click:Connect(function()
+			task.spawn(function()
+				local ok, success, message = pcall(function()
+					return remotes.setHat:InvokeServer(hat.id)
+				end)
+				if not ok then
+					toast("요청 실패", "bad")
+				elseif not success then
+					toast(tostring(message), "bad")
+				else
+					toast(tostring(message), "good")
+				end
+				refreshWardrobe()
+			end)
+		end)
+		hatRows[hat.id] = { name = name, button = button, hat = hat }
+	end
+	player:GetAttributeChangedSignal("Fame"):Connect(refreshWardrobe)
+	player:GetAttributeChangedSignal("Hat"):Connect(refreshWardrobe)
+
+	-- ---------- 열고 닫기 ----------
 	function self.toggleRecipes()
 		rebuildRecipes()
 		recipeFrame.Visible = not recipeFrame.Visible
 	end
 
 	function self.toggleShop()
-		self.refreshShop()
+		refreshShop()
+		wardrobeFrame.Visible = false
 		shopFrame.Visible = not shopFrame.Visible
 	end
 
+	function self.toggleWardrobe()
+		refreshWardrobe()
+		shopFrame.Visible = false
+		wardrobeFrame.Visible = not wardrobeFrame.Visible
+	end
+
 	function self.openShop()
-		self.refreshShop()
+		refreshShop()
+		wardrobeFrame.Visible = false
 		shopFrame.Visible = true
 	end
 
 	function self.closeAll()
 		recipeFrame.Visible = false
 		shopFrame.Visible = false
+		wardrobeFrame.Visible = false
 	end
 
 	rebuildRecipes()
-	self.refreshShop()
+	refreshShop()
+	refreshWardrobe()
 	return self
 end
 
