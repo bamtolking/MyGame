@@ -19,9 +19,9 @@ const S = { session: null, myId: null, isNet: false, isHost: false, name: '', ho
 
 // ---------- 세션: 솔로(로컬 시뮬레이션) ----------
 class LocalSession {
-  constructor(name) {
-    this.game = new Game();
-    const p = this.game.addPlayer(name);
+  constructor(name, cls, map, difficulty) {
+    this.game = new Game({ map, difficulty });
+    const p = this.game.addPlayer(name, cls);
     this.playerId = p.id;
     this.acc = 0; this.paused = false;
     view.reset(); view.applyFull(this.game.fullState());
@@ -82,16 +82,29 @@ async function connectOrExplain() {
   }
 }
 
-$('btn-solo').addEventListener('click', () => startLocal());
+// ---------- 전장/난이도/캐릭터 선택 (저장됨) ----------
+const pref = (k, def, valid) => { try { const v = localStorage.getItem(k); return valid[v] ? v : def; } catch { return def; } };
+const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const SEL = { map: pref('dh_map', C.DEFAULT_MAP, C.MAPS), difficulty: pref('dh_diff', C.DEFAULT_DIFFICULTY, C.DIFFICULTIES), cls: pref('dh_cls', C.DEFAULT_CLASS, C.CLASSES) };
+function renderSetup() {
+  ui.renderCards($('setup-map'), C.MAPS, SEL.map, (k) => { SEL.map = k; setPref('dh_map', k); ui.markCard($('setup-map'), k); });
+  ui.renderCards($('setup-diff'), C.DIFFICULTIES, SEL.difficulty, (k) => { SEL.difficulty = k; setPref('dh_diff', k); ui.markCard($('setup-diff'), k); });
+  ui.renderCards($('setup-class'), C.CLASSES, SEL.cls, (k) => { SEL.cls = k; setPref('dh_cls', k); ui.markCard($('setup-class'), k); });
+}
+$('btn-solo').addEventListener('click', () => { S.name = getName(); renderSetup(); ui.showScreen('setup'); });
+$('setup-start').addEventListener('click', () => startLocal());
+$('setup-back').addEventListener('click', () => ui.showScreen('menu'));
+ui.onLobbySettings = (map, difficulty) => net.send({ type: 'settings', map, difficulty });
+ui.onLobbyClass = (cls) => { SEL.cls = cls; setPref('dh_cls', cls); net.send({ type: 'class', cls }); };
 $('btn-create').addEventListener('click', async () => {
   S.name = getName(); menuMsg('서버에 연결하는 중…', true);
-  if (await connectOrExplain()) net.send({ type: 'create', name: S.name });
+  if (await connectOrExplain()) net.send({ type: 'create', name: S.name, cls: SEL.cls });
 });
 $('btn-join').addEventListener('click', async () => {
   const code = ($('code').value || '').trim().toUpperCase();
   if (code.length !== 4) { menuMsg('방 코드 4자리를 입력하세요'); return; }
   S.name = getName(); menuMsg('서버에 연결하는 중…', true);
-  if (await connectOrExplain()) net.send({ type: 'join', code, name: S.name });
+  if (await connectOrExplain()) net.send({ type: 'join', code, name: S.name, cls: SEL.cls });
 });
 $('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-join').click(); });
 $('btn-start').addEventListener('click', () => net.send({ type: 'start' }));
@@ -120,19 +133,22 @@ input.onTap = (sx, sy) => {
   else S.session.build(ui.buildKey, tx, ty);
 };
 input.onHover = (sx, sy) => { S.hoverTile = sx == null ? null : renderer.screenToTile(sx, sy); };
+input.onZoom = (f) => renderer.setZoom(renderer.zoom * f);
 input.onKey = (key, code) => {
   if (!S.session) return;
   if (key === 'e') S.session.eat();
   else if (key === 'b') $('btn-build').click();
   else if (key === 'c') $('btn-chat').click();
   else if (key === 'escape') { ui.setBuildKey(null); ui.closePanels(); }
-  else if (/^[1-8]$/.test(key)) { const keys = [...Object.keys(C.BUILDINGS), 'REPAIR', 'DISMANTLE']; const k = keys[+key - 1]; if (k) ui.onSelectBuild(k); }
+  else if (key === '+' || key === '=') renderer.setZoom(renderer.zoom * 1.1);
+  else if (key === '-') renderer.setZoom(renderer.zoom * 0.9);
+  else if (/^[0-9]$/.test(key)) { const keys = [...Object.keys(C.BUILDINGS), 'REPAIR', 'DISMANTLE']; const k = keys[(+key + 9) % 10]; if (k) ui.onSelectBuild(k); }
   void code;
 };
 
 // ---------- 네트워크 이벤트 ----------
 net.on('lobby', (info) => {
-  S.isNet = true; S.isHost = ui.lobby(info);
+  S.isNet = true; S.isHost = ui.lobby(info, SEL.cls);
   if (info.state === 'lobby') { ui.showScreen('lobby'); endSession(); }
 });
 net.on('error', (m) => { menuMsg(m.msg); ui.el.lobbyHint.textContent = m.msg; ui.el.lobbyHint.style.color = 'var(--danger)'; });
@@ -145,7 +161,7 @@ net.on('close', () => { if (S.session || !ui.el.screens.lobby.classList.contains
 // ---------- 세션 시작/종료 ----------
 function startLocal() {
   S.isNet = false; S.isHost = true; S.name = getName();
-  const s = new LocalSession(S.name);
+  const s = new LocalSession(S.name, SEL.cls, SEL.map, SEL.difficulty);
   S.myId = s.playerId;
   beginSession(s, false);
 }
@@ -155,7 +171,12 @@ function beginSession(session, isNet) {
   ui.hideOverlay(); ui.setBuildKey(null); ui.closePanels();
   ui.showScreen('game'); input.enabled = true;
   renderer.resize();
-  view.onEvent = (e) => { if (e.type === 'night') ui.toast('🌙 밤이 왔다! 벽 뒤로!', 2500); if (e.type === 'dawn') ui.toast('🌞 아침이다. 보급 도착!', 2000); };
+  ui.renderBuildList(S.isNet ? SEL.cls : session.game.players.get(S.myId).cls);
+  view.onEvent = (e) => {
+    if (e.type === 'night') ui.toast(e.boss ? '🌙👑 괴수가 온다! 벽 뒤로!' : '🌙 밤이 왔다! 벽 뒤로!', 2500);
+    if (e.type === 'dawn') ui.toast('🌞 아침이다. 보급 도착!', 2000);
+    if (e.type === 'steal') ui.toast('🦝 도둑이다! 잡으면 되찾을 수 있어요', 2000);
+  };
 }
 function endSession() { if (S.session) { S.session.destroy(); S.session = null; } input.enabled = false; }
 function toMenu() { endSession(); ui.hideOverlay(); ui.showScreen('menu'); S.isNet = false; }
@@ -196,6 +217,7 @@ if (capApp && capApp.addListener) {
       if (now - backAt < 2000) { $('btn-menu').click(); return; }
       backAt = now; ui.toast('한 번 더 누르면 메뉴로 나갑니다');
     } else if (inLobby) { $('btn-leave').click(); }
+    else if (!ui.el.screens.setup.classList.contains('hidden')) { ui.showScreen('menu'); }
     else if (capApp.exitApp) capApp.exitApp();
   });
 }
@@ -204,4 +226,4 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !IS_A
   window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); });
 }
 // 디버그/테스트용 훅 (e2e 스크립트가 사용)
-window.__dh = { S, view, C, net };
+window.__dh = { S, view, C, net, renderer };

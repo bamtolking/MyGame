@@ -59,7 +59,15 @@ try {
   await p1.fill('#name', '테스터');
   await shot(p1, '01-menu');
   await p1.click('#btn-solo');
+  await p1.waitForSelector('#screen-setup:not(.hidden)');
+  await p1.click('#setup-map .card[data-key="SWAMP"]');
+  await p1.click('#setup-diff .card[data-key="EASY"]');
+  await p1.click('#setup-class .card[data-key="LUMBERJACK"]');
+  await shot(p1, '00-setup');
+  await p1.click('#setup-start');
   await p1.waitForFunction(() => window.__dh && window.__dh.view.ready);
+  const cfg = await p1.evaluate(() => ({ map: window.__dh.view.map, diff: window.__dh.view.difficulty, cls: window.__dh.view.me(window.__dh.S.myId).cls, w: window.__dh.view.w }));
+  assert(cfg.map === 'SWAMP' && cfg.diff === 'EASY' && cfg.cls === 'LUMBERJACK' && cfg.w === 96, `설정 반영: ${JSON.stringify(cfg)}`);
   await p1.waitForTimeout(500);
   await shot(p1, '02-solo-day');
   const me0 = await p1.evaluate(() => window.__dh.view.me(window.__dh.S.myId));
@@ -98,14 +106,22 @@ try {
   const tapPos = await p1.evaluate(([tx, ty]) => { const c = window.__dh; const cam = c.S; void cam; return null; }, tapTarget);
   void tapPos;
   // 화면 좌표 계산은 renderer 내부 카메라를 사용 → 페이지 안에서 클릭 좌표 산출
-  const [sx, sy] = await p1.evaluate(([tx, ty]) => { const ts = 32; const W = innerWidth, H = innerHeight; const me = window.__dh.view.me(window.__dh.S.myId); return [(tx + 0.5 - me.x) * ts + W / 2, (ty + 0.5 - me.y) * ts + H / 2]; }, tapTarget);
+  const [sx, sy] = await p1.evaluate(([tx, ty]) => { const r = window.__dh.renderer; return [(tx + 0.5 - r.cam.x) * r.ts + r.W / 2, (ty + 0.5 - r.cam.y) * r.ts + r.H / 2]; }, tapTarget);
   await p1.touchscreen.tap(sx, sy);
   await p1.waitForTimeout(150);
   const tapped = await p1.evaluate(([tx, ty]) => window.__dh.view.tileAt(tx, ty), tapTarget);
   assert(tapped === 5, '터치 탭으로 벽이 지어짐');
   await p1.click('#btn-build'); // 건설 취소
+  // 채집 모션: 옆에 나무를 두고 액션 버튼을 누른 채 스크린샷
+  await p1.evaluate(() => { const { S, view } = window.__dh; const g = S.session.game; const me = g.players.get(S.myId); const tx = Math.floor(me.x) + 1, ty = Math.floor(me.y); g.setTile(g.idx(tx, ty), 1); me.dx = 1; me.dy = 0; view.applyDelta(g.delta()); });
+  const ab = await p1.$('#btn-action'); const abb = await ab.boundingBox();
+  await p1.touchscreen.tap(abb.x + abb.width / 2, abb.y + abb.height / 2);
+  await p1.mouse.move(abb.x + abb.width / 2, abb.y + abb.height / 2); await p1.mouse.down();
+  await p1.waitForTimeout(120); await shot(p1, '03b-gather'); await p1.mouse.up();
+  const swung = await p1.evaluate(() => window.__dh.view.me(window.__dh.S.myId).swingKind);
+  assert(swung === 'tree' || swung === 'miss', '채집 동작 발생 (' + swung + ')');
   // 밤으로 빨리감기
-  await p1.evaluate(() => { const g = window.__dh.S.session.game; const C = window.__dh.C; for (let i = 0; i < C.DAY_TICKS + C.TICK_RATE * 12; i++) g.tick(); window.__dh.view.applyDelta(g.delta()); });
+  await p1.evaluate(() => { const g = window.__dh.S.session.game; const C = window.__dh.C; for (let i = 0; i < g.dayTicks + C.TICK_RATE * 12; i++) g.tick(); window.__dh.view.applyDelta(g.delta()); });
   await p1.waitForTimeout(400);
   const night = await p1.evaluate(() => ({ phase: window.__dh.view.phase, enemies: window.__dh.view.enemies.length }));
   assert(night.phase === 'night' && night.enemies > 0, `밤 + 적 출현 (${night.enemies}마리)`);
@@ -148,8 +164,18 @@ try {
   await bad.waitForFunction(() => document.getElementById('menu-msg').textContent.includes('없어요'));
   assert(true, '없는 코드는 오류 메시지');
   await bad.context().close();
+  await host.click('#lobby-map .card[data-key="SNOW"]');
+  await guest.waitForFunction(() => document.querySelector('#lobby-map .card.selected')?.dataset.key === 'SNOW');
+  assert(true, '방장의 전장 선택이 참가자에게 동기화됨');
+  assert(await guest.$eval('#lobby-map .card[data-key="MEADOW"]', (b) => b.disabled), '참가자는 전장을 바꿀 수 없음');
+  await guest.click('#lobby-class .card[data-key="KNIGHT"]');
+  await host.waitForFunction(() => [...document.querySelectorAll('#lobby-members li')].some((li) => li.textContent.includes('🛡️')));
+  assert(true, '참가자의 캐릭터 선택이 방장에게 표시됨');
+  await shot(host, '07b-lobby-settings');
   await host.click('#btn-start');
   await host.waitForFunction(() => window.__dh.view.ready && window.__dh.view.players.length === 2);
+  const netCfg = await guest.evaluate(() => ({ map: window.__dh.view.map, cls: window.__dh.view.me(window.__dh.S.myId).cls }));
+  assert(netCfg.map === 'SNOW' && netCfg.cls === 'KNIGHT', '협동 게임에 전장/캐릭터 반영: ' + JSON.stringify(netCfg));
   await guest.waitForFunction(() => window.__dh.view.ready && window.__dh.view.players.length === 2);
   assert(true, '두 클라이언트 모두 게임 시작, 플레이어 2명');
   // 호스트가 이동 → 게스트 화면에도 반영

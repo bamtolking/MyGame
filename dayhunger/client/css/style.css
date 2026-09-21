@@ -9,7 +9,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; }
 .hidden { display: none !important; }
 .screen { position: absolute; inset: 0; }
-#screen-menu, #screen-lobby { display: flex; align-items: center; justify-content: center; padding: calc(16px + var(--safe-t)) 16px calc(16px + var(--safe-b)); overflow-y: auto; }
+#screen-menu, #screen-lobby, #screen-setup { display: flex; align-items: center; justify-content: center; padding: calc(16px + var(--safe-t)) 16px calc(16px + var(--safe-b)); overflow-y: auto; }
 .menu-card { width: min(420px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.4); }
 h1 { margin: 0; font-size: 34px; letter-spacing: 2px; text-align: center; }
 h2 { margin: 0; font-size: 22px; text-align: center; }
@@ -42,7 +42,7 @@ button:disabled { opacity: .5; }
 #hud { position: absolute; inset: 0; pointer-events: none; }
 #hud > * { pointer-events: auto; }
 #top { position: absolute; top: calc(8px + var(--safe-t)); left: calc(8px + var(--safe-l)); right: calc(8px + var(--safe-r)); display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; pointer-events: none; }
-#clock { background: rgba(0,0,0,.5); border-radius: 10px; padding: 6px 10px; min-width: 130px; }
+#clock { background: rgba(0,0,0,.5); border-radius: 10px; padding: 6px 10px; min-width: 130px; white-space: nowrap; }
 #daylabel { font-weight: 700; font-size: 15px; }
 .bar { height: 8px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; margin-top: 4px; }
 .bar > div { height: 100%; width: 50%; background: var(--accent); transition: width .2s linear; }
@@ -52,7 +52,7 @@ button:disabled { opacity: .5; }
 .stat { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .stat .bar { flex: 1; margin: 0; height: 10px; }
 #hpfill { background: var(--danger); } #hufill { background: #ffb74d; }
-#minimap { position: absolute; top: calc(58px + var(--safe-t)); right: calc(8px + var(--safe-r)); width: 96px; height: 96px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: #000; image-rendering: pixelated; pointer-events: none; opacity: .9; }
+#minimap { position: absolute; top: calc(58px + var(--safe-t)); right: calc(8px + var(--safe-r)); width: 112px; height: 112px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: #000; image-rendering: pixelated; pointer-events: none; opacity: .9; }
 #log { position: absolute; top: calc(110px + var(--safe-t)); left: calc(8px + var(--safe-l)); font-size: 12px; color: #dfe7ee; text-shadow: 0 1px 2px #000; pointer-events: none; max-width: 60%; }
 #log div { opacity: .95; }
 #toast { position: absolute; top: 40%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.7); padding: 8px 14px; border-radius: 8px; font-size: 15px; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
@@ -85,3 +85,18 @@ button.round.active { outline: 3px solid var(--accent2); }
 
 @media (max-width: 380px) { #stats { width: 120px; } #minimap { width: 72px; height: 72px; } h1 { font-size: 28px; } }
 @media (orientation: landscape) and (max-height: 500px) { .panel { max-height: 60%; } }
+
+/* 설정 카드 */
+.menu-card.wide { width: min(560px, 100%); }
+.menu-card h3 { margin: 6px 0 0; font-size: 14px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+.cards { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: thin; }
+.card { flex: 0 0 auto; width: 150px; text-align: left; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; border-radius: 12px; }
+.card .ci { font-size: 24px; }
+.card .cn { font-weight: 700; font-size: 15px; }
+.card .cd { font-size: 11px; color: var(--muted); line-height: 1.35; white-space: normal; }
+.card.selected { border-color: var(--accent2); background: #1d3a4a; box-shadow: 0 0 0 1px var(--accent2) inset; }
+.card:disabled { opacity: .6; cursor: default; }
+.card:disabled.selected { opacity: 1; }
+.members li .tag { color: var(--accent); font-size: 13px; }
+.menu-card .tag { color: var(--accent2); font-size: 12px; font-weight: 400; }
+#res { gap: 8px; font-size: 14px; }

@@ -1,12 +1,10 @@
-// 터치 조이스틱 + 행동 버튼 + 키보드(PC 테스트용) + 캔버스 탭.
+// 터치 조이스틱 + 행동 버튼 + 키보드(PC 테스트용) + 캔버스 탭 + 핀치 줌.
 export class Input {
   constructor({ joy, knob, actionBtn, canvas }) {
-    this.jx = 0; this.jy = 0;          // 조이스틱 벡터
+    this.jx = 0; this.jy = 0;
     this.keys = new Set();
     this.actionHeld = false;
-    this.onTap = null;                 // (screenX, screenY)
-    this.onHover = null;               // (screenX, screenY | null)
-    this.onKey = null;                 // (key)
+    this.onTap = null; this.onHover = null; this.onKey = null; this.onZoom = null;
     this.enabled = false;
     const R = 40;
     let joyId = null, cx = 0, cy = 0;
@@ -37,17 +35,32 @@ export class Input {
     actionBtn.addEventListener('pointerup', up); actionBtn.addEventListener('pointercancel', up); actionBtn.addEventListener('lostpointercapture', up);
     actionBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // 캔버스 탭 (짧게, 거의 움직이지 않은 터치)
-    let tap = null;
-    canvas.addEventListener('pointerdown', (e) => { tap = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() }; });
-    canvas.addEventListener('pointermove', (e) => { if (this.onHover && e.pointerType === 'mouse') this.onHover(e.clientX, e.clientY); });
-    canvas.addEventListener('pointerleave', () => { if (this.onHover) this.onHover(null, null); });
-    canvas.addEventListener('pointerup', (e) => {
-      if (!tap || tap.id !== e.pointerId) return;
+    // 캔버스: 탭(짧고 거의 안 움직인 터치) + 두 손가락 핀치 줌
+    const pts = new Map();
+    let tap = null, pinchD = 0;
+    canvas.addEventListener('pointerdown', (e) => {
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 1) tap = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
+      else { tap = null; const [a, b] = [...pts.values()]; pinchD = Math.hypot(a.x - b.x, a.y - b.y); }
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinchD > 0 && this.onZoom) this.onZoom(d / pinchD);
+        pinchD = d;
+      } else if (this.onHover && e.pointerType === 'mouse') this.onHover(e.clientX, e.clientY);
+    });
+    const release = (e) => {
+      const had = pts.has(e.pointerId); pts.delete(e.pointerId); pinchD = 0;
+      if (!had || !tap || tap.id !== e.pointerId) { if (pts.size === 0) tap = null; return; }
       const ok = performance.now() - tap.t < 400 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 12;
       tap = null;
       if (ok && this.onTap) this.onTap(e.clientX, e.clientY);
-    });
+    };
+    canvas.addEventListener('pointerup', release); canvas.addEventListener('pointercancel', release);
+    canvas.addEventListener('pointerleave', () => { if (this.onHover) this.onHover(null, null); });
+    canvas.addEventListener('wheel', (e) => { if (this.onZoom) this.onZoom(e.deltaY < 0 ? 1.1 : 0.9); e.preventDefault(); }, { passive: false });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     window.addEventListener('keydown', (e) => {

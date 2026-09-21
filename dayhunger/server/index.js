@@ -47,8 +47,9 @@ class Room {
     this.code = code;
     this.game = null;
     this.state = 'lobby'; // lobby | playing
-    this.members = new Map(); // ws -> { name, playerId }
+    this.members = new Map(); // ws -> { name, playerId, cls }
     this.hostWs = null;
+    this.settings = { map: C.DEFAULT_MAP, difficulty: C.DEFAULT_DIFFICULTY };
     this.timer = null;
     this.tickNo = 0;
     this.emptySince = null;
@@ -59,16 +60,16 @@ class Room {
     for (const ws of this.members.keys()) if (ws !== except && ws.readyState === ws.OPEN) ws.send(s);
   }
   lobbyInfo() {
-    return { type: 'lobby', code: this.code, state: this.state, members: [...this.members.values()].map((m) => ({ name: m.name, host: m.ws === this.hostWs })) };
+    return { type: 'lobby', code: this.code, state: this.state, settings: { ...this.settings }, members: [...this.members.values()].map((m) => ({ name: m.name, host: m.ws === this.hostWs, cls: m.cls })) };
   }
   // 각자에게 '당신이 방장인지'를 붙여서 보냄
   sendLobby() {
     const info = this.lobbyInfo();
     for (const ws of this.members.keys()) if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ ...info, youHost: ws === this.hostWs }));
   }
-  join(ws, name) {
+  join(ws, name, cls) {
     if (this.size >= C.MAX_PLAYERS) return { error: '방이 가득 찼어요 (최대 4명)' };
-    const m = { ws, name: String(name || '생존자').slice(0, 10), playerId: null };
+    const m = { ws, name: String(name || '생존자').slice(0, 10), playerId: null, cls: C.CLASSES[cls] ? cls : C.DEFAULT_CLASS };
     this.members.set(ws, m);
     if (!this.hostWs) this.hostWs = ws;
     this.emptySince = null;
@@ -76,7 +77,7 @@ class Room {
     return { member: m };
   }
   spawnMember(m) {
-    const p = this.game.addPlayer(m.name);
+    const p = this.game.addPlayer(m.name, m.cls);
     m.playerId = p.id;
     m.ws.send(JSON.stringify({ type: 'start', playerId: p.id, code: this.code }));
     m.ws.send(JSON.stringify(this.game.fullState()));
@@ -93,7 +94,7 @@ class Room {
   start() {
     if (this.state === 'playing') return;
     this.state = 'playing';
-    this.game = new Game();
+    this.game = new Game({ map: this.settings.map, difficulty: this.settings.difficulty });
     for (const m of this.members.values()) this.spawnMember(m);
     this.timer = setInterval(() => this.tick(), 1000 / C.TICK_RATE);
   }
@@ -121,6 +122,16 @@ class Room {
     const g = this.game;
     switch (msg.type) {
       case 'start': if (ws === this.hostWs && this.state === 'lobby') { this.start(); } break;
+      case 'settings':
+        if (ws === this.hostWs && this.state === 'lobby') {
+          if (C.MAPS[msg.map]) this.settings.map = msg.map;
+          if (C.DIFFICULTIES[msg.difficulty]) this.settings.difficulty = msg.difficulty;
+          this.sendLobby();
+        }
+        break;
+      case 'class':
+        if (this.state === 'lobby' && C.CLASSES[msg.cls]) { m.cls = msg.cls; this.sendLobby(); }
+        break;
       case 'restart': if (ws === this.hostWs && this.state === 'playing' && g && g.over) this.restart(); break;
       case 'continue': if (ws === this.hostWs && g && g.over && g.won) { g.continueEndless(); } break;
       case 'input': if (g && m.playerId != null) g.setInput(m.playerId, msg); break;
@@ -160,7 +171,7 @@ wss.on('connection', (ws) => {
       if (ws.room) ws.room.leave(ws);
       const room = new Room(makeCode());
       rooms.set(room.code, room);
-      room.join(ws, msg.name); ws.room = room;
+      room.join(ws, msg.name, msg.cls); ws.room = room;
       room.sendLobby();
       return;
     }
@@ -170,7 +181,7 @@ wss.on('connection', (ws) => {
       if (!room) { ws.send(JSON.stringify({ type: 'error', msg: '그 코드의 방이 없어요' })); return; }
       if (room.game && room.game.over) { ws.send(JSON.stringify({ type: 'error', msg: '이미 끝난 게임이에요' })); return; }
       if (ws.room) ws.room.leave(ws);
-      const r = room.join(ws, msg.name);
+      const r = room.join(ws, msg.name, msg.cls);
       if (r.error) { ws.send(JSON.stringify({ type: 'error', msg: r.error })); return; }
       ws.room = room;
       room.sendLobby();
