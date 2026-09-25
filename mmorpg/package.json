@@ -1,0 +1,28 @@
+{
+  "name": "moonlit-exorcists",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && node scripts/singlefile.mjs",
+    "start": "node src/server/node/main.ts",
+    "server": "node src/server/node/main.ts",
+    "test": "vitest run",
+    "balance": "node scripts/balance.ts 180 2",
+    "load": "node scripts/loadtest.ts",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "dependencies": {
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "@types/ws": "^8.18.1",
+    "playwright-core": "1.63.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.1",
+    "vitest": "5.0.1"
+  },
+  "engines": { "node": ">=22.18" }
+}

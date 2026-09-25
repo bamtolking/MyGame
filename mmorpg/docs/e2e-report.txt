@@ -1,0 +1,57 @@
+
+[offline] phone-390x844 390x844
+  ✓ entered town as Lv1 with 6 AI companions (roster 7)
+  ✓ touch-drag joystick moved the player (+177px)
+  ✓ hunting works: Lv3, 70 kills, quest 3, 93 monsters in view, 55 fps
+  ✓ sheet bag opens/closes
+  ✓ sheet tal opens/closes
+  ✓ sheet quest opens/closes
+  ✓ sheet map opens/closes
+  ✓ sheet settings opens/closes
+  ✓ chat message comes back from the server into the chat log
+  ✓ AUTO mode drives the character (walked 644px in 8s)
+  ✓ touching the joystick turns AUTO off
+  ✓ title offers 이어하기 after reload
+  ✓ resumed Lv3 (was Lv3), kills 154
+  ✓ no console/page errors
+
+[offline] small-360x640 360x640
+  ✓ entered town as Lv1 with 6 AI companions (roster 7)
+  ✓ touch-drag joystick moved the player (+175px)
+  ✓ hunting works: Lv2, 45 kills, quest 1, 54 monsters in view, 60 fps
+  ✓ sheet bag opens/closes
+  ✓ sheet tal opens/closes
+  ✓ sheet quest opens/closes
+  ✓ sheet map opens/closes
+  ✓ sheet settings opens/closes
+  ✓ chat message comes back from the server into the chat log
+  ✓ AUTO mode drives the character (walked 968px in 8s)
+  ✓ touching the joystick turns AUTO off
+  ✓ title offers 이어하기 after reload
+  ✓ resumed Lv3 (was Lv3), kills 86
+  ✓ no console/page errors
+
+[offline] landscape-844x390 844x390
+  ✓ entered town as Lv1 with 6 AI companions (roster 7)
+  ✓ touch-drag joystick moved the player (+179px)
+  ✓ hunting works: Lv3, 101 kills, quest 3, 71 monsters in view, 44 fps
+  ✓ sheet bag opens/closes
+  ✓ sheet tal opens/closes
+  ✓ sheet quest opens/closes
+  ✓ sheet map opens/closes
+  ✓ sheet settings opens/closes
+  ✓ chat message comes back from the server into the chat log
+  ✓ AUTO mode drives the character (walked 725px in 8s)
+  ✓ touching the joystick turns AUTO off
+  ✓ title offers 이어하기 after reload
+  ✓ resumed Lv3 (was Lv3), kills 184
+  ✓ no console/page errors
+
+[online] two players through the real server
+  ✓ both players see each other (humans 2/2, entities 2/2)
+  ✓ chat crosses between the two browsers
+  ✓ player 2 sees player 1 where player 1 is (Δ 27px, interpolation delay included)
+  ✓ online client without errors
+  ✓ online client without errors
+
+E2E OK

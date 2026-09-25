@@ -1,0 +1,24 @@
+// Global tuning constants shared by server (authoritative sim) and client (prediction/render).
+export const PROTOCOL_VERSION = 1;
+export const TICK_HZ = 20;
+export const DT = 1 / TICK_HZ;
+export const SNAP_EVERY = 2; // snapshot every 2 ticks → 10 Hz
+export const TILE = 32;
+export const MAP_W = 192;
+export const MAP_H = 192;
+export const WORLD_W = MAP_W * TILE;
+export const WORLD_H = MAP_H * TILE;
+export const POS_Q = 8; // positions are stored on a 1/8 px grid (u16 on the wire)
+export const AOI = 760; // half-size of the area-of-interest square sent to each client
+export const PLAYER_R = 13;
+export const MAX_LEVEL = 30;
+export const INV_MAX = 30;
+export const TAL_SLOTS = 4;
+export const TAL_SLOT_LEVELS = [1, 3, 7, 12]; // character level that unlocks each talisman slot
+export const TAL_MAX_LV = 5;
+export const SHARE_R = 650; // everyone alive within this radius of a kill gets full credit
+export const REVIVE_R = 64;
+export const REVIVE_TIME = 2; // seconds an ally must stand next to a downed player
+export const DOWN_TIME = 15; // seconds before auto-respawn at a shrine
+export const CHANNEL_CAP = 80;
+export const NAME_MAX = 10;
