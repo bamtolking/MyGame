@@ -9,33 +9,50 @@ import { audio } from '../platform/audio';
 
 const pickStr = (arr: readonly string[], fallback: string) => (arr.length ? arr[Math.floor(Math.random() * arr.length)] : fallback);
 
-function choiceInfo(w: World, c: LevelChoice): { icon: string; name: string; tag: string; tagCls: string; desc: string; hint: string } {
-  if (c.kind === 'heal') return { icon: '☕', name: '커피 한 잔', tag: '', tagCls: '', desc: c.desc, hint: '' };
-  if (c.kind === 'coins') return { icon: '💰', name: '용돈', tag: '', tagCls: '', desc: c.desc, hint: '' };
+/** 카드 등급: 무기(청록) · 패시브(보라) · 진화 가능(금색) · 기타(민트) */
+type Rarity = 'weapon' | 'passive' | 'evo' | 'misc';
+interface ChoiceInfo { icon: string; name: string; tag: string; tagCls: string; desc: string; hint: string; rar: Rarity; lv: number; max: number }
+
+function choiceInfo(w: World, c: LevelChoice): ChoiceInfo {
+  if (c.kind === 'heal') return { icon: '☕', name: '커피 한 잔', tag: '', tagCls: '', desc: c.desc, hint: '', rar: 'misc', lv: 0, max: 0 };
+  if (c.kind === 'coins') return { icon: '💰', name: '용돈', tag: '', tagCls: '', desc: c.desc, hint: '', rar: 'misc', lv: 0, max: 0 };
   if (c.kind === 'newWeapon' || c.kind === 'weapon') {
     const d = WEAPON.get(c.id)!;
     const pair = d.evolveWith ? PASSIVE.get(d.evolveWith) : undefined;
     const evo = d.evolvesTo ? WEAPON.get(d.evolvesTo) : undefined;
     const has = pair && w.passives.some(p => p.def.id === pair.id);
-    const hint = pair && evo ? `진화: 최대 레벨 + ${pair.icon} ${pair.name}${has ? ' ✔' : ''}` : '';
-    const max = c.level >= maxLevelOf(d);
+    const mx = maxLevelOf(d);
+    const max = c.level >= mx;
+    const ready = !!(pair && evo && has && max);   // 이걸 고르면 진화 조건이 완성된다
+    const hint = ready ? `⭐ 진화 준비 완료 → ${evo!.icon} ${evo!.name}` : pair && evo ? `진화: 최대 레벨 + ${pair.icon} ${pair.name}${has ? ' ✔' : ''}` : '';
     return {
       icon: d.icon, name: d.name,
       tag: c.kind === 'newWeapon' ? 'NEW 무기' : max ? `MAX` : `Lv ${c.level}`,
-      tagCls: c.kind === 'newWeapon' ? '' : 'lv',
+      tagCls: c.kind === 'newWeapon' ? 'new' : max ? 'max' : 'lv',
       desc: c.kind === 'newWeapon' ? d.desc : c.desc, hint,
+      rar: ready ? 'evo' : 'weapon', lv: c.level, max: mx,
     };
   }
   const d = PASSIVE.get(c.id)!;
   const evoFor = [...WEAPON.values()].filter(x => x.evolveWith === d.id && !x.evolved && w.weapons.some(o => o.def.id === x.id));
+  const readyFor = c.kind === 'newPassive' ? evoFor.filter(x => w.weapons.some(o => o.def.id === x.id && o.level >= maxLevelOf(x))) : [];
   const stats = Object.entries(d.perLevel).map(([k, v]) => statLabel(k, v as number)).join(' · ');
   return {
     icon: d.icon, name: d.name,
     tag: c.kind === 'newPassive' ? 'NEW 패시브' : c.level >= d.maxLevel ? 'MAX' : `Lv ${c.level}`,
-    tagCls: c.kind === 'newPassive' ? '' : 'lv',
+    tagCls: c.kind === 'newPassive' ? 'new' : c.level >= d.maxLevel ? 'max' : 'lv',
     desc: c.kind === 'newPassive' ? d.desc : `${stats} (Lv ${c.level - 1} → ${c.level})`,
-    hint: evoFor.length ? `진화 재료: ${evoFor.map(x => `${x.icon} ${x.name}`).join(', ')}` : '',
+    hint: readyFor.length ? `⭐ ${readyFor.map(x => `${x.icon} ${x.name}`).join(', ')} 진화 준비 완료` : evoFor.length ? `진화 재료: ${evoFor.map(x => `${x.icon} ${x.name}`).join(', ')}` : '',
+    rar: readyFor.length ? 'evo' : 'passive', lv: c.level, max: d.maxLevel,
   };
+}
+
+/** 카드의 레벨 눈금: 이미 가진 레벨은 켜고, 이번에 오르는 칸은 깜빡인다 */
+function levelPips(lv: number, max: number): HTMLElement | null {
+  if (!max || max > 12) return null;
+  const el = h('div', { class: 'cpips' });
+  for (let i = 1; i <= max; i++) el.appendChild(h('i', i < lv ? { class: 'on' } : i === lv ? { class: 'new' } : null));
+  return el;
 }
 
 export interface ModalHost {
@@ -61,13 +78,13 @@ export class Modals {
 
   close() { this.cur?.remove(); this.cur = null; this.kind = ''; this.banishMode = false; }
 
-  private open(kind: string, ...children: (Node | null)[]) {
+  private open(kind: string, w: World, ...children: (Node | null)[]) {
     const keepBanish = kind === 'levelup' && this.kind === 'levelup' ? this.banishMode : false;
     this.close();
     this.banishMode = keepBanish;
     this.kind = kind;
-    const m = h('div', { class: 'modal' }, ...children);
-    this.cur = h('div', { class: 'modal-wrap no-joy' }, m);
+    const m = h('div', { class: `modal m-${kind}` }, ...children);
+    this.cur = h('div', { class: `modal-wrap no-joy mw-${kind}`, 'data-stage': w.cfg.stage.id }, m);
     this.host.root.appendChild(this.cur);
     return m;
   }
@@ -80,14 +97,14 @@ export class Modals {
     w.choices.forEach((c, i) => {
       const inf = choiceInfo(w, c);
       const canBan = c.kind === 'newWeapon' || c.kind === 'newPassive';
-      const card = h('button', { class: `choice${this.banishMode ? (canBan ? ' banish-mode' : ' ban-off') : ''}`, type: 'button', style: `animation-delay:${i * 60}ms` },
+      const card = h('button', { class: `choice r-${inf.rar}${this.banishMode ? (canBan ? ' banish-mode' : ' ban-off') : ''}`, type: 'button', style: `animation-delay:${60 + i * 70}ms` },
         h('div', { class: 'ic' }, inf.icon),
         h('div', { class: 'grow' },
-          h('div', { class: 'nm' }, inf.name),
+          h('div', { class: 'nmrow' }, h('span', { class: 'nm' }, inf.name), inf.tag ? h('span', { class: `tag ${inf.tagCls}` }, inf.tag) : null),
+          levelPips(inf.lv, inf.max),
           h('div', { class: 'ds' }, inf.desc),
           inf.hint ? h('div', { class: 'hint' }, inf.hint) : null,
         ),
-        inf.tag ? h('span', { class: `tag ${inf.tagCls}` }, inf.tag) : null,
       );
       card.addEventListener('click', () => {
         if (performance.now() < lockUntil || performance.now() < toolLock) return;
@@ -105,7 +122,8 @@ export class Modals {
     if (p.rerolls > 0) tools.appendChild(btn(`🔄 새로고침 ${p.rerolls}`, guard(() => this.host.reroll()), 'btn small sky'));
     if (p.skips > 0) tools.appendChild(btn(`⏭ 건너뛰기 ${p.skips}`, guard(() => this.host.skip()), 'btn small ghost'));
     if (p.banishes > 0) tools.appendChild(btn(this.banishMode ? '취소' : `🚫 제외 ${p.banishes}`, guard(() => { this.banishMode = !this.banishMode; this.levelUp(w); }), 'btn small danger'));
-    this.open('levelup',
+    this.open('levelup', w,
+      h('div', { class: 'modal-kicker' }, 'LEVEL UP'),
       h('div', { class: 'modal-title' }, `🎉 레벨 ${p.level - w.levelQueue + 1}!`),
       h('div', { class: 'modal-sub' }, this.banishMode ? '제외할 새 항목을 고르세요 (이번 판에서 다시 안 나옴)' : pickStr(LEVELUP_SHOUTS, '승진각!')),
       list,
@@ -115,25 +133,30 @@ export class Modals {
 
   chest(w: World) {
     const res = w.chest!;
-    const stage = h('div', { class: 'chest-stage' });
+    const stage = h('div', { class: `chest-stage${res.boss ? ' boss' : ''}` });
     const box = h('div', { class: 'box' }, res.boss ? '🎁' : '📦');
+    stage.appendChild(h('div', { class: 'rays' }));
     stage.appendChild(box);
     const reels = h('div', { class: 'reels' });
     const list = h('div', { class: 'chest-list' });
     const done = btn('받기!', () => this.host.closeChest(), 'btn primary big', { style: 'width:100%;margin-top:12px' });
     done.classList.add('hidden');
-    const m = this.open('chest',
+    const sub = h('div', { class: 'modal-sub' }, '상자를 눌러 열어보세요');
+    this.open('chest', w,
+      h('div', { class: 'modal-kicker' }, res.boss ? 'BOSS REWARD' : 'DELIVERY'),
       h('div', { class: 'modal-title' }, res.boss ? '🎁 보스 보상 상자!' : '📦 택배 도착!'),
-      h('div', { class: 'modal-sub' }, '상자를 눌러 열어보세요'),
-      stage, reels, list, done,
+      sub,
+      h('div', { class: 'chest-cols' }, stage, h('div', { class: 'chest-side' }, reels, list, done)),
     );
     let opened = false;
     const icons = [...WEAPON.values()].map(x => x.icon).concat([...PASSIVE.values()].map(x => x.icon));
     const openIt = () => {
       if (opened) return;
       opened = true;
+      stage.classList.add('opened');
       box.classList.add('open');
       box.textContent = '✨';
+      sub.textContent = '두근두근…';
       audio.play('tick');
       const n = res.items.length;
       const cells = res.items.map(() => { const r = h('div', { class: 'reel' }, '❔'); reels.appendChild(r); return r; });
@@ -149,7 +172,7 @@ export class Modals {
           c.classList.add('done');
           const d = it.kind === 'passive' ? PASSIVE.get(it.id) : it.kind === 'coins' ? null : WEAPON.get(it.id);
           c.textContent = d ? d.icon : '💰';
-          if (it.kind === 'evolve') { c.classList.add('evo'); audio.play('evolve'); } else audio.play('coin');
+          if (it.kind === 'evolve') { c.classList.add('evo'); stage.classList.add('evo'); audio.play('evolve'); } else audio.play('coin');
           const name = d ? d.name : `월급 ${it.level}`;
           const from = it.from ? WEAPON.get(it.from) : null;
           list.appendChild(h('div', { class: `it${it.kind === 'evolve' ? ' evo' : ''}` },
@@ -158,8 +181,9 @@ export class Modals {
           ));
           if (i === n - 1) {
             window.clearInterval(spin);
-            list.appendChild(h('div', { class: 'it' }, h('span', { class: 'e' }, '💰'), h('span', { class: 'grow' }, `월급 +${res.coins}`)));
+            list.appendChild(h('div', { class: 'it pay' }, h('span', { class: 'e' }, '💰'), h('span', { class: 'grow' }, `월급 +${res.coins}`)));
             if (n >= 3) audio.play('jackpot');
+            sub.textContent = n >= 5 ? '대박! 전부 챙기세요' : '수령 완료';
             done.classList.remove('hidden');
           }
         }, 650 + i * (n >= 5 ? 360 : 480));
@@ -167,28 +191,28 @@ export class Modals {
     };
     box.addEventListener('click', openIt);
     window.setTimeout(openIt, 1400);
-    void m;
   }
 
   lunch(w: World) {
     const list = h('div', { class: 'choices-grid' });
     w.lunchChoices.forEach((l, i) => {
       const stats = Object.entries(l.stats).map(([k, v]) => statLabel(k, v as number)).join(' · ');
-      const card = h('button', { class: 'choice lunch-card', type: 'button', style: `animation-delay:${i * 80}ms` },
+      const card = h('button', { class: 'choice lunch-card', type: 'button', style: `animation-delay:${60 + i * 80}ms` },
         h('div', { class: 'ic' }, l.icon),
         h('div', { class: 'grow' },
-          h('div', { class: 'nm' }, l.name),
+          h('div', { class: 'nmrow' }, h('span', { class: 'nm' }, l.name)),
           h('div', { class: 'ds' }, l.desc),
-          h('div', { class: 'ds' }, h('b', null, stats), l.heal ? ` · 체력 ${Math.round(l.heal * 100)}% 회복` : ''),
+          h('div', { class: 'ds fx' }, h('b', null, stats), l.heal ? ` · 체력 ${Math.round(l.heal * 100)}% 회복` : ''),
         ),
       );
       const lock = performance.now() + 400;
       card.addEventListener('click', () => { if (performance.now() >= lock) this.host.lunch(l.id); });
       list.appendChild(card);
     });
-    this.open('lunch',
+    this.open('lunch', w,
+      h('div', { class: 'modal-kicker' }, 'LUNCH BREAK · 12:00'),
       h('div', { class: 'modal-title' }, `🍱 ${pickStr(LUNCH_TITLES, '점심시간!')}`),
-      h('div', { class: 'modal-sub' }, '12:00 — 고른 메뉴의 효과가 퇴근까지 유지됩니다'),
+      h('div', { class: 'modal-sub' }, '고른 메뉴의 효과가 퇴근까지 유지됩니다'),
       list,
     );
   }
@@ -197,13 +221,13 @@ export class Modals {
     const total = w.weapons.reduce((a, x) => a + x.dmg, 0) || 1;
     const build = h('div', { class: 'build' });
     for (const wi of [...w.weapons].sort((a, b) => b.dmg - a.dmg)) {
-      build.appendChild(h('div', null,
+      build.appendChild(h('div', wi.def.evolved ? { class: 'evo' } : null,
         h('div', { class: 'w' }, h('span', { class: 'e' }, wi.def.icon), h('span', { class: 'n' }, `${wi.def.name} ${wi.def.evolved ? '★' : `Lv${wi.level}`}`), h('span', { class: 'dmg' }, Math.round(wi.dmg).toLocaleString('ko-KR'))),
         h('div', { class: 'dmgbar' }, h('i', { style: `width:${(wi.dmg / total) * 100}%` })),
       ));
     }
-    const pas = h('div', { class: 'row gap', style: 'flex-wrap:wrap;margin-bottom:6px' },
-      ...w.passives.map(p => h('span', { class: 'pill' }, `${p.def.icon} ${p.def.name} ${p.level}`)));
+    const pas = w.passives.length ? h('div', { class: 'pill-row' },
+      ...w.passives.map(p => h('span', { class: 'pill' }, `${p.def.icon} ${p.def.name} ${p.level}`))) : null;
     const d = w.d;
     const stats = h('div', { class: 'statlist' },
       h('div', null, '피해', h('b', null, `${Math.round((d.mightMul - 1) * 100)}%`)),
@@ -215,25 +239,31 @@ export class Modals {
       h('div', null, '이동속도', h('b', null, `${Math.round(d.moveSpeed)}`)),
       h('div', null, '행운', h('b', null, `${Math.round((d.luck - 1) * 100)}%`)),
     );
-    this.open('pause',
+    this.open('pause', w,
+      h('div', { class: 'modal-kicker' }, 'PAUSED'),
       h('div', { class: 'modal-title' }, `⏸ ${pickStr(PAUSE_TITLES, '잠깐 쉬는 중')}`),
       h('div', { class: 'modal-sub' }, `${clockText(w)} · ${fmtTime(w.t)} 경과 · ${w.cfg.stage.name}${w.cfg.heat ? ` · 야근 강도 ${w.cfg.heat}` : ''}`),
-      build, pas, stats,
-      w.lunch ? h('div', { class: 'small', style: 'margin-bottom:8px' }, `점심: ${w.lunch.icon} ${w.lunch.name}`) : null,
-      h('div', { class: 'small', style: 'margin-bottom:10px;color:#cfd3ff' }, `💡 ${pickStr(TIPS, '')}`),
-      h('div', { class: 'col gap pause-actions' },
-        btn('▶ 계속 일하기', () => this.host.resume(), 'btn primary big'),
-        h('div', { class: 'row gap' },
-          btn('⚙ 설정', () => this.host.settings(), 'btn ghost grow'),
-          btn('🏳 조퇴하기', () => this.host.quit(), 'btn danger grow'),
+      h('div', { class: 'pause-cols' },
+        h('div', { class: 'pause-main' }, h('div', { class: 'sec-title' }, '🗡 무기별 피해'), build),
+        h('div', { class: 'pause-side' },
+          pas, stats,
+          w.lunch ? h('div', { class: 'small', style: 'margin-bottom:8px' }, `점심: ${w.lunch.icon} ${w.lunch.name}`) : null,
+          h('div', { class: 'tip' }, `💡 ${pickStr(TIPS, '')}`),
+          h('div', { class: 'col gap pause-actions' },
+            btn('▶ 계속 일하기', () => this.host.resume(), 'btn primary big'),
+            h('div', { class: 'row gap' },
+              btn('⚙ 설정', () => this.host.settings(), 'btn ghost grow'),
+              btn('🏳 조퇴하기', () => this.host.quit(), 'btn danger grow'),
+            ),
+          ),
         ),
       ),
     );
   }
 
   victory(w: World) {
-    this.open('victory',
-      h('div', { class: 'result-head' },
+    this.open('victory', w,
+      h('div', { class: 'result-head win' },
         h('div', { class: 'big' }, '🎉'),
         h('h2', { class: 'win' }, '18:00 칼퇴 성공!'),
         h('div', { class: 'quote' }, w.yageun ? '조금 늦었지만… 어쨌든 퇴근!' : '정시 퇴근의 기쁨을 누리세요'),
