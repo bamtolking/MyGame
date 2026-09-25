@@ -38,6 +38,17 @@ export class Post {
     this.baseKey = this.v2Key = this.redKey = '';
   }
 
+  /** GPU 문맥을 잃었다 되찾았을 때: 버퍼를 모두 새 캔버스로 바꾼다(예전 캔버스는 메인보다 늦게 복구돼 그 사이 다시 그린 내용이 버려질 수 있다).
+   *  키로 캐시해 둔 버퍼(기본 어둠·정적 오버레이·저체력 테두리·램프)도 다시 그린다. 이어서 resize()를 불러야 한다 */
+  reset() {
+    for (const b of [this.b4, this.b8, this.b16, this.l8, this.d8, this.d8base, this.v2, this.red]) b.c.width = b.c.height = 0;
+    this.b4 = buf(); this.b8 = buf(); this.b16 = buf(); this.l8 = buf();
+    this.d8 = buf(); this.d8base = buf(); this.v2 = buf(); this.red = buf();
+    this.cw = this.ch = 0;
+    this.baseKey = this.v2Key = this.redKey = '';
+    this.lamp = null;
+  }
+
   /** 저해상도 버퍼용 View(월드 변환을 버퍼 배율로, W/H는 화면 CSS px 그대로) */
   private sub(v: View, div: number): View {
     return { x0: v.x0, y0: v.y0, x1: v.x1, y1: v.y1, S: v.S / div, bx: v.bx / div, by: v.by / div, W: v.W, H: v.H, dpr: v.dpr / div, time: v.time, quality: v.quality };

@@ -6,12 +6,12 @@ import { orbitPositions } from '../sim/weapons';
 import { ENEMY } from '../content';
 import type { EnemyDef, StageDef } from '../content/types';
 import {
-  angry, bubble, coin, danger, ebullet, emoji, gem, gemColor, gemTier, glow, lightBeam, nameplate, person, setSpriteScale, shadow, spark,
-  spriteScale, tinted, worker, type Sprite,
+  angry, bubble, clearSpriteCache, coin, danger, ebullet, emoji, gem, gemColor, gemTier, glow, lightBeam, nameplate, person, setSpriteScale, shadow,
+  silhouette, spark, spriteGen, spriteScale, syncSpriteScale, tinted, worker, type Sprite,
 } from './sprites';
 import { Fx, type View, type Quality } from './fx';
 import { Post } from './post';
-import { DEFAULT_ENV, drawAmbient, drawFloor, drawPropAnims, drawProps, envOf, lightPower, visibleProps, type EnvStyle, type Placed } from './env';
+import { DEFAULT_ENV, drawAmbient, drawFloor, drawPropAnims, drawProps, envOf, lightPower, resetEnvCanvases, visibleProps, type EnvStyle, type Placed } from './env';
 import { hexA as colorA, neon } from './color';
 
 export const VIEW_SHORT = 420;   // 화면 짧은 변에 보이는 월드 단위
@@ -21,6 +21,8 @@ export interface Joy { active: boolean; bx: number; by: number; kx: number; ky: 
 interface Dust { x: number; y: number; t: number; life: number; r: number; vx: number }
 
 const TAU = Math.PI * 2;
+/** 0..1 소수부. JS %는 왼쪽 부호를 따라가 음수 좌표에서 음수가 되고, 그 값으로 만든 반지름이 음수면 arc·ellipse가 예외를 던진다 */
+const frac = (v: number) => v - Math.floor(v);
 // 점선 패턴(프레임마다 배열을 새로 만들지 않게)
 const NO_DASH: number[] = [], DASH_ZONE = [7, 5], DASH_AURA = [12, 7], DASH_AURA2 = [3, 9], DASH_SLAM = [9, 6], DASH_LOB = [5, 5], DASH_CHARGE = [10, 8];
 const TAIL: [number, number][] = [[0.62, 0.1], [0.4, 0.12], [0.2, 0.16]];   // 궤도체 꼬리: [길이(rad), 진하기]
@@ -52,13 +54,29 @@ export class Renderer {
   private bossList: Enemy[] = [];
   private orbitPrev: number[] = [];
   private warmStage: StageDef | null = null;
-  private warmQ: EnemyDef[] = [];
+  private warmGen = -1;
+  private warmQ: [EnemyDef, number][] = [];   // [적, 걷기 프레임]
+  private ctxLost = false;
+  private stillAt = -1;   // 시뮬레이션이 멈춘 시각(ms, 움직이는 중이면 -1)
   private orbitDir: number[] = [];
 
   constructor(public canvas: HTMLCanvasElement, public fx: Fx) {
     this.g = canvas.getContext('2d', { alpha: false })!;
     for (let i = 0; i < 18; i++) this.dust.push({ x: 0, y: 0, t: 1, life: 1, r: 4, vx: 0 });
+    // GPU 프로세스가 죽거나 초기화되면(저사양 안드로이드의 앱 전환 등) 캔버스 문맥을 잃었다 되찾는다 → 다음 프레임 시작에 캐시를 비운다
+    canvas.addEventListener('contextrestored', () => { this.ctxLost = true; });
     this.resize();
+  }
+
+  /** 문맥을 되찾으면 오프스크린 캐시 캔버스(스프라이트·바닥 타일·후처리·fx 시트)가 빈 채로 남는다.
+   *  캐시 키는 그대로라 저절로 다시 그려지지 않으므로 전부 비워 다시 굽게 한다 */
+  private resetCanvases() {
+    clearSpriteCache();
+    resetEnvCanvases();
+    this.post.reset();
+    this.post.resize(this.canvas.width, this.canvas.height);
+    this.fx.invalidateText();
+    (this.fx as { resetCanvases?: () => void }).resetCanvases?.();
   }
 
   resize() {
@@ -97,6 +115,13 @@ export class Renderer {
     else this.g.drawImage(s.c, dx, dy, s.c.width * this.k, s.c.height * this.k);
   }
 
+  /** 스프라이트 s 모양의 캔버스 c(원본 또는 색 실루엣)를 앵커 기준 kx·ky배로 찍는다(kx < 0 = 좌우 반전).
+   *  c는 s.c 크기로 늘려 찍으므로 반 해상도 실루엣도 딱 겹친다. 끝나면 변환은 호출한 쪽이 다시 맞춘다 */
+  private stamp(s: Sprite, c: HTMLCanvasElement, x: number, y: number, kx: number, ky: number) {
+    this.g.setTransform(this.k * kx, 0, 0, this.k * ky, this.bx + x * this.S, this.by + y * this.S);
+    this.g.drawImage(c, -s.ax * this.SS, -s.ay * this.SS, s.c.width, s.c.height);
+  }
+
   /** 회전·확대 스프라이트(행렬 직접 설정, save/restore 없음). 끝나면 변환은 호출한 쪽이 다시 맞춘다 */
   private rot(s: Sprite, x: number, y: number, a: number, sc = 1) {
     const k = this.k * sc, c = Math.cos(a) * k, n = Math.sin(a) * k;
@@ -112,23 +137,33 @@ export class Renderer {
     g.drawImage(s.c, x - r, y - r, r * 2, r * 2);
   }
 
-  /** 근무지가 바뀌면 그 근무지 적 스프라이트(외곽선·림라이트 가공)를 프레임마다 두 개씩 미리 만들어 첫 등장 때 끊김을 없앤다 */
+  /** 근무지가 바뀌거나 캐시가 비워지면(배율·글꼴·문맥) 그 근무지 적 스프라이트(외곽선·림라이트 가공)를 프레임마다 조금씩 미리 만들어
+   *  첫 등장 때 끊김을 없앤다. 사람형(보스)은 걷기 자세 셋 + 붉은 림 실루엣까지 — 비싸서 한 프레임에 하나씩 */
   private warm(w: World) {
-    const st = w.cfg.stage;
-    if (st !== this.warmStage) {
-      this.warmStage = st;
+    const st = w.cfg.stage, gen = spriteGen();
+    if (st !== this.warmStage || gen !== this.warmGen) {
+      this.warmStage = st; this.warmGen = gen;
       const ids = new Set<string>([st.finalBoss]);
       for (const seg of st.timeline) for (const e of seg.pool) ids.add(e.enemy);
       for (const ev of st.events) if (ev.enemy) ids.add(ev.enemy);
       for (const e of st.overtimePool) ids.add(e.enemy);
-      this.warmQ = [...ids].map(id => ENEMY.get(id)).filter((d): d is EnemyDef => !!d);
+      this.warmQ.length = 0;
+      for (const id of ids) {
+        const d = ENEMY.get(id);
+        if (!d) continue;
+        if (d.body && !d.label) for (const f of [3, 1, 0]) this.warmQ.push([d, f]);
+        else this.warmQ.push([d, 0]);
+      }
     }
     const big = w.flags.has('bigHead') ? 1.35 : 1;
     for (let n = 0; n < 2 && this.warmQ.length; n++) {
-      const d = this.warmQ.pop()!, r = d.radius * big;
+      const [d, f] = this.warmQ.pop()!, r = d.radius * big;
       if (d.label) bubble(d.label, r, d.tint ?? '#ff5a7a');
-      else if (d.body) person(d.sprite, d.body.suit, d.body.tie, r, 0, false, d.boss ? '#ff5446' : d.elite ? '#ffd76a' : envOf(st).rim);
-      else angry(d.sprite, Math.round(r * 2.1), d.tint ?? (d.elite ? '#ffb000' : '#ff3b5c'), envOf(st).rim, !!d.elite);
+      else if (d.body) {
+        const s = person(d.sprite, d.body.suit, d.body.tie, r, f, d.boss ? '#ff5446' : d.elite ? '#ffd76a' : envOf(st).rim);
+        if (d.boss) silhouette(s, '#ff2a36');
+        n++;
+      } else angry(d.sprite, Math.round(r * 2.1), d.tint ?? (d.elite ? '#ffb000' : '#ff3b5c'), envOf(st).rim, !!d.elite);
     }
   }
 
@@ -136,6 +171,13 @@ export class Renderer {
   render(w: World, dt: number, joy: Joy | null, steps = 1) {
     const g = this.g;
     const fx = this.fx;
+    // 문맥을 잃은 동안은 그려도 버려진다. 되찾으면(이벤트 또는 여기서 본 잃음) 캐시를 비운다
+    if (g.isContextLost?.()) { this.ctxLost = true; return; }
+    if (this.ctxLost) { this.ctxLost = false; this.resetCanvases(); }
+    // 작은 화면 변화로 미뤄 둔 스프라이트 배율은 멈춘 지 0.5초 지나서(일시정지·모달이 다 뜬 뒤) 맞춘다 — 다시 굽는 끊김이 안 보이게
+    if (this.live) this.stillAt = -1;
+    else if (this.stillAt < 0) this.stillAt = performance.now();
+    else if (performance.now() - this.stillAt > 500) syncSpriteScale();
     this.time += dt;
     this.frameDt = dt;
     const p = w.player;
@@ -166,6 +208,8 @@ export class Renderer {
     // ── 바닥·소품 ──
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    // 바닥색을 먼저 깐다: 타일이 비어도(문맥을 잃었다 되찾는 등) 이전 프레임이 번져 남지 않게
+    g.fillStyle = st.palette.floor; g.fillRect(0, 0, cw, ch);
     drawFloor(g, st, view, this.exact);
     visibleProps(st, x0, y0, x1, y1, this.props);
     drawProps(g, st, this.props, view, this.exact);
@@ -193,7 +237,8 @@ export class Renderer {
     // ── 픽업 ──
     this.drawPickups(w, vis);
 
-    // ── 적(보스는 플레이어 위) ──
+    // ── 적 → 플레이어. 보스는 발 위치로 앞뒤를 가른다: 플레이어보다 뒤(위쪽)면 밑에, 앞(아래쪽)이면 위에 그리고
+    //    그 몸에 플레이어가 가려지면 플레이어를 반투명하게 한 번 더 얹어 늘 먼저 읽히게 ──
     g.setTransform(1, 0, 0, 1, 0, 0);
     const bosses = this.bossList; bosses.length = 0;
     let burnN = 0;
@@ -203,9 +248,18 @@ export class Renderer {
       this.drawEnemy(e);
       if (e.burnT > 0 && this.live && burnN < 14 && this.rnd() < dt * 8) { burnN++; fx.burst(e.x, e.y - e.r * 0.5, '#ff7a1a', 1, 40, 2.5, 1, -80); }
     }
+    const pf = py + 14;   // 플레이어 발(그림자 자리)
+    for (const e of bosses) if (e.y + e.r * (e.def.body ? 1.3 : 0.85) <= pf) this.drawEnemy(e);
     this.drawPlayer(w);
     g.setTransform(1, 0, 0, 1, 0, 0);
-    for (const e of bosses) this.drawEnemy(e);
+    let hidden = false;
+    for (const e of bosses) {
+      if (e.y + e.r * (e.def.body ? 1.3 : 0.85) <= pf) continue;
+      this.drawEnemy(e);
+      // 보스 몸통(사람형: 가로 ±1.05r, 머리 꼭대기 -1.6r)이 플레이어 몸(가로 ±16, 세로 -27..+18)을 덮는지
+      if (Math.abs(e.x - px) < e.r * (e.def.body ? 1.05 : 0.9) + 16 && e.y - e.r * (e.def.body ? 1.6 : 0.9) < py + 18) hidden = true;
+    }
+    if (hidden) this.drawPlayer(w, true);
     this.drawTelegraphs(w, vis);
 
     // ── 궤도 무기·드론·투사체·광선·적 탄 ──
@@ -267,7 +321,7 @@ export class Renderer {
       g.fillStyle = z.hostile ? '#ff2e4a' : z.color;
       g.beginPath(); g.arc(z.x, z.y, z.r, 0, TAU); g.fill();
       g.globalAlpha = 0.12 * k; g.fillStyle = col;
-      g.beginPath(); g.arc(z.x, z.y, z.r * (0.45 + ((this.time * 0.8 + z.x * 0.01) % 1) * 0.5), 0, TAU); g.fill();
+      g.beginPath(); g.arc(z.x, z.y, z.r * (0.45 + frac(this.time * 0.8 + z.x * 0.01) * 0.5), 0, TAU); g.fill();
       g.globalAlpha = 0.75 * k;
       g.strokeStyle = col;
       g.lineWidth = z.hostile ? 2.4 : 1.6;
@@ -457,7 +511,7 @@ export class Renderer {
       const col = k.bossChest ? '#ff6bd6' : PICKUP_GLOW[k.kind] ?? '#ffffff';
       this.world();
       if (big) { const lb = lightBeam(col); g.globalAlpha = 0.5 + Math.sin(t * 3) * 0.12; g.drawImage(lb.c, k.x - 18, k.y - lb.ay * 0.9 + 6, 36, lb.h * 0.9); }
-      const pr = (t * 1.2 + k.x * 0.01) % 1;
+      const pr = frac(t * 1.2 + k.x * 0.01);
       g.globalAlpha = 0.6 * (1 - pr); g.strokeStyle = col; g.lineWidth = 1.4;
       g.beginPath(); g.ellipse(k.x, k.y + 9, (big ? 16 : 10) * (0.6 + pr * 0.8), (big ? 6 : 4) * (0.6 + pr * 0.8), 0, 0, TAU); g.stroke();
       if (this.low) this.light(g, colorA(col, 0.5), k.x, k.y + bob, big ? 30 : 18, 0.7);
@@ -472,14 +526,19 @@ export class Renderer {
   private enemySprite(e: Enemy): Sprite {
     const d = e.def;
     if (d.label) return bubble(d.label, e.r, d.tint ?? '#ff5a7a');
-    if (d.body) return person(d.sprite, d.body.suit, d.body.tie, e.r, Math.floor(this.time * 6 + e.seed) & 3, e.face < 0, e.boss ? '#ff5446' : e.elite ? '#ffd76a' : this.env.rim);
+    if (d.body) return person(d.sprite, d.body.suit, d.body.tie, e.r, Math.floor(this.time * 6 + e.seed) & 3, e.boss ? '#ff5446' : e.elite ? '#ffd76a' : this.env.rim);
     return angry(d.sprite, Math.round(e.r * 2.1), d.tint ?? (e.elite ? '#ffb000' : '#ff3b5c'), this.env.rim, e.elite);
   }
+
+  /** 적의 색 실루엣 캔버스: 사람형(보스)은 반 해상도(stamp처럼 원본 크기로 늘려 찍는다), 나머지는 원본 해상도 */
+  private tint(s: Sprite, half: boolean, color: string): HTMLCanvasElement { return (half ? silhouette(s, color) : tinted(s, color)).c; }
 
   /** 식별 변환 상태에서 호출. 끝나면 식별 변환으로 돌려 둔다 */
   private drawEnemy(e: Enemy) {
     const g = this.g;
     const s = this.enemySprite(e);
+    // 사람형(보스)은 오른쪽을 보는 그림만 캐시하고, 왼쪽을 볼 때는 찍을 때 좌우로 뒤집는다
+    const body = !!e.def.body && !e.def.label, mir = body && e.face < 0 ? -1 : 1;
     let sx = 1, sy = 1;
     // 등장: 튀어나오듯 커졌다가 안착
     if (e.spawnT > 0) { const t = 1 - e.spawnT / 0.25; const q = t < 0.7 ? (t / 0.7) * 1.14 : 1.14 - ((t - 0.7) / 0.3) * 0.14; sx = sy = Math.max(0.05, q); }
@@ -504,25 +563,32 @@ export class Renderer {
     if (big) {
       // 뒤에 살짝 큰 실루엣: 보스는 붉은 림 맥동, 맞으면 흰 테두리 번쩍임
       const pl = 0.5 + Math.sin(this.time * 4) * 0.5;
-      if (e.boss) { g.globalAlpha = 0.25 + pl * 0.35; this.rot(tinted(s, '#ff2a36'), x, y, 0, 1.04 + pl * 0.03); }
-      if (fl > 0) { g.globalAlpha = Math.min(0.85, fl * 1.2); this.rot(tinted(s, '#ffffff'), x, y, 0, e.boss ? 1.05 : 1.08); }
+      if (e.boss) { const q = 1.04 + pl * 0.03; g.globalAlpha = 0.25 + pl * 0.35; this.stamp(s, this.tint(s, body, '#ff2a36'), x, y, q * mir, q); }
+      if (fl > 0) { const q = e.boss ? 1.05 : 1.08; g.globalAlpha = Math.min(0.85, fl * 1.2); this.stamp(s, this.tint(s, body, '#ffffff'), x, y, q * mir, q); }
       g.globalAlpha = 1;
       g.setTransform(1, 0, 0, 1, 0, 0);
     }
     const ax = this.bx + x * this.S, ay = this.by + y * this.S;
+    const sw = s.c.width, sh = s.c.height;
     if (sx === 1 && sy === 1 && this.exact) {
-      const dx = Math.round(ax - s.ax * this.SS), dy = Math.round(ay - s.ay * this.SS);
+      // 1:1 정수 픽셀. 뒤집을 때는 x축만 -1(정수 이동이라 여전히 픽셀 그대로)
+      const dy = Math.round(ay - s.ay * this.SS);
+      let dx = 0;
+      if (mir < 0) g.setTransform(-1, 0, 0, 1, Math.round(ax + s.ax * this.SS), 0);
+      else dx = Math.round(ax - s.ax * this.SS);
       g.drawImage(s.c, dx, dy);
-      if (fl > 0) { g.globalAlpha = flashA; g.drawImage(tinted(s, '#ffffff').c, dx, dy); g.globalAlpha = 1; }
-      if (e.freezeT > 0) { g.globalAlpha = 0.5; g.drawImage(tinted(s, '#9fe8ff').c, dx, dy); g.globalAlpha = 1; }
+      if (fl > 0) { g.globalAlpha = flashA; g.drawImage(this.tint(s, body, '#ffffff'), dx, dy, sw, sh); g.globalAlpha = 1; }
+      if (e.freezeT > 0) { g.globalAlpha = 0.5; g.drawImage(this.tint(s, body, '#9fe8ff'), dx, dy, sw, sh); g.globalAlpha = 1; }
+      if (mir < 0) g.setTransform(1, 0, 0, 1, 0, 0);
     } else {
       // 발끝 기준으로 찌그러뜨림
       const fp = (s.h - s.ay) * 0.8 * this.SS;
       const kx = sx * this.k, ky = sy * this.k;
-      g.setTransform(kx, 0, 0, ky, ax, ay + fp * (this.k - ky));
-      g.drawImage(s.c, -s.ax * this.SS, -s.ay * this.SS);
-      if (fl > 0) { g.globalAlpha = flashA; g.drawImage(tinted(s, '#ffffff').c, -s.ax * this.SS, -s.ay * this.SS); g.globalAlpha = 1; }
-      if (e.freezeT > 0) { g.globalAlpha = 0.5; g.drawImage(tinted(s, '#9fe8ff').c, -s.ax * this.SS, -s.ay * this.SS); g.globalAlpha = 1; }
+      const ox = -s.ax * this.SS, oy = -s.ay * this.SS;
+      g.setTransform(kx * mir, 0, 0, ky, ax, ay + fp * (this.k - ky));
+      g.drawImage(s.c, ox, oy);
+      if (fl > 0) { g.globalAlpha = flashA; g.drawImage(this.tint(s, body, '#ffffff'), ox, oy, sw, sh); g.globalAlpha = 1; }
+      if (e.freezeT > 0) { g.globalAlpha = 0.5; g.drawImage(this.tint(s, body, '#9fe8ff'), ox, oy, sw, sh); g.globalAlpha = 1; }
       g.setTransform(1, 0, 0, 1, 0, 0);
     }
   }
@@ -568,7 +634,8 @@ export class Renderer {
 
   // ───────────── 플레이어 ─────────────
 
-  private drawPlayer(w: World) {
+  /** ghost = 앞쪽 보스에 가려졌을 때 한 번 더 얹는 반투명 몸 + 따뜻한 윤곽(기울기 갱신·궁극기 고리는 첫 번째에만) */
+  private drawPlayer(w: World, ghost = false) {
     const g = this.g;
     const p = w.player;
     const x = this.ipx, y = this.ipy;
@@ -578,8 +645,8 @@ export class Renderer {
     const flip = p.fx < -0.05 ? -1 : 1;
     // 이동 방향으로 기울기(부드럽게)
     const target = p.moving ? Math.max(-1, Math.min(1, p.mx)) * 0.14 : 0;
-    this.lean += (target - this.lean) * Math.min(1, this.frameDt * 12);
-    if (p.ultActiveT > 0) {
+    if (!ghost) this.lean += (target - this.lean) * Math.min(1, this.frameDt * 12);
+    if (p.ultActiveT > 0 && !ghost) {
       this.world();
       this.light(g, 'rgba(255,120,240,.7)', x, y, 44, 0.7 + Math.sin(this.time * 10) * 0.2);
       g.globalAlpha = 0.6; g.strokeStyle = '#ff9cf0'; g.lineWidth = 1.6;
@@ -594,6 +661,15 @@ export class Renderer {
     const a = c * flip * kx, b = n * flip * kx, cc = -n * ky, d = c * ky;
     const ax = this.bx + x * this.S, ay = this.by + y * this.S;
     g.setTransform(a, b, cc, d, ax - cc * fp, ay + fp * this.k - d * fp);
+    if (ghost) {
+      g.globalAlpha = blink ? 0.3 : 0.6;
+      g.drawImage(s.c, -s.ax * this.SS, -s.ay * this.SS);
+      g.globalAlpha = 0.2;
+      g.drawImage(tinted(s, '#fff0cc').c, -s.ax * this.SS, -s.ay * this.SS);
+      g.globalAlpha = 1;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      return;
+    }
     if (blink) g.globalAlpha = 0.5;
     g.drawImage(s.c, -s.ax * this.SS, -s.ay * this.SS);
     if (p.hurtT > 0) {

@@ -204,7 +204,11 @@ export function floorTile(st: StageDef): { c: HTMLCanvasElement; tw: number } {
   else if (style.floor === 'wood') floorWood(g, st.palette, r);
   else if (style.floor === 'jangpan') floorJangpan(g, st.palette, r);
   else floorCarpet(g, st.palette, r);
-  if (tiles.size >= 2) tiles.delete(tiles.keys().next().value!);
+  if (tiles.size >= 2) {
+    // 가장 오래된 타일을 버리며 메모리를 바로 돌려준다(한 장이 수 MB)
+    const k0 = tiles.keys().next().value!, old = tiles.get(k0)!;
+    tiles.delete(k0); old.c.width = old.c.height = 0;
+  }
   t = { c, tw: N / S };
   tiles.set(key, t);
   return t;
@@ -808,6 +812,13 @@ export function drawAmbient(g: CanvasRenderingContext2D, st: StageDef, v: View, 
 }
 
 const moteTex = new Map<string, HTMLCanvasElement>();
+
+/** GPU 문맥을 잃었다 되찾으면 바닥 타일·분위기 입자 텍스처가 빈 채로 남는다(키는 그대로라 다시 안 그려짐) → 버리고 다시 만든다 */
+export function resetEnvCanvases() {
+  for (const t of tiles.values()) t.c.width = t.c.height = 0;
+  tiles.clear();
+  moteTex.clear();
+}
 /** 작은 빛 알갱이(흰 심 + 색 번짐) */
 function moteSprite(color: string): HTMLCanvasElement {
   let c = moteTex.get(color);

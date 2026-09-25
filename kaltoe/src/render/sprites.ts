@@ -12,19 +12,38 @@ const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twe
 export const UI_FONT = BODY_FONT;
 export { DISPLAY_FONT } from '../ui/fonts';
 
-let S = 2;                       // 월드 1u → 기기 픽셀
+let S = 2;                       // 월드 1u → 기기 픽셀(스프라이트를 굽는 배율)
+let want = 2;                    // 화면이 원하는 배율(작은 차이는 S를 그대로 두고 렌더러가 살짝 늘려 찍는다)
 const cache = new Map<string, Sprite>();
-const MAX_N = 1400, MAX_PX = 16e6;   // 개수·픽셀(약 64MB) 상한
-let tick = 0, pixels = 0;
+const MAX_N = 1400;              // 개수 상한 — 넘으면(또는 픽셀 상한을 넘으면) 오래 안 쓴 것부터 70%까지 버린다
+/** 픽셀 상한: 같은 월드 넓이라도 배율²만큼 픽셀이 늘어나므로 배율에 맞춘다(휴대폰 @2x 약 24MB · @3x 약 31MB · 태블릿 최대 64MB) */
+const pxBudget = (s: number) => Math.min(16e6, Math.max(6e6, s * s * 1e6));
+let MAX_PX = pxBudget(S);
+let tick = 0, pixels = 0, gen = 0;
 let emojiOk: boolean | null = null;
+const POSE = [0, 1, 0, 3];       // 걷기 프레임 → 자세(0·2번은 같은 그림이라 한 장만 굽는다)
 
-/** 글꼴이 늦게 도착했을 때(또는 배율이 바뀌었을 때) 캐시를 비운다 */
-export function clearSpriteCache() { cache.clear(); pixels = 0; }
+/** 글꼴이 늦게 도착했을 때(또는 배율이 바뀌었을 때·GPU 문맥을 잃었을 때) 캐시를 비운다. 버린 캔버스 메모리는 바로 돌려준다 */
+export function clearSpriteCache() {
+  for (const s of cache.values()) release(s);
+  cache.clear(); pixels = 0; gen++;
+}
+/** 캐시를 비운 횟수(렌더러가 미리 굽기를 다시 할지 판단) */
+export function spriteGen() { return gen; }
 
-/** 배율은 화면 배율(zoom×dpr) 그대로 — 렌더러가 스프라이트를 기기 픽셀 1:1로 찍을 수 있게 */
-export function setSpriteScale(s: number) {
-  const q = Math.max(0.5, s);
-  if (Math.abs(q - S) > 1e-9) { S = q; clearSpriteCache(); }
+/** 배율은 화면 배율(zoom×dpr) — 렌더러가 스프라이트를 기기 픽셀 1:1로 찍을 수 있게.
+ *  12% 안쪽의 작은 변화(주소창·툴바가 접히는 등)는 다시 굽지 않고(전체 재생성 50~140ms 끊김) 렌더러가 살짝 늘려 찍는다.
+ *  미뤄 둔 차이는 syncSpriteScale()로 끊김이 안 보이는 때(일시정지·모달) 맞춘다. 다시 구웠으면 true */
+export function setSpriteScale(s: number): boolean {
+  want = Math.max(0.5, s);
+  if (cache.size && Math.abs(want / S - 1) < 0.12) return false;
+  return syncSpriteScale();
+}
+/** 미뤄 둔 배율 차이를 지금 맞춘다. 다시 구웠으면 true */
+export function syncSpriteScale(): boolean {
+  if (Math.abs(want - S) < 1e-9) return false;
+  S = want; MAX_PX = pxBudget(S); clearSpriteCache();
+  return true;
 }
 export function spriteScale() { return S; }
 
@@ -32,6 +51,10 @@ function area(s: Sprite) {
   let n = s.c.width * s.c.height;
   if (s.t) for (const v of s.t.values()) n += v.c.width * v.c.height;
   return n;
+}
+function release(s: Sprite) {
+  free(s.c);
+  if (s.t) for (const v of s.t.values()) free(v.c);
 }
 function hit(key: string): Sprite | undefined {
   const s = cache.get(key);
@@ -47,26 +70,44 @@ function put(key: string, s: Sprite): Sprite {
   if (cache.size > MAX_N || pixels > MAX_PX) evict();
   return s;
 }
-/** 오래 안 쓴 35%를 버린다(가득 찼을 때만 정렬하므로 평소 비용 없음) */
-function evict() {
+/** 파생본(색 실루엣)을 붙였을 때: 원본을 방금 쓴 것으로 표시하고 픽셀 상한을 확인한다 */
+function grow(owner: Sprite, n: number) {
+  owner.u = ++tick;
+  pixels += n;
+  if (pixels > MAX_PX) evict();
+}
+/** 오래 안 쓴 것부터 픽셀·개수가 상한의 keep배 밑으로 내려갈 때까지 버린다(가득 찼을 때만 정렬하므로 평소 비용 없음).
+ *  방금 쓴 것(u = tick)은 호출한 쪽이 아직 그리는 중이라 남긴다. 버린 캔버스는 메모리를 바로 돌려준다(iOS는 늦게 회수) */
+function evict(keep = 0.7) {
   const arr = [...cache.entries()].sort((a, b) => (a[1].u ?? 0) - (b[1].u ?? 0));
-  const n = Math.ceil(arr.length * 0.35);
-  for (let i = 0; i < n; i++) { cache.delete(arr[i][0]); pixels -= area(arr[i][1]); }
+  const tpx = MAX_PX * keep, tn = MAX_N * keep;
+  for (const [key, s] of arr) {
+    if (pixels <= tpx && cache.size <= tn) break;
+    if (s.u === tick) continue;
+    cache.delete(key); pixels -= area(s); release(s);
+  }
   if (pixels < 0) pixels = 0;
 }
 
+/** 2D 문맥. 캔버스 메모리 한도(iOS Safari)에 걸려 null이면 캐시를 비워 메모리를 돌려받고 한 번 더 시도한다 */
+function ctx2d(c: HTMLCanvasElement): CanvasRenderingContext2D {
+  let g = c.getContext('2d');
+  if (!g) { evict(0); g = c.getContext('2d'); }
+  if (!g) throw new Error('sprite canvas: 2d context unavailable');
+  return g;
+}
 function canvas(wu: number, hu: number, k = S): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas');
   c.width = Math.max(1, Math.ceil(wu * k));
   c.height = Math.max(1, Math.ceil(hu * k));
-  const g = c.getContext('2d')!;
+  const g = ctx2d(c);
   g.scale(k, k);
   return [c, g];
 }
 function blank(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
-  return [c, c.getContext('2d')!];
+  return [c, ctx2d(c)];
 }
 
 export function emojiSupported(): boolean {
@@ -165,7 +206,23 @@ export function tinted(s: Sprite, color: string): Sprite {
   const c = tintCanvas(s.c, color);
   o = { c, w: s.w, h: s.h, ax: s.ax, ay: s.ay };
   (s.t ??= new Map()).set(color, o);
-  pixels += c.width * c.height;
+  grow(s, c.width * c.height);
+  return o;
+}
+/** 큰 스프라이트(보스)용 색 실루엣: 반 해상도로 구워 메모리를 1/4로(단색 모양이라 늘려도 티가 안 난다).
+ *  그릴 때 원본 캔버스 크기(s.c.width × s.c.height)로 늘려 찍는다 */
+export function silhouette(s: Sprite, color: string): Sprite {
+  const key = `${color}/2`;
+  let o = s.t?.get(key);
+  if (o) return o;
+  const [c, g] = blank(Math.max(1, Math.ceil(s.c.width / 2)), Math.max(1, Math.ceil(s.c.height / 2)));
+  g.drawImage(s.c, 0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = color;
+  g.fillRect(0, 0, c.width, c.height);
+  o = { c, w: s.w, h: s.h, ax: s.ax, ay: s.ay };
+  (s.t ??= new Map()).set(key, o);
+  grow(s, c.width * c.height);
   return o;
 }
 /** 하얗게 번쩍이는 실루엣 */
@@ -376,7 +433,7 @@ function limb(g: CanvasRenderingContext2D, x: number, y: number, ang: number, sl
 
 /** frame 0..3 = 걷기 프레임. 오른쪽을 바라보는 그림(왼쪽은 좌우 반전). res = 픽셀 배율(기본: 게임 배율) */
 export function worker(look: Look, frame: number, size = 34, res = S): Sprite {
-  const f = frame & 3;
+  const f = POSE[frame & 3];
   const key = `w|${look.skin}|${look.hair}|${look.hairStyle}|${look.suit}|${look.tie}|${look.accessory ?? ''}|${look.glasses ? 1 : 0}|${f}|${size}|${res}`;
   const s = hit(key);
   if (s) return s;
@@ -468,10 +525,10 @@ export function worker(look: Look, frame: number, size = 34, res = S): Sprite {
   return put(key, { c, w: W, h: H, ax: W / 2, ay: H * 0.64 });
 }
 
-/** 사람형 적(상사·친척): 이모지 얼굴 + 정장 몸통 + 외곽선·림라이트. flip = 왼쪽 바라봄(미리 뒤집어 1:1로 찍는다) */
-export function person(face: string, suit: string, tie: string, radius: number, frame: number, flip = false, rim = '#ff6a5a'): Sprite {
-  const f = frame & 3;
-  const key = `p|${face}|${suit}|${tie}|${radius}|${f}|${flip ? 1 : 0}|${rim}`;
+/** 사람형 적(상사·친척): 이모지 얼굴 + 정장 몸통 + 외곽선·림라이트. 오른쪽을 보는 그림만 굽는다(왼쪽은 렌더러가 찍을 때 좌우 반전) */
+export function person(face: string, suit: string, tie: string, radius: number, frame: number, rim = '#ff6a5a'): Sprite {
+  const f = POSE[frame & 3];
+  const key = `p|${face}|${suit}|${tie}|${radius}|${f}|${rim}`;
   const s = hit(key);
   if (s) return s;
   const size = radius * 2.4;
@@ -479,8 +536,6 @@ export function person(face: string, suit: string, tie: string, radius: number, 
   const [c0, g] = canvas(W, H);
   const k = size / 34;
   const cx = W / 2;
-  g.save();
-  if (flip) { g.translate(W, 0); g.scale(-1, 1); }
   g.save();
   g.scale(k, k);
   const x = cx / k;
@@ -516,7 +571,6 @@ export function person(face: string, suit: string, tie: string, radius: number, 
   g.restore();
   // 얼굴
   drawEmoji(g, face, cx, 13 * k + 2, radius * 1.45);
-  g.restore();
   const c = dressCanvas(c0, { ow: Math.max(1.3, radius * 0.07), outline: '#08090f', rim, rimA: 0.7, rimW: radius * 0.08, shadeA: 0.22, shadeW: radius * 0.1 });
   free(c0);
   return put(key, { c, w: W, h: H, ax: W / 2, ay: H * 0.55 });
