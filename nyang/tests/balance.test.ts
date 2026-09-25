@@ -39,6 +39,8 @@ export function playGame(seed: number, mods: string[] = [], opts: { powers?: boo
   return { score: g.score, drops: g.stats.drops, time: g.time, maxTier: g.stats.maxTier, maxCombo: g.stats.maxCombo, ascends: g.stats.ascends, peakBodies: peak, msPerStep: ms };
 }
 
+/** 사람이 한 번 떨어뜨리는 데 걸리는 시간 추정 (초) */
+const HUMAN_PACE = 2.0;
 const pct = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
 const avg = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
 
@@ -47,15 +49,15 @@ function summarize(name: string, rs: Result[]): string {
   const tiers = new Array(CATS.length).fill(0);
   for (const r of rs) tiers[r.maxTier]++;
   const dist = tiers.map((c, i) => c ? `${CATS[i].name} ${c}` : '').filter(Boolean).join(', ');
-  return `| ${name} | ${rs.length} | ${Math.round(avg(sc))} | ${pct(sc, 0.1)}–${pct(sc, 0.9)} | ${avg(tm).toFixed(1)}분 | ${Math.round(avg(dr))} | ${avg(rs.map(r => r.maxCombo)).toFixed(1)} | ${dist} | ${Math.max(...rs.map(r => r.peakBodies))} | ${avg(rs.map(r => r.msPerStep)).toFixed(3)} |`;
+  return `| ${name} | ${rs.length} | ${Math.round(avg(sc))} | ${pct(sc, 0.1)}–${pct(sc, 0.9)} | ${avg(tm).toFixed(1)}분 | ${(avg(dr) * HUMAN_PACE / 60).toFixed(1)}분 | ${Math.round(avg(dr))} | ${avg(rs.map(r => r.maxCombo)).toFixed(1)} | ${dist} | ${Math.max(...rs.map(r => r.peakBodies))} | ${avg(rs.map(r => r.msPerStep)).toFixed(3)} |`;
 }
 
 describe('balance sweep', () => {
   it('bot games finish with sane numbers', () => {
     const N = Number(process.env.BALANCE_N || 12);
     const lines: string[] = [];
-    lines.push('| 조건 | 판 | 평균 점수 | 10~90% | 평균 시간 | 평균 떨어뜨림 | 평균 최대 콤보 | 최고 단계 분포 | 최대 동시 고양이 | 스텝당 ms |');
-    lines.push('|---|---|---|---|---|---|---|---|---|---|');
+    lines.push('| 조건 | 판 | 평균 점수 | 10~90% | 봇 시간 | 사람 속도 추정 | 평균 떨어뜨림 | 평균 최대 콤보 | 최고 단계 분포 | 최대 동시 고양이 | 스텝당 ms |');
+    lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
     const base = Array.from({ length: N }, (_, i) => playGame(1000 + i));
     lines.push(summarize('기본 봇 (능력 없음)', base));
     const full = Array.from({ length: N }, (_, i) => playGame(2000 + i, [], { powers: true, revive: true }));
@@ -68,7 +70,7 @@ describe('balance sweep', () => {
       const rs = Array.from({ length: Math.max(4, N >> 1) }, (_, i) => playGame(4000 + i, [m.id]));
       lines.push(summarize(`오늘의 상자: ${m.name}`, rs));
     }
-    const out = `# 밸런스 스윕 결과\n\n자동 생성: \`npm run balance\` (봇 ${N}판 기준, 1배속 시간). 봇은 떨어뜨릴 때 0.35초 고민한다.\n\n${lines.join('\n')}\n`;
+    const out = `# 밸런스 스윕 결과\n\n자동 생성: \`npm run balance\` (봇 ${N}판 기준). 봇은 0.8초마다 떨어뜨린다. "사람 속도 추정"은 한 번에 ${HUMAN_PACE}초씩 걸린다고 보고 떨어뜨린 횟수로 계산한 판 길이.\n\n${lines.join('\n')}\n`;
     mkdirSync('docs', { recursive: true });
     writeFileSync('docs/balance-results.md', out);
     console.log(out);

@@ -23,6 +23,7 @@ console.log('play/index.html:', (html.length / 1024).toFixed(0), 'KB');
 
 // 아티팩트: doctype/html/head/body 없이 (호스트가 감싼다)
 const inner = html
+  .replace('window.__NYANG_SINGLEFILE__=1', 'window.__NYANG_SINGLEFILE__=1;window.__NYANG_NO_SHARE__=1')
   .replace(/^[\s\S]*?<head>/, '')
   .replace(/<\/head>\s*<body>/, '')
   .replace(/<\/body>\s*<\/html>\s*$/, '')

@@ -9,12 +9,15 @@ export type Power = 'punch' | 'liquify' | 'shake';
 export const POWERS: Power[] = ['punch', 'liquify', 'shake'];
 export const NIP = -1;
 export const NIP_R = 15;
+/** 캣닢이 키워 줄 수 있는 가장 큰 단계 (러시안블루 → 뱅갈까지). 더 큰 고양이는 점수만 */
+export const NIP_MAX_TIER = 6;
+export const NIP_TREAT_POINTS = 100;
 
 export type GameEvent =
   | { t: 'drop'; tier: number; x: number }
   | { t: 'merge'; tier: number; x: number; y: number; points: number; combo: number; ax: number; ay: number; bx: number; by: number; ar: number; br: number }
   | { t: 'ascend'; x: number; y: number; points: number; combo: number }
-  | { t: 'nip'; tier: number; x: number; y: number; points: number; combo: number }
+  | { t: 'nip'; tier: number; x: number; y: number; points: number; combo: number; grew: boolean }
   | { t: 'land'; tier: number; x: number; y: number; speed: number }
   | { t: 'charge'; power: Power }
   | { t: 'power'; power: Power; x: number; y: number; tier: number }
@@ -224,21 +227,20 @@ export class Game {
         this.world.remove(nip);
         this.stats.nips++;
         const t = cat.tier;
-        const chain = this.chainOf(cat) + 1;
-        if (t === MAX_TIER) {
-          this.world.remove(cat);
-          const pts = this.award(mergePoints(t) + ASCEND_BONUS, chain);
-          this.stats.ascends++;
-          this.events.push({ t: 'ascend', x: cat.x, y: cat.y, points: pts, combo: this.combo });
+        if (t > NIP_MAX_TIER) {
+          // 큰 고양이는 캣닢에 기분만 좋아진다 (점수만)
+          const pts = this.award(NIP_TREAT_POINTS, 1);
+          this.events.push({ t: 'nip', tier: t, x: cat.x, y: cat.y, points: pts, combo: this.combo, grew: false });
           continue;
         }
+        const chain = this.chainOf(cat) + 1;
         cat.tier = t + 1;
         cat.rt = this.targetR(t + 1);
         cat.born = Math.max(cat.born, this.time - this.rules.overflowGrace * 0.5);
         cat.chain = chain; cat.ct = this.time;
         if (t + 1 > this.stats.maxTier) this.stats.maxTier = t + 1;
         const pts = this.award(mergePoints(t), chain);
-        this.events.push({ t: 'nip', tier: t + 1, x: cat.x, y: cat.y, points: pts, combo: this.combo });
+        this.events.push({ t: 'nip', tier: t + 1, x: cat.x, y: cat.y, points: pts, combo: this.combo, grew: true });
       }
     }
     for (const b of born) this.world.add(b);
@@ -450,7 +452,7 @@ function liquifyForce(bodies: Body[], h: number): void {
       if (B.tier !== A.tier) continue;
       const dx = B.x - A.x, dy = B.y - A.y;
       const d = Math.hypot(dx, dy);
-      const range = (A.r + B.r) * 3.5;
+      const range = (A.r + B.r) * 2.8;
       if (d < 1e-3 || d > range) continue;
       const ux = dx / d, uy = dy / d;
       // 이미 빠르게 다가가는 중이면 더 당기지 않는다 (사이에 낀 고양이가 튕겨 나가지 않게)

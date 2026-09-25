@@ -5,6 +5,7 @@ import type { Body } from '../sim/physics';
 import { drawCat, drawTail, type CatPose, type Clip, type Mood } from './catdraw';
 import { buildClips, VISUAL_SCALE, type Disc } from './squish';
 import { Fx, FONT } from './fx';
+import { t } from '../i18n';
 
 export const WALL = 16;
 export const RAIL_Y = -132;
@@ -109,7 +110,7 @@ export class Renderer {
     for (const e of events) if ((e.t === 'merge' || e.t === 'nip') && e.combo >= 2 && (!topCombo || e.combo > topCombo.combo)) topCombo = { combo: e.combo, x: e.x, y: e.y, r: CATS[e.tier].r };
     if (topCombo && (this.t - this.comboT > 0.3 || topCombo.combo > this.comboShown)) {
       this.comboT = this.t; this.comboShown = topCombo.combo;
-      fx.text(clampX(topCombo.x, game.rules.boxW), topCombo.y - topCombo.r - 30, `${topCombo.combo} 콤보!`, comboColor(topCombo.combo), 22 + Math.min(16, topCombo.combo * 3), true);
+      fx.combo(clampX(topCombo.x, game.rules.boxW), topCombo.y - topCombo.r - 30, t('fx.combo', { n: topCombo.combo }), comboColor(topCombo.combo), 22 + Math.min(16, topCombo.combo * 3));
     }
     for (const e of events) {
       switch (e.t) {
@@ -122,11 +123,11 @@ export class Renderer {
         }
         case 'ascend':
           fx.ascend(e.x, e.y);
-          fx.text(e.x, e.y - 40, '승천!', '#FFE46B', 40, true);
+          fx.text(e.x, e.y - 40, t('fx.ascend'), '#FFE46B', 40, true);
           fx.text(e.x, e.y + 10, `+${e.points}`, '#ffffff', 26, true);
           break;
         case 'nip':
-          fx.nip(e.x, e.y, CATS[e.tier].r);
+          fx.nip(e.x, e.y, CATS[e.tier].r * (e.grew ? 1 : 0.6));
           const ny = this.textY(e.x, e.y - CATS[e.tier].r * 0.6);
           fx.text(e.x, ny, `+${e.points}`, '#D8FFB0', 17);
           break;
@@ -179,7 +180,7 @@ export class Renderer {
     ctx.setTransform(s, 0, 0, s, (this.ox + sx * this.scale) * dpr, (this.oy + sy * this.scale) * dpr);
     const line = Math.max(1.1, 1.9 * Math.min(1.2, this.scale)) / this.scale;
 
-    this.drawBoxBack(ctx, game, t);
+    this.drawBoxBack(ctx, game);
     this.drawCrane(ctx, game, t, opts, line, opts.paused ? 0 : dt);
 
     // 고양이
@@ -393,8 +394,7 @@ export class Renderer {
     drawCat(ctx, pose);
   }
 
-  private drawBoxBack(ctx: CanvasRenderingContext2D, game: Game, t: number): void {
-    void t;
+  private drawBoxBack(ctx: CanvasRenderingContext2D, game: Game): void {
     const W = game.rules.boxW, H = game.rules.boxH;
     ctx.save();
     // 안쪽 뒷면
@@ -424,9 +424,9 @@ export class Renderer {
     ctx.lineWidth = 4;
     roundRect(ctx, -110, -46, 220, 92, 14); ctx.stroke();
     ctx.font = `34px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('냥체역학 택배', 0, -12);
+    fitText(ctx, t('box.stamp1'), 0, -12, 200);
     ctx.font = `20px ${FONT}`;
-    ctx.fillText('취급주의 · 말랑함', 0, 24);
+    fitText(ctx, t('box.stamp2'), 0, 24, 200);
     ctx.restore();
     ctx.save();
     ctx.globalAlpha = 0.14; ctx.fillStyle = '#7A2E1E';
@@ -547,7 +547,7 @@ export class Renderer {
     ctx.save();
     ctx.translate(S * 0.62 - (W / 2) * sc, 250 + 70 * sc);
     ctx.scale(sc, sc);
-    this.drawBoxBack(ctx, game, 0);
+    this.drawBoxBack(ctx, game);
     const bodies = game.world.bodies;
     const discs = bodies.map(b => ({ x: b.x, y: b.y, r: b.r * VISUAL_SCALE }));
     const clips: Clip[][] = [];
@@ -564,15 +564,16 @@ export class Renderer {
       ctx.lineWidth = size * sw; ctx.strokeStyle = stroke; ctx.strokeText(s, x, y);
       ctx.fillStyle = fill; ctx.fillText(s, x, y);
     };
-    txt('냥체역학', 60, 130, 92, '#FFFFFF');
+    const name = t('app.name');
+    txt(name, 60, 130, name.length > 6 ? 70 : 92, '#FFFFFF');
     ctx.font = `36px ${FONT}`; ctx.fillStyle = '#8A5A44'; ctx.fillText(info.title, 64, 190);
     txt(info.score, 60, 330, 104, '#FFD34D');
-    ctx.font = `34px ${FONT}`; ctx.fillStyle = '#6B4436'; ctx.fillText('점', 64, 380);
-    if (info.best) txt('최고 기록!', 60, 450, 44, '#FF6F7D', '#ffffff', 0.18);
+    ctx.font = `34px ${FONT}`; ctx.fillStyle = '#6B4436'; ctx.fillText(t('card.pts'), 64, 380);
+    if (info.best) txt(t('card.best'), 60, 450, 44, '#FF6F7D', '#ffffff', 0.18);
     ctx.font = `30px ${FONT}`; ctx.fillStyle = '#6B4436';
     info.sub.split('\n').forEach((l, i) => ctx.fillText(l, 64, 540 + i * 46));
     ctx.font = `28px ${FONT}`; ctx.fillStyle = 'rgba(107,68,54,0.7)';
-    ctx.fillText('고양이는 액체다', 64, S - 60);
+    ctx.fillText(t('card.tag'), 64, S - 60);
     return c;
   }
 }
@@ -614,6 +615,13 @@ function paw(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, rot
     ctx.beginPath(); ctx.ellipse(dx * s, dy * s, s * 0.33, s * 0.4, 0, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
+}
+
+/** 최대 폭을 넘으면 가로로 눌러 쓴다 */
+function fitText(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, maxW: number): void {
+  const w = ctx.measureText(s).width;
+  if (w <= maxW) { ctx.fillText(s, x, y); return; }
+  ctx.save(); ctx.translate(x, y); ctx.scale(maxW / w, 1); ctx.fillText(s, 0, 0); ctx.restore();
 }
 
 function arrowUp(ctx: CanvasRenderingContext2D): void {

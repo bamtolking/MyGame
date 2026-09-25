@@ -2,6 +2,7 @@
 // localStorage가 막혀 있어도 게임은 돌아가야 하므로 모든 접근을 감싼다.
 import { CATS } from '../data/cats';
 import type { GameSnapshot } from '../sim/game';
+import type { LangSetting } from '../i18n';
 
 export interface DailyRecord { score: number; maxTier: number; maxCombo: number; drops: number; mod: string }
 
@@ -15,7 +16,7 @@ export interface Profile {
   ascends: number;
   maxCombo: number;
   daily: Record<string, DailyRecord>;
-  settings: { sfx: boolean; bgm: boolean; vib: boolean; lite: boolean };
+  settings: { sfx: boolean; bgm: boolean; vib: boolean; lite: boolean; lang: LangSetting };
   tutorial: number;
 }
 
@@ -25,7 +26,7 @@ const RUN = 'nyangche.run.v1';
 export function defaultProfile(): Profile {
   return {
     v: 1, best: 0, dex: CATS.map(() => 0), games: 0, merges: 0, ascends: 0, maxCombo: 0, daily: {},
-    settings: { sfx: true, bgm: true, vib: true, lite: false }, tutorial: 0,
+    settings: { sfx: true, bgm: true, vib: true, lite: false, lang: 'auto' }, tutorial: 0,
   };
 }
 
@@ -58,7 +59,7 @@ export function loadProfile(): Profile {
       ascends: Number(p.ascends) || 0,
       maxCombo: Number(p.maxCombo) || 0,
       daily: p.daily && typeof p.daily === 'object' ? p.daily : {},
-      settings: { ...base.settings, ...(p.settings || {}) },
+      settings: { ...base.settings, ...(p.settings || {}), lang: ['auto', 'ko', 'en'].includes(p.settings?.lang) ? p.settings.lang : 'auto' },
       tutorial: Number(p.tutorial) || 0,
     };
   } catch {

@@ -22,7 +22,7 @@ export function chooseX(g: Game, rng: Rng, skill = 1): number {
     }
     let s = hitY * 0.6;
     if (hit) {
-      if (tier === NIP) s += 180 + hit.tier * 70;
+      if (tier === NIP) s += hit.tier <= 6 ? 180 + hit.tier * 70 : -100;
       else if (hit.tier === tier) s += 900 + hit.y * 0.4;
       else if (hit.tier >= 0 && hit.tier < tier) s -= (tier - hit.tier) * 45;
       else if (hit.tier === tier + 1) s += 60;

@@ -11,24 +11,15 @@ import { Sound } from '../platform/audio';
 import { loadProfile, saveProfile, loadRun, saveRun, clearRun, resetAll, defaultProfile, type Profile } from '../platform/storage';
 import { shareText, vibrate, type ShareResult } from '../platform/share';
 import { ICON } from './icons';
+import { t, setLang, getLang, catName, catDesc, modName, modDesc, fmt, type LangSetting } from '../i18n';
+
+export const VERSION = '0.9.0';
 
 const STEP = 1 / 60;
 type Mode = 'title' | 'play' | 'pause' | 'over' | 'revive' | 'results';
 
-const POWER_INFO: Record<Power, { name: string; icon: string; desc: string }> = {
-  punch: { name: '냥펀치', icon: ICON.paw, desc: '고른 고양이 한 마리를 상자 밖으로 내보내요.' },
-  liquify: { name: '액체화', icon: ICON.drop, desc: '4.5초 동안 모두 말랑하게 녹아 작아지고, 같은 고양이끼리 끌어당겨요.' },
-  shake: { name: '흔들기', icon: ICON.box, desc: '상자를 흔들어 고양이들이 자리를 다시 잡게 해요.' },
-};
-
-const TIPS = {
-  small: '같은 고양이가 옆에 오도록 떨어뜨려 보세요. 작은 고양이가 큰 고양이 사이에 갇히면 합치기 어려워요.',
-  powers: '능력을 한 번도 안 썼어요! 액체화는 떨어져 있는 같은 고양이를 끌어모아 줘요.',
-  combo: '합체로 커진 고양이가 바로 옆의 같은 고양이에 닿으면 연쇄 콤보! 점수가 최대 4배가 돼요.',
-  corner: '큰 고양이를 한쪽 구석에 크기 순서대로 모아 두면 연쇄가 잘 터져요.',
-};
-
-const fmt = (n: number) => Math.round(n).toLocaleString('ko-KR');
+const POWER_ICON: Record<Power, string> = { punch: ICON.paw, liquify: ICON.drop, shake: ICON.box };
+const powerName = (p: Power) => t('power.' + p);
 
 function el<T extends HTMLElement = HTMLElement>(html: string): T {
   const t = document.createElement('template');
@@ -78,7 +69,8 @@ export class App {
 
   constructor(readonly root: HTMLElement) {
     this.profile = loadProfile();
-    this.canvas = el<HTMLCanvasElement>('<canvas id="cv" aria-label="고양이 상자"></canvas>');
+    setLang(this.profile.settings.lang);
+    this.canvas = el<HTMLCanvasElement>(`<canvas id="cv" aria-label="${t('hud.box')}"></canvas>`);
     root.appendChild(this.canvas);
     this.renderer = new Renderer(this.canvas);
     this.demo = this.newDemo();
@@ -100,16 +92,16 @@ export class App {
     this.hud = el(`
       <div id="hud" hidden>
         <div class="hud-top">
-          <button class="icon-btn" id="btn-pause" aria-label="일시정지">${ICON.pause}</button>
+          <button class="icon-btn" id="btn-pause" aria-label="${t('hud.pause')}">${ICON.pause}</button>
           <div class="score-box">
             <div class="score outline-text" id="score">0</div>
-            <div class="best" id="best">최고 0</div>
+            <div class="best" id="best">${t('hud.best', { n: 0 })}</div>
           </div>
-          <div class="next-box" aria-label="다음 고양이"><canvas id="next" width="60" height="52"></canvas>다음</div>
+          <div class="next-box" aria-label="${t('hud.nextLabel')}"><canvas id="next" width="60" height="52"></canvas>${t('hud.next')}</div>
         </div>
-        <div class="gauge" id="gauge" role="progressbar" aria-label="츄르 게이지"><div class="gauge-fill" id="gauge-fill"></div><div class="gauge-label">츄르 게이지</div></div>
+        <div class="gauge" id="gauge" role="progressbar" aria-label="${t('hud.gauge')}"><div class="gauge-fill" id="gauge-fill"></div><div class="gauge-label">${t('hud.gauge')}</div></div>
         <div class="hud-bottom">
-          ${POWERS.map(p => `<button class="power" data-power="${p}" aria-label="${POWER_INFO[p].name}">${POWER_INFO[p].icon}<span>${POWER_INFO[p].name}</span><b class="count">1</b></button>`).join('')}
+          ${POWERS.map(p => `<button class="power" data-power="${p}" aria-label="${powerName(p)}">${POWER_ICON[p]}<span>${powerName(p)}</span><b class="count">1</b></button>`).join('')}
         </div>
       </div>`);
     this.root.appendChild(this.hud);
@@ -141,23 +133,26 @@ export class App {
     const stars = '★'.repeat(d.mod.level) + '☆'.repeat(3 - d.mod.level);
     const dailyRun = run && run.mode === 'daily';
     const classicRun = run && run.mode === 'classic';
+    const logo = getLang() === 'ko'
+      ? '<h1 class="outline-text"><span>냥</span><span>체</span><span>역</span><span>학</span></h1>'
+      : '<h1 class="outline-text en"><span>Cats</span> <span>Are</span><br><span>Liquid</span></h1>';
     this.title.innerHTML = `
       <div class="logo">
-        <h1 class="outline-text"><span>냥</span><span>체</span><span>역</span><span>학</span></h1>
-        <div class="tag">고양이는 액체다</div>
+        ${logo}
+        <div class="tag">${t('app.tag')}</div>
       </div>
       <div class="title-menu">
-        ${classicRun ? `<button class="btn big" id="t-continue">${ICON.play}이어하기 <span class="sub">&nbsp;${fmt(run!.score)}점</span></button>` : ''}
-        <button class="btn ${classicRun ? 'plain' : 'big'}" id="t-play">${classicRun ? '새 게임' : `${ICON.play}게임 시작`}</button>
+        ${classicRun ? `<button class="btn big" id="t-continue">${ICON.play}${t('menu.continue')} <span class="sub">&nbsp;${t('menu.points', { n: fmt(run!.score) })}</span></button>` : ''}
+        <button class="btn ${classicRun ? 'plain' : 'big'}" id="t-play">${classicRun ? t('menu.newGame') : `${ICON.play}${t('menu.play')}`}</button>
         <button class="btn mint daily" id="t-daily">
-          <span>${done ? `오늘의 상자 완료 · ${fmt(done.score)}점` : dailyRun ? '오늘의 상자 이어하기' : `오늘의 상자 #${d.no}`}</span>
-          <span class="sub">${d.mod.name} ${stars}</span>
+          <span>${done ? t('menu.dailyDone', { n: fmt(done.score) }) : dailyRun ? t('menu.dailyContinue') : t('menu.daily', { no: d.no })}</span>
+          <span class="sub">${modName(d.mod)} ${stars}</span>
         </button>
         <div class="row">
-          <button class="btn sky small" id="t-dex">${ICON.book}도감 ${dex}/${CATS.length}</button>
-          <button class="btn plain small" id="t-settings">${ICON.gear}설정</button>
+          <button class="btn sky small" id="t-dex">${ICON.book}${t('menu.dex', { a: dex, b: CATS.length })}</button>
+          <button class="btn plain small" id="t-settings">${ICON.gear}${t('menu.settings')}</button>
         </div>
-        ${this.profile.best > 0 ? `<div class="best-line">최고 기록 <b>${fmt(this.profile.best)}</b>점</div>` : ''}
+        ${this.profile.best > 0 ? `<div class="best-line">${t('menu.best', { n: fmt(this.profile.best) })}</div>` : ''}
       </div>`;
     this.title.hidden = false;
     const on = (id: string, f: () => void) => this.title.querySelector('#' + id)?.addEventListener('click', () => { this.sound.unlock(); this.sound.tap(); f(); });
@@ -214,12 +209,12 @@ export class App {
     this.renderer.fx.list.length = 0;
     this.title.hidden = true;
     this.hud.hidden = false;
-    this.hud.querySelector('.best')!.innerHTML = g.mode === 'daily' ? `<span class="mode-chip">오늘의 상자 · ${dailyInfo().mod.name}</span>` : `최고 ${fmt(this.profile.best)}`;
+    this.hud.querySelector('.best')!.innerHTML = g.mode === 'daily' ? `<span class="mode-chip">${t('hud.daily', { mod: modName(dailyInfo().mod) })}</span>` : t('hud.best', { n: fmt(this.profile.best) });
     this.layoutInsets();
     this.updateHud(true);
     this.requestWake();
     this.save();
-    if (!(this.profile.tutorial & 1)) this.setHint('화면을 끌어서 위치를 정하고, 손을 떼면 떨어져요');
+    if (!(this.profile.tutorial & 1)) this.setHint(t('hint.drag'));
   }
 
   private freshGame(kind: 'classic' | 'daily'): Game {
@@ -262,11 +257,11 @@ export class App {
     this.openSheet(`
       <div class="card">
         <canvas id="rv-cat" style="width:120px;height:120px;display:block;margin:0 auto"></canvas>
-        <h2>앗, 상자가 넘쳤다!</h2>
-        <p>집사 찬스를 쓰면 위쪽 고양이들을 치우고<br>이어서 할 수 있어요. (한 판에 한 번)</p>
+        <h2>${t('revive.title')}</h2>
+        <p>${t('revive.body')}</p>
         <div class="stack">
-          <button class="btn gold big" id="rv-yes">${ICON.heart}집사 찬스!</button>
-          <button class="btn plain" id="rv-no">결과 보기 · ${fmt(g.score)}점</button>
+          <button class="btn gold big" id="rv-yes">${ICON.heart}${t('revive.yes')}</button>
+          <button class="btn plain" id="rv-no">${t('revive.no', { n: fmt(g.score) })}</button>
         </div>
       </div>`);
     drawPortrait(this.sheet.querySelector('#rv-cat')!, Math.max(1, Math.min(g.stats.maxTier, 6)), { mood: 'scared' });
@@ -305,33 +300,33 @@ export class App {
     if (this.newBest) this.sound.record();
     const top = Math.max(0, g.stats.maxTier);
     const d = g.mode === 'daily' ? dailyInfo(new Date(g.dateKey + 'T12:00:00')) : null;
-    let tip = TIPS.corner;
-    if (top < 5) tip = TIPS.small;
-    else if (g.stats.powersUsed === 0) tip = TIPS.powers;
-    else if (g.stats.maxCombo < 3) tip = TIPS.combo;
+    let tip = t('tip.corner');
+    if (top < 5) tip = t('tip.small');
+    else if (g.stats.powersUsed === 0) tip = t('tip.powers');
+    else if (g.stats.maxCombo < 3) tip = t('tip.combo');
     const mins = Math.floor(g.time / 60), secs = Math.floor(g.time % 60);
     this.openSheet(`
       <div class="card">
-        <h2>${d ? `오늘의 상자 #${d.no} 완료!` : '상자가 넘쳤다!'}</h2>
-        ${d ? `<p>${d.mod.name} · 내일 새 상자가 와요</p>` : ''}
+        <h2>${d ? t('res.dailyDone', { no: d.no }) : t('res.over')}</h2>
+        ${d ? `<p>${t('res.dailySub', { mod: modName(d.mod) })}</p>` : ''}
         <div class="big-score outline-text" id="rs-score">0</div>
-        <p>점</p>
-        ${this.newBest ? '<span class="ribbon">최고 기록!</span>' : ''}
+        <p>${t('res.pts')}</p>
+        ${this.newBest ? `<span class="ribbon">${t('res.best')}</span>` : ''}
         <div class="stats">
-          <div class="stat cat"><canvas id="rs-cat"></canvas><div><span>가장 큰 고양이</span><b>${CATS[top].name}</b></div></div>
-          <div class="stat"><span>최대 콤보</span><b>${g.stats.maxCombo}</b></div>
-          <div class="stat"><span>합체</span><b>${fmt(g.stats.merges)}번</b></div>
-          <div class="stat"><span>떨어뜨린 고양이</span><b>${fmt(g.stats.drops)}마리</b></div>
-          <div class="stat"><span>플레이 시간</span><b>${mins}분 ${secs}초</b></div>
+          <div class="stat cat"><canvas id="rs-cat"></canvas><div><span>${t('res.bigCat')}</span><b>${catName(top)}</b></div></div>
+          <div class="stat"><span>${t('res.maxCombo')}</span><b>${g.stats.maxCombo}</b></div>
+          <div class="stat"><span>${t('res.merges')}</span><b>${t('res.mergesN', { n: fmt(g.stats.merges) })}</b></div>
+          <div class="stat"><span>${t('res.drops')}</span><b>${t('res.dropsN', { n: fmt(g.stats.drops) })}</b></div>
+          <div class="stat"><span>${t('res.time')}</span><b>${t('res.timeV', { m: mins, s: secs })}</b></div>
         </div>
-        <img class="share-preview" id="rs-card" alt="결과 카드">
+        <img class="share-preview" id="rs-card" alt="${t('res.card')}">
         <p class="tip">${tip}</p>
-        ${this.saveOk ? '' : '<p class="tip">이 기기에서는 기록을 저장할 수 없어요. (브라우저 저장소가 막혀 있음)</p>'}
+        ${this.saveOk ? '' : `<p class="tip">${t('res.noSave')}</p>`}
         <div class="stack">
-          <button class="btn mint big" id="rs-share">${ICON.share}결과 공유하기</button>
+          <button class="btn mint big" id="rs-share">${ICON.share}${t('res.share')}</button>
           <div class="row2">
-            <button class="btn small" id="rs-again">${ICON.retry}${d ? '클래식 하기' : '다시 하기'}</button>
-            <button class="btn plain small" id="rs-home">${ICON.home}처음으로</button>
+            <button class="btn small" id="rs-again">${ICON.retry}${d ? t('res.classic') : t('res.again')}</button>
+            <button class="btn plain small" id="rs-home">${ICON.home}${t('res.home')}</button>
           </div>
         </div>
       </div>`);
@@ -347,32 +342,32 @@ export class App {
 
   private makeCard(g: Game, d: DailyInfo | null): HTMLCanvasElement {
     return this.renderer.renderCard(g, {
-      title: d ? `오늘의 상자 #${d.no} · ${d.mod.name}` : '클래식',
+      title: d ? t('card.daily', { no: d.no, mod: modName(d.mod) }) : t('card.classic'),
       score: fmt(g.score),
-      sub: `가장 큰 고양이: ${CATS[g.stats.maxTier].name}\n최대 콤보 ${g.stats.maxCombo} · 합체 ${g.stats.merges}번`,
+      sub: t('card.sub', { cat: catName(g.stats.maxTier), c: g.stats.maxCombo, m: fmt(g.stats.merges) }),
       best: this.newBest,
     });
   }
 
   private shareMessage(g: { score: number; stats: { maxTier: number; maxCombo: number } }, d: DailyInfo | null): string {
     const bar = CATS.map((_, i) => i <= g.stats.maxTier ? '🐾' : '▫️').join('');
-    const cat = CATS[g.stats.maxTier].name;
-    if (d) return `냥체역학 오늘의 상자 #${d.no} · ${d.mod.name}\n${fmt(g.score)}점 · 최대 ${g.stats.maxCombo}콤보\n${bar} ${cat}`;
-    return `냥체역학에서 ${fmt(g.score)}점!\n${cat}까지 키웠어요 · 최대 ${g.stats.maxCombo}콤보\n${bar}`;
+    const cat = catName(g.stats.maxTier);
+    const p = { no: d?.no ?? 0, mod: d ? modName(d.mod) : '', score: fmt(g.score), combo: g.stats.maxCombo, bar, cat };
+    return t(d ? 'share.daily' : 'share.classic', p);
   }
 
   private async share(text: string, image?: HTMLCanvasElement): Promise<void> {
     this.sound.tap();
     const r: ShareResult = await shareText(text, image);
-    if (r === 'copied') this.toast('결과를 복사했어요. 친구에게 붙여넣어 보내세요!');
+    if (r === 'copied') this.toast(t('toast.copied'));
     else if (r === 'failed') {
       // 복사도 막힌 환경: 직접 선택해서 복사할 수 있게 보여 준다
-      const box = el<HTMLTextAreaElement>(`<textarea class="copybox" readonly aria-label="공유할 결과"></textarea>`);
+      const box = el<HTMLTextAreaElement>(`<textarea class="copybox" readonly aria-label="${t('share.aria')}"></textarea>`);
       box.value = text;
       const card = this.sheet.querySelector('.card');
       if (card && !card.querySelector('.copybox')) card.querySelector('.stack')?.before(box);
       box.focus(); box.select();
-      this.toast('아래 글을 길게 눌러 복사하세요');
+      this.toast(t('toast.copyManual'));
     }
   }
 
@@ -393,16 +388,16 @@ export class App {
     const stars = '★'.repeat(d.mod.level) + '☆'.repeat(3 - d.mod.level);
     this.openSheet(`
       <div class="card">
-        <h2>오늘의 상자 #${d.no}</h2>
-        <p>오늘은 모든 집사가 같은 순서로 고양이를 받아요.<br>기록은 하루에 한 판만 남아요.</p>
+        <h2>${t('daily.title', { no: d.no })}</h2>
+        <p>${t('daily.body')}</p>
         <div class="daily-card">
-          <div class="mod">${d.mod.name}</div>
-          <div class="stars" aria-label="난이도 ${d.mod.level}">${stars}</div>
-          <p>${d.mod.desc}</p>
+          <div class="mod">${modName(d.mod)}</div>
+          <div class="stars" aria-label="${t('daily.level', { n: d.mod.level })}">${stars}</div>
+          <p>${modDesc(d.mod)}</p>
         </div>
         <div class="stack">
-          <button class="btn mint big" id="dl-go">${ICON.play}시작!</button>
-          <button class="btn plain small" id="dl-back">나중에</button>
+          <button class="btn mint big" id="dl-go">${ICON.play}${t('daily.go')}</button>
+          <button class="btn plain small" id="dl-back">${t('daily.later')}</button>
         </div>
       </div>`);
     this.sheet.querySelector('#dl-go')!.addEventListener('click', () => { this.sound.tap(); this.startGame('daily'); });
@@ -413,21 +408,21 @@ export class App {
     const r = this.profile.daily[d.key];
     this.openSheet(`
       <div class="card">
-        <h2>오늘의 상자 #${d.no}</h2>
-        <p>${d.mod.name} · 오늘 기록</p>
+        <h2>${t('daily.title', { no: d.no })}</h2>
+        <p>${t('daily.today', { mod: modName(d.mod) })}</p>
         <div class="big-score outline-text">${fmt(r.score)}</div>
-        <p>가장 큰 고양이 ${CATS[r.maxTier].name} · 최대 ${r.maxCombo}콤보</p>
-        <div class="daily-card"><p>다음 상자까지</p><div class="mod countdown" id="dd-cd"></div></div>
+        <p>${t('daily.summary', { cat: catName(r.maxTier), c: r.maxCombo })}</p>
+        <div class="daily-card"><p>${t('daily.next')}</p><div class="mod countdown" id="dd-cd"></div></div>
         <div class="stack">
-          <button class="btn mint big" id="dd-share">${ICON.share}기록 공유하기</button>
-          <button class="btn plain small" id="dd-back">닫기</button>
+          <button class="btn mint big" id="dd-share">${ICON.share}${t('daily.share')}</button>
+          <button class="btn plain small" id="dd-back">${t('common.close')}</button>
         </div>
       </div>`);
     const cd = this.sheet.querySelector('#dd-cd')!;
     const tick = () => {
       const ms = msUntilTomorrow();
       const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60;
-      cd.textContent = `${h}시간 ${String(m).padStart(2, '0')}분 ${String(s).padStart(2, '0')}초`;
+      cd.textContent = t('daily.cd', { h, m: String(m).padStart(2, '0'), s: String(s).padStart(2, '0') });
     };
     tick();
     clearInterval(this.countdownTimer);
@@ -443,14 +438,14 @@ export class App {
     const found = dex.filter(x => x > 0).length;
     this.openSheet(`
       <div class="card">
-        <h2>고양이 도감</h2>
-        <div class="progress-line">발견 ${found} / ${CATS.length}</div>
+        <h2>${t('dex.title')}</h2>
+        <div class="progress-line">${t('dex.found', { a: found, b: CATS.length })}</div>
         <div class="chain">${CATS.map((_, i) => `<canvas data-chain="${i}"></canvas>`).join('')}</div>
         <div class="dex-grid">
-          ${CATS.map((c, i) => `<button class="dex-item ${dex[i] ? '' : 'locked'}" data-tier="${i}"><canvas></canvas>${dex[i] ? c.name : '???'}<small>${dex[i] ? `${fmt(dex[i])}번 만남` : '미발견'}</small></button>`).join('')}
-          <div class="dex-item"><canvas id="dex-nip"></canvas>캣닢 공<small>닿으면 한 단계 업</small></div>
+          ${CATS.map((_, i) => `<button class="dex-item ${dex[i] ? '' : 'locked'}" data-tier="${i}"><canvas></canvas>${dex[i] ? catName(i) : '???'}<small>${dex[i] ? t('dex.met', { n: fmt(dex[i]) }) : t('dex.unknown')}</small></button>`).join('')}
+          <div class="dex-item"><canvas id="dex-nip"></canvas>${t('dex.nip')}<small>${t('dex.nipSub')}</small></div>
         </div>
-        <div class="stack"><button class="btn plain small" id="dx-close">닫기</button></div>
+        <div class="stack"><button class="btn plain small" id="dx-close">${t('common.close')}</button></div>
       </div>`);
     this.sheet.querySelectorAll<HTMLCanvasElement>('[data-chain]').forEach(cv => {
       const i = Number(cv.dataset.chain);
@@ -466,15 +461,15 @@ export class App {
   }
 
   private showDexDetail(i: number): void {
-    const c = CATS[i];
+    const other = getLang() === 'ko' ? CATS[i].en : CATS[i].name;
     this.openSheet(`
       <div class="card dex-detail">
         <canvas id="dd-cat"></canvas>
-        <h2>${c.name}</h2>
-        <div class="en">${c.en} · ${i + 1}단계</div>
-        <p style="margin-top:10px">${c.desc}</p>
-        <p class="tip">${i < MAX_TIER ? `${c.name} 두 마리가 만나면 ${CATS[i + 1].name}!` : '우주뚱냥 두 마리가 만나면 우주로 승천하며 큰 보너스를 줘요.'}<br>지금까지 ${fmt(this.profile.dex[i])}번 만났어요.</p>
-        <div class="stack"><button class="btn plain small" id="dd-back">도감으로</button></div>
+        <h2>${catName(i)}</h2>
+        <div class="en">${other} · ${t('dex.step', { n: i + 1 })}</div>
+        <p style="margin-top:10px">${catDesc(i)}</p>
+        <p class="tip">${i < MAX_TIER ? t('dex.next', { a: catName(i), b: catName(i + 1) }) : t('dex.last')}<br>${t('dex.metLong', { n: fmt(this.profile.dex[i]) })}</p>
+        <div class="stack"><button class="btn plain small" id="dd-back">${t('dex.back')}</button></div>
       </div>`);
     const cv = this.sheet.querySelector<HTMLCanvasElement>('#dd-cat')!;
     const moods: Mood[] = ['idle', 'happy', i === 8 ? 'grumpy' : 'idle', 'sleep'];
@@ -490,19 +485,28 @@ export class App {
     const row = (id: string, label: string, on: boolean) => `<div class="setting"><span id="${id}-l">${label}</span><button class="toggle" id="${id}" role="switch" aria-checked="${on}" aria-labelledby="${id}-l"></button></div>`;
     this.openSheet(`
       <div class="card">
-        <h2>설정</h2>
-        ${row('st-sfx', '효과음', s.sfx)}
-        ${row('st-bgm', '배경음악', s.bgm)}
-        ${row('st-vib', '진동', s.vib)}
-        ${row('st-lite', '효과 줄이기 (배터리 절약)', s.lite)}
+        <h2>${t('set.title')}</h2>
+        ${row('st-sfx', t('set.sfx'), s.sfx)}
+        ${row('st-bgm', t('set.bgm'), s.bgm)}
+        ${row('st-vib', t('set.vib'), s.vib)}
+        ${row('st-lite', t('set.lite'), s.lite)}
+        <div class="setting"><span>${t('set.lang')}</span><button class="btn plain small" id="st-lang">${getLang() === 'ko' ? '한국어' : 'English'}</button></div>
         <div class="stack">
-          <button class="btn sky small" id="st-how">게임 방법</button>
-          <button class="btn plain small" id="st-reset">기록 초기화</button>
-          <button class="btn small" id="st-close">닫기</button>
+          <button class="btn sky small" id="st-how">${t('set.how')}</button>
+          <button class="btn plain small" id="st-reset">${t('set.reset')}</button>
+          <button class="btn small" id="st-close">${t('common.close')}</button>
         </div>
-        <p class="credits">냥체역학 v0.9 · 글꼴: 주아체 (SIL OFL) · 모든 그림과 소리는 코드로 그리고 합성했어요.</p>
+        <p class="credits">${t('set.credits', { v: VERSION })}</p>
       </div>`);
-    const bind = (id: string, key: keyof Profile['settings']) => {
+    this.sheet.querySelector('#st-lang')!.addEventListener('click', () => {
+      const nextLang: LangSetting = getLang() === 'ko' ? 'en' : 'ko';
+      s.lang = nextLang;
+      saveProfile(this.profile);
+      this.sound.tap();
+      this.applyLanguage();
+      this.showSettings();
+    });
+    const bind = (id: string, key: 'sfx' | 'bgm' | 'vib' | 'lite') => {
       const b = this.sheet.querySelector<HTMLButtonElement>('#' + id)!;
       b.addEventListener('click', () => {
         s[key] = !s[key];
@@ -521,11 +525,11 @@ export class App {
   private confirmReset(): void {
     this.openSheet(`
       <div class="card">
-        <h2>기록을 지울까요?</h2>
-        <p>최고 기록, 도감, 오늘의 상자 기록이 모두 사라져요. 되돌릴 수 없어요.</p>
+        <h2>${t('reset.title')}</h2>
+        <p>${t('reset.body')}</p>
         <div class="stack">
-          <button class="btn" id="rs-yes">모두 지우기</button>
-          <button class="btn plain small" id="rs-no">취소</button>
+          <button class="btn" id="rs-yes">${t('reset.yes')}</button>
+          <button class="btn plain small" id="rs-no">${t('common.cancel')}</button>
         </div>
       </div>`);
     this.sheet.querySelector('#rs-yes')!.addEventListener('click', () => {
@@ -533,7 +537,7 @@ export class App {
       const settings = this.profile.settings;
       this.profile = { ...defaultProfile(), settings };
       saveProfile(this.profile);
-      this.toast('기록을 지웠어요');
+      this.toast(t('toast.reset'));
       this.showTitle();
     });
     this.sheet.querySelector('#rs-no')!.addEventListener('click', () => { this.sound.tap(); this.showSettings(); });
@@ -542,16 +546,16 @@ export class App {
   showHowTo(back: () => void): void {
     this.openSheet(`
       <div class="card">
-        <h2>게임 방법</h2>
+        <h2>${t('how.title')}</h2>
         <div class="howto">
-          <div class="step"><canvas data-t="1"></canvas><div><b>끌어서 조준, 떼면 쏙</b>화면을 좌우로 끌어 위치를 정하고 손을 떼면 고양이가 떨어져요.</div></div>
-          <div class="step"><canvas data-t="2"></canvas><div><b>같은 고양이끼리 합체</b>같은 고양이 두 마리가 닿으면 한 단계 큰 고양이가 돼요. 목표는 우주뚱냥!</div></div>
-          <div class="step">${ICON.warn}<div><b>상자 밖으로 삐져나오면 끝</b>점선 위로 2초 넘게 나와 있으면 상자가 넘쳐요.</div></div>
-          <div class="step"><canvas data-t="-1"></canvas><div><b>캣닢 공</b>처음 닿은 고양이를 한 단계 키워 줘요.</div></div>
-          ${POWERS.map(p => `<div class="step">${POWER_INFO[p].icon}<div><b>${POWER_INFO[p].name}</b>${POWER_INFO[p].desc}</div></div>`).join('')}
-          <div class="step">${ICON.heart}<div><b>츄르 게이지</b>점수를 얻으면 차오르고, 가득 차면 능력이 하나 충전돼요.</div></div>
+          <div class="step"><canvas data-t="1"></canvas><div><b>${t('how.aim.t')}</b>${t('how.aim.d')}</div></div>
+          <div class="step"><canvas data-t="2"></canvas><div><b>${t('how.merge.t')}</b>${t('how.merge.d')}</div></div>
+          <div class="step">${ICON.warn}<div><b>${t('how.over.t')}</b>${t('how.over.d')}</div></div>
+          <div class="step"><canvas data-t="-1"></canvas><div><b>${t('how.nip.t')}</b>${t('how.nip.d')}</div></div>
+          ${POWERS.map(p => `<div class="step">${POWER_ICON[p]}<div><b>${powerName(p)}</b>${t('power.' + p + '.desc')}</div></div>`).join('')}
+          <div class="step">${ICON.heart}<div><b>${t('how.gauge.t')}</b>${t('how.gauge.d')}</div></div>
         </div>
-        <div class="stack"><button class="btn small" id="ht-back">알겠어요</button></div>
+        <div class="stack"><button class="btn small" id="ht-back">${t('how.ok')}</button></div>
       </div>`);
     this.sheet.querySelectorAll<HTMLCanvasElement>('canvas[data-t]').forEach(cv => drawPortrait(cv, Number(cv.dataset.t), { mood: 'happy', pad: 0.12 }));
     this.sheet.querySelector('#ht-back')!.addEventListener('click', () => { this.sound.tap(); back(); });
@@ -577,16 +581,16 @@ export class App {
     const g = this.game!;
     this.openSheet(`
       <div class="card">
-        <h2>잠깐 쉬는 중</h2>
-        <p>${g.mode === 'daily' ? '오늘의 상자' : '클래식'} · ${fmt(g.score)}점 · 진행 상황은 자동 저장돼요</p>
+        <h2>${t('pause.title')}</h2>
+        <p>${t('pause.body', { mode: t(g.mode === 'daily' ? 'mode.daily' : 'mode.classic'), n: fmt(g.score) })}</p>
         <div class="stack">
-          <button class="btn big" id="ps-go">${ICON.play}계속하기</button>
+          <button class="btn big" id="ps-go">${ICON.play}${t('pause.go')}</button>
           <div class="row2">
-            <button class="btn sky small" id="ps-how">게임 방법</button>
-            <button class="btn plain small" id="ps-set">${ICON.gear}설정</button>
+            <button class="btn sky small" id="ps-how">${t('set.how')}</button>
+            <button class="btn plain small" id="ps-set">${ICON.gear}${t('menu.settings')}</button>
           </div>
-          ${g.mode === 'classic' ? `<button class="btn plain small" id="ps-restart">${ICON.retry}새로 시작</button>` : ''}
-          <button class="btn plain small" id="ps-home">${ICON.home}처음으로</button>
+          ${g.mode === 'classic' ? `<button class="btn plain small" id="ps-restart">${ICON.retry}${t('pause.restart')}</button>` : ''}
+          <button class="btn plain small" id="ps-home">${ICON.home}${t('res.home')}</button>
         </div>
       </div>`);
     this.sheet.querySelector('#ps-go')!.addEventListener('click', () => { this.sound.tap(); this.resume(); });
@@ -656,6 +660,31 @@ export class App {
     this.renderer.reduceMotion = s.lite || (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
   }
 
+  setLanguage(l: LangSetting): void {
+    this.profile.settings.lang = l;
+    saveProfile(this.profile);
+    this.applyLanguage();
+  }
+
+  /** 언어를 바꾸면 HUD를 다시 만들고 지금 화면을 다시 그린다 */
+  private applyLanguage(): void {
+    setLang(this.profile.settings.lang);
+    this.canvas.setAttribute('aria-label', t('hud.box'));
+    const hidden = this.hud.hidden;
+    this.hud.remove();
+    this.powerBtns.clear();
+    this.hintEl = null;
+    this.buildHud();
+    this.hud.hidden = hidden;
+    this.root.insertBefore(this.hud, this.title);
+    if (this.game && !hidden) {
+      this.hud.querySelector('.best')!.innerHTML = this.game.mode === 'daily' ? `<span class="mode-chip">${t('hud.daily', { mod: modName(dailyInfo().mod) })}</span>` : t('hud.best', { n: fmt(this.profile.best) });
+      this.updateHud(true);
+    }
+    if (this.mode === 'title') this.showTitle();
+    this.layoutInsets();
+  }
+
   private haptic(p: number | number[]): void {
     if (this.profile.settings.vib) vibrate(p);
   }
@@ -684,7 +713,7 @@ export class App {
       const w = this.renderer.toWorld(e.clientX, e.clientY);
       if (this.renderer.targeting) {
         const b = this.renderer.pickBody(this.game, w.x, w.y);
-        if (b) this.game.punch(b.id); else this.toast('취소했어요');
+        if (b) this.game.punch(b.id); else this.toast(t('toast.cancel'));
         this.setTargeting(false);
         this.processEvents(this.game.events.splice(0));
         return;
@@ -744,7 +773,7 @@ export class App {
     this.renderer.targeting = on;
     this.renderer.hoverId = -1;
     this.powerBtns.get('punch')!.classList.toggle('active', on);
-    if (on) this.setHint('내보낼 고양이를 톡 누르세요'); else this.setHint(null);
+    if (on) this.setHint(t('hint.target')); else this.setHint(null);
   }
 
   private usePower(p: Power): void {
@@ -766,7 +795,7 @@ export class App {
 
   private noCharge(p: Power): void {
     const g = this.game!;
-    if (g.charges[p] <= 0) this.toast('츄르 게이지를 채우면 충전돼요');
+    if (g.charges[p] <= 0) this.toast(t('toast.noCharge'));
     const b = this.powerBtns.get(p)!;
     b.classList.remove('pulse'); void b.offsetWidth; b.classList.add('pulse');
   }
@@ -785,37 +814,38 @@ export class App {
           this.sound.drop(e.tier < 0 ? 0 : e.tier);
           this.haptic(6);
           if (e.tier >= 0) {
-            if (p.dex[e.tier] === 0) this.toast('새 고양이 발견!', e.tier, CATS[e.tier].name);
+            if (p.dex[e.tier] === 0) this.toast(t('toast.newCat'), e.tier, catName(e.tier));
             p.dex[e.tier]++; dirty = true;
           }
-          if (!(p.tutorial & 1)) { p.tutorial |= 1; dirty = true; this.setHint('같은 고양이끼리 닿으면 합체해요!'); }
+          if (!(p.tutorial & 1)) { p.tutorial |= 1; dirty = true; this.setHint(t('hint.merge')); }
           break;
         case 'merge':
         case 'nip': {
           if (e.t === 'nip') this.sound.nip(); else this.sound.merge(e.tier, e.combo);
           this.haptic(e.tier >= 7 ? [20, 30, 40] : 8 + e.tier * 3);
+          if (e.t === 'nip' && !e.grew) break;
           p.merges++;
           const first = p.dex[e.tier] === 0;
           p.dex[e.tier]++;
           dirty = true;
-          if (first) this.toast('새 고양이 발견!', e.tier, CATS[e.tier].name);
+          if (first) this.toast(t('toast.newCat'), e.tier, catName(e.tier));
           if (!(p.tutorial & 2)) { p.tutorial |= 2; this.setHint(null); }
           if (e.combo >= 3) this.sound.purr();
-          if (!(p.tutorial & 8) && g.stats.merges >= 6) { p.tutorial |= 8; this.toast('아래 능력 버튼도 써 보세요! 츄르 게이지가 차면 충전돼요'); }
+          if (!(p.tutorial & 8) && g.stats.merges >= 6) { p.tutorial |= 8; this.toast(t('toast.powers')); }
           break;
         }
         case 'ascend':
           this.sound.ascend();
           this.haptic([40, 40, 80, 40, 120]);
           p.ascends++; p.merges++; dirty = true;
-          this.toast('우주뚱냥 승천! 보너스 1,000점');
+          this.toast(t('toast.ascend'));
           break;
         case 'land':
           this.sound.land(Math.max(0, e.tier), e.speed);
           break;
         case 'charge':
           this.sound.charge();
-          this.toast(`츄르 게이지 가득! ${POWER_INFO[e.power].name} +1`);
+          this.toast(t('toast.charge', { power: powerName(e.power) }));
           { const b = this.powerBtns.get(e.power)!; b.classList.remove('pulse'); void b.offsetWidth; b.classList.add('pulse'); }
           break;
         case 'power':
@@ -842,7 +872,7 @@ export class App {
     this.scoreEl.textContent = fmt(this.shownScore);
     if (g.mode === 'classic') {
       const best = Math.max(this.profile.best, g.score);
-      const txt = g.score > this.profile.best && this.profile.best > 0 ? `최고 기록 경신 중!` : `최고 ${fmt(best)}`;
+      const txt = g.score > this.profile.best && this.profile.best > 0 ? t('hud.beating') : t('hud.best', { n: fmt(best) });
       if (this.bestEl.textContent !== txt) this.bestEl.textContent = txt;
     }
     if (force || this.nextShown !== g.nextTier) {
@@ -862,11 +892,11 @@ export class App {
     }
     if (g.current === NIP && !(this.profile.tutorial & 16)) {
       this.profile.tutorial |= 16; saveProfile(this.profile);
-      this.toast('캣닢 공! 처음 닿은 고양이를 한 단계 키워 줘요', NIP);
+      this.toast(t('toast.nip'), NIP);
     }
     if (g.danger > 0.2 && !(this.profile.tutorial & 4)) {
       this.profile.tutorial |= 4; saveProfile(this.profile);
-      this.toast('점선 밖으로 오래 나와 있으면 상자가 넘쳐요!');
+      this.toast(t('toast.danger'));
     }
   }
 

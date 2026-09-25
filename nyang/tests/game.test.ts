@@ -5,6 +5,8 @@ import { makeBody } from '../src/sim/physics';
 import { makeRng } from '../src/sim/rng';
 import { chooseX } from '../src/sim/bot';
 import { dailyInfo } from '../src/sim/daily';
+import { t, setLang, missingKeys, catName, modName } from '../src/i18n';
+import { MODIFIERS } from '../src/data/rules';
 
 const DT = 1 / 60;
 const run = (g: Game, sec: number) => { const ev: any[] = []; for (let i = 0; i < Math.round(sec / DT); i++) { g.update(DT); ev.push(...g.events); } return ev; };
@@ -79,6 +81,19 @@ describe('game rules', () => {
     expect(g.world.bodies.length).toBe(1);
     run(g, 1);
     expect(cat.r).toBeCloseTo(CATS[6].r, 3);
+  });
+
+  it('a catnip ball only makes happy points on cats bigger than a Bengal', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    const cat = place(g, 8, 180, 400);
+    place(g, NIP, 180, 250);
+    const ev = run(g, 1);
+    const e = ev.find(x => x.t === 'nip');
+    expect(e).toBeTruthy();
+    expect(e.grew).toBe(false);
+    expect(cat.tier).toBe(8);
+    expect(g.world.bodies.length).toBe(1);
+    expect(g.score).toBe(100);
   });
 
   it('dropping follows the queue and respects the cooldown', () => {
@@ -272,5 +287,16 @@ describe('game rules', () => {
     const mods = new Set<string>();
     for (let d = 1; d <= 60; d++) mods.add(dailyInfo(new Date(2026, 9, d)).mod.id);
     expect(mods.size).toBeGreaterThanOrEqual(6);
+  });
+
+  it('both languages have every string, with parameters filled in', () => {
+    expect(missingKeys()).toEqual({ ko: [], en: [] });
+    setLang('en');
+    expect(t('menu.daily', { no: 7 })).toBe('Daily Box #7');
+    expect(catName(10)).toBe('Cosmic Chonk');
+    expect(MODIFIERS.every(m => modName(m) !== m.name)).toBe(true);
+    setLang('ko');
+    expect(t('menu.daily', { no: 7 })).toBe('오늘의 상자 #7');
+    expect(catName(0)).toBe('아깽이');
   });
 });

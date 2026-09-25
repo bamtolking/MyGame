@@ -36,7 +36,7 @@ export interface Rules {
 
 export const BASE_RULES: Rules = {
   boxW: 360,
-  boxH: 470,
+  boxH: 430,
   gravity: 1900,
   friction: 0.3,
   restitution: 0.12,
@@ -49,11 +49,11 @@ export const BASE_RULES: Rules = {
   comboWindow: 1.0,
   comboBonus: 0.5,
   comboMaxMul: 4,
-  gaugeFirst: 1500,
-  gaugeGrowth: 1.35,
+  gaugeFirst: 2500,
+  gaugeGrowth: 1.6,
   maxCharges: 3,
   startCharges: 1,
-  liquifyTime: 4.5,
+  liquifyTime: 3.5,
   liquifyShrink: 0.86,
   shakeTime: 1.1,
 };
@@ -72,9 +72,9 @@ export interface Modifier {
 /** 오늘의 상자 규칙. 날짜 시드로 하나가 정해진다. */
 export const MODIFIERS: Modifier[] = [
   { id: 'plain', name: '평범한 상자', desc: '특별한 규칙이 없는 날. 순수 실력 승부!', level: 2, apply: () => {} },
-  { id: 'moon', name: '달나라 상자', desc: '중력이 약하다. 고양이가 둥실둥실 떨어진다.', level: 3, apply: r => { r.gravity *= 0.6; } },
+  { id: 'moon', name: '달나라 상자', desc: '중력이 약하다. 고양이가 둥실둥실 떨어진다.', level: 2, apply: r => { r.gravity *= 0.6; } },
   { id: 'butter', name: '버터 바른 상자', desc: '바닥도 고양이도 미끌미끌. 쉽게 굴러간다.', level: 2, apply: r => { r.friction = 0.02; } },
-  { id: 'narrow', name: '좁은 상자', desc: '상자 폭이 좁아졌다. 쌓기 계획이 중요!', level: 3, apply: r => { r.boxW = 320; r.boxH = 500; } },
+  { id: 'narrow', name: '좁은 상자', desc: '상자 폭이 좁아졌다. 쌓기 계획이 중요!', level: 3, apply: r => { r.boxW = 320; r.boxH = 460; } },
   { id: 'catnip', name: '캣닢 축제', desc: '캣닢 공이 훨씬 자주 나온다. 콤보 파티!', level: 1, apply: r => { r.catnipEvery = [7, 11]; } },
   { id: 'bouncy', name: '통통 상자', desc: '고양이들이 탱탱볼처럼 튄다.', level: 2, apply: r => { r.restitution = 0.5; } },
   { id: 'chonk', name: '뚱냥 주의보', desc: '처음부터 큰 고양이가 자주 나온다.', level: 3, apply: r => { r.spawnWeights = [14, 20, 26, 22, 18]; } },

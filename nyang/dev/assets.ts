@@ -111,6 +111,8 @@ function drawPile(w: World, W: number, H: number, line: number) {
   for (const i of order) drawCat(ctx, poses[i]);
 }
 
+const LANG = q.get('lang') === 'en' ? 'en' : 'ko';
+
 function feature() {
   const Wd = 1024, Hd = 500;
   cv.width = Wd; cv.height = Hd;
@@ -128,12 +130,16 @@ function feature() {
   ctx.fillRect(-16, H, W + 32, 16); ctx.strokeRect(-16, H, W + 32, 16);
   ctx.restore();
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  outlineText('냥체역학', 60, 210, 108);
+  const tag = LANG === 'ko' ? '고양이는 액체다' : 'Squish · Merge · Chonk';
+  if (LANG === 'ko') outlineText('냥체역학', 60, 210, 108);
+  else { outlineText('Cats Are', 60, 150, 84); outlineText('Liquid', 60, 236, 84); }
+  ctx.font = `30px ${FONT}`;
+  const tw = ctx.measureText(tag).width;
   ctx.fillStyle = '#4A2E23';
-  ctx.beginPath(); ctx.roundRect(64, 250, 262, 52, 26); ctx.fill();
-  ctx.fillStyle = '#FFF8F0'; ctx.font = `30px ${FONT}`; ctx.fillText('고양이는 액체다', 86, 287);
+  ctx.beginPath(); ctx.roundRect(64, 262, tw + 44, 52, 26); ctx.fill();
+  ctx.fillStyle = '#FFF8F0'; ctx.fillText(tag, 86, 299);
   ctx.fillStyle = '#6B4436'; ctx.font = `26px ${FONT}`;
-  ctx.fillText('말랑말랑 고양이 합체 물리 퍼즐', 66, 360);
+  ctx.fillText(LANG === 'ko' ? '말랑말랑 고양이 합체 물리 퍼즐' : 'A squishy cat-merging physics puzzle', 66, 372);
 }
 
 async function compose(src: string, W: number, Hh: number, cap: string, sub: string) {

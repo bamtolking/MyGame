@@ -1,0 +1,13 @@
+{
+  "appId": "com.example.nyangche",
+  "appName": "냥체역학",
+  "webDir": "dist",
+  "backgroundColor": "#FFD9BE",
+  "android": {
+    "backgroundColor": "#FFD9BE"
+  },
+  "ios": {
+    "backgroundColor": "#FFD9BE",
+    "contentInset": "never"
+  }
+}

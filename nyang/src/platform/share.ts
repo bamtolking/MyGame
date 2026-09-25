@@ -6,7 +6,8 @@ export type ShareResult = 'shared' | 'copied' | 'cancelled' | 'failed';
 export async function shareText(text: string, image?: HTMLCanvasElement): Promise<ShareResult> {
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
   const full = SHARE_URL ? `${text}\n${SHARE_URL}` : text;
-  if (typeof nav.share === 'function') {
+  // 아티팩트처럼 시스템 공유가 막힌 곳에서는 바로 복사 (공유 시도가 사용자 동작을 소모하므로)
+  if (typeof nav.share === 'function' && !(window as any).__NYANG_NO_SHARE__) {
     try {
       if (image && nav.canShare) {
         const blob = await new Promise<Blob | null>(res => image.toBlob(b => res(b), 'image/png'));

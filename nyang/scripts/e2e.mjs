@@ -13,9 +13,9 @@ const log = m => { console.log(m); report.push(m); };
 const check = (name, cond, extra = '') => { if (!cond) failures++; log(`${cond ? 'OK  ' : 'FAIL'} ${name}${extra ? ' — ' + extra : ''}`); };
 const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--use-gl=swiftshader', '--autoplay-policy=no-user-gesture-required'] });
 
-async function run(name, viewport) {
-  log(`\n== ${name} (${viewport.width}x${viewport.height}) ==`);
-  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+async function run(name, viewport, locale = 'ko-KR') {
+  log(`\n== ${name} (${viewport.width}x${viewport.height}, ${locale}) ==`);
+  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
@@ -34,6 +34,8 @@ async function run(name, viewport) {
   await page.waitForSelector('#t-play');
   await wait(800);
   await shot('01-title');
+  const lang = await S(() => document.documentElement.lang);
+  check('language follows the device', lang === (locale.startsWith('ko') ? 'ko' : 'en'), lang);
   check('title shows start + daily + dex buttons', await page.isVisible('#t-play') && await page.isVisible('#t-daily') && await page.isVisible('#t-dex'));
 
   // 한 판 시작
@@ -162,6 +164,12 @@ async function run(name, viewport) {
   check('settings toggle sfx', (await page.getAttribute('#st-sfx', 'aria-checked')) === 'false');
   await page.tap('#st-sfx');
   await shot('09-settings');
+  const langBefore = await S(() => document.documentElement.lang);
+  await page.tap('#st-lang'); await wait(200);
+  const flipped = await S(() => document.documentElement.lang);
+  await page.tap('#st-lang'); await wait(200);
+  const langBack = await S(() => document.documentElement.lang);
+  check('language toggle switches and returns', flipped !== langBefore && langBack === langBefore, `${langBefore}→${flipped}→${langBack}`);
   await page.tap('#st-close'); await wait(150);
 
   // 오늘의 상자
@@ -180,7 +188,7 @@ async function run(name, viewport) {
   check('daily results', await page.isVisible('#rs-share'));
   await page.tap('#rs-home'); await wait(300);
   const dailyLabel = await page.textContent('#t-daily');
-  check('daily marked done on title', /완료/.test(dailyLabel || ''), (dailyLabel || '').trim().replace(/\s+/g, ' '));
+  check('daily marked done on title', /완료|done/.test(dailyLabel || ''), (dailyLabel || '').trim().replace(/\s+/g, ' '));
   await page.tap('#t-daily'); await wait(300);
   check('daily done sheet with countdown', await page.isVisible('#dd-cd'));
   await page.tap('#dd-back'); await wait(150);
@@ -209,6 +217,7 @@ if (!only || only === 'phone') await run('phone-390x844', { width: 390, height: 
 if (!only || only === 'small') await run('small-360x640', { width: 360, height: 640 });
 if (!only || only === 'land') await run('landscape-844x390', { width: 844, height: 390 });
 if (!only || only === 'tablet') await run('tablet-768x1024', { width: 768, height: 1024 });
+if (!only || only === 'en') await run('english-390x844', { width: 390, height: 844 }, 'en-US');
 await browser.close();
 writeFileSync('e2e-out/report.txt', report.join('\n') + '\n');
 log(failures ? `\nE2E FAILED: ${failures} checks` : '\nE2E OK');

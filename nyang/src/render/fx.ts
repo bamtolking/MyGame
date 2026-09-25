@@ -60,6 +60,15 @@ export class Fx {
     this.add({ kind: 'text', x, y, vy: big ? -40 : -70, text, color, size, life: big ? 1.1 : 0.9, max: big ? 1.1 : 0.9, big });
   }
 
+  private lastCombo: Particle | null = null;
+
+  /** 콤보 글자는 하나만: 새 콤보가 뜨면 이전 것은 지운다 */
+  combo(x: number, y: number, text: string, color: string, size: number): void {
+    if (this.lastCombo && this.lastCombo.life > 0) this.lastCombo.life = 0;
+    this.text(x, y, text, color, size, true);
+    this.lastCombo = this.list[this.list.length - 1];
+  }
+
   ascend(x: number, y: number): void {
     this.add({ kind: 'beam', x, y, size: 120, life: 1.4, max: 1.4, color: '#fff' });
     this.add({ kind: 'fly', x, y, vx: 0, vy: -520, tier: 10, r0: CATS[10].r, rot: 0, vr: 0.8, life: 1.6, max: 1.6 });

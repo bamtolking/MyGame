@@ -25,7 +25,7 @@ export class Sound {
       const comp = c.createDynamicsCompressor();
       comp.threshold.value = -14; comp.ratio.value = 4;
       this.master.connect(comp); comp.connect(c.destination);
-      this.sfx = c.createGain(); this.sfx.gain.value = this.sfxOn ? 0.8 : 0; this.sfx.connect(this.master);
+      this.sfx = c.createGain(); this.sfx.gain.value = this.sfxOn ? 1 : 0; this.sfx.connect(this.master);
       this.music = c.createGain(); this.music.gain.value = this.bgmOn ? 0.22 : 0; this.music.connect(this.master);
       const n = Math.floor(c.sampleRate * 1.5);
       this.noiseBuf = c.createBuffer(1, n, c.sampleRate);
@@ -35,7 +35,7 @@ export class Sound {
     } catch { this.ctx = null; }
   }
 
-  setSfx(on: boolean): void { this.sfxOn = on; if (this.ctx) this.sfx.gain.value = on ? 0.8 : 0; }
+  setSfx(on: boolean): void { this.sfxOn = on; if (this.ctx) this.sfx.gain.value = on ? 1 : 0; }
   setBgm(on: boolean): void {
     this.bgmOn = on;
     if (!this.ctx) return;
@@ -80,8 +80,8 @@ export class Sound {
     // "미-아-오" 포먼트
     const out = c.createGain();
     out.gain.setValueAtTime(0.0001, t0);
-    out.gain.exponentialRampToValueAtTime(0.5, t0 + 0.04);
-    out.gain.setValueAtTime(0.5, t0 + dur * 0.6);
+    out.gain.exponentialRampToValueAtTime(0.9, t0 + 0.04);
+    out.gain.setValueAtTime(0.9, t0 + dur * 0.6);
     out.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     const formant = (a: [number, number, number], q: number, gain: number) => {
       const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = q;
@@ -134,21 +134,21 @@ export class Sound {
   merge(tier: number, combo: number): void {
     if (!this.ok()) return;
     const p = 1 + Math.min(6, combo - 1) * 0.12;
-    this.tone(520 * p * Math.pow(0.93, tier), 0.09, 'sine', 0.35, 700);
-    this.tone(260 * p, 0.12, 'triangle', 0.18, -120, 0.01);
+    this.tone(520 * p * Math.pow(0.93, tier), 0.09, 'sine', 0.6, 700);
+    this.tone(260 * p, 0.12, 'triangle', 0.3, -120, 0.01);
     if (this.gate('meow', 110)) this.meow(tier, 'happy', 0.05);
-    if (combo >= 2) [0, 1, 2].forEach(i => this.tone(880 * p * Math.pow(1.26, i), 0.12, 'triangle', 0.12, 0, 0.08 + i * 0.05));
+    if (combo >= 2) [0, 1, 2].forEach(i => this.tone(880 * p * Math.pow(1.26, i), 0.12, 'triangle', 0.2, 0, 0.08 + i * 0.05));
     if (tier >= 7) this.noise(0.35, 0.18, 900, 'lowpass', 0.02);
   }
 
   drop(tier: number): void {
     if (!this.ok() || !this.gate('drop', 60)) return;
-    this.tone(700 - tier * 30, 0.08, 'sine', 0.12, -300);
+    this.tone(700 - tier * 30, 0.08, 'sine', 0.3, -300);
   }
 
   land(tier: number, speed: number): void {
     if (!this.ok() || !this.gate('land', 70)) return;
-    const v = Math.min(0.35, speed / 3000);
+    const v = Math.min(0.5, speed / 2000);
     this.tone(180 - tier * 8, 0.12, 'sine', v, -60);
     this.noise(0.06, v * 0.5, 700);
   }
@@ -175,23 +175,23 @@ export class Sound {
 
   liquify(): void {
     if (!this.ok()) return;
-    for (let i = 0; i < 12; i++) this.tone(300 + Math.random() * 500, 0.09, 'sine', 0.12, 400 + Math.random() * 300, i * 0.07);
+    for (let i = 0; i < 12; i++) this.tone(300 + Math.random() * 500, 0.09, 'sine', 0.22, 400 + Math.random() * 300, i * 0.07);
   }
 
   bubble(): void {
     if (!this.ok() || !this.gate('bubble', 90)) return;
-    this.tone(400 + Math.random() * 600, 0.06, 'sine', 0.06, 500);
+    this.tone(400 + Math.random() * 600, 0.06, 'sine', 0.12, 500);
   }
 
   shake(): void {
     if (!this.ok()) return;
-    this.noise(0.9, 0.25, 350);
-    for (let i = 0; i < 5; i++) this.tone(120, 0.1, 'triangle', 0.12, -30, i * 0.18);
+    this.noise(0.9, 0.4, 350);
+    for (let i = 0; i < 5; i++) this.tone(120, 0.1, 'triangle', 0.25, -30, i * 0.18);
   }
 
   charge(): void {
     if (!this.ok()) return;
-    [988, 1319, 1976].forEach((f, i) => this.tone(f, 0.18, 'sine', 0.13, 0, i * 0.07));
+    [988, 1319, 1976].forEach((f, i) => this.tone(f, 0.18, 'sine', 0.22, 0, i * 0.07));
   }
 
   danger(): void {
@@ -208,12 +208,12 @@ export class Sound {
 
   record(): void {
     if (!this.ok()) return;
-    [523, 659, 784, 1046, 784, 1046].forEach((f, i) => this.tone(f, 0.22, 'square', 0.07, 0, i * 0.11));
+    [523, 659, 784, 1046, 784, 1046].forEach((f, i) => this.tone(f, 0.22, 'square', 0.12, 0, i * 0.11));
   }
 
   tap(): void {
     if (!this.ok() || !this.gate('tap', 40)) return;
-    this.tone(900, 0.05, 'sine', 0.1, 200);
+    this.tone(900, 0.05, 'sine', 0.25, 200);
   }
 
   purr(): void {
@@ -224,7 +224,7 @@ export class Sound {
     const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
     const g = c.createGain(); g.gain.value = 0;
     const lfo = c.createOscillator(); lfo.frequency.value = 24;
-    const lg = c.createGain(); lg.gain.value = 0.35;
+    const lg = c.createGain(); lg.gain.value = 0.9;
     lfo.connect(lg); lg.connect(g.gain);
     const env = c.createGain();
     env.gain.setValueAtTime(0.0001, t0); env.gain.exponentialRampToValueAtTime(1, t0 + 0.2); env.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.2);
