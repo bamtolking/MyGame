@@ -1,0 +1,22 @@
+{
+  "name": "kaltoe-survivor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && node scripts/singlefile.mjs",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "balance": "vitest run tests/balance.test.ts --reporter=verbose",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "playwright-core": "1.63.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.1",
+    "vitest": "5.0.1"
+  }
+}

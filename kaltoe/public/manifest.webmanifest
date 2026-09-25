@@ -1,0 +1,15 @@
+{
+  "name": "칼퇴 서바이버",
+  "short_name": "칼퇴",
+  "description": "09:00부터 18:00까지 살아남아 칼퇴하는 직장인 서바이벌 로그라이트",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#141729",
+  "theme_color": "#141729",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
