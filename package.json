@@ -9,7 +9,12 @@
     "preview": "vite preview --host",
     "test": "vitest run",
     "balance": "vitest run tests/balance.test.ts --reporter=verbose",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "abyss:dev": "vite --config abyss/vite.config.ts --host",
+    "abyss:build": "tsc --noEmit -p abyss/tsconfig.json && vite build --config abyss/vite.config.ts && node abyss/scripts/singlefile.mjs",
+    "abyss:test": "vitest run --config abyss/vite.config.ts tests/rules.test.ts tests/world.test.ts",
+    "abyss:shots": "node abyss/scripts/shots.mjs",
+    "abyss:balance": "vitest run --config abyss/vite.config.ts tests/balance.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",
