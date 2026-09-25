@@ -370,10 +370,21 @@ export class App implements AppApi {
       !onTitle ? h('button', { class: 'wide', onclick: () => { if (this.tr instanceof LocalTransport) this.tr.saveNow(); this.showTitle(); } }, '타이틀로 나가기') : null);
   }
   private backupBox(): HTMLElement {
-    const ls = new store.LocalProfileStore(); const ta = h('textarea', { rows: 3, placeholder: '백업 코드를 붙여넣고 불러오기' }) as HTMLTextAreaElement;
-    return h('div', { class: 'backup' }, h('small', { class: 'hint' }, '오프라인 캐릭터는 이 브라우저에 저장됩니다. 백업 코드로 옮길 수 있어요.'), ta,
-      h('div', { class: 'row' }, h('button', { onclick: () => { if (this.tr instanceof LocalTransport) this.tr.saveNow(); const s = ls.exportString(store.token('offline')); ta.value = s ?? ''; if (s) { ta.select(); try { void navigator.clipboard?.writeText(s); } catch { /* ignore */ } } } }, '백업 코드 만들기'),
-        h('button', { onclick: () => { if (!ta.value.trim()) return; if (ls.importString(store.token('offline'), ta.value)) { const p = ls.load(store.token('offline')); if (p) store.rememberChar('offline', { name: p.name, cls: p.cls, level: p.level, t: Date.now() }); alert('불러왔습니다. 타이틀에서 이어하기를 누르세요.'); this.showTitle(); } else alert('올바른 백업 코드가 아닙니다'); } }, '불러오기')));
+    const ls = new store.LocalProfileStore(); const ta = h('textarea', { id: 'backup-code', rows: 3, placeholder: '백업 코드를 붙여넣고 불러오기' }) as HTMLTextAreaElement;
+    const msg = h('small', { class: 'hint', 'aria-live': 'polite' });
+    const say = (t: string, ok = true) => { msg.textContent = t; msg.className = ok ? 'hint good' : 'hint bad'; };
+    return h('div', { class: 'backup' }, h('small', { class: 'hint' }, '오프라인 캐릭터는 이 브라우저에 저장됩니다. 백업 코드로 다른 브라우저로 옮길 수 있어요.'), ta,
+      h('div', { class: 'row' }, h('button', { onclick: () => {
+        if (this.tr instanceof LocalTransport) this.tr.saveNow(); const s = ls.exportString(store.token('offline'));
+        if (!s) { say('저장된 오프라인 캐릭터가 없습니다', false); return; }
+        ta.value = s; ta.select(); say('백업 코드를 만들었습니다. 복사해서 보관하세요');
+        try { navigator.clipboard?.writeText(s).then(() => say('백업 코드를 만들어 클립보드에 복사했습니다'), () => { /* selection fallback already shown */ }); } catch { /* ignore */ }
+      } }, '백업 코드 만들기'),
+        h('button', { onclick: () => {
+          if (!ta.value.trim()) { say('먼저 백업 코드를 붙여넣으세요', false); return; }
+          if (ls.importString(store.token('offline'), ta.value)) { const p = ls.load(store.token('offline')); if (p) store.rememberChar('offline', { name: p.name, cls: p.cls, level: p.level, t: Date.now() }); say(`${p?.name ?? '캐릭터'}을(를) 불러왔습니다. 타이틀에서 이어하기를 누르세요`); }
+          else say('올바른 백업 코드가 아닙니다. 코드 전체를 붙여넣었는지 확인하세요', false);
+        } }, '불러오기')), msg);
   }
 }
 

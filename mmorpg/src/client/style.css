@@ -114,7 +114,7 @@ select { width: auto; min-height: 40px; }
 .tr .menu button.badge::after { content: ''; position: absolute; right: 3px; top: 3px; width: 9px; height: 9px; border-radius: 50%; background: #ff4a5a; box-shadow: 0 0 6px #ff4a5a; }
 /* top-center */
 .topc { position: absolute; left: 50%; transform: translateX(-50%); top: calc(8px + var(--sat)); width: min(420px, 46vw); display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
-@media (orientation: portrait) { .topc { top: calc(158px + var(--sat)); left: calc(8px + var(--sal)); right: calc(64px + var(--sar)); width: auto; transform: none; max-width: 420px; } }
+@media (orientation: portrait) { .topc { top: calc(180px + var(--sat)); left: calc(8px + var(--sal)); right: calc(64px + var(--sar)); width: auto; transform: none; max-width: 420px; } }
 .bossbar { background: var(--panel); border: 1px solid rgba(255, 90, 90, 0.5); border-radius: 12px; padding: 6px 10px; }
 .bossbar .bn { display: flex; gap: 6px; align-items: baseline; } .bossbar .bn b { flex: 1; color: #ffb0b0; font-size: 14px; } .bossbar .bn small { color: #fff; font-weight: 800; }
 .bossbar .bb { height: 10px; background: rgba(0, 0, 0, 0.6); border-radius: 5px; overflow: hidden; margin-top: 4px; } .bossbar .bb i { display: block; height: 100%; background: linear-gradient(90deg, #ff2a4a, #ff8a3a); transition: width 0.2s; }

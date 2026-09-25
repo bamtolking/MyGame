@@ -12,3 +12,8 @@ html = html.replace(/<link rel="modulepreload"[^>]*>/g, '').replace(/<link rel="
 mkdirSync('play', { recursive: true });
 writeFileSync(join('play', 'index.html'), html);
 console.log('play/index.html written:', (html.length / 1024).toFixed(0), 'KB');
+// Artifact variant: the host wraps the page in its own doctype/head/body, so emit title + style + app + script only.
+const inner = html.replace(/^[\s\S]*?<head>/, '').replace(/<\/head>\s*<body>/, '').replace(/<\/body>\s*<\/html>\s*$/, '')
+  .replace(/<meta charset="utf-8" \/>\s*/, '').replace(/<meta name="viewport"[^>]*>\s*/, '').replace(/<link rel="icon" href="[^"]*"\s*\/>\s*/, '').replace(/<title>[^<]*<\/title>\s*/, '');
+writeFileSync(join('play', 'artifact.html'), '<title>달빛 퇴마단</title>\n' + inner.trim() + '\n');
+console.log('play/artifact.html written:', (inner.length / 1024).toFixed(0), 'KB');
