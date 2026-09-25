@@ -98,8 +98,8 @@ const OFFICE: StageDef = {
   subtitle: '메일 폭탄 주의',
   desc: '평범한 월요일. 메일은 쌓이고 전화는 울리고, 부장님은 17시에 뭔가를 들고 오신다. 오늘은 반드시 칼퇴한다.',
   icon: '🏢',
-  palette: { floor: '#c9d3df', floorAlt: '#bdc9d7', line: '#a9b7c8', accent: '#3b82f6', fog: '#1e293b' },
-  decor: ['🪴', '🪑', '🗑️', '💼', '🗄️', '📌'],
+  palette: { floor: '#1c2430', floorAlt: '#212b39', line: '#34425a', accent: '#3de0ff', fog: '#050a14' },
+  decor: ['📌', '🗑️', '💼', '📚', '🔌', '🧻'],
   timeline: timeline([
     { memo: 10, spam: 3 },                                                              // 0-30
     { memo: 8, spam: 4, phone: 2 },                                                     // 30-70
@@ -163,8 +163,8 @@ const CRUNCH: StageDef = {
   subtitle: '서버가 먼저 퇴근했다',
   desc: '분기 마감 D-1. 불 꺼진 사무실엔 모니터 불빛과 버그뿐. 본부장님은 오늘 밤 "숫자"를 원하신다. 🧨는 멀리서 처리하세요.',
   icon: '🌃',
-  palette: { floor: '#1b2238', floorAlt: '#20294a', line: '#2c3860', accent: '#38bdf8', fog: '#04060d' },
-  decor: ['💻', '🍕', '🔌', '💡', '📦', '🪑'],
+  palette: { floor: '#121a2e', floorAlt: '#152036', line: '#243457', accent: '#38bdf8', fog: '#010309' },
+  decor: ['🍕', '🥤', '🔌', '💾', '🍜', '🧃'],
   timeline: timeline([
     { bug: 6, memo: 4, ghost_task: 2 },                                                                   // 0-30
     { bug: 6, memo: 3, ghost_task: 3, owl: 2 },                                                           // 30-70
@@ -230,8 +230,8 @@ const DINNER: StageDef = {
   subtitle: '1차에서 끝날 리 없다',
   desc: '"오늘 회식 필참!" 고깃집 불판 위로 소주병이 행군한다. 폭탄주 부장님이 3차를 외치기 전에 탈출하라.',
   icon: '🍻',
-  palette: { floor: '#8a5a3b', floorAlt: '#7e5035', line: '#66412a', accent: '#f97316', fog: '#2a1308' },
-  decor: ['🥢', '🍚', '🧂', '🥬', '🧄', '🪑'],
+  palette: { floor: '#261612', floorAlt: '#2e1b15', line: '#40261c', accent: '#ff8a3d', fog: '#0c0402' },
+  decor: ['🥢', '🧂', '🥬', '🧄', '🌶️', '🧅'],
   timeline: timeline([
     { soju: 8, beer: 4 },                                                                               // 0-30
     { soju: 7, beer: 4, cheers: 2 },                                                                    // 30-70
@@ -297,8 +297,8 @@ const HOLIDAY: StageDef = {
   subtitle: '잔소리 무한 리필',
   desc: '따끈한 장판 위로 날아드는 "취업은?" "결혼은?". 큰이모의 덕담 폭격을 버티고 무사히 귀경하라.',
   icon: '🎑',
-  palette: { floor: '#e8c77a', floorAlt: '#dfbb69', line: '#c9a457', accent: '#dc2626', fog: '#5b3a12' },
-  decor: ['🍊', '🍐', '🍎', '🧧', '🌕', '🏮'],
+  palette: { floor: '#2a2016', floorAlt: '#36291b', line: '#4a3822', accent: '#ffcf5a', fog: '#0b0703' },
+  decor: ['🍊', '🍐', '🍎', '🧧', '🌰', '🎐'],
   timeline: timeline([
     { nag_job: 6, songpyeon: 5 },                                                                                         // 0-30
     { nag_job: 5, songpyeon: 4, nag_marry: 3, cousin: 2 },                                                                // 30-70
