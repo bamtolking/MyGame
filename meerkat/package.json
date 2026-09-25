@@ -1,0 +1,43 @@
+{
+  "name": "meerkat-posture",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "미어캣 — AI 자세 분석 · 맞춤 교정 운동 코치",
+  "scripts": {
+    "dev": "node scripts/prepare-assets.mjs && vite --host",
+    "build": "node scripts/prepare-assets.mjs && tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview --host",
+    "test": "vitest run",
+    "e2e": "node scripts/e2e.mjs",
+    "cap:sync": "npm run build && npx cap sync"
+  },
+  "dependencies": {
+    "@capacitor-community/text-to-speech": "^8.0.2",
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/filesystem": "^8.1.3",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/share": "^8.0.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3",
+    "@mediapipe/tasks-vision": "^1.0.1",
+    "@preact/signals": "^2.11.2",
+    "lucide-preact": "^1.48.0",
+    "preact": "^10.29.8",
+    "pretendard": "^1.3.9"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@capacitor/cli": "^8.5.2",
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^22.20.4",
+    "playwright-core": "^1.63.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.1"
+  }
+}

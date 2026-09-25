@@ -1,0 +1,13 @@
+node_modules
+dist
+public/mediapipe
+e2e-out
+*.log
+.DS_Store
+android/app/build
+android/build
+android/.gradle
+android/local.properties
+ios/App/Pods
+ios/App/build
+dev/samples
