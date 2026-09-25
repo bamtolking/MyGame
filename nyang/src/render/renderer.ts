@@ -1,11 +1,12 @@
 // 캔버스 장면: 방 배경, 종이 상자, 크레인, 고양이, 연출. 월드 → 화면 변환도 여기서 관리한다.
 import { CATS } from '../data/cats';
 import { Game, NIP, radiusOf, type GameEvent } from '../sim/game';
-import type { Body } from '../sim/physics';
+import { makeBody, type Body } from '../sim/physics';
 import { drawCat, drawTail, type CatPose, type Clip, type Mood } from './catdraw';
 import { buildClips, VISUAL_SCALE, type Disc } from './squish';
 import { Fx, FONT } from './fx';
 import { t } from '../i18n';
+import { BOXES, type BoxSkin } from '../data/cosmetics';
 
 export const WALL = 16;
 export const RAIL_Y = -132;
@@ -38,6 +39,9 @@ export class Renderer {
   reduceMotion = false;
   targeting = false;
   hoverId = -1;
+  /** 꾸미기: 상자 스킨과 모자 */
+  skin: BoxSkin = BOXES[0];
+  hat = 'none';
   private vis = new Map<number, Vis>();
   private bg: HTMLCanvasElement | null = null;
   private bgKey = '';
@@ -117,7 +121,8 @@ export class Renderer {
         case 'merge': {
           fx.merge(e.tier, e.x, e.y, e.ax, e.ay, e.bx, e.by, e.ar, e.br);
           const ty = this.textY(e.x, e.y - CATS[e.tier].r * 0.6);
-          fx.text(e.x, ty, `+${e.points}`, '#FFF4C2', 15 + Math.min(10, e.tier));
+          fx.text(e.x, ty, `+${e.points}`, e.gold ? '#FFD34D' : e.fever ? '#FFB3D9' : '#FFF4C2', 15 + Math.min(10, e.tier) + (e.gold ? 6 : 0));
+          if (e.gold) { fx.goldBurst(e.x, e.y, CATS[e.tier].r); fx.text(e.x, ty - 26, t('fx.gold', { n: game.rules.goldMul + (e.gold - 1) * 2 }), '#FFD34D', 24, true); }
           this.lookX = e.x; this.lookY = e.y;
           break;
         }
@@ -143,6 +148,9 @@ export class Renderer {
           break;
         case 'drop':
           this.held.lower = 0;
+          break;
+        case 'fever':
+          if (e.on) { fx.feverStart(game.rules.boxW, game.rules.boxH); fx.combo(game.rules.boxW / 2, game.rules.boxH * 0.38, t('fx.fever'), '#FF7AC8', 46); }
           break;
       }
     }
@@ -180,7 +188,7 @@ export class Renderer {
     ctx.setTransform(s, 0, 0, s, (this.ox + sx * this.scale) * dpr, (this.oy + sy * this.scale) * dpr);
     const line = Math.max(1.1, 1.9 * Math.min(1.2, this.scale)) / this.scale;
 
-    this.drawBoxBack(ctx, game);
+    this.drawBoxBack(ctx, game, t);
     this.drawCrane(ctx, game, t, opts, line, opts.paused ? 0 : dt);
 
     // 고양이
@@ -207,7 +215,7 @@ export class Renderer {
       const ly = opts.showHeld ? -0.7 : clamp((this.lookY - b.y) / 160, -1, 1);
       poses[i] = {
         tier: b.tier, x: b.x, y: b.y, r: discs[i].r, a: b.a + v.off, squash: clamp(v.sq, -0.28, 0.24), clips: this.clips[i], mood,
-        lookX: lx, lookY: ly, blink: v.blink, t, seed: v.seed, line, melt: liquid, detail: this.scale,
+        lookX: lx, lookY: ly, blink: v.blink, t, seed: v.seed, line, melt: liquid, detail: this.scale, gold: b.gold, hat: this.hat,
       };
     }
     const order = poses.map((_, i) => i).sort((a, b) => poses[b].y - poses[a].y);
@@ -253,6 +261,17 @@ export class Renderer {
       ctx.moveTo(0, H);
       for (let x = 0; x <= W; x += 12) ctx.lineTo(x, H * 0.12 + Math.sin(x * 0.04 + t * 3) * 8);
       ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    if (game.fever > 0) {
+      if (!opts.paused && Math.random() < (this.lite ? 0.15 : 0.5)) this.fx.feverSparkle(W, H);
+      ctx.save();
+      ctx.globalAlpha = 0.07 + 0.03 * Math.sin(t * 8);
+      const fg = ctx.createLinearGradient(0, 0, W, H);
+      for (let i = 0; i <= 4; i++) fg.addColorStop(i / 4, `hsl(${(t * 120 + i * 80) % 360}, 90%, 70%)`);
+      ctx.fillStyle = fg;
+      ctx.fillRect(0, 0, W, H);
       ctx.restore();
     }
 
@@ -318,6 +337,7 @@ export class Renderer {
     if (b.chain > 0 && game.time - b.ct < 1.1) return 'happy';
     if (liquid > 0.3) return 'melt';
     if (game.danger > 0.25 && b.y - b.r < 60) return 'scared';
+    if (game.fever > 0) return 'happy';
     if (v.restT > 16 && Math.sin(v.seed * 10 + game.time * 0.2) > 0.3) return 'sleep';
     if (b.tier === 8) return 'grumpy';
     return 'idle';
@@ -389,38 +409,41 @@ export class Renderer {
     const pose: CatPose = {
       tier, x: tx + Math.sin(h.a) * r * 0.6, y: cy, r, a: h.a, squash: 0.06, clips: [], mood: tier === NIP ? 'idle' : 'held',
       lookX: 0, lookY: 1, blink: 0, t, seed: 3, line, held: true, detail: this.scale, alpha: ready ? 1 : 0.35 + 0.65 * e,
+      gold: game.currentGold, hat: this.hat,
     };
     drawTail(ctx, pose);
     drawCat(ctx, pose);
   }
 
-  private drawBoxBack(ctx: CanvasRenderingContext2D, game: Game): void {
+  private drawBoxBack(ctx: CanvasRenderingContext2D, game: Game, time = 0): void {
     const W = game.rules.boxW, H = game.rules.boxH;
+    const sk = this.skin;
     ctx.save();
     // 안쪽 뒷면
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#C98E55'); g.addColorStop(1, '#AE733F');
+    g.addColorStop(0, sk.back[0]); g.addColorStop(1, sk.back[1]);
     ctx.fillStyle = g;
     ctx.fillRect(0, -2, W, H + 2);
-    // 골판지 결
-    ctx.strokeStyle = 'rgba(90,50,20,0.07)'; ctx.lineWidth = 2;
-    for (let x = 10; x < W; x += 14) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, -2, W, H + 2); ctx.clip();
+    this.drawSkinPattern(ctx, sk.pattern, W, H, time);
+    ctx.restore();
     // 안쪽 그림자 (벽 쪽)
     const sl = ctx.createLinearGradient(0, 0, 26, 0);
-    sl.addColorStop(0, 'rgba(60,30,10,0.28)'); sl.addColorStop(1, 'rgba(60,30,10,0)');
+    sl.addColorStop(0, 'rgba(60,30,10,0.24)'); sl.addColorStop(1, 'rgba(60,30,10,0)');
     ctx.fillStyle = sl; ctx.fillRect(0, 0, 26, H);
     const sr = ctx.createLinearGradient(W, 0, W - 26, 0);
-    sr.addColorStop(0, 'rgba(60,30,10,0.28)'); sr.addColorStop(1, 'rgba(60,30,10,0)');
+    sr.addColorStop(0, 'rgba(60,30,10,0.24)'); sr.addColorStop(1, 'rgba(60,30,10,0)');
     ctx.fillStyle = sr; ctx.fillRect(W - 26, 0, 26, H);
     const sb = ctx.createLinearGradient(0, H, 0, H - 30);
-    sb.addColorStop(0, 'rgba(60,30,10,0.3)'); sb.addColorStop(1, 'rgba(60,30,10,0)');
+    sb.addColorStop(0, 'rgba(60,30,10,0.26)'); sb.addColorStop(1, 'rgba(60,30,10,0)');
     ctx.fillStyle = sb; ctx.fillRect(0, H - 30, W, 30);
     // 인쇄 도장
     ctx.save();
     ctx.translate(W * 0.5, H * 0.46);
     ctx.rotate(-0.12);
-    ctx.globalAlpha = 0.16;
-    ctx.strokeStyle = '#7A2E1E'; ctx.fillStyle = '#7A2E1E';
+    ctx.globalAlpha = sk.id === 'cardboard' ? 0.16 : 0.22;
+    ctx.strokeStyle = sk.stamp; ctx.fillStyle = sk.stamp;
     ctx.lineWidth = 4;
     roundRect(ctx, -110, -46, 220, 92, 14); ctx.stroke();
     ctx.font = `34px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -428,45 +451,150 @@ export class Renderer {
     ctx.font = `20px ${FONT}`;
     fitText(ctx, t('box.stamp2'), 0, 24, 200);
     ctx.restore();
-    ctx.save();
-    ctx.globalAlpha = 0.14; ctx.fillStyle = '#7A2E1E';
-    ctx.translate(W * 0.2, H * 0.8);
-    arrowUp(ctx); ctx.translate(26, 0); arrowUp(ctx);
-    ctx.restore();
+    if (sk.id === 'cardboard') {
+      ctx.save();
+      ctx.globalAlpha = 0.14; ctx.fillStyle = sk.stamp;
+      ctx.translate(W * 0.2, H * 0.8);
+      arrowUp(ctx); ctx.translate(26, 0); arrowUp(ctx);
+      ctx.restore();
+    }
 
     // 날개 (위쪽 열린 뚜껑)
-    const flap = (side: number) => {
-      ctx.save();
-      const x = side < 0 ? -WALL : W + WALL;
-      ctx.translate(x, -4);
-      ctx.scale(side, 1);
-      ctx.beginPath();
-      ctx.moveTo(0, 0); ctx.lineTo(WALL, 0); ctx.lineTo(WALL - 12, -58); ctx.lineTo(-24, -46); ctx.closePath();
-      ctx.fillStyle = '#DDA567'; ctx.fill();
-      ctx.strokeStyle = '#9C6632'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = 'rgba(255,245,220,0.55)';
-      ctx.beginPath(); ctx.moveTo(-6, -8); ctx.lineTo(4, -8); ctx.lineTo(-4, -50); ctx.lineTo(-14, -48); ctx.closePath(); ctx.fill();
-      ctx.restore();
-    };
-    flap(-1); flap(1);
-    // 벽과 바닥
-    ctx.fillStyle = '#D69C5E';
-    ctx.strokeStyle = '#9C6632'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.rect(-WALL, -4, WALL, H + 4); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.rect(W, -4, WALL, H + 4); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.rect(-WALL, H, W + WALL * 2, WALL); ctx.fill(); ctx.stroke();
-    // 골판지 단면 (벽 윗면)
-    for (const x of [-WALL, W]) {
-      ctx.fillStyle = '#F0C58F'; ctx.fillRect(x + 2, -4, WALL - 4, 6);
-      ctx.strokeStyle = '#B98046'; ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let i = 0; i <= 6; i++) ctx.lineTo(x + 2 + i * (WALL - 4) / 6, -1 + (i % 2 ? -2 : 2));
-      ctx.stroke();
+    if (sk.flap) {
+      const flap = (side: number) => {
+        ctx.save();
+        const x = side < 0 ? -WALL : W + WALL;
+        ctx.translate(x, -4);
+        ctx.scale(side, 1);
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(WALL, 0); ctx.lineTo(WALL - 12, -58); ctx.lineTo(-24, -46); ctx.closePath();
+        ctx.fillStyle = sk.flap; ctx.fill();
+        ctx.strokeStyle = sk.edge; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = 'rgba(255,245,220,0.5)';
+        ctx.beginPath(); ctx.moveTo(-6, -8); ctx.lineTo(4, -8); ctx.lineTo(-4, -50); ctx.lineTo(-14, -48); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      };
+      flap(-1); flap(1);
     }
-    // 테이프
-    ctx.fillStyle = 'rgba(245,225,170,0.75)';
-    ctx.fillRect(-WALL - 2, H + WALL * 0.3, W + WALL * 2 + 4, WALL * 0.45);
+    // 벽과 바닥
+    const round = sk.id === 'bath' || sk.id === 'bowl' ? 8 : 0;
+    ctx.fillStyle = sk.id === 'bowl' ? 'rgba(201,241,248,0.75)' : sk.wall;
+    ctx.strokeStyle = sk.edge; ctx.lineWidth = 2;
+    roundRect(ctx, -WALL, -4, WALL, H + 4, Math.min(round, 7)); ctx.fill(); ctx.stroke();
+    roundRect(ctx, W, -4, WALL, H + 4, Math.min(round, 7)); ctx.fill(); ctx.stroke();
+    roundRect(ctx, -WALL, H, W + WALL * 2, WALL, round); ctx.fill(); ctx.stroke();
+    if (sk.id === 'cardboard') {
+      // 골판지 단면 (벽 윗면)
+      for (const x of [-WALL, W]) {
+        ctx.fillStyle = '#F0C58F'; ctx.fillRect(x + 2, -4, WALL - 4, 6);
+        ctx.strokeStyle = '#B98046'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i <= 6; i++) ctx.lineTo(x + 2 + i * (WALL - 4) / 6, -1 + (i % 2 ? -2 : 2));
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(245,225,170,0.75)';
+      ctx.fillRect(-WALL - 2, H + WALL * 0.3, W + WALL * 2 + 4, WALL * 0.45);
+    } else if (sk.id === 'gift') {
+      ctx.fillStyle = '#FFE46B';
+      ctx.fillRect(-WALL - 2, H + WALL * 0.25, W + WALL * 2 + 4, WALL * 0.5);
+      ctx.fillRect(-WALL + 4, -4, WALL - 8, H + 4);
+      ctx.fillRect(W + 4, -4, WALL - 8, H + 4);
+    } else if (sk.id === 'basket') {
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      for (const x0 of [-WALL, W]) for (let y = 12; y < H - 6; y += 22) { roundRect(ctx, x0 + 4, y, WALL - 8, 12, 5); ctx.fill(); }
+    } else if (sk.id === 'wood') {
+      ctx.fillStyle = sk.edge;
+      for (const x0 of [-WALL / 2, W + WALL / 2]) for (const y of [14, H - 14]) { ctx.beginPath(); ctx.arc(x0, y, 2.4, 0, Math.PI * 2); ctx.fill(); }
+    } else if (sk.id === 'golden') {
+      const shine = ((time * 0.4) % 1.6) - 0.3;
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      for (const x0 of [-WALL, W]) ctx.fillRect(x0 + 3, H * shine, WALL - 6, 40);
+    }
+    this.drawFeverWalls(ctx, game, time, W, H);
     ctx.restore();
+  }
+
+  private drawSkinPattern(ctx: CanvasRenderingContext2D, pattern: string, W: number, H: number, time: number): void {
+    switch (pattern) {
+      case 'corrugated':
+        ctx.strokeStyle = 'rgba(90,50,20,0.07)'; ctx.lineWidth = 2;
+        for (let x = 10; x < W; x += 14) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+        break;
+      case 'stripes':
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        for (let x = -H; x < W; x += 44) { ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + 20, H); ctx.lineTo(x + 20 + H, 0); ctx.lineTo(x + H, 0); ctx.closePath(); ctx.fill(); }
+        ctx.fillStyle = 'rgba(255,228,107,0.55)';
+        ctx.fillRect(W / 2 - 14, 0, 28, H);
+        break;
+      case 'weave':
+        ctx.fillStyle = 'rgba(40,90,140,0.18)';
+        for (let y = 8, row = 0; y < H; y += 26, row++) for (let x = (row % 2) * 17 + 6; x < W; x += 34) { roundRect(ctx, x, y, 22, 12, 6); ctx.fill(); }
+        break;
+      case 'planks':
+        ctx.strokeStyle = 'rgba(60,30,10,0.18)'; ctx.lineWidth = 2;
+        for (let y = 36; y < H; y += 44) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+        ctx.strokeStyle = 'rgba(60,30,10,0.08)'; ctx.lineWidth = 1;
+        for (let y = 12; y < H; y += 9) { ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(W * 0.3, y + 3, W * 0.6, y - 3, W, y + 1); ctx.stroke(); }
+        break;
+      case 'tiles':
+        ctx.strokeStyle = 'rgba(111,169,201,0.35)'; ctx.lineWidth = 1.5;
+        for (let x = 30; x < W; x += 30) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+        for (let y = 30; y < H; y += 30) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+        break;
+      case 'glass':
+        ctx.fillStyle = 'rgba(255,255,255,0.28)';
+        ctx.fillRect(W * 0.12, 0, 10, H); ctx.fillRect(W * 0.16, 0, 4, H);
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5;
+        for (let i = 0; i < 9; i++) {
+          const x = (i * 71 + 23) % W, y = H - ((time * (18 + i * 3) + i * 97) % H);
+          ctx.beginPath(); ctx.arc(x, y, 3 + (i % 3) * 2, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(80,160,90,0.5)';
+        for (let x = 20; x < W; x += 46) { ctx.beginPath(); ctx.moveTo(x, H); ctx.quadraticCurveTo(x - 8, H - 30, x + 4 * Math.sin(time + x), H - 58); ctx.quadraticCurveTo(x + 8, H - 30, x + 8, H); ctx.fill(); }
+        break;
+      case 'stars':
+        for (let i = 0; i < 40; i++) {
+          const x = (i * 97.3) % W, y = (i * 53.7) % H;
+          const tw = 0.4 + 0.6 * Math.abs(Math.sin(time * 1.5 + i));
+          ctx.fillStyle = `rgba(255,240,180,${0.25 + 0.5 * tw})`;
+          ctx.beginPath(); ctx.arc(x, y, 1 + (i % 3) * 0.7, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = 'rgba(255,240,200,0.8)';
+        ctx.beginPath(); ctx.arc(W * 0.78, H * 0.16, 22, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#2E3170';
+        ctx.beginPath(); ctx.arc(W * 0.78 + 9, H * 0.16 - 6, 20, 0, Math.PI * 2); ctx.fill();
+        break;
+      case 'shine': {
+        const x = ((time * 90) % (W + 200)) - 100;
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 60, 0); ctx.lineTo(x - 40, H); ctx.lineTo(x - 100, H); ctx.closePath(); ctx.fill();
+        break;
+      }
+    }
+  }
+
+  /** 벽이 피버 게이지: 합체할수록 아래부터 차오르고, 피버 중에는 무지개로 빛나며 줄어든다 */
+  private drawFeverWalls(ctx: CanvasRenderingContext2D, game: Game, time: number, W: number, H: number): void {
+    const on = game.fever > 0;
+    const k = on ? game.fever / game.rules.feverTime : game.feverMeter;
+    if (k <= 0.001) return;
+    const h = (H + 2) * Math.min(1, k);
+    for (const x0 of [-WALL, W]) {
+      ctx.save();
+      if (on) {
+        const g = ctx.createLinearGradient(0, H - h, 0, H);
+        for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, `hsl(${(time * 240 + i * 55) % 360}, 95%, 65%)`);
+        ctx.fillStyle = g;
+        ctx.shadowColor = 'rgba(255,200,80,0.9)'; ctx.shadowBlur = 14;
+      } else {
+        const g = ctx.createLinearGradient(0, H - h, 0, H);
+        g.addColorStop(0, '#FFB45C'); g.addColorStop(1, '#FF6F9A');
+        ctx.fillStyle = g;
+      }
+      roundRect(ctx, x0 + 3, H - h + 1, WALL - 6, h - 2, 5);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   private drawRim(ctx: CanvasRenderingContext2D, game: Game, t: number): void {
@@ -531,6 +659,54 @@ export class Renderer {
     return c;
   }
 
+  /** 멈춘 장면의 고양이들 (카드·미리보기용) */
+  private drawStill(ctx: CanvasRenderingContext2D, game: Game, line: number, detail: number): void {
+    const W = game.rules.boxW, H = game.rules.boxH;
+    const bodies = game.world.bodies;
+    const discs = bodies.map(b => ({ x: b.x, y: b.y, r: b.r * VISUAL_SCALE }));
+    const clips: Clip[][] = [];
+    buildClips(discs, W, H, clips);
+    const poses: CatPose[] = bodies.map((b, i) => ({ tier: b.tier, x: b.x, y: b.y, r: discs[i].r, a: b.a + (this.vis.get(b.id)?.off ?? 0), squash: 0, clips: clips[i], mood: b.tier === 8 ? 'grumpy' : (i % 3 === 0 ? 'happy' : 'idle'), lookX: 0, lookY: 0, blink: 0, t: 1, seed: b.id, line, detail, gold: b.gold, hat: this.hat }));
+    const order = poses.map((_, i) => i).sort((a, b) => poses[b].y - poses[a].y);
+    for (const i of order) drawTail(ctx, poses[i]);
+    for (const i of order) drawCat(ctx, poses[i]);
+  }
+
+  private miniGame: Game | null = null;
+
+  /** 꾸미기 미리보기: 작은 상자에 고양이 몇 마리 */
+  renderMini(canvas: HTMLCanvasElement, skin: BoxSkin, hat: string, withCats = true): void {
+    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    const cw = canvas.clientWidth || canvas.width, ch = canvas.clientHeight || canvas.height;
+    canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr);
+    const ctx = canvas.getContext('2d')!;
+    if (!this.miniGame) {
+      const g = new Game({ mode: 'classic', seed: 7 });
+      const W = g.rules.boxW;
+      const cats: Array<[number, number]> = [[6, 90], [4, 270], [3, 200], [5, 150], [2, 300], [1, 60], [7, 220], [0, 330], [2, 110]];
+      cats.forEach(([tier, x], i) => {
+        const b = makeBody(g.nextId++, tier, Math.min(W - CATS[tier].r, x), -CATS[tier].r - 20, CATS[tier].r, -9);
+        b.gold = i === 3;
+        g.world.add(b);
+        for (let k = 0; k < 30; k++) g.world.step(1 / 60);
+      });
+      for (let k = 0; k < 120; k++) g.world.step(1 / 60);
+      for (const b of g.world.bodies) { b.a = 0; b.w = 0; }
+      this.miniGame = g;
+    }
+    const g = this.miniGame;
+    const W = g.rules.boxW, H = g.rules.boxH;
+    const sc = Math.min(canvas.width / (W + WALL * 2 + 24), canvas.height / (H + WALL + (skin.flap ? 64 : 10)));
+    const prevSkin = this.skin, prevHat = this.hat;
+    this.skin = skin; this.hat = hat;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(sc, 0, 0, sc, canvas.width / 2 - (W / 2) * sc, canvas.height - (H + WALL + 4) * sc);
+    this.drawBoxBack(ctx, g, 1.5);
+    if (withCats) this.drawStill(ctx, g, 2.2 / sc, sc);
+    this.skin = prevSkin; this.hat = prevHat;
+  }
+
   /** 공유용 이미지 (정사각형 1080) */
   renderCard(game: Game, info: { title: string; score: string; sub: string; best?: boolean }): HTMLCanvasElement {
     const S = 1080;
@@ -548,14 +724,7 @@ export class Renderer {
     ctx.translate(S * 0.62 - (W / 2) * sc, 250 + 70 * sc);
     ctx.scale(sc, sc);
     this.drawBoxBack(ctx, game);
-    const bodies = game.world.bodies;
-    const discs = bodies.map(b => ({ x: b.x, y: b.y, r: b.r * VISUAL_SCALE }));
-    const clips: Clip[][] = [];
-    buildClips(discs, W, H, clips);
-    const poses: CatPose[] = bodies.map((b, i) => ({ tier: b.tier, x: b.x, y: b.y, r: discs[i].r, a: b.a + (this.vis.get(b.id)?.off ?? 0), squash: 0, clips: clips[i], mood: b.tier === 8 ? 'grumpy' : (i % 3 === 0 ? 'happy' : 'idle'), lookX: 0, lookY: 0, blink: 0, t: 1, seed: b.id, line: 2 / sc * 1.4, detail: sc }));
-    const order = poses.map((_, i) => i).sort((a, b) => poses[b].y - poses[a].y);
-    for (const i of order) drawTail(ctx, poses[i]);
-    for (const i of order) drawCat(ctx, poses[i]);
+    this.drawStill(ctx, game, 2 / sc * 1.4, sc);
     ctx.restore();
     // 글자
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';

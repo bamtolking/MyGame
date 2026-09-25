@@ -238,6 +238,76 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 3px; }
 
 .countdown-big { position: absolute; inset: 0; display: grid; place-items: center; font-size: 110px; pointer-events: none; animation: pop 0.4s; }
 
+
+/* ── 타이틀 윗줄: 집사 레벨 + 설정 ── */
+.title-top { position: absolute; left: 12px; right: 12px; top: calc(var(--safe-top) + 10px); display: flex; justify-content: space-between; align-items: center; gap: 10px; pointer-events: none; }
+.title-top > * { pointer-events: auto; }
+#title .logo { margin-top: 46px; }
+.lv-chip {
+  display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 8px; row-gap: 3px;
+  padding: 6px 12px 7px; border-radius: 16px; background: var(--cream); box-shadow: 0 4px 0 #E4C9B2, 0 6px 12px var(--shadow);
+  min-width: 150px; max-width: 60vw; text-align: left; font-size: 14px;
+}
+.lv-chip b { font-weight: 400; color: #fff; background: var(--pink); border-radius: 999px; padding: 1px 8px; font-size: 14px; }
+.lv-chip span { color: var(--cocoa-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-chip i { grid-column: 1 / -1; display: block; height: 6px; border-radius: 3px; background: #F0DCCB; overflow: hidden; }
+.lv-chip i em { display: block; height: 100%; background: linear-gradient(90deg, #FFB45C, #FF6F9A); border-radius: 3px; }
+.title-menu .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.row3 .btn.small { flex-direction: column; gap: 2px; min-height: 60px; padding: 6px 4px; font-size: 14px; line-height: 1.15; text-align: center; }
+.row3 .btn svg { width: 22px; height: 22px; }
+.btn.notify { position: relative; }
+.btn.notify::after { content: ''; position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; border-radius: 50%; background: var(--pink); border: 3px solid var(--cream); }
+.streak { display: inline-flex; align-items: center; gap: 2px; }
+.streak svg, .streak-line svg { width: 16px; height: 16px; vertical-align: -2px; }
+.streak-line { color: #D9481B !important; }
+
+/* ── 경험치 막대 ── */
+.xp-box { margin-top: 14px; background: var(--cream-2); border-radius: 16px; padding: 10px 12px; }
+.xp-top { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--cocoa-2); }
+.xp-top .lv { font-weight: 400; color: #fff; background: var(--pink); border-radius: 999px; padding: 1px 9px; }
+.xp-top .lv.pop { animation: wiggle 0.6s ease-in-out 2; }
+.xp-top .gain { margin-left: auto; font-weight: 400; color: var(--pink-d); font-variant-numeric: tabular-nums; }
+.xpbar { margin-top: 8px; height: 12px; border-radius: 6px; background: #F0DCCB; overflow: hidden; }
+.xpbar i { display: block; height: 100%; background: linear-gradient(90deg, #FFB45C, #FF6F9A); border-radius: 6px; }
+.near { margin-top: 8px !important; color: var(--pink-d) !important; font-size: 17px !important; }
+.unlocks { display: grid; gap: 8px; margin-top: 8px; }
+.unlock { display: flex; align-items: center; gap: 10px; background: linear-gradient(135deg, #FFF3C4, #FFE1EA); border-radius: 16px; padding: 8px 10px; animation: pop 0.45s cubic-bezier(.2, 1.5, .5, 1); }
+.unlock canvas { width: 64px; height: 64px; flex: none; }
+.unlock div { flex: 1; min-width: 0; }
+.unlock small { display: block; font-size: 12px; color: var(--pink-d); }
+.unlock b { font-weight: 400; font-size: 19px; }
+.unlock .btn { min-height: 40px; font-size: 15px; padding: 0 12px; }
+
+/* ── 미션 ── */
+.missions { display: grid; gap: 8px; margin-top: 14px; }
+.missions .m-head { font-size: 15px; color: var(--cocoa-2); }
+.mission { background: var(--cream-2); border-radius: 14px; padding: 10px 12px; }
+.mission .m-top { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.mission .m-top b { margin-left: auto; font-weight: 400; color: var(--pink-d); white-space: nowrap; font-size: 14px; }
+.mission .m-check { width: 22px; height: 22px; flex: none; border-radius: 50%; background: #F0DCCB; display: grid; place-items: center; }
+.mission .m-check svg { width: 22px; height: 22px; }
+.mission.done { background: #DDF6EE; }
+.mission.done .m-text { color: var(--mint-d); }
+.mission .bar { margin-top: 7px; height: 8px; border-radius: 4px; background: #F0DCCB; overflow: hidden; }
+.mission .bar i { display: block; height: 100%; background: var(--mint); border-radius: 4px; }
+.mission small { display: block; margin-top: 3px; font-size: 12px; color: var(--cocoa-3); font-variant-numeric: tabular-nums; }
+.missions.compact .mission { padding: 8px 10px; }
+.missions.compact .m-top { font-size: 14px; }
+
+/* ── 꾸미기 ── */
+.cus-preview { display: block; width: 100%; height: 220px; margin-top: 10px; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; background: var(--cream-2); border-radius: 14px; padding: 4px; }
+.tabs button { min-height: 40px; border-radius: 11px; font-size: 17px; color: var(--cocoa-2); }
+.tabs button[aria-selected="true"] { background: #fff; color: var(--cocoa); box-shadow: 0 2px 0 #E4C9B2; }
+.cus-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+.cus-item { background: var(--cream-2); border-radius: 14px; padding: 6px 4px 7px; font-size: 13px; text-align: center; border: 3px solid transparent; }
+.cus-item canvas { display: block; width: 100%; aspect-ratio: 1; }
+.cus-item small { display: block; min-height: 15px; font-size: 11px; color: var(--cocoa-3); }
+.cus-item.on { border-color: var(--pink); background: #FFE2E6; }
+.cus-item.on small { color: var(--pink-d); }
+.cus-item.locked canvas { filter: grayscale(1) opacity(0.45); }
+.cus-item.locked span { color: var(--cocoa-3); }
+
 @media (orientation: landscape) and (max-height: 520px) {
   .gauge { top: calc(var(--safe-top) + 62px); width: min(30vw, 220px); height: 14px; }
   .best { margin-top: 3px; }
@@ -247,6 +317,7 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 3px; }
   .hint { bottom: 12px; }
   .toast { top: calc(var(--safe-top) + 40px); }
   #title { flex-direction: row; align-items: center; }
+  #title .logo { margin-top: 0; }
   .title-menu { width: min(46vw, 380px); margin: 0; }
   .logo { width: 40vw; }
 }

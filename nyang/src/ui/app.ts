@@ -4,16 +4,19 @@ import { Game, NIP, POWERS, type GameEvent, type GameSnapshot, type Power } from
 import { chooseX } from '../sim/bot';
 import { makeRng, range, weighted } from '../sim/rng';
 import { makeBody } from '../sim/physics';
-import { dailyInfo, msUntilTomorrow, type DailyInfo } from '../sim/daily';
+import { dailyInfo, dateKey, msUntilTomorrow, type DailyInfo } from '../sim/daily';
 import { Renderer } from '../render/renderer';
 import { drawPortrait, type Mood } from '../render/catdraw';
 import { Sound } from '../platform/audio';
 import { loadProfile, saveProfile, loadRun, saveRun, clearRun, resetAll, defaultProfile, type Profile } from '../platform/storage';
 import { shareText, vibrate, type ShareResult } from '../platform/share';
 import { ICON } from './icons';
+import { BOXES, HATS, boxById, hatById, rewardsAt, nextReward, type BoxSkin, type Hat } from '../data/cosmetics';
+import { levelOf, gameXp, titleOf, bumpStreak, liveStreak } from '../meta/progress';
+import { ensureMissions, applySignal, missionById, missionText, ALL_DONE_BONUS, type MissionSignal, type MissionState } from '../meta/missions';
 import { t, setLang, getLang, catName, catDesc, modName, modDesc, fmt, type LangSetting } from '../i18n';
 
-export const VERSION = '0.9.0';
+export const VERSION = '0.10.0';
 
 const STEP = 1 / 60;
 type Mode = 'title' | 'play' | 'pause' | 'over' | 'revive' | 'results';
@@ -45,7 +48,7 @@ export class App {
   private pendingDrop = 0;
   private keyDir = 0;
   private shownScore = 0;
-  private nextShown = -99;
+  private nextShown = '';
   private saveTimer = 0;
   private lastDangerBuzz = 0;
   private hintEl: HTMLElement | null = null;
@@ -56,6 +59,12 @@ export class App {
   private newBest = false;
   private cardCanvas: HTMLCanvasElement | null = null;
   private countdownTimer = 0;
+  /** 이번 판을 시작할 때의 경험치, 이번 판에서 처음 만난 고양이 수 */
+  private runStartXp = 0;
+  private runNewCats = 0;
+  /** 큰 합체 순간의 슬로 모션 남은 시간 (초) */
+  private slow = 0;
+  private scoreSigT = 0;
 
   private hud!: HTMLElement;
   private title!: HTMLElement;
@@ -80,6 +89,7 @@ export class App {
     this.sheet = el('<div id="sheet" class="sheet" hidden></div>');
     root.appendChild(this.sheet);
     this.applySettings();
+    this.applyLook();
     this.bindInput();
     this.showTitle();
     document.fonts?.load?.("20px 'Jua'").then(() => { this.renderer.resize(); }).catch(() => {});
@@ -132,11 +142,21 @@ export class App {
     const dex = this.profile.dex.filter(x => x > 0).length;
     const stars = '★'.repeat(d.mod.level) + '☆'.repeat(3 - d.mod.level);
     const dailyRun = run && run.mode === 'daily';
+    const lv = levelOf(this.profile.xp);
+    const ms = this.missionState();
+    const streak = liveStreak(this.profile.streak, d.key);
+    this.sound.setMusic('title');
+    this.sound.setFever(false);
+    this.sound.setTension(0);
     const classicRun = run && run.mode === 'classic';
     const logo = getLang() === 'ko'
       ? '<h1 class="outline-text"><span>냥</span><span>체</span><span>역</span><span>학</span></h1>'
       : '<h1 class="outline-text en"><span>Cats</span> <span>Are</span><br><span>Liquid</span></h1>';
     this.title.innerHTML = `
+      <div class="title-top">
+        <button class="lv-chip" id="t-level" aria-label="${t('menu.custom')}"><b>${t('lv.chip', { n: lv.level })}</b><span>${titleOf(lv.level, getLang())}</span><i><em style="width:${(lv.into / lv.need * 100).toFixed(1)}%"></em></i></button>
+        <button class="icon-btn" id="t-settings" aria-label="${t('menu.settings')}">${ICON.gear}</button>
+      </div>
       <div class="logo">
         ${logo}
         <div class="tag">${t('app.tag')}</div>
@@ -146,11 +166,12 @@ export class App {
         <button class="btn ${classicRun ? 'plain' : 'big'}" id="t-play">${classicRun ? t('menu.newGame') : `${ICON.play}${t('menu.play')}`}</button>
         <button class="btn mint daily" id="t-daily">
           <span>${done ? t('menu.dailyDone', { n: fmt(done.score) }) : dailyRun ? t('menu.dailyContinue') : t('menu.daily', { no: d.no })}</span>
-          <span class="sub">${modName(d.mod)} ${stars}</span>
+          <span class="sub">${modName(d.mod)} ${stars}${streak > 0 ? ` · <span class="streak">${ICON.flame}${t('menu.streak', { n: streak })}</span>` : ''}</span>
         </button>
-        <div class="row">
+        <div class="row3">
           <button class="btn sky small" id="t-dex">${ICON.book}${t('menu.dex', { a: dex, b: CATS.length })}</button>
-          <button class="btn plain small" id="t-settings">${ICON.gear}${t('menu.settings')}</button>
+          <button class="btn gold small ${ms.done.every(Boolean) ? '' : 'notify'}" id="t-missions">${ICON.check}${t('menu.missions', { a: ms.done.filter(Boolean).length, b: 3 })}</button>
+          <button class="btn plain small" id="t-custom">${ICON.brush}${t('menu.custom')}</button>
         </div>
         ${this.profile.best > 0 ? `<div class="best-line">${t('menu.best', { n: fmt(this.profile.best) })}</div>` : ''}
       </div>`;
@@ -161,6 +182,9 @@ export class App {
     on('t-daily', () => dailyRun ? this.startGame('daily', run!) : done ? this.showDailyDone(d) : this.showDailyIntro(d));
     on('t-dex', () => this.showDex());
     on('t-settings', () => this.showSettings());
+    on('t-missions', () => this.showMissions());
+    on('t-custom', () => this.showCustomize());
+    on('t-level', () => this.showCustomize());
     this.layoutInsets();
   }
 
@@ -202,11 +226,16 @@ export class App {
     this.mode = 'play';
     this.newBest = false;
     this.shownScore = g.score;
-    this.nextShown = -99;
+    this.nextShown = '';
     this.acc = 0;
     this.pendingDrop = 0;
     this.renderer.targeting = false;
     this.renderer.fx.list.length = 0;
+    this.runStartXp = this.profile.xp;
+    this.runNewCats = 0;
+    this.slow = 0;
+    this.sound.setMusic('game');
+    this.sound.setFever(g.fever > 0);
     this.title.hidden = true;
     this.hud.hidden = false;
     this.hud.querySelector('.best')!.innerHTML = g.mode === 'daily' ? `<span class="mode-chip">${t('hud.daily', { mod: modName(dailyInfo().mod) })}</span>` : t('hud.best', { n: fmt(this.profile.best) });
@@ -246,6 +275,8 @@ export class App {
     this.renderer.targeting = false;
     this.setHint(null);
     this.sound.over();
+    this.sound.setFever(false);
+    this.sound.setTension(0);
     this.haptic([60, 40, 90]);
     clearTimeout(this.overTimer);
     this.overTimer = window.setTimeout(() => { if (!g.revived) this.showRevive(); else this.finish(); }, 1100);
@@ -288,9 +319,14 @@ export class App {
     p.maxCombo = Math.max(p.maxCombo, g.stats.maxCombo);
     if (g.mode === 'daily' && !p.daily[g.dateKey]) {
       p.daily[g.dateKey] = { score: g.score, maxTier: g.stats.maxTier, maxCombo: g.stats.maxCombo, drops: g.stats.drops, mod: g.mods[0] ?? 'plain' };
+      p.streak = bumpStreak(p.streak, g.dateKey);
     }
+    this.signal({ kind: 'score', score: g.score });
+    this.signal({ kind: 'game', daily: g.mode === 'daily' });
+    this.addXp(gameXp(g.score, this.runNewCats), false);
     this.saveOk = saveProfile(p);
     clearRun();
+    this.sound.setMusic('title');
     this.showResults();
   }
 
@@ -305,6 +341,12 @@ export class App {
     else if (g.stats.powersUsed === 0) tip = t('tip.powers');
     else if (g.stats.maxCombo < 3) tip = t('tip.combo');
     const mins = Math.floor(g.time / 60), secs = Math.floor(g.time % 60);
+    const best = this.profile.best;
+    let near = '';
+    if (!this.newBest && g.mode === 'classic' && best > 0 && best - g.score <= best * 0.25) near = t('res.toBest', { n: fmt(best - g.score) });
+    else if (top < MAX_TIER) near = t('res.nextCat', { cat: catName(top + 1) });
+    const xpFrom = Math.min(this.runStartXp, this.profile.xp), xpTo = this.profile.xp;
+    const lv0 = levelOf(xpFrom);
     this.openSheet(`
       <div class="card">
         <h2>${d ? t('res.dailyDone', { no: d.no }) : t('res.over')}</h2>
@@ -312,6 +354,13 @@ export class App {
         <div class="big-score outline-text" id="rs-score">0</div>
         <p>${t('res.pts')}</p>
         ${this.newBest ? `<span class="ribbon">${t('res.best')}</span>` : ''}
+        ${near ? `<p class="near">${near}</p>` : ''}
+        <div class="xp-box" id="rs-xp">
+          <div class="xp-top"><b class="lv" id="rs-lv">${t('lv.chip', { n: lv0.level })}</b><span id="rs-title">${titleOf(lv0.level, getLang())}</span><b class="gain">${t('res.xpGain', { n: fmt(xpTo - xpFrom) })}</b></div>
+          <div class="xpbar"><i id="rs-xpfill" style="width:${(lv0.into / lv0.need * 100).toFixed(1)}%"></i></div>
+        </div>
+        <div id="rs-unlocks" class="unlocks"></div>
+        ${this.missionListHtml(true)}
         <div class="stats">
           <div class="stat cat"><canvas id="rs-cat"></canvas><div><span>${t('res.bigCat')}</span><b>${catName(top)}</b></div></div>
           <div class="stat"><span>${t('res.maxCombo')}</span><b>${g.stats.maxCombo}</b></div>
@@ -332,12 +381,69 @@ export class App {
       </div>`);
     drawPortrait(this.sheet.querySelector('#rs-cat')!, top, { mood: 'happy' });
     this.countUp(this.sheet.querySelector('#rs-score')!, g.score);
+    this.animateXp(xpFrom, xpTo);
     const card = this.makeCard(g, d);
     this.cardCanvas = card;
     (this.sheet.querySelector('#rs-card') as HTMLImageElement).src = card.toDataURL('image/png');
     this.sheet.querySelector('#rs-share')!.addEventListener('click', () => this.share(this.shareMessage(g, d), card));
     this.sheet.querySelector('#rs-again')!.addEventListener('click', () => { this.sound.tap(); this.startGame('classic'); });
     this.sheet.querySelector('#rs-home')!.addEventListener('click', () => { this.sound.tap(); this.showTitle(); });
+  }
+
+  /** 결과 화면 경험치 막대: 레벨이 오르면 보상 카드를 보여 준다 */
+  private animateXp(from: number, to: number): void {
+    const fill = this.sheet.querySelector<HTMLElement>('#rs-xpfill');
+    const lvEl = this.sheet.querySelector<HTMLElement>('#rs-lv');
+    const titleEl = this.sheet.querySelector<HTMLElement>('#rs-title');
+    if (!fill || !lvEl || !titleEl) return;
+    const startLv = levelOf(from).level, endLv = levelOf(to).level;
+    let shownLv = startLv;
+    const t0 = performance.now() + 500;
+    const dur = Math.min(2200, 700 + (to - from) * 0.6);
+    const frame = (now: number) => {
+      if (!fill.isConnected) return;
+      const k = Math.max(0, Math.min(1, (now - t0) / dur));
+      const e = 1 - Math.pow(1 - k, 2);
+      const info = levelOf(from + (to - from) * e);
+      fill.style.width = `${(info.into / info.need * 100).toFixed(1)}%`;
+      if (info.level !== shownLv) {
+        shownLv = info.level;
+        lvEl.textContent = t('lv.chip', { n: info.level });
+        titleEl.textContent = titleOf(info.level, getLang());
+        lvEl.classList.remove('pop'); void lvEl.offsetWidth; lvEl.classList.add('pop');
+        this.sound.levelUp();
+        this.haptic([20, 30, 60]);
+      }
+      if (k < 1) requestAnimationFrame(frame);
+      else if (endLv > startLv) this.showUnlocks(startLv, endLv);
+    };
+    requestAnimationFrame(frame);
+  }
+
+  private showUnlocks(fromLv: number, toLv: number): void {
+    const box = this.sheet.querySelector<HTMLElement>('#rs-unlocks');
+    if (!box) return;
+    for (let l = fromLv + 1; l <= toLv; l++) {
+      for (const rw of rewardsAt(l)) {
+        const item = rw.kind === 'box' ? boxById(rw.id) : hatById(rw.id);
+        const name = getLang() === 'ko' ? item.ko : item.en;
+        const using = rw.kind === 'box' ? this.profile.look.box === rw.id : this.profile.look.hat === rw.id;
+        const node = el(`<div class="unlock"><canvas></canvas><div><small>${t('res.levelUp')} ${t('lv.chip', { n: l })} · ${t('res.unlock')}</small><b>${name}</b></div><button class="btn mint small">${using ? t('res.equipped') : t('res.equip')}</button></div>`);
+        box.appendChild(node);
+        const cv = node.querySelector('canvas')!;
+        if (rw.kind === 'box') this.renderer.renderMini(cv, item as BoxSkin, this.profile.look.hat, false);
+        else drawPortrait(cv, 1, { hat: rw.id, mood: 'happy', pad: 0.16 });
+        const btn = node.querySelector('button')!;
+        btn.addEventListener('click', () => {
+          this.sound.tap();
+          if (rw.kind === 'box') this.profile.look.box = rw.id; else this.profile.look.hat = rw.id;
+          saveProfile(this.profile);
+          this.applyLook();
+          box.querySelectorAll('.unlock button').forEach(b => { b.textContent = t('res.equip'); });
+          btn.textContent = t('res.equipped');
+        });
+      }
+    }
   }
 
   private makeCard(g: Game, d: DailyInfo | null): HTMLCanvasElement {
@@ -353,7 +459,8 @@ export class App {
     const bar = CATS.map((_, i) => i <= g.stats.maxTier ? '🐾' : '▫️').join('');
     const cat = catName(g.stats.maxTier);
     const p = { no: d?.no ?? 0, mod: d ? modName(d.mod) : '', score: fmt(g.score), combo: g.stats.maxCombo, bar, cat };
-    return t(d ? 'share.daily' : 'share.classic', p);
+    const streak = d ? liveStreak(this.profile.streak, d.key) : 0;
+    return t(d ? 'share.daily' : 'share.classic', p) + (streak >= 2 ? `\n🔥 ${t('share.streak', { n: streak })}` : '');
   }
 
   private async share(text: string, image?: HTMLCanvasElement): Promise<void> {
@@ -412,6 +519,7 @@ export class App {
         <p>${t('daily.today', { mod: modName(d.mod) })}</p>
         <div class="big-score outline-text">${fmt(r.score)}</div>
         <p>${t('daily.summary', { cat: catName(r.maxTier), c: r.maxCombo })}</p>
+        ${liveStreak(this.profile.streak, d.key) > 0 ? `<p class="streak-line">${ICON.flame}${t('daily.streak', { n: liveStreak(this.profile.streak, d.key) })}</p>` : ''}
         <div class="daily-card"><p>${t('daily.next')}</p><div class="mod countdown" id="dd-cd"></div></div>
         <div class="stack">
           <button class="btn mint big" id="dd-share">${ICON.share}${t('daily.share')}</button>
@@ -554,10 +662,12 @@ export class App {
           <div class="step"><canvas data-t="-1"></canvas><div><b>${t('how.nip.t')}</b>${t('how.nip.d')}</div></div>
           ${POWERS.map(p => `<div class="step">${POWER_ICON[p]}<div><b>${powerName(p)}</b>${t('power.' + p + '.desc')}</div></div>`).join('')}
           <div class="step">${ICON.heart}<div><b>${t('how.gauge.t')}</b>${t('how.gauge.d')}</div></div>
+          <div class="step">${ICON.fever}<div><b>${t('how.fever.t')}</b>${t('how.fever.d')}</div></div>
+          <div class="step"><canvas data-t="3" data-gold="1"></canvas><div><b>${t('how.gold.t')}</b>${t('how.gold.d')}</div></div>
         </div>
         <div class="stack"><button class="btn small" id="ht-back">${t('how.ok')}</button></div>
       </div>`);
-    this.sheet.querySelectorAll<HTMLCanvasElement>('canvas[data-t]').forEach(cv => drawPortrait(cv, Number(cv.dataset.t), { mood: 'happy', pad: 0.12 }));
+    this.sheet.querySelectorAll<HTMLCanvasElement>('canvas[data-t]').forEach(cv => drawPortrait(cv, Number(cv.dataset.t), { mood: 'happy', pad: 0.12, gold: cv.dataset.gold === '1' }));
     this.sheet.querySelector('#ht-back')!.addEventListener('click', () => { this.sound.tap(); back(); });
   }
 
@@ -759,7 +869,7 @@ export class App {
       }
     });
     window.addEventListener('pagehide', () => this.save());
-    window.addEventListener('resize', () => { this.renderer.resize(); this.layoutInsets(); this.nextShown = -99; });
+    window.addEventListener('resize', () => { this.renderer.resize(); this.layoutInsets(); this.nextShown = ''; });
   }
 
   private tryDrop(): void {
@@ -814,7 +924,7 @@ export class App {
           this.sound.drop(e.tier < 0 ? 0 : e.tier);
           this.haptic(6);
           if (e.tier >= 0) {
-            if (p.dex[e.tier] === 0) this.toast(t('toast.newCat'), e.tier, catName(e.tier));
+            if (p.dex[e.tier] === 0) { this.toast(t('toast.newCat'), e.tier, catName(e.tier)); this.runNewCats++; }
             p.dex[e.tier]++; dirty = true;
           }
           if (!(p.tutorial & 1)) { p.tutorial |= 1; dirty = true; this.setHint(t('hint.merge')); }
@@ -824,11 +934,17 @@ export class App {
           if (e.t === 'nip') this.sound.nip(); else this.sound.merge(e.tier, e.combo);
           this.haptic(e.tier >= 7 ? [20, 30, 40] : 8 + e.tier * 3);
           if (e.t === 'nip' && !e.grew) break;
+          if (e.t === 'merge') {
+            this.signal({ kind: 'merge', tier: e.tier });
+            if (e.gold) { this.signal({ kind: 'gold' }); this.sound.gold(); this.haptic([15, 20, 15, 20, 40]); }
+            if (e.tier >= 8) this.slow = 0.22;
+          } else this.signal({ kind: 'nip' });
+          if (e.combo >= 2) this.signal({ kind: 'combo', combo: e.combo });
           p.merges++;
           const first = p.dex[e.tier] === 0;
           p.dex[e.tier]++;
           dirty = true;
-          if (first) this.toast(t('toast.newCat'), e.tier, catName(e.tier));
+          if (first) { this.toast(t('toast.newCat'), e.tier, catName(e.tier)); this.runNewCats++; }
           if (!(p.tutorial & 2)) { p.tutorial |= 2; this.setHint(null); }
           if (e.combo >= 3) this.sound.purr();
           if (!(p.tutorial & 8) && g.stats.merges >= 6) { p.tutorial |= 8; this.toast(t('toast.powers')); }
@@ -837,6 +953,9 @@ export class App {
         case 'ascend':
           this.sound.ascend();
           this.haptic([40, 40, 80, 40, 120]);
+          this.slow = 0.35;
+          this.signal({ kind: 'merge', tier: MAX_TIER + 1 });
+          if (e.gold) this.signal({ kind: 'gold' });
           p.ascends++; p.merges++; dirty = true;
           this.toast(t('toast.ascend'));
           break;
@@ -853,6 +972,16 @@ export class App {
           else if (e.power === 'liquify') this.sound.liquify();
           else this.sound.shake();
           this.haptic(e.power === 'shake' ? [30, 50, 30, 50, 30] : 20);
+          this.signal({ kind: 'power' });
+          break;
+        case 'fever':
+          this.sound.setFever(e.on);
+          if (e.on) {
+            this.sound.feverStart();
+            this.haptic([30, 30, 60]);
+            this.slow = 0.2;
+            this.signal({ kind: 'fever' });
+          }
           break;
         case 'over':
           this.onGameOver();
@@ -860,6 +989,133 @@ export class App {
       }
     }
     if (dirty) this.saveOk = saveProfile(p);
+  }
+
+  // ── 미션 / 경험치 / 꾸미기 ─────────────────────────────────
+
+  private missionState(): MissionState {
+    this.profile.missions = ensureMissions(this.profile.missions, dateKey(new Date()));
+    return this.profile.missions;
+  }
+
+  /** 게임 안의 일을 미션에 알린다. 끝난 미션은 알림 + 경험치 */
+  private signal(sig: MissionSignal): void {
+    const res = applySignal(this.missionState(), sig);
+    if (!res.completed.length && !res.bonus) return;
+    for (const m of res.completed) this.toast(`<b>${t('mis.done')}</b> ${missionText(m, getLang(), catName)} · +${m.xp} XP`);
+    if (res.bonus) this.toast(t('mis.allDone', { xp: ALL_DONE_BONUS }));
+    this.sound.mission();
+    this.addXp(res.xp, true);
+  }
+
+  private addXp(n: number, announce: boolean): void {
+    if (n <= 0) return;
+    const before = levelOf(this.profile.xp).level;
+    this.profile.xp += n;
+    const after = levelOf(this.profile.xp).level;
+    if (announce && after > before && this.mode === 'play') {
+      this.toast(t('toast.levelUp', { n: after }));
+      this.sound.levelUp();
+    }
+    this.saveOk = saveProfile(this.profile);
+  }
+
+  private applyLook(): void {
+    this.renderer.skin = boxById(this.profile.look.box);
+    this.renderer.hat = this.profile.look.hat;
+    this.nextShown = '';
+  }
+
+  private missionListHtml(compact: boolean): string {
+    const ms = this.missionState();
+    const rows = ms.ids.map((id, i) => {
+      const m = missionById(id)!;
+      const k = Math.min(1, ms.prog[i] / m.target);
+      const prog = m.kind === 'score' ? `${fmt(ms.prog[i])} / ${fmt(m.target)}` : `${ms.prog[i]} / ${m.target}`;
+      return `<div class="mission ${ms.done[i] ? 'done' : ''}">
+        <div class="m-top"><span class="m-check">${ms.done[i] ? ICON.check : ''}</span><span class="m-text">${missionText(m, getLang(), catName)}</span><b>+${m.xp} XP</b></div>
+        ${compact && ms.done[i] ? '' : `<div class="bar"><i style="width:${(k * 100).toFixed(1)}%"></i></div><small>${prog}</small>`}
+      </div>`;
+    }).join('');
+    return `<div class="missions ${compact ? 'compact' : ''}">${compact ? `<div class="m-head">${t('res.missions')}</div>` : ''}${rows}</div>`;
+  }
+
+  showMissions(): void {
+    const ms = this.missionState();
+    this.openSheet(`
+      <div class="card">
+        <h2>${t('mis.title')}</h2>
+        ${this.missionListHtml(false)}
+        <p class="tip">${ms.bonus ? t('mis.bonusDone') : t('mis.bonus', { xp: ALL_DONE_BONUS })}</p>
+        <p class="progress-line countdown" id="mi-cd"></p>
+        <div class="stack"><button class="btn small" id="mi-close">${t('common.close')}</button></div>
+      </div>`);
+    const cd = this.sheet.querySelector('#mi-cd')!;
+    const tick = () => {
+      const ms2 = msUntilTomorrow();
+      const h = Math.floor(ms2 / 3600000), m = Math.floor(ms2 / 60000) % 60, sec = Math.floor(ms2 / 1000) % 60;
+      cd.textContent = t('mis.reset', { t: t('daily.cd', { h, m: String(m).padStart(2, '0'), s: String(sec).padStart(2, '0') }) });
+    };
+    tick();
+    clearInterval(this.countdownTimer);
+    this.countdownTimer = window.setInterval(() => { if (!cd.isConnected) clearInterval(this.countdownTimer); else tick(); }, 1000);
+    this.sheet.querySelector('#mi-close')!.addEventListener('click', () => { this.sound.tap(); this.closeSheet(); if (this.mode === 'title') this.showTitle(); });
+  }
+
+  showCustomize(tab: 'box' | 'hat' = 'box'): void {
+    const lv = levelOf(this.profile.xp);
+    const nr = nextReward(lv.level);
+    const nrName = nr ? (() => { const it = nr.kind === 'box' ? boxById(nr.id) : hatById(nr.id); return getLang() === 'ko' ? it.ko : it.en; })() : '';
+    this.openSheet(`
+      <div class="card">
+        <h2>${t('cus.title')}</h2>
+        <div class="xp-box">
+          <div class="xp-top"><b class="lv">${t('lv.chip', { n: lv.level })}</b><span>${titleOf(lv.level, getLang())}</span><b class="gain">${fmt(lv.into)} / ${fmt(lv.need)} XP</b></div>
+          <div class="xpbar"><i style="width:${(lv.into / lv.need * 100).toFixed(1)}%"></i></div>
+        </div>
+        <canvas class="cus-preview" id="cus-preview"></canvas>
+        <div class="tabs" role="tablist">
+          <button role="tab" data-tab="box" aria-selected="${tab === 'box'}">${t('cus.box')}</button>
+          <button role="tab" data-tab="hat" aria-selected="${tab === 'hat'}">${t('cus.hat')}</button>
+        </div>
+        <div class="cus-grid" id="cus-grid"></div>
+        <p class="progress-line">${nr ? t('cus.next', { n: nr.level, item: nrName }) : t('cus.allOpen')}</p>
+        <div class="stack"><button class="btn small" id="cus-close">${t('common.close')}</button></div>
+      </div>`);
+    const preview = this.sheet.querySelector<HTMLCanvasElement>('#cus-preview')!;
+    const grid = this.sheet.querySelector<HTMLElement>('#cus-grid')!;
+    const draw = () => {
+      this.renderer.renderMini(preview, boxById(this.profile.look.box), this.profile.look.hat, true);
+      const items: Array<BoxSkin | Hat> = tab === 'box' ? BOXES : HATS;
+      grid.innerHTML = items.map(it => {
+        const locked = it.level > lv.level;
+        const using = tab === 'box' ? this.profile.look.box === it.id : this.profile.look.hat === it.id;
+        return `<button class="cus-item ${locked ? 'locked' : ''} ${using ? 'on' : ''}" data-id="${it.id}" ${locked ? 'aria-disabled="true"' : ''}><canvas></canvas><span>${getLang() === 'ko' ? it.ko : it.en}</span><small>${locked ? t('cus.locked', { n: it.level }) : using ? t('cus.using') : ''}</small></button>`;
+      }).join('');
+      grid.querySelectorAll<HTMLButtonElement>('.cus-item').forEach((b, i) => {
+        const it = items[i];
+        const cv = b.querySelector('canvas')!;
+        if (tab === 'box') this.renderer.renderMini(cv, it as BoxSkin, 'none', false);
+        else if (it.id === 'none') drawPortrait(cv, 1, { pad: 0.16 });
+        else drawPortrait(cv, 1, { hat: it.id, pad: 0.16, mood: 'happy' });
+        b.addEventListener('click', () => {
+          if (it.level > lv.level) { this.sound.tap(); this.toast(t('cus.locked', { n: it.level })); return; }
+          this.sound.tap();
+          if (tab === 'box') this.profile.look.box = it.id; else this.profile.look.hat = it.id;
+          saveProfile(this.profile);
+          this.applyLook();
+          draw();
+        });
+      });
+    };
+    draw();
+    this.sheet.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach(b => b.addEventListener('click', () => {
+      this.sound.tap();
+      tab = b.dataset.tab as 'box' | 'hat';
+      this.sheet.querySelectorAll('[role="tab"]').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+      draw();
+    }));
+    this.sheet.querySelector('#cus-close')!.addEventListener('click', () => { this.sound.tap(); this.closeSheet(); if (this.mode === 'title') this.showTitle(); });
   }
 
   // ── HUD ──────────────────────────────────────────────────
@@ -875,9 +1131,10 @@ export class App {
       const txt = g.score > this.profile.best && this.profile.best > 0 ? t('hud.beating') : t('hud.best', { n: fmt(best) });
       if (this.bestEl.textContent !== txt) this.bestEl.textContent = txt;
     }
-    if (force || this.nextShown !== g.nextTier) {
-      this.nextShown = g.nextTier;
-      drawPortrait(this.nextCv, g.nextTier, { pad: 0.12 });
+    const nextKey = `${g.nextTier}:${g.nextGold}:${this.profile.look.hat}`;
+    if (force || this.nextShown !== nextKey) {
+      this.nextShown = nextKey;
+      drawPortrait(this.nextCv, g.nextTier, { pad: 0.12, gold: g.nextGold, hat: this.profile.look.hat });
     }
     const full = POWERS.every(p => g.charges[p] >= g.rules.maxCharges);
     this.gaugeFill.style.width = `${Math.min(100, (g.gauge / g.gaugeNeed) * 100).toFixed(1)}%`;
@@ -902,7 +1159,7 @@ export class App {
 
   // ── 홍보용 장면 (스토어 스크린샷 스크립트가 호출) ─────────────
 
-  stage(scene: 'pile' | 'combo' | 'liquify' | 'results' | 'dex' | 'daily'): void {
+  stage(scene: 'pile' | 'combo' | 'liquify' | 'results' | 'dex' | 'daily' | 'fever' | 'custom' | 'missions'): void {
     const g = new Game({ mode: 'classic', seed: 20260925 });
     const rng = makeRng(scene.length * 97 + 5);
     const W = g.rules.boxW;
@@ -918,8 +1175,10 @@ export class App {
     for (const b of g.world.bodies) { b.a = 0; b.w = 0; b.born = -10; b.touched = true; }
     // 테두리 위로 삐져나온 고양이는 치운다 (위험 표시 없이 깔끔한 화면)
     for (const b of [...g.world.bodies]) if (b.y - b.r < 40) g.world.remove(b);
+    if (scene !== 'liquify') g.world.bodies.forEach((b, i) => { if (i % 9 === 4) b.gold = true; });
+    else g.rules.feverGain = [0, 0, 0];
     g.score = scene === 'results' ? 48210 : 18640;
-    g.stats = { drops: 214, merges: 187, maxCombo: 6, maxTier: 9, ascends: 0, nips: 4, powersUsed: 3 };
+    g.stats = { drops: 214, merges: 187, maxCombo: 6, maxTier: 9, ascends: 0, nips: 4, powersUsed: 3, golds: 5, fevers: 3 };
     g.charges = { punch: 2, liquify: 1, shake: 3 };
     g.gauge = g.gaugeNeed * 0.62;
     g.time = 412;
@@ -927,6 +1186,9 @@ export class App {
     for (let i = 0; i < CATS.length; i++) if (!this.profile.dex[i]) this.profile.dex[i] = 1 + (CATS.length - i) * 3;
     if (!this.profile.best) this.profile.best = 52480;
     this.profile.tutorial = 31;
+    if (this.profile.xp < 5200) this.profile.xp = 5200;
+    this.profile.look = { box: scene === 'fever' ? 'gift' : scene === 'liquify' ? 'bowl' : 'cardboard', hat: scene === 'fever' ? 'party' : scene === 'pile' ? 'bow' : 'none' };
+    this.applyLook();
     this.startGame('classic');
     this.game = g;
     this.shownScore = g.score;
@@ -937,6 +1199,22 @@ export class App {
       for (const [t, x, y] of pairs) g.world.add(makeBody(g.nextId++, t, x, y, CATS[t].r, g.time));
     }
     if (scene === 'liquify') { g.startLiquify(); g.events.length = 0; }
+    if (scene === 'fever') {
+      g.fever = g.rules.feverTime * 0.8;
+      this.sound.setFever(true);
+      this.renderer.fx.feverStart(g.rules.boxW, g.rules.boxH);
+      this.renderer.fx.combo(g.rules.boxW / 2, g.rules.boxH * 0.38, t('fx.fever'), '#FF7AC8', 46);
+      const pairs: Array<[number, number, number, boolean]> = [[3, 120, 40, true], [3, 172, 40, false], [2, 260, 10, false], [2, 300, 10, false]];
+      for (const [tier, x, y, gold] of pairs) { const b = makeBody(g.nextId++, tier, x, y, CATS[tier].r, g.time); b.gold = gold; g.world.add(b); }
+    }
+    if (scene === 'custom') { this.showTitle(); this.showCustomize(); }
+    if (scene === 'missions') {
+      this.showTitle();
+      const ms = this.missionState();
+      ms.prog = ms.ids.map((id, i) => i === 0 ? missionById(id)!.target : Math.floor(missionById(id)!.target * (i === 1 ? 0.6 : 0.25)));
+      ms.done = [true, false, false];
+      this.showMissions();
+    }
     if (scene === 'results') { g.over = true; this.finishStaged(); }
     if (scene === 'dex') { this.pause(); this.showDex(); }
     if (scene === 'daily') { this.showTitle(); this.showDailyIntro(dailyInfo()); }
@@ -944,6 +1222,7 @@ export class App {
 
   private finishStaged(): void {
     this.newBest = true;
+    this.runStartXp = Math.max(0, this.profile.xp - 640);
     this.mode = 'results';
     this.showResults();
   }
@@ -957,7 +1236,10 @@ export class App {
     if (dt > 0) this.fps = this.fps * 0.95 + Math.min(240, 1 / dt) * 0.05;
 
     if (this.mode === 'play' && this.game) {
-      this.acc += dt;
+      // 큰 합체 순간 잠깐 느리게 (히트 스톱)
+      const sdt = this.slow > 0 && !this.renderer.reduceMotion ? dt * 0.3 : dt;
+      if (this.slow > 0) this.slow -= dt;
+      this.acc += sdt;
       let n = 0;
       while (this.acc >= STEP && n < 5 && this.mode === 'play') {
         this.stepGame();
@@ -965,7 +1247,7 @@ export class App {
       }
       if (n >= 5) this.acc = 0;
       this.updateHud();
-      this.renderer.render(this.game, dt, { showHeld: true });
+      this.renderer.render(this.game, sdt, { showHeld: true });
     } else if (this.mode === 'title') {
       this.acc += dt;
       let n = 0;
@@ -988,6 +1270,9 @@ export class App {
     g.update(STEP);
     this.processEvents(g.events.splice(0));
     if (g.liquify > 0 && Math.random() < 0.08) this.sound.bubble();
+    this.sound.setTension(g.danger);
+    this.scoreSigT += STEP;
+    if (this.scoreSigT > 0.5) { this.scoreSigT = 0; this.signal({ kind: 'score', score: g.score }); }
     if (g.danger > 0.3) {
       this.sound.danger();
       if (performance.now() - this.lastDangerBuzz > 700) { this.lastDangerBuzz = performance.now(); this.haptic(15); }

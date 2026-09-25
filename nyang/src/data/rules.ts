@@ -32,6 +32,14 @@ export interface Rules {
   liquifyTime: number;
   liquifyShrink: number;
   shakeTime: number;
+  /** 냥냥 피버: 지속 시간, 점수 배율, 합체당 게이지 증가 (기본 + 단계별 + 연쇄별), 초당 감소 */
+  feverTime: number;
+  feverMul: number;
+  feverGain: [number, number, number];
+  feverDecay: number;
+  /** 황금 고양이: 소환 확률, 합체 점수 배율 */
+  goldChance: number;
+  goldMul: number;
 }
 
 export const BASE_RULES: Rules = {
@@ -56,6 +64,12 @@ export const BASE_RULES: Rules = {
   liquifyTime: 3.5,
   liquifyShrink: 0.86,
   shakeTime: 1.1,
+  feverTime: 8,
+  feverMul: 2,
+  feverGain: [0.022, 0.009, 0.03],
+  feverDecay: 0.012,
+  goldChance: 0.045,
+  goldMul: 3,
 };
 
 export type ModeId = 'classic' | 'daily';
@@ -82,7 +96,7 @@ export const MODIFIERS: Modifier[] = [
 ];
 
 export function makeRules(mods: string[] = []): Rules {
-  const r: Rules = { ...BASE_RULES, spawnWeights: [...BASE_RULES.spawnWeights], catnipEvery: [...BASE_RULES.catnipEvery] as [number, number] };
+  const r: Rules = { ...BASE_RULES, spawnWeights: [...BASE_RULES.spawnWeights], catnipEvery: [...BASE_RULES.catnipEvery] as [number, number], feverGain: [...BASE_RULES.feverGain] as [number, number, number] };
   for (const id of mods) MODIFIERS.find(m => m.id === id)?.apply(r);
   return r;
 }

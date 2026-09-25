@@ -96,6 +96,53 @@ describe('game rules', () => {
     expect(g.score).toBe(100);
   });
 
+  it('a golden cat triples the merge points', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    const a = place(g, 3, 150, 400); place(g, 3, 200, 400);
+    a.gold = true;
+    const ev = run(g, 1);
+    const m = ev.find(e => e.t === 'merge');
+    expect(m.gold).toBe(1);
+    expect(m.points).toBe(mergePoints(3) * g.rules.goldMul);
+    expect(g.world.bodies[0].gold).toBe(false);
+    expect(g.stats.golds).toBe(1);
+  });
+
+  it('fever starts when the meter fills, doubles points, speeds drops, then ends', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.feverMeter = 0.999;
+    place(g, 2, 150, 420); place(g, 2, 190, 420);
+    let ev = run(g, 0.5);
+    expect(ev.some(e => e.t === 'fever' && e.on)).toBe(true);
+    expect(g.fever).toBeGreaterThan(0);
+    expect(g.stats.fevers).toBe(1);
+    place(g, 1, 60, 440); place(g, 1, 90, 440);
+    ev = run(g, 0.5);
+    const m = ev.find(e => e.t === 'merge');
+    expect(m.fever).toBe(true);
+    expect(m.points).toBe(mergePoints(1) * g.rules.feverMul);
+    g.cooldown = 0; g.aim(300); g.drop();
+    expect(g.cooldown).toBeCloseTo(g.rules.dropCooldown * 0.5, 6);
+    ev = run(g, g.rules.feverTime);
+    expect(ev.some(e => e.t === 'fever' && !e.on)).toBe(true);
+    expect(g.fever).toBe(0);
+  });
+
+  it('golden cats come from the seed only, never in the first drops, a few percent of the time', () => {
+    const golds = (seed: number) => {
+      const g = new Game({ mode: 'daily', seed });
+      const out: boolean[] = [];
+      for (let i = 0; i < 400; i++) { out.push(g.currentGold); g.drop(); g.cooldown = 0; g.world.bodies.length = 0; }
+      return out;
+    };
+    const a = golds(11), b = golds(11);
+    expect(a).toEqual(b);
+    expect(a.slice(0, 6).some(Boolean)).toBe(false);
+    const n = a.filter(Boolean).length;
+    expect(n).toBeGreaterThan(6);
+    expect(n).toBeLessThan(35);
+  });
+
   it('dropping follows the queue and respects the cooldown', () => {
     const g = new Game({ mode: 'classic', seed: 42 });
     const first = g.current, second = g.nextTier;
@@ -256,6 +303,7 @@ describe('game rules', () => {
     const g = new Game({ mode: 'classic', seed: 77 });
     const rng = makeRng(1);
     for (let i = 0; i < 25; i++) { g.aim(chooseX(g, rng)); g.drop(); run(g, 0.5); }
+    g.world.bodies[0].gold = true; g.feverMeter = 0.4;
     const snap = JSON.parse(JSON.stringify(g.snapshot()));
     const h = Game.restore(snap);
     const r1 = makeRng(9), r2 = makeRng(9);
@@ -264,6 +312,8 @@ describe('game rules', () => {
       h.aim(chooseX(h, r2)); h.drop(); run(h, 0.5);
     }
     expect(h.score).toBe(g.score);
+    expect(h.feverMeter).toBe(g.feverMeter);
+    expect(h.queueGold).toEqual(g.queueGold);
     expect(h.world.bodies.map(b => [b.id, b.tier, b.x.toFixed(6), b.y.toFixed(6)])).toEqual(g.world.bodies.map(b => [b.id, b.tier, b.x.toFixed(6), b.y.toFixed(6)]));
   });
 

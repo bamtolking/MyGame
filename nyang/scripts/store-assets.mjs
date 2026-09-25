@@ -37,16 +37,20 @@ await asset('asset=feature&lang=en', 'store/feature-1024x500-en.png', 1024, 500)
 const SCENES = {
   ko: [
     ['pile', '같은 고양이끼리 합체!', '떨어뜨리고, 닿으면 더 큰 고양이로'],
-    ['combo', '말랑말랑 연쇄 콤보', '합체가 합체를 부르면 점수 최대 4배'],
+    ['fever', '냥냥 피버 타임!', '합체할수록 벽이 차오르고, 가득 차면 점수 2배'],
     ['liquify', '고양이는 액체다', '액체화! 녹아내린 고양이들이 서로 끌어당겨요'],
+    ['custom', '상자와 모자 꾸미기', '레벨이 오를 때마다 새 꾸미기가 열려요'],
+    ['missions', '매일 새 미션', '미션을 깨고 집사 레벨 올리기'],
     ['daily', '매일 새로운 상자', '오늘의 규칙, 모두 같은 고양이 순서로 대결'],
     ['dex', '11종 고양이 도감', '아깽이부터 우주뚱냥까지 모아 보세요'],
     ['results', '결과 카드로 자랑하기', '친구에게 점수와 상자를 공유'],
   ],
   en: [
     ['pile', 'Merge matching cats!', 'Drop them in. Twins that touch grow bigger'],
-    ['combo', 'Squishy chain combos', 'Merges that trigger merges score up to 4×'],
+    ['fever', 'Nyan Fever!', 'Every merge fills the walls. Full walls = double points'],
     ['liquify', 'Cats are liquid', 'Liquify! Melty cats pull their twins together'],
+    ['custom', 'Boxes & hats', 'Level up to unlock new styles'],
+    ['missions', 'Daily missions', 'Clear missions, earn XP, level up'],
     ['daily', 'A new box every day', 'Daily rules, the same cats for everyone'],
     ['dex', 'Collect 11 cats', 'From tiny Kitten to the Cosmic Chonk'],
     ['results', 'Brag with result cards', 'Share your score and your box'],
@@ -63,7 +67,7 @@ for (const lang of ['ko', 'en']) {
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(400);
     await page.evaluate(s => window.__nyang.stage(s), scene);
-    await page.waitForTimeout(scene === 'combo' ? 380 : scene === 'liquify' ? 1400 : 700);
+    await page.waitForTimeout(scene === 'fever' ? 650 : scene === 'liquify' ? 1400 : 900);
     await page.screenshot({ path: `store/raw/${lang}/${scene}.png` });
     await page.close();
   }

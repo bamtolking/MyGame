@@ -9,7 +9,7 @@ import { chooseX, chooseXSim, maybeUsePower } from '../src/sim/bot';
 
 const DT = 1 / 60;
 
-interface Result { score: number; drops: number; time: number; maxTier: number; maxCombo: number; ascends: number; peakBodies: number; msPerStep: number }
+interface Result { score: number; drops: number; time: number; maxTier: number; maxCombo: number; ascends: number; peakBodies: number; msPerStep: number; fevers: number; golds: number }
 
 export function playGame(seed: number, mods: string[] = [], opts: { powers?: boolean; revive?: boolean; think?: number; skill?: number; maxTime?: number; sim?: boolean } = {}): Result {
   const g = new Game({ mode: 'classic', seed, mods });
@@ -36,7 +36,7 @@ export function playGame(seed: number, mods: string[] = [], opts: { powers?: boo
     peak = Math.max(peak, g.world.bodies.length);
   }
   const ms = (performance.now() - t0) / steps;
-  return { score: g.score, drops: g.stats.drops, time: g.time, maxTier: g.stats.maxTier, maxCombo: g.stats.maxCombo, ascends: g.stats.ascends, peakBodies: peak, msPerStep: ms };
+  return { score: g.score, drops: g.stats.drops, time: g.time, maxTier: g.stats.maxTier, maxCombo: g.stats.maxCombo, ascends: g.stats.ascends, peakBodies: peak, msPerStep: ms, fevers: g.stats.fevers, golds: g.stats.golds };
 }
 
 /** 사람이 한 번 떨어뜨리는 데 걸리는 시간 추정 (초) */
@@ -49,15 +49,15 @@ function summarize(name: string, rs: Result[]): string {
   const tiers = new Array(CATS.length).fill(0);
   for (const r of rs) tiers[r.maxTier]++;
   const dist = tiers.map((c, i) => c ? `${CATS[i].name} ${c}` : '').filter(Boolean).join(', ');
-  return `| ${name} | ${rs.length} | ${Math.round(avg(sc))} | ${pct(sc, 0.1)}–${pct(sc, 0.9)} | ${avg(tm).toFixed(1)}분 | ${(avg(dr) * HUMAN_PACE / 60).toFixed(1)}분 | ${Math.round(avg(dr))} | ${avg(rs.map(r => r.maxCombo)).toFixed(1)} | ${dist} | ${Math.max(...rs.map(r => r.peakBodies))} | ${avg(rs.map(r => r.msPerStep)).toFixed(3)} |`;
+  return `| ${name} | ${rs.length} | ${Math.round(avg(sc))} | ${pct(sc, 0.1)}–${pct(sc, 0.9)} | ${avg(tm).toFixed(1)}분 | ${(avg(dr) * HUMAN_PACE / 60).toFixed(1)}분 | ${Math.round(avg(dr))} | ${avg(rs.map(r => r.maxCombo)).toFixed(1)} | ${avg(rs.map(r => r.fevers)).toFixed(1)} (${(avg(rs.map(r => r.drops)) / Math.max(0.1, avg(rs.map(r => r.fevers)))).toFixed(0)}번마다) | ${avg(rs.map(r => r.golds)).toFixed(1)} | ${dist} | ${Math.max(...rs.map(r => r.peakBodies))} | ${avg(rs.map(r => r.msPerStep)).toFixed(3)} |`;
 }
 
 describe('balance sweep', () => {
   it('bot games finish with sane numbers', () => {
     const N = Number(process.env.BALANCE_N || 12);
     const lines: string[] = [];
-    lines.push('| 조건 | 판 | 평균 점수 | 10~90% | 봇 시간 | 사람 속도 추정 | 평균 떨어뜨림 | 평균 최대 콤보 | 최고 단계 분포 | 최대 동시 고양이 | 스텝당 ms |');
-    lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
+    lines.push('| 조건 | 판 | 평균 점수 | 10~90% | 봇 시간 | 사람 속도 추정 | 평균 떨어뜨림 | 평균 최대 콤보 | 피버 (떨어뜨림 N번마다) | 황금 합체 | 최고 단계 분포 | 최대 동시 고양이 | 스텝당 ms |');
+    lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     const base = Array.from({ length: N }, (_, i) => playGame(1000 + i));
     lines.push(summarize('기본 봇 (능력 없음)', base));
     const full = Array.from({ length: N }, (_, i) => playGame(2000 + i, [], { powers: true, revive: true }));

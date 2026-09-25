@@ -2,7 +2,7 @@
 import { CATS } from '../data/cats';
 import { drawCat, drawTail, type CatPose } from './catdraw';
 
-type Kind = 'heart' | 'dot' | 'star' | 'ring' | 'text' | 'leaf' | 'bubble' | 'ghost' | 'fly' | 'beam' | 'cloud';
+type Kind = 'heart' | 'dot' | 'star' | 'ring' | 'text' | 'leaf' | 'bubble' | 'ghost' | 'fly' | 'beam' | 'cloud' | 'coin';
 
 export interface Particle {
   kind: Kind;
@@ -96,6 +96,33 @@ export class Fx {
     this.shake = Math.max(this.shake, 4);
   }
 
+  /** 황금 고양이 합체: 금화가 튄다 */
+  goldBurst(x: number, y: number, r: number): void {
+    const n = this.lite ? 6 : 16;
+    for (let i = 0; i < n; i++) {
+      const a = rnd(0, Math.PI * 2), s = rnd(180, 420);
+      this.add({ kind: 'coin', x: x + Math.cos(a) * r * 0.4, y: y + Math.sin(a) * r * 0.4, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 260, g: 1100, size: rnd(5, 8), color: '#FFD34D', rot: rnd(0, 6), vr: rnd(8, 16), life: rnd(0.7, 1.1), max: 1.1 });
+    }
+    this.add({ kind: 'ring', x, y, size: r, color: '#FFE27A', life: 0.5, max: 0.5 });
+    this.flash = Math.max(this.flash, 0.18); this.flashColor = '#FFF1C2';
+  }
+
+  /** 냥냥 피버 시작 */
+  feverStart(W: number, H: number): void {
+    const cols = ['#FF7AC8', '#6CE4FF', '#FFE46B', '#9CFF8A', '#B08CFF'];
+    for (let i = 0; i < (this.lite ? 14 : 44); i++) {
+      this.add({ kind: 'star', x: rnd(0, W), y: H + rnd(0, 30), vx: rnd(-60, 60), vy: rnd(-900, -500), g: 700, size: rnd(6, 11), color: cols[i % cols.length], rot: rnd(0, 3), vr: rnd(-8, 8), life: rnd(0.9, 1.4), max: 1.4 });
+    }
+    this.flash = 0.45; this.flashColor = '#FFE2F2';
+    this.shake = Math.max(this.shake, 5);
+  }
+
+  /** 피버 중 반짝이 비 */
+  feverSparkle(W: number, H: number): void {
+    const cols = ['#FF7AC8', '#6CE4FF', '#FFE46B', '#9CFF8A', '#ffffff'];
+    this.add({ kind: 'star', x: rnd(0, W), y: rnd(-40, H * 0.3), vx: rnd(-20, 20), vy: rnd(40, 120), g: 30, size: rnd(3, 6), color: cols[Math.floor(rnd(0, cols.length))], rot: rnd(0, 3), vr: rnd(-4, 4), life: rnd(0.8, 1.4), max: 1.4 });
+  }
+
   poof(x: number, y: number, r: number): void {
     for (let i = 0; i < 6; i++) this.add({ kind: 'cloud', x: x + rnd(-r, r) * 0.5, y: y + rnd(-r, r) * 0.5, vx: rnd(-60, 60), vy: rnd(-90, -20), size: rnd(8, 12) + r * 0.25, color: '#ffffff', life: rnd(0.5, 0.8), max: 0.8 });
   }
@@ -150,6 +177,16 @@ export class Fx {
           ctx.translate(p.x, p.y); ctx.rotate(p.rot);
           star(ctx, p.size * (0.5 + 0.5 * k), p.color);
           break;
+        case 'coin': {
+          ctx.globalAlpha = Math.min(1, k * 2);
+          ctx.translate(p.x, p.y);
+          const sx = Math.abs(Math.cos(p.rot));
+          ctx.fillStyle = '#E3A21A';
+          ctx.beginPath(); ctx.ellipse(0, 0, p.size * Math.max(0.15, sx), p.size, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = p.color;
+          ctx.beginPath(); ctx.ellipse(0, 0, p.size * Math.max(0.1, sx) * 0.75, p.size * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+          break;
+        }
         case 'leaf':
           ctx.globalAlpha = Math.min(1, k * 2);
           ctx.translate(p.x, p.y); ctx.rotate(p.rot);

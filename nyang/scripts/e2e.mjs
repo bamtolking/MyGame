@@ -37,11 +37,34 @@ async function run(name, viewport, locale = 'ko-KR') {
   const lang = await S(() => document.documentElement.lang);
   check('language follows the device', lang === (locale.startsWith('ko') ? 'ko' : 'en'), lang);
   check('title shows start + daily + dex buttons', await page.isVisible('#t-play') && await page.isVisible('#t-daily') && await page.isVisible('#t-dex'));
+  check('title shows level, missions and style', await page.isVisible('#t-level') && await page.isVisible('#t-missions') && await page.isVisible('#t-custom'));
+  const rowFits = await S(() => [...document.querySelectorAll('.row3 .btn')].every(b => b.getBoundingClientRect().right <= innerWidth + 1));
+  check('title buttons fit the screen width', rowFits);
+
+  // 오늘의 미션
+  await page.tap('#t-missions');
+  await wait(250);
+  check('missions sheet lists 3 missions', (await S(() => document.querySelectorAll('.mission').length)) === 3);
+  await page.tap('#mi-close'); await wait(250);
+
+  // 꾸미기: 잠긴 건 못 고르고, 레벨이 오르면 고를 수 있다
+  await page.tap('#t-custom');
+  await wait(300);
+  const lockedTap = await S(() => { const b = document.querySelector('.cus-item.locked'); b.click(); return window.__nyang.profile.look.box; });
+  check('locked box cannot be equipped', lockedTap === 'cardboard');
+  await page.tap('#cus-close'); await wait(200);
+  await S(() => { window.__nyang.profile.xp = 800; });
+  await page.tap('#t-custom'); await wait(300);
+  await page.tap('.cus-item[data-id="gift"]'); await wait(200);
+  check('unlocked box can be equipped', (await S(() => window.__nyang.renderer.skin.id)) === 'gift');
+  await shot('01b-custom');
+  await page.tap('#cus-close'); await wait(200);
 
   // 한 판 시작
   await page.tap('#t-play');
   await wait(300);
   check('game starts', (await S(() => window.__nyang.mode)) === 'play');
+  check('game music plays', (await S(() => window.__nyang.sound.bgm?.getMode())) === 'game');
   check('first-time hint shown', await page.isVisible('.hint'));
   // 터치로 떨어뜨리기 (상자 폭 곳곳)
   const xs = [60, 300, 180, 110, 250, 40, 320, 150, 210, 90, 270, 180, 130, 230];
@@ -90,6 +113,21 @@ async function run(name, viewport, locale = 'ko-KR') {
   const after = await S(() => ({ n: window.__nyang.game.world.bodies.length, c: window.__nyang.game.charges.punch, t: window.__nyang.renderer.targeting }));
   check('punch removes a cat and uses a charge', after.n <= before.n - 1 && after.c === before.c - 1 && !after.t, JSON.stringify({ before, after }));
 
+  // 냥냥 피버: 게이지를 거의 채운 뒤 합체 한 번
+  await S(() => {
+    const g = window.__nyang.game;
+    g.fever = 0; g.feverMeter = 0.999;
+    window.__fevers0 = g.stats.fevers;
+    window.__golds0 = g.stats.golds;
+    window.__mode0 = window.__nyang.mode;
+    const mk = (id, x) => ({ id, tier: 2, x, y: 30, vx: 0, vy: 0, a: 0, w: 0, r: 22, rt: 22, invM: 1 / 484, born: g.time, over: 0, touched: true, dead: false, hit: 0, chain: 0, ct: g.time, gold: true, px: 0, py: 0, pa: 0, ovx: 0, ovy: 0, cf: 0, cl: 0, cr: 0 });
+    g.world.add(mk(g.nextId++, 165)); g.world.add(mk(g.nextId++, 195));
+  });
+  await wait(700);
+  const fev = await S(() => ({ fever: window.__nyang.game.fever, started: window.__nyang.game.stats.fevers - window.__fevers0, golds: window.__nyang.game.stats.golds, golds0: window.__golds0, mode0: window.__mode0, mode: window.__nyang.mode, meter: window.__nyang.game.feverMeter, time: window.__nyang.game.time }));
+  check('a merge on a full meter starts Nyan Fever (golden merge counted)', fev.started === 1 && fev.fever > 0 && fev.golds >= 1, JSON.stringify(fev));
+  await shot('04b-fever');
+
   // 일시정지
   await page.tap('#btn-pause');
   await wait(200);
@@ -100,15 +138,17 @@ async function run(name, viewport, locale = 'ko-KR') {
   await wait(200);
   check('resume', (await S(() => window.__nyang.mode)) === 'play');
 
-  // 저장 → 새로고침 → 이어하기
+  // 저장 → 새로고침 → 이어하기 (일시정지해서 저장 시점과 새로고침 사이에 판이 움직이지 않게)
+  await page.tap('#btn-pause'); await wait(200);
   const saved = await S(() => { window.__nyang.save(); const g = window.__nyang.game; return { score: g.score, n: g.world.bodies.length }; });
   await page.reload();
   await page.waitForSelector('#t-continue', { timeout: 5000 }).catch(() => {});
   check('continue button after reload', await page.isVisible('#t-continue'));
+  const stored = await S(() => { const r = JSON.parse(localStorage.getItem('nyangche.run.v1')); return { score: r.score, n: r.bodies.length }; });
+  check('saved run matches the paused game', stored.score === saved.score && stored.n === saved.n, JSON.stringify({ saved, stored }));
   await page.tap('#t-continue');
-  await wait(200);
-  const resumed = await S(() => { const g = window.__nyang.game; return { score: g.score, n: g.world.bodies.length }; });
-  check('resume restores score and cats', resumed.score === saved.score && resumed.n === saved.n, JSON.stringify({ saved, resumed }));
+  const resumed = await S(() => { const g = window.__nyang.game; return { score: g.score, mode: window.__nyang.mode }; });
+  check('resume restores the game', resumed.mode === 'play' && resumed.score >= saved.score, JSON.stringify({ saved, resumed }));
 
   // 넘치게 만들기 → 집사 찬스 → 다시 넘침 → 결과
   // 중력을 끄고 테두리 위에 고양이 하나를 걸쳐 두면 2.2초 뒤 넘침 판정
@@ -133,6 +173,9 @@ async function run(name, viewport, locale = 'ko-KR') {
   check('results sheet after second overflow', await page.isVisible('#rs-share'));
   await wait(1600);
   await shot('07-results');
+  const xpGain = await S(() => document.querySelector('#rs-xp .gain')?.textContent || '');
+  check('results show XP gained', /\+[\d,]+ XP/.test(xpGain), xpGain);
+  check('results show today\'s missions', (await S(() => document.querySelectorAll('.missions .mission').length)) === 3);
   const card = await S(() => { const img = document.getElementById('rs-card'); return img && img.naturalWidth; });
   check('share card image rendered', card === 1080, `width=${card}`);
   await page.tap('#rs-share');
@@ -142,6 +185,7 @@ async function run(name, viewport, locale = 'ko-KR') {
   await page.tap('#rs-home');
   await wait(300);
   check('best score shown on title', await page.isVisible('.best-line'));
+  check('title music after a game', (await S(() => window.__nyang.sound.bgm?.getMode())) === 'title');
   check('no saved run after game over', !(await page.isVisible('#t-continue')));
 
   // 도감
@@ -191,6 +235,7 @@ async function run(name, viewport, locale = 'ko-KR') {
   check('daily marked done on title', /완료|done/.test(dailyLabel || ''), (dailyLabel || '').trim().replace(/\s+/g, ' '));
   await page.tap('#t-daily'); await wait(300);
   check('daily done sheet with countdown', await page.isVisible('#dd-cd'));
+  check('daily streak started', (await S(() => window.__nyang.profile.streak.count)) === 1);
   await page.tap('#dd-back'); await wait(150);
 
   // 많이 쌓였을 때 프레임

@@ -1,5 +1,6 @@
-// 절차적 사운드: 야옹(포먼트 합성), 뽁, 퐁, 골골송, 보글보글, 배경음 오르골.
+// 절차적 사운드: 야옹(포먼트 합성), 뽁, 퐁, 골골송, 보글보글. 배경음악은 music.ts.
 // 사용자 입력 뒤에만 시작한다 (브라우저 자동재생 정책).
+import { Music, type MusicMode } from './music';
 
 export class Sound {
   ctx: AudioContext | null = null;
@@ -10,9 +11,10 @@ export class Sound {
   sfxOn = true;
   bgmOn = true;
   private last = new Map<string, number>();
-  private bgmTimer: number | null = null;
-  private bgmStep = 0;
-  private bgmNext = 0;
+  private bgm: Music | null = null;
+  /** unlock 전에 요청된 음악 상태 */
+  private wantMode: MusicMode = 'title';
+  private wantFever = false;
 
   unlock(): void {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {}); return; }
@@ -26,22 +28,37 @@ export class Sound {
       comp.threshold.value = -14; comp.ratio.value = 4;
       this.master.connect(comp); comp.connect(c.destination);
       this.sfx = c.createGain(); this.sfx.gain.value = this.sfxOn ? 1 : 0; this.sfx.connect(this.master);
-      this.music = c.createGain(); this.music.gain.value = this.bgmOn ? 0.22 : 0; this.music.connect(this.master);
+      this.music = c.createGain(); this.music.gain.value = 0.3; this.music.connect(this.master);
       const n = Math.floor(c.sampleRate * 1.5);
       this.noiseBuf = c.createBuffer(1, n, c.sampleRate);
       const d = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-      if (this.bgmOn) this.startBgm();
+      this.bgm = new Music(c, this.music, this.noiseBuf);
+      this.bgm.setEnabled(this.bgmOn);
+      this.bgm.setMode(this.wantMode);
+      this.bgm.setFever(this.wantFever);
     } catch { this.ctx = null; }
   }
 
   setSfx(on: boolean): void { this.sfxOn = on; if (this.ctx) this.sfx.gain.value = on ? 1 : 0; }
   setBgm(on: boolean): void {
     this.bgmOn = on;
-    if (!this.ctx) return;
-    this.music.gain.value = on ? 0.22 : 0;
-    if (on) this.startBgm(); else this.stopBgm();
+    this.bgm?.setEnabled(on);
   }
+
+  /** 음악 편곡: 타이틀 / 게임 / 끔 (다음 마디에서 바뀜) */
+  setMusic(mode: MusicMode): void {
+    this.wantMode = mode;
+    this.bgm?.setMode(mode);
+  }
+
+  setFever(on: boolean): void {
+    this.wantFever = on;
+    this.bgm?.setFever(on);
+  }
+
+  /** 넘침 위험도 0..1 → 음악이 먹먹해진다 */
+  setTension(k: number): void { this.bgm?.setTension(k); }
   suspend(): void { this.ctx?.suspend().catch(() => {}); }
   resume(): void { this.ctx?.resume().catch(() => {}); }
 
@@ -232,51 +249,27 @@ export class Sound {
     s.start(t0); lfo.start(t0); s.stop(t0 + 1.3); lfo.stop(t0 + 1.3);
   }
 
-  // ── 배경음: 느긋한 오르골 루프 ──
-  private startBgm(): void {
-    if (this.bgmTimer != null || !this.ctx) return;
-    this.bgmNext = this.ctx.currentTime + 0.1;
-    this.bgmTimer = window.setInterval(() => this.scheduleBgm(), 120);
+  mission(): void {
+    if (!this.ok()) return;
+    [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, 0.2, 'triangle', 0.2, 0, i * 0.07));
   }
 
-  private stopBgm(): void {
-    if (this.bgmTimer != null) { clearInterval(this.bgmTimer); this.bgmTimer = null; }
+  levelUp(): void {
+    if (!this.ok()) return;
+    [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.35, 'square', 0.1, 0, i * 0.09));
+    [1047, 1319, 1568].forEach((f, i) => this.tone(f, 0.6, 'sine', 0.18, 0, 0.5 + i * 0.02));
+    this.meow(1, 'happy', 0.55);
   }
 
-  private scheduleBgm(): void {
-    const c = this.ctx;
-    if (!c || c.state !== 'running') return;
-    const beat = 60 / 84 / 2;
-    // C장조 5음계 멜로디 (32스텝) + 코드
-    const mel = [72, -1, 76, 79, 76, -1, 74, 72, 69, -1, 72, 74, 76, -1, -1, -1, 74, -1, 77, 81, 79, -1, 76, 74, 72, -1, 74, 76, 72, -1, -1, -1];
-    const chords = [[48, 55, 64], [45, 52, 60], [41, 48, 57], [43, 50, 59]];
-    while (this.bgmNext < c.currentTime + 0.5) {
-      const step = this.bgmStep % 32;
-      const t = this.bgmNext;
-      const n = mel[step];
-      if (n > 0) this.pluck(midi(n), t, 0.09);
-      if (step % 8 === 0) {
-        const ch = chords[(step / 8) | 0];
-        ch.forEach((m, i) => this.pluck(midi(m), t + i * 0.02, 0.05, 1.6));
-      }
-      if (step % 4 === 2) this.pluck(midi(chords[(step / 8) | 0][0] + 12), t, 0.035, 0.4);
-      this.bgmStep++;
-      this.bgmNext += beat;
-    }
+  feverStart(): void {
+    if (!this.ok()) return;
+    [523, 659, 784, 1047, 784, 1047, 1319, 1568].forEach((f, i) => this.tone(f, 0.12, 'square', 0.1, 0, i * 0.05));
+    this.noise(0.6, 0.2, 5000, 'highpass', 0.1);
+    this.meow(2, 'happy', 0.2);
   }
 
-  private pluck(freq: number, t0: number, vol: number, dur = 0.7): void {
-    const c = this.ctx!;
-    const o = c.createOscillator(); o.type = 'triangle'; o.frequency.value = freq;
-    const o2 = c.createOscillator(); o2.type = 'sine'; o2.frequency.value = freq * 2.005;
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    const g2 = c.createGain(); g2.gain.value = 0.3;
-    o.connect(g); o2.connect(g2); g2.connect(g); g.connect(this.music);
-    o.start(t0); o2.start(t0); o.stop(t0 + dur + 0.05); o2.stop(t0 + dur + 0.05);
+  gold(): void {
+    if (!this.ok()) return;
+    [1568, 2093, 2637, 3136].forEach((f, i) => this.tone(f, 0.25, 'sine', 0.16, 0, i * 0.045));
   }
 }
-
-function midi(n: number): number { return 440 * Math.pow(2, (n - 69) / 12); }

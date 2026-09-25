@@ -30,6 +30,10 @@ export interface CatPose {
   alpha?: number;
   /** 작은 화면에서 수염 등 생략 */
   detail?: number;
+  /** 황금 고양이 */
+  gold?: boolean;
+  /** 모자/액세서리 id (data/cosmetics.ts) */
+  hat?: string;
 }
 
 const N_MIN = 28, N_MAX = 64;
@@ -124,9 +128,10 @@ export function drawTail(ctx: CanvasRenderingContext2D, p: CatPose): void {
   ctx.lineJoin = 'round';
   const path = () => { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(1.35, 0.75, tipX, tipY); };
   path();
-  ctx.strokeStyle = def.line; ctx.lineWidth = width + lw * 2; ctx.stroke();
+  ctx.strokeStyle = p.gold ? '#B87A00' : def.line; ctx.lineWidth = width + lw * 2; ctx.stroke();
   path();
-  ctx.strokeStyle = tailColor(def); ctx.lineWidth = width; ctx.stroke();
+  ctx.strokeStyle = p.gold ? '#F2BC2E' : tailColor(def); ctx.lineWidth = width; ctx.stroke();
+  if (p.gold) { ctx.restore(); return; }
   // 꼬리 끝 무늬
   if (def.pattern === 'point' || def.pattern === 'tux' || def.pattern === 'coon' || def.pattern === 'tabby' || def.pattern === 'mackerel') {
     ctx.beginPath();
@@ -157,6 +162,17 @@ export function drawCat(ctx: CanvasRenderingContext2D, p: CatPose): void {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
+  if (p.gold) {
+    const pulse = 0.75 + 0.25 * Math.sin(p.t * 4 + p.seed);
+    ctx.fillStyle = cachedGrad(ctx, 'goldglow', () => {
+      const g = ctx.createRadialGradient(0, 0, 0.7, 0, 0, 1.45);
+      g.addColorStop(0, 'rgba(255,214,70,0.75)'); g.addColorStop(1, 'rgba(255,214,70,0)');
+      return g;
+    });
+    ctx.globalAlpha = (p.alpha ?? 1) * pulse;
+    ctx.beginPath(); ctx.arc(0, 0, 1.45, 0, TAU); ctx.fill();
+    ctx.globalAlpha = p.alpha ?? 1;
+  }
   drawEars(ctx, p, def, n, lw);
 
   outlinePath(ctx, n);
@@ -177,17 +193,140 @@ export function drawCat(ctx: CanvasRenderingContext2D, p: CatPose): void {
     return hl;
   });
   ctx.fillRect(-1.6, -1.6, 3.2, 3.2);
+  if (p.gold) drawGold(ctx, p);
   ctx.rotate(p.a);
   drawFace(ctx, p, def, pxR);
   ctx.restore();
 
   outlinePath(ctx, n);
-  ctx.strokeStyle = def.line;
-  ctx.lineWidth = lw * 2;
+  ctx.strokeStyle = p.gold ? '#B87A00' : def.line;
+  ctx.lineWidth = lw * (p.gold ? 2.6 : 2);
   ctx.stroke();
 
   if (p.held) drawPaws(ctx, p, def, lw);
-  if (def.pattern === 'cosmic') drawCrown(ctx, p, n, lw);
+  const hat = p.hat ?? 'none';
+  if (def.pattern === 'cosmic' && (hat === 'none' || hat === 'shades' || hat === 'phones')) drawCrown(ctx, p, n, lw);
+  if (hat !== 'none') drawHat(ctx, p, hat, n, lw, def);
+  ctx.restore();
+}
+
+/** 황금 고양이: 털빛을 금색으로 물들이고 반짝이는 띠를 흘린다 */
+function drawGold(ctx: CanvasRenderingContext2D, p: CatPose): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.globalAlpha *= 0.85;
+  ctx.fillStyle = '#FFCB45';
+  ctx.fillRect(-1.6, -1.6, 3.2, 3.2);
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = (p.alpha ?? 1) * 0.55;
+  ctx.fillStyle = '#7A5200';
+  ctx.fillRect(-1.6, -1.6, 3.2, 3.2);
+  ctx.globalCompositeOperation = 'source-over';
+  const x = ((p.t * 0.9 + p.seed) % 2.6) - 1.3;
+  ctx.globalAlpha = (p.alpha ?? 1) * 0.55;
+  ctx.fillStyle = '#FFFBE0';
+  ctx.beginPath();
+  ctx.moveTo(x - 0.18, -1.3); ctx.lineTo(x + 0.02, -1.3); ctx.lineTo(x + 0.62, 1.3); ctx.lineTo(x + 0.42, 1.3);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+/** 모자/액세서리 (몸 좌표, 머리 꼭대기 기준) */
+function drawHat(ctx: CanvasRenderingContext2D, p: CatPose, hat: string, n: number, lw: number, def: CatDef): void {
+  const topR = radiusAt(p.a - Math.PI / 2, n);
+  ctx.save();
+  ctx.rotate(p.a);
+  ctx.lineWidth = lw * 2;
+  ctx.lineJoin = 'round';
+  const kitten = def.pattern === 'kitten';
+  switch (hat) {
+    case 'bow': {
+      ctx.translate(0.42, -topR * 0.86);
+      ctx.rotate(0.35);
+      ctx.fillStyle = '#FF6F9A'; ctx.strokeStyle = '#B83562';
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(s * 0.34, -0.26, s * 0.36, 0);
+        ctx.quadraticCurveTo(s * 0.34, 0.26, 0, 0);
+        ctx.fill(); ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(0, 0, 0.08, 0, TAU); ctx.fill(); ctx.stroke();
+      break;
+    }
+    case 'party': {
+      ctx.translate(0.12, -topR * 0.9);
+      ctx.rotate(0.28);
+      ctx.beginPath(); ctx.moveTo(-0.26, 0.04); ctx.lineTo(0, -0.66); ctx.lineTo(0.26, 0.04); ctx.closePath();
+      ctx.fillStyle = '#7FD3FF'; ctx.fill();
+      ctx.save(); ctx.clip();
+      ctx.strokeStyle = '#FF6F9A'; ctx.lineWidth = 0.08;
+      for (let y = -0.55; y < 0.1; y += 0.2) { ctx.beginPath(); ctx.moveTo(-0.4, y + 0.12); ctx.lineTo(0.4, y - 0.06); ctx.stroke(); }
+      ctx.restore();
+      ctx.strokeStyle = '#2F6F99'; ctx.lineWidth = lw * 2;
+      ctx.beginPath(); ctx.moveTo(-0.26, 0.04); ctx.lineTo(0, -0.66); ctx.lineTo(0.26, 0.04); ctx.closePath(); ctx.stroke();
+      ctx.fillStyle = '#FFE46B'; ctx.beginPath(); ctx.arc(0, -0.68, 0.09, 0, TAU); ctx.fill(); ctx.stroke();
+      break;
+    }
+    case 'flower': {
+      ctx.translate(-0.46, -topR * 0.82);
+      ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#E58BA6';
+      for (let i = 0; i < 5; i++) {
+        const a = i * TAU / 5 + p.seed;
+        ctx.beginPath(); ctx.ellipse(Math.cos(a) * 0.13, Math.sin(a) * 0.13, 0.11, 0.08, a, 0, TAU); ctx.fill(); ctx.stroke();
+      }
+      ctx.fillStyle = '#FFCF3A'; ctx.beginPath(); ctx.arc(0, 0, 0.08, 0, TAU); ctx.fill();
+      break;
+    }
+    case 'shades': {
+      const ey = def.pattern === 'persian' ? 0.02 : -0.06;
+      const ex = kitten ? 0.36 : 0.34;
+      ctx.fillStyle = '#1D1B2A'; ctx.strokeStyle = '#1D1B2A';
+      for (const s of [-1, 1]) {
+        ctx.beginPath(); ctx.ellipse(s * ex, ey, 0.21, 0.15, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath(); ctx.ellipse(s * ex - 0.07, ey - 0.05, 0.06, 0.03, -0.4, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#1D1B2A';
+      }
+      ctx.lineWidth = 0.06;
+      ctx.beginPath(); ctx.moveTo(-ex + 0.2, ey - 0.03); ctx.quadraticCurveTo(0, ey - 0.1, ex - 0.2, ey - 0.03); ctx.stroke();
+      break;
+    }
+    case 'phones': {
+      ctx.strokeStyle = '#4E5270'; ctx.lineWidth = 0.1;
+      ctx.beginPath(); ctx.arc(0, 0.05, Math.min(1.02, topR * 1.02), Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+      for (const s of [-1, 1]) {
+        ctx.save();
+        ctx.translate(s * 0.9, 0.05);
+        ctx.fillStyle = '#FF6F7D'; ctx.strokeStyle = '#B83E4E'; ctx.lineWidth = lw * 2;
+        ctx.beginPath(); ctx.ellipse(0, 0, 0.14, 0.24, 0, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#FFD0D6'; ctx.beginPath(); ctx.ellipse(0, 0, 0.06, 0.14, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+      break;
+    }
+    case 'frog': {
+      const R = topR * 1.04;
+      ctx.fillStyle = '#7DC95E'; ctx.strokeStyle = '#3B7A2A';
+      ctx.beginPath(); ctx.arc(0, 0, R, Math.PI * 1.18, Math.PI * 1.82); ctx.quadraticCurveTo(0, -R * 0.45, Math.cos(Math.PI * 1.18) * R, Math.sin(Math.PI * 1.18) * R); ctx.fill(); ctx.stroke();
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = '#7DC95E';
+        ctx.beginPath(); ctx.arc(s * 0.3, -R * 0.93, 0.17, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(s * 0.3, -R * 0.93, 0.11, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#1B1116'; ctx.beginPath(); ctx.arc(s * 0.3, -R * 0.91, 0.06, 0, TAU); ctx.fill();
+      }
+      break;
+    }
+    case 'halo': {
+      const y = -topR * 1.18;
+      const glow = 0.5 + 0.5 * Math.sin(p.t * 3 + p.seed);
+      ctx.strokeStyle = `rgba(255,236,140,${0.35 + glow * 0.3})`; ctx.lineWidth = 0.16;
+      ctx.beginPath(); ctx.ellipse(0, y, 0.42, 0.11, 0, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = '#FFD34D'; ctx.lineWidth = 0.07;
+      ctx.beginPath(); ctx.ellipse(0, y, 0.42, 0.11, 0, 0, TAU); ctx.stroke();
+      break;
+    }
+  }
   ctx.restore();
 }
 
@@ -224,7 +363,7 @@ function drawEars(ctx: CanvasRenderingContext2D, p: CatPose, def: CatDef, n: num
     ctx.quadraticCurveTo(tipX, -h - 0.04, tipX + w * 0.12, -h + 0.02);
     ctx.quadraticCurveTo(w * 0.55, -h * 0.55, w, 0.06);
     ctx.closePath();
-    ctx.fillStyle = pat === 'point' ? def.c1 : pat === 'cosmic' ? def.belly : pat === 'calico' ? (side < 0 ? def.c1 : def.c2) : def.body;
+    ctx.fillStyle = p.gold ? '#F2BC2E' : pat === 'point' ? def.c1 : pat === 'cosmic' ? def.belly : pat === 'calico' ? (side < 0 ? def.c1 : def.c2) : def.body;
     ctx.fill();
     ctx.strokeStyle = def.line; ctx.lineWidth = lw * 2; ctx.stroke();
     // 귀 안쪽
@@ -560,7 +699,7 @@ function drawNip(ctx: CanvasRenderingContext2D, p: CatPose): void {
 }
 
 /** 도감/미리보기용: 캔버스 한 장에 한 마리 */
-export function drawPortrait(canvas: HTMLCanvasElement, tier: number, opts: { mood?: Mood; t?: number; silhouette?: boolean; pad?: number } = {}): void {
+export function drawPortrait(canvas: HTMLCanvasElement, tier: number, opts: { mood?: Mood; t?: number; silhouette?: boolean; pad?: number; gold?: boolean; hat?: string } = {}): void {
   const dpr = Math.min(3, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
   const cssW = canvas.clientWidth || canvas.width, cssH = canvas.clientHeight || canvas.height;
   if (canvas.width !== Math.round(cssW * dpr)) { canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr); }
@@ -572,7 +711,7 @@ export function drawPortrait(canvas: HTMLCanvasElement, tier: number, opts: { mo
   const r = size * (0.5 - pad) * (tier < 0 ? 0.8 : 1);
   const pose: CatPose = {
     tier, x: canvas.width / 2, y: canvas.height / 2 + r * 0.1, r, a: 0, squash: 0, clips: [], mood: opts.mood ?? (tier === 8 ? 'grumpy' : 'idle'),
-    lookX: 0, lookY: 0.2, blink: 0, t: opts.t ?? 0, seed: tier * 1.7, line: Math.max(1.5 * dpr, r * 0.05), detail: 1,
+    lookX: 0, lookY: 0.2, blink: 0, t: opts.t ?? 0, seed: tier * 1.7, line: Math.max(1.5 * dpr, r * 0.05), detail: 1, gold: opts.gold, hat: opts.hat,
   };
   if (opts.silhouette) {
     ctx.globalAlpha = 1;

@@ -40,14 +40,20 @@
 ■ 연쇄 콤보
 합체로 커진 고양이가 옆의 같은 고양이와 또 만나면 연쇄! 점수가 최대 4배가 돼요.
 
+■ 냥냥 피버 & 황금 고양이
+합체할수록 상자 벽이 차오르고, 가득 차면 8초 동안 점수 2배! 가끔 나오는 반짝이는 황금 고양이를 합치면 점수 3배.
+
 ■ 능력 3종
 • 냥펀치: 방해되는 고양이를 톡 날려 보내기
 • 액체화: 모두 녹아내려 같은 고양이끼리 끌어당기기
 • 흔들기: 상자를 흔들어 자리 다시 잡기
 점수를 모으면 츄르 게이지가 차고 능력이 충전돼요.
 
-■ 오늘의 상자
-매일 새로운 규칙(달나라 상자, 버터 바른 상자, 좁은 상자…). 모든 집사가 같은 순서로 고양이를 받아요. 하루 한 판, 친구와 점수를 비교해 보세요.
+■ 오늘의 상자와 오늘의 미션
+매일 새로운 규칙(달나라 상자, 버터 바른 상자, 좁은 상자…). 모든 집사가 같은 순서로 고양이를 받아요. 하루 한 판, 친구와 점수를 비교하고 연속 기록도 이어 가세요. 매일 바뀌는 미션 3개를 깨면 경험치를 받아요.
+
+■ 집사 레벨과 꾸미기
+레벨이 오를 때마다 선물 상자, 빨래 바구니, 욕조, 어항, 밤하늘 상자와 리본, 파티 모자, 선글라스, 개구리 모자 같은 꾸미기가 열려요.
 
 ■ 고양이 도감
 11종 고양이를 모두 만나 보세요. 처음 만나는 고양이마다 발견 알림이 떠요.
@@ -90,14 +96,20 @@ Cats squish against each other, flatten on the walls and stretch as they fall. T
 ■ Chain combos
 When a freshly merged cat meets another twin, that's a chain! Up to 4× points.
 
+■ Nyan Fever & golden cats
+Every merge fills the box walls. When they're full: 8 seconds of double points! Merge the rare shiny golden cats for 3× points.
+
 ■ Three powers
 • Paw Punch: boop an annoying cat out of the box
 • Liquify: everyone melts and matching cats pull together
 • Shake: shake the box so the cats settle into new spots
 Scoring fills the treat meter and recharges your powers.
 
-■ Daily Box
-A new rule every day (Moon Box, Buttered Box, Narrow Box…). Everyone gets the same cats in the same order. One run per day, so compare scores with friends.
+■ Daily Box & daily missions
+A new rule every day (Moon Box, Buttered Box, Narrow Box…). Everyone gets the same cats in the same order. One run per day: compare scores with friends and keep your streak going. Clear three fresh missions every day for XP.
+
+■ Levels & styles
+Every level unlocks something new: gift box, laundry basket, bathtub, fishbowl, starry box, plus bows, party hats, sunglasses, a frog hat and more.
 
 ■ Cat-alog
 Meet all 11 cats. Every new cat you find gets its own discovery moment.
@@ -117,8 +129,10 @@ Plays offline. No personal data collected.
 | # | 한국어 | English |
 |---|---|---|
 | 1 | 같은 고양이끼리 합체! | Merge matching cats! |
-| 2 | 말랑말랑 연쇄 콤보 | Squishy chain combos |
+| 2 | 냥냥 피버 타임! | Nyan Fever! |
 | 3 | 고양이는 액체다 | Cats are liquid |
-| 4 | 매일 새로운 상자 | A new box every day |
-| 5 | 11종 고양이 도감 | Collect 11 cats |
-| 6 | 결과 카드로 자랑하기 | Brag with result cards |
+| 4 | 상자와 모자 꾸미기 | Boxes & hats |
+| 5 | 매일 새 미션 | Daily missions |
+| 6 | 매일 새로운 상자 | A new box every day |
+| 7 | 11종 고양이 도감 | Collect 11 cats |
+| 8 | 결과 카드로 자랑하기 | Brag with result cards |

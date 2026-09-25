@@ -14,14 +14,15 @@ export const NIP_MAX_TIER = 6;
 export const NIP_TREAT_POINTS = 100;
 
 export type GameEvent =
-  | { t: 'drop'; tier: number; x: number }
-  | { t: 'merge'; tier: number; x: number; y: number; points: number; combo: number; ax: number; ay: number; bx: number; by: number; ar: number; br: number }
-  | { t: 'ascend'; x: number; y: number; points: number; combo: number }
+  | { t: 'drop'; tier: number; x: number; gold: boolean }
+  | { t: 'merge'; tier: number; x: number; y: number; points: number; combo: number; ax: number; ay: number; bx: number; by: number; ar: number; br: number; gold: number; fever: boolean }
+  | { t: 'ascend'; x: number; y: number; points: number; combo: number; gold: number }
   | { t: 'nip'; tier: number; x: number; y: number; points: number; combo: number; grew: boolean }
   | { t: 'land'; tier: number; x: number; y: number; speed: number }
   | { t: 'charge'; power: Power }
   | { t: 'power'; power: Power; x: number; y: number; tier: number }
   | { t: 'revive'; poofs: Array<{ x: number; y: number; tier: number }> }
+  | { t: 'fever'; on: boolean }
   | { t: 'over' };
 
 export interface GameOptions {
@@ -39,6 +40,8 @@ export interface Stats {
   ascends: number;
   nips: number;
   powersUsed: number;
+  golds: number;
+  fevers: number;
 }
 
 export function radiusOf(tier: number): number {
@@ -58,6 +61,8 @@ export class Game {
   fxRng: Rng;
   /** [지금 들고 있는 것, 다음] 단계. -1 = 캣닢 공 */
   queue: number[] = [];
+  /** queue와 같은 순서: 황금 고양이인지 */
+  queueGold: boolean[] = [];
   spawned = 0;
   nipAt = 0;
   holdX: number;
@@ -74,13 +79,16 @@ export class Game {
   private shakeDir = 1;
   /** 능력 사용 직후 넘침 판정을 잠시 멈춘다 (능력 때문에 지는 일 없게) */
   calm = 0;
+  /** 냥냥 피버 게이지 0..1, 남은 피버 시간 */
+  feverMeter = 0;
+  fever = 0;
   revived = false;
   over = false;
   /** 넘침 위험도 0..1 (가장 오래 삐져나온 고양이 기준) */
   danger = 0;
   /** 가장 높이 쌓인 고양이 윗면 (y, 작을수록 위험) */
   topY = 0;
-  stats: Stats = { drops: 0, merges: 0, maxCombo: 0, maxTier: 0, ascends: 0, nips: 0, powersUsed: 0 };
+  stats: Stats = { drops: 0, merges: 0, maxCombo: 0, maxTier: 0, ascends: 0, nips: 0, powersUsed: 0, golds: 0, fevers: 0 };
   events: GameEvent[] = [];
   private lastLand = new Map<number, number>();
 
@@ -95,28 +103,32 @@ export class Game {
     this.spawnRng = makeRng(this.seed);
     this.fxRng = makeRng(this.seed ^ 0x5bd1e995);
     this.nipAt = Math.round(range(this.spawnRng, r.catnipEvery[0], r.catnipEvery[1]));
-    this.queue = [this.rollSpawn(), this.rollSpawn()];
+    for (let i = 0; i < 2; i++) this.pushSpawn();
     this.holdX = r.boxW / 2;
     this.gaugeNeed = r.gaugeFirst;
     this.charges = { punch: r.startCharges, liquify: r.startCharges, shake: r.startCharges };
     this.topY = r.boxH;
   }
 
-  /** 소환 순서는 플레이와 무관하게 시드로만 정해진다 (오늘의 상자 공정성) */
-  private rollSpawn(): number {
+  /** 소환 순서(황금 여부 포함)는 플레이와 무관하게 시드로만 정해진다 (오늘의 상자 공정성) */
+  private pushSpawn(): void {
     const i = this.spawned++;
     if (i === this.nipAt) {
       this.nipAt += Math.round(range(this.spawnRng, this.rules.catnipEvery[0], this.rules.catnipEvery[1]));
-      return NIP;
+      this.queue.push(NIP); this.queueGold.push(false);
+      return;
     }
     const w = this.rules.spawnWeights;
     // 처음 몇 번은 작은 고양이만 (첫 합체를 빨리 보여 준다)
-    if (i < 4) return weighted(this.spawnRng, w.slice(0, 3));
-    return weighted(this.spawnRng, w);
+    const tier = i < 4 ? weighted(this.spawnRng, w.slice(0, 3)) : weighted(this.spawnRng, w);
+    const gold = next(this.spawnRng) < this.rules.goldChance && i >= 6;
+    this.queue.push(tier); this.queueGold.push(gold);
   }
 
   get current(): number { return this.queue[0]; }
   get nextTier(): number { return this.queue[1]; }
+  get currentGold(): boolean { return !!this.queueGold[0]; }
+  get nextGold(): boolean { return !!this.queueGold[1]; }
   get ready(): boolean { return this.cooldown <= 0 && !this.over; }
   get comboMul(): number { return Math.min(this.rules.comboMaxMul, 1 + this.rules.comboBonus * Math.max(0, this.combo - 1)); }
 
@@ -131,17 +143,19 @@ export class Game {
   drop(): boolean {
     if (!this.ready) return false;
     const tier = this.queue.shift()!;
-    this.queue.push(this.rollSpawn());
+    const gold = !!this.queueGold.shift();
+    this.pushSpawn();
     const x = this.clampX(this.holdX, tier);
     const r = radiusOf(tier);
     const b = makeBody(this.nextId++, tier, x, this.rules.dropY, r, this.time);
     if (this.liquify > 0 && tier !== NIP) { b.rt = r * this.rules.liquifyShrink; b.r = b.rt; b.invM = 1 / (b.r * b.r); }
     b.vy = 60;
+    b.gold = gold;
     this.world.add(b);
-    this.cooldown = this.rules.dropCooldown;
+    this.cooldown = this.rules.dropCooldown * (this.fever > 0 ? 0.5 : 1);
     this.stats.drops++;
     this.holdX = this.clampX(this.holdX);
-    this.events.push({ t: 'drop', tier, x });
+    this.events.push({ t: 'drop', tier, x, gold });
     return true;
   }
 
@@ -152,6 +166,7 @@ export class Game {
     if (this.cooldown > 0) this.cooldown -= dt;
     if (this.comboTimer > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) { this.comboTimer = 0; this.combo = 0; } }
     this.tickPowers(dt);
+    this.tickFever(dt);
     this.world.step(dt);
     this.resolveTouches();
     this.checkLanding();
@@ -163,12 +178,12 @@ export class Game {
     return this.time - b.ct <= this.rules.comboWindow ? b.chain : 0;
   }
 
-  /** 점수 지급. chain = 이번 합체의 연쇄 단계 (1 = 단독 합체) */
-  private award(base: number, chain: number): number {
+  /** 점수 지급. chain = 이번 합체의 연쇄 단계 (1 = 단독 합체), mul = 황금 등 추가 배율 */
+  private award(base: number, chain: number, mul = 1): number {
     this.combo = chain;
     this.comboTimer = this.rules.comboWindow;
     if (chain > this.stats.maxCombo) this.stats.maxCombo = chain;
-    const pts = Math.round(base * this.comboMul);
+    const pts = Math.round(base * this.comboMul * mul * (this.fever > 0 ? this.rules.feverMul : 1));
     this.score += pts;
     this.addGauge(pts);
     return pts;
@@ -189,6 +204,28 @@ export class Game {
     if (maxed()) this.gauge = Math.min(this.gauge, this.gaugeNeed);
   }
 
+  /** 합체할 때마다 피버 게이지가 찬다. 가득 차면 냥냥 피버 */
+  private feed(tier: number, chain: number, gold: number): void {
+    if (this.fever > 0) return;
+    const [base, perTier, perChain] = this.rules.feverGain;
+    this.feverMeter += base + perTier * tier + perChain * Math.max(0, chain - 1) + gold * 0.25;
+    if (this.feverMeter >= 1) {
+      this.feverMeter = 0;
+      this.fever = this.rules.feverTime;
+      this.stats.fevers++;
+      this.events.push({ t: 'fever', on: true });
+    }
+  }
+
+  private tickFever(dt: number): void {
+    if (this.fever > 0) {
+      this.fever -= dt;
+      if (this.fever <= 0) { this.fever = 0; this.events.push({ t: 'fever', on: false }); }
+    } else if (this.feverMeter > 0) {
+      this.feverMeter = Math.max(0, this.feverMeter - this.rules.feverDecay * dt);
+    }
+  }
+
   private targetR(tier: number): number {
     return radiusOf(tier) * (this.liquify > 0 && tier !== NIP ? this.rules.liquifyShrink : 1);
   }
@@ -201,12 +238,16 @@ export class Game {
         const t = A.tier;
         const x = (A.x + B.x) / 2, y = (A.y + B.y) / 2;
         const chain = Math.max(this.chainOf(A), this.chainOf(B)) + 1;
+        const gold = (A.gold ? 1 : 0) + (B.gold ? 1 : 0);
+        const gmul = gold ? this.rules.goldMul + (gold - 1) * 2 : 1;
+        if (gold) this.stats.golds++;
         this.world.remove(A); this.world.remove(B);
         this.stats.merges++;
         if (t === MAX_TIER) {
-          const pts = this.award(mergePoints(t) + ASCEND_BONUS, chain);
+          const pts = this.award(mergePoints(t) + ASCEND_BONUS, chain, gmul);
           this.stats.ascends++;
-          this.events.push({ t: 'ascend', x, y, points: pts, combo: this.combo });
+          this.events.push({ t: 'ascend', x, y, points: pts, combo: this.combo, gold });
+          this.feed(t, chain, gold);
           this.nudge(x, y, 170, 520);
           continue;
         }
@@ -218,8 +259,10 @@ export class Game {
         nb.chain = chain; nb.ct = this.time;
         born.push(nb);
         if (t + 1 > this.stats.maxTier) this.stats.maxTier = t + 1;
-        const pts = this.award(mergePoints(t), chain);
-        this.events.push({ t: 'merge', tier: t + 1, x, y, points: pts, combo: this.combo, ax: A.x, ay: A.y, bx: B.x, by: B.y, ar: A.r, br: B.r });
+        const wasFever = this.fever > 0;
+        const pts = this.award(mergePoints(t), chain, gmul);
+        this.events.push({ t: 'merge', tier: t + 1, x, y, points: pts, combo: this.combo, ax: A.x, ay: A.y, bx: B.x, by: B.y, ar: A.r, br: B.r, gold, fever: wasFever });
+        this.feed(t + 1, chain, gold);
         this.nudge(x, y, CATS[t + 1].r * 1.6, 90 + 14 * t);
       } else if ((A.tier === NIP) !== (B.tier === NIP)) {
         const nip = A.tier === NIP ? A : B;
@@ -239,8 +282,9 @@ export class Game {
         cat.born = Math.max(cat.born, this.time - this.rules.overflowGrace * 0.5);
         cat.chain = chain; cat.ct = this.time;
         if (t + 1 > this.stats.maxTier) this.stats.maxTier = t + 1;
-        const pts = this.award(mergePoints(t), chain);
+        const pts = this.award(mergePoints(t), chain, cat.gold ? this.rules.goldMul : 1);
         this.events.push({ t: 'nip', tier: t + 1, x: cat.x, y: cat.y, points: pts, combo: this.combo, grew: true });
+        this.feed(t + 1, chain, 0);
       }
     }
     for (const b of born) this.world.add(b);
@@ -397,8 +441,9 @@ export class Game {
       score: this.score, combo: this.combo, comboTimer: this.comboTimer,
       gauge: this.gauge, gaugeNeed: this.gaugeNeed, charges: { ...this.charges },
       liquify: this.liquify, shake: this.shake, shakeTick: this.shakeTick, calm: this.calm,
+      queueGold: [...this.queueGold], fever: this.fever, feverMeter: this.feverMeter,
       revived: this.revived, stats: { ...this.stats },
-      bodies: this.world.bodies.map(b => [b.id, b.tier, b.x, b.y, b.vx, b.vy, b.a, b.w, b.r, b.rt, b.born, b.over, b.touched ? 1 : 0, b.chain, b.ct]),
+      bodies: this.world.bodies.map(b => [b.id, b.tier, b.x, b.y, b.vx, b.vy, b.a, b.w, b.r, b.rt, b.born, b.over, b.touched ? 1 : 0, b.chain, b.ct, b.gold ? 1 : 0]),
     };
   }
 
@@ -408,17 +453,19 @@ export class Game {
     g.time = s.time; g.nextId = s.nextId;
     g.spawnRng = { ...s.spawnRng }; g.fxRng = { ...s.fxRng };
     g.queue = [...s.queue]; g.spawned = s.spawned; g.nipAt = s.nipAt;
+    g.queueGold = s.queue.map((_, i) => !!s.queueGold?.[i]);
+    g.fever = s.fever ?? 0; g.feverMeter = s.feverMeter ?? 0;
     g.holdX = s.holdX; g.cooldown = s.cooldown;
     g.score = s.score; g.combo = s.combo; g.comboTimer = s.comboTimer;
     g.gauge = s.gauge; g.gaugeNeed = s.gaugeNeed; g.charges = { ...s.charges };
     g.shake = s.shake; g.shakeTick = s.shakeTick; g.calm = s.calm ?? 0;
-    g.revived = s.revived; g.stats = { ...s.stats };
+    g.revived = s.revived; g.stats = Object.assign({ golds: 0, fevers: 0 }, s.stats);
     for (const a of s.bodies) {
-      const [id, tier, x, y, vx, vy, ang, w, r, rt, born, over, touched, chain, ct] = a;
+      const [id, tier, x, y, vx, vy, ang, w, r, rt, born, over, touched, chain, ct, gold] = a;
       if (!(tier === NIP || (tier >= 0 && tier <= MAX_TIER)) || ![x, y, vx, vy, ang, w, r, rt].every(Number.isFinite)) throw new Error('bad body');
       const b = makeBody(id, tier, x, y, r, born);
       b.vx = vx; b.vy = vy; b.a = ang; b.w = w; b.rt = rt; b.over = over; b.touched = touched === 1;
-      b.chain = chain ?? 0; b.ct = ct ?? born;
+      b.chain = chain ?? 0; b.ct = ct ?? born; b.gold = gold === 1;
       g.world.add(b);
     }
     g.liquify = s.liquify;
@@ -437,6 +484,7 @@ export interface GameSnapshot {
   score: number; combo: number; comboTimer: number;
   gauge: number; gaugeNeed: number; charges: Record<Power, number>;
   liquify: number; shake: number; shakeTick: number; calm?: number;
+  queueGold?: boolean[]; fever?: number; feverMeter?: number;
   revived: boolean; stats: Stats;
   bodies: number[][];
 }

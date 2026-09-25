@@ -57,7 +57,7 @@ npx cap open ios                               # Xcode 열기
 
 1. Play Console → 앱 만들기 (게임, 무료).
 2. **스토어 등록정보**: `docs/STORE_LISTING.md`의 제목·짧은 설명·자세한 설명.
-3. **그래픽**: 아이콘 `store/icon-512-play.png`, 그래픽 이미지 `store/feature-1024x500-ko.png`(영어는 `-en`), 휴대폰 스크린샷 `store/screenshots/ko/play-*.jpg` (1080×1920, 6장).
+3. **그래픽**: 아이콘 `store/icon-512-play.png`, 그래픽 이미지 `store/feature-1024x500-ko.png`(영어는 `-en`), 휴대폰 스크린샷 `store/screenshots/ko/play-*.jpg` (1080×1920, 8장).
 4. **앱 콘텐츠**
    - 개인정보처리방침 URL
    - 데이터 보안: 이 버전은 **수집·공유하는 데이터 없음** (저장은 기기 안에만). 광고나 분석 도구를 넣으면 다시 작성해야 합니다.

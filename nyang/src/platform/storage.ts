@@ -3,6 +3,9 @@
 import { CATS } from '../data/cats';
 import type { GameSnapshot } from '../sim/game';
 import type { LangSetting } from '../i18n';
+import type { MissionState } from '../meta/missions';
+import type { Streak } from '../meta/progress';
+import { BOXES, HATS } from '../data/cosmetics';
 
 export interface DailyRecord { score: number; maxTier: number; maxCombo: number; drops: number; mod: string }
 
@@ -18,6 +21,12 @@ export interface Profile {
   daily: Record<string, DailyRecord>;
   settings: { sfx: boolean; bgm: boolean; vib: boolean; lite: boolean; lang: LangSetting };
   tutorial: number;
+  /** 집사 경험치 (누적) */
+  xp: number;
+  /** 장착한 상자 스킨과 모자 */
+  look: { box: string; hat: string };
+  missions?: MissionState;
+  streak: Streak;
 }
 
 const KEY = 'nyangche.profile.v1';
@@ -27,6 +36,7 @@ export function defaultProfile(): Profile {
   return {
     v: 1, best: 0, dex: CATS.map(() => 0), games: 0, merges: 0, ascends: 0, maxCombo: 0, daily: {},
     settings: { sfx: true, bgm: true, vib: true, lite: false, lang: 'auto' }, tutorial: 0,
+    xp: 0, look: { box: 'cardboard', hat: 'none' }, streak: { count: 0, best: 0, last: '' },
   };
 }
 
@@ -61,6 +71,13 @@ export function loadProfile(): Profile {
       daily: p.daily && typeof p.daily === 'object' ? p.daily : {},
       settings: { ...base.settings, ...(p.settings || {}), lang: ['auto', 'ko', 'en'].includes(p.settings?.lang) ? p.settings.lang : 'auto' },
       tutorial: Number(p.tutorial) || 0,
+      xp: Math.max(0, Number(p.xp) || 0),
+      look: {
+        box: BOXES.some(b => b.id === p.look?.box) ? p.look.box : 'cardboard',
+        hat: HATS.some(h => h.id === p.look?.hat) ? p.look.hat : 'none',
+      },
+      missions: p.missions && Array.isArray(p.missions.ids) ? p.missions : undefined,
+      streak: p.streak && typeof p.streak.count === 'number' ? { count: p.streak.count, best: Number(p.streak.best) || 0, last: String(p.streak.last || '') } : base.streak,
     };
   } catch {
     return base;

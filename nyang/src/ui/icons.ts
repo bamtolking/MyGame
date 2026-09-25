@@ -15,5 +15,9 @@ export const ICON = {
   heart: svg('<path d="M16 27S4 19.5 4 11.5A6.5 6.5 0 0 1 16 8a6.5 6.5 0 0 1 12 3.5C28 19.5 16 27 16 27Z" fill="currentColor"/>'),
   calendar: svg('<rect x="5" y="7" width="22" height="20" rx="4" fill="#fff"/><path d="M5 13h22" stroke="#23967C" stroke-width="2.4"/><path d="M11 4v5M21 4v5" stroke="#fff" stroke-width="2.8"/><circle cx="16" cy="20" r="3" fill="#FF6F7D"/>'),
   nip: svg('<circle cx="16" cy="16" r="11" fill="#7CCB5E" stroke="#2F6B25" stroke-width="2"/><path d="M6 13c6 4 14 4 20 0M6 20c6 3 14 3 20 0" stroke="#4E9A3A" stroke-width="2"/>'),
+  flame: svg('<path d="M16 3c1 5 7 7 7 14a7 7 0 0 1-14 0c0-3 1.5-5 3-6.5 0 3 1.5 4.5 3 4.5-1-4 0-8 1-12Z" fill="#FF7A45" stroke="#D9481B" stroke-width="1.6"/><path d="M16 17c2 2 3 3.5 3 5a3 3 0 0 1-6 0c0-1.5 1.2-3 3-5Z" fill="#FFD34D"/>'),
+  check: svg('<circle cx="16" cy="16" r="12" fill="#3FC7A6"/><path d="M10 16.5l4 4 8-9" stroke="#fff" stroke-width="3.2"/>'),
+  brush: svg('<path d="M22 4l6 6-11 11-6-6L22 4Z" fill="#FF9DB0" stroke="#C94E68" stroke-width="2"/><path d="M11 15l6 6c-1 5-6 7-12 6 2-2 1-5 2-8 1-2 2-3 4-4Z" fill="#8C5A3C"/>'),
+  fever: svg('<rect x="5" y="4" width="6" height="24" rx="3" fill="#FFB45C"/><rect x="21" y="4" width="6" height="24" rx="3" fill="#FF6F9A"/><path d="M16 9l1.6 3.4 3.7.5-2.7 2.6.7 3.7-3.3-1.8-3.3 1.8.7-3.7-2.7-2.6 3.7-.5Z" fill="#FFD34D" stroke="#D9A514" stroke-width="1"/>'),
   warn: svg('<path d="M16 4 29 27H3L16 4Z" fill="#FFD34D" stroke="#D9A514" stroke-width="2"/><path d="M16 12v7" stroke="#4A2E23" stroke-width="3"/><circle cx="16" cy="23" r="1.8" fill="#4A2E23"/>'),
 };

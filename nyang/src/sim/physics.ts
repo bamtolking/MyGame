@@ -21,6 +21,8 @@ export interface Body {
   hit: number;
   /** 연쇄 합체 단계와 그 시각 (콤보 계산용, 물리와 무관) */
   chain: number; ct: number;
+  /** 황금 고양이 (합체 점수 3배) */
+  gold: boolean;
   // 하위 스텝 임시값
   px: number; py: number; pa: number; ovx: number; ovy: number;
   /** 이번 하위 스텝의 바닥/왼벽/오른벽 밀어냄 양 */
@@ -49,7 +51,7 @@ const BOUNCE_MIN = 120;
 
 export function makeBody(id: number, tier: number, x: number, y: number, r: number, born: number): Body {
   return {
-    id, tier, x, y, vx: 0, vy: 0, a: 0, w: 0, r, rt: r, invM: 1 / (r * r), born, over: 0, touched: false, dead: false, hit: 0, chain: 0, ct: born,
+    id, tier, x, y, vx: 0, vy: 0, a: 0, w: 0, r, rt: r, invM: 1 / (r * r), born, over: 0, touched: false, dead: false, hit: 0, chain: 0, ct: born, gold: false,
     px: x, py: y, pa: 0, ovx: 0, ovy: 0, cf: 0, cl: 0, cr: 0,
   };
 }
