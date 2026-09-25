@@ -4,9 +4,9 @@ import { TILE } from '../../shared/constants.ts';
 import { T, SOLID, type GameMap } from '../../shared/map.ts';
 import { hash2, fbm } from '../../shared/rng.ts';
 import { ZONES } from '../../shared/data/zones.ts';
+import type { Painter } from './paint.ts';
 
 const CH = 8; const CW = CH * TILE;
-type Ctx = CanvasRenderingContext2D;
 export interface TileObj { kind: string; x: number; y: number; v: number; light?: string }
 
 function hex(c: string): [number, number, number] { const n = parseInt(c.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
@@ -16,7 +16,8 @@ export class Terrain {
   map: GameMap; colorMap: HTMLCanvasElement; miniMap: HTMLCanvasElement; scale = 1;
   private chunks = new Map<number, HTMLCanvasElement>(); private order: number[] = [];
   constructor(map: GameMap) { this.map = map; this.colorMap = this.buildColorMap(false); this.miniMap = this.buildColorMap(true); }
-  setScale(s: number): void { if (Math.abs(s - this.scale) > 0.01) { this.scale = s; this.chunks.clear(); this.order = []; } }
+  maxChunks = 40;
+  setScale(s: number): void { s = Math.min(1.75, s); if (Math.abs(s - this.scale) > 0.01) { this.scale = s; this.chunks.clear(); this.order = []; } }
 
   private tileColor(x: number, y: number, mini: boolean): [number, number, number] {
     const m = this.map; const i = y * m.w + x; const t = m.tiles[i]; const z = ZONES[m.zones[i]] ?? ZONES[1];
@@ -44,17 +45,16 @@ export class Terrain {
     c.putImageData(img, 0, 0); return cv;
   }
 
-  /** Draw ground for the visible world rect (ctx already in world space). Bakes at most `budget` new chunks. */
-  draw(c: Ctx, x0: number, y0: number, x1: number, y1: number, budget = 2): void {
+  /** Draw ground for the visible world rect. Bakes at most `budget` new chunks. */
+  draw(p: Painter, x0: number, y0: number, x1: number, y1: number, budget = 2): void {
     const cx0 = Math.max(0, Math.floor(x0 / CW)), cy0 = Math.max(0, Math.floor(y0 / CW));
     const cx1 = Math.min(Math.ceil(this.map.w / CH) - 1, Math.floor(x1 / CW)), cy1 = Math.min(Math.ceil(this.map.h / CH) - 1, Math.floor(y1 / CW));
-    c.imageSmoothingEnabled = true;
     // base colour everywhere first (covers chunks not baked yet)
-    c.drawImage(this.colorMap, x0 / TILE - 1, y0 / TILE - 1, (x1 - x0) / TILE + 2, (y1 - y0) / TILE + 2, x0 - TILE * 1.5, y0 - TILE * 1.5, x1 - x0 + TILE * 2, y1 - y0 + TILE * 2);
+    p.image(this.colorMap, x0 / TILE - 1, y0 / TILE - 1, (x1 - x0) / TILE + 2, (y1 - y0) / TILE + 2, x0 - TILE * 1.5, y0 - TILE * 1.5, x1 - x0 + TILE * 2, y1 - y0 + TILE * 2);
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
       const k = cy * 64 + cx; let ch = this.chunks.get(k);
-      if (!ch && budget > 0) { budget--; ch = this.bake(cx, cy); this.chunks.set(k, ch); this.order.push(k); if (this.order.length > 70) this.chunks.delete(this.order.shift()!); }
-      if (ch) c.drawImage(ch, cx * CW, cy * CW, CW, CW);
+      if (!ch && budget > 0) { budget--; ch = this.bake(cx, cy); this.chunks.set(k, ch); this.order.push(k); if (this.order.length > this.maxChunks) this.chunks.delete(this.order.shift()!); }
+      if (ch) p.image(ch, 0, 0, ch.width, ch.height, cx * CW, cy * CW, CW, CW);
     }
   }
   private bake(cx: number, cy: number): HTMLCanvasElement {

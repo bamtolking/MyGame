@@ -13,12 +13,12 @@ import { findPath } from '../../shared/path.ts';
 import { PF } from '../../shared/protocol.ts';
 import { Game } from '../game.ts';
 import { LocalTransport, WsTransport, wsUrl, detectServer, type Transport } from '../net.ts';
-import { Sound } from '../audio.ts';
+import { Sound } from '../audio/engine.ts';
 import * as store from '../storage.ts';
 import { h, $, clear, fmtTime } from './dom.ts';
 import { Joystick } from './joystick.ts';
 import { bagPanel, itemModal, smithPanel, talPanel, questPanel, mapPanel, rosterPanel, chatPanel, codexPanel } from './panels.ts';
-import { classIcon, talIcon } from '../render/sprites.ts';
+import { classIcon, talIcon } from '../render/art/icons.ts';
 
 export interface AppApi {
   me(): MeState; game(): Game; send(m: C2S): void; openSheet(name: string, arg?: unknown): void; closeSheet(): void;
@@ -65,7 +65,7 @@ export class App implements AppApi {
         h('button', { class: off ? '' : 'primary big', onclick: () => this.showCreate('offline') }, off ? '새 캐릭터 (오프라인)' : h('span', {}, '모험 시작', h('small', { class: 'block' }, 'AI 동료들과 함께하는 체험 월드'))),
         onlineBox,
         h('div', { class: 'row' }, h('button', { onclick: () => this.titleModal(codexPanel()) }, '요괴 도감'), h('button', { onclick: () => this.titleModal(this.settingsPanel(true)) }, '설정'))),
-      h('div', { class: 'foot' }, '이동만 하세요. 공격·부적은 자동입니다. · v0.1 알파', h('br'), store.storageOk ? '' : '⚠ 브라우저 저장소를 쓸 수 없어 진행이 저장되지 않습니다'),
+      h('div', { class: 'foot' }, '이동만 하세요. 공격·부적은 자동입니다. · v0.2 알파', h('br'), store.storageOk ? '' : '⚠ 브라우저 저장소를 쓸 수 없어 진행이 저장되지 않습니다'),
       h('div', { id: 'modal', class: 'hidden' }));
     this.root.append(t);
     const fill = (info: Awaited<ReturnType<typeof detectServer>>) => {
@@ -102,7 +102,7 @@ export class App implements AppApi {
     this.tr?.close();
     const tr: Transport = this.mode === 'offline' ? new LocalTransport(6) : new WsTransport(wsUrl(this.set.server));
     this.tr = tr;
-    this.g = new Game(tr, this.el.cv as HTMLCanvasElement, this.snd, this.set, this.hooks());
+    this.g = new Game(tr, this.el.cv, this.snd, this.set, this.hooks());
     tr.onStatus = (s, why) => {
       if (s === 'open') { this.retry = 0; this.el.loading.querySelector('p')!.textContent = '월드에 들어가는 중…'; tr.send({ t: 'hello', v: PROTOCOL_VERSION, token: store.token(this.mode), name: this.pendingHello!.name, cls: this.pendingHello!.cls }); }
       else if (this.mode === 'online') {
@@ -116,13 +116,14 @@ export class App implements AppApi {
   private fatal(msg: string): void { this.openModal(h('div', {}, h('h3', {}, '알림'), h('p', {}, msg), h('button', { class: 'primary wide', onclick: () => this.showTitle() }, '타이틀로'))); }
   private hooks() {
     return {
-      onWelcome: () => { this.el.loading.classList.add('hidden'); const me = this.g!.me; store.rememberChar(this.mode, { name: me.name, cls: me.cls, level: me.level, t: Date.now() }); this.renderStatic(); this.zoneSamples = null; this.questPath.t = 0; this.tutorial = me.level <= 1 && me.quest.main === 0; if (this.tutorial) this.el.tutorial.classList.remove('hidden'); this.snd.mood = 'calm'; },
+      onWelcome: () => { this.el.loading.classList.add('hidden'); const me = this.g!.me; store.rememberChar(this.mode, { name: me.name, cls: me.cls, level: me.level, t: Date.now() }); this.renderStatic(); this.zoneSamples = null; this.questPath.t = 0; this.tutorial = me.level <= 1 && me.quest.main === 0; if (this.tutorial) this.el.tutorial.classList.remove('hidden'); },
       onMe: (ch: Set<string>) => { if (ch.has('level')) store.rememberChar(this.mode, { name: this.g!.me.name, cls: this.g!.me.cls, level: this.g!.me.level, t: Date.now() }); if (this.sheet && (SHEET_KEYS[this.sheet.name] ?? []).some(k => ch.has(k))) this.sheetDirty = true; if (ch.has('slots') || ch.has('tals') || ch.has('level')) this.renderSlots(); },
       onRoster: () => { if (this.sheet?.name === 'roster') this.sheetDirty = true; },
       onChat: (name: string, text: string, sys: boolean) => this.addChat(name, text, sys),
       onAnn: (text: string, kind: string) => { this.ann.push(text); this.addChat('', text, true); if (kind === 'legend' || kind === 'boss') this.snd.play('quest'); },
       onToast: (text: string, color?: string, big?: boolean) => this.toast(text, color, big),
       onBoss: (b: BossInfo | null) => this.renderBoss(b),
+      onUlt: (cls: ClassId) => this.cutIn(cls),
       onWb: (w: WorldBossState) => this.renderWb(w),
       onError: (msg: string, fatal: boolean) => { if (fatal) { this.tr?.close(); this.fatal(msg); } else { this.toast(msg, '#ff9a9a'); this.snd.play('error'); } },
       onLevel: (lv: number) => { const el = this.el.lvlup; el.textContent = `LEVEL ${lv}`; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); if (TAL_SLOT_LEVELS.includes(lv)) this.toast(`부적 칸이 열렸습니다! 부적 메뉴에서 장착하세요`, '#ffe066', true); },
@@ -133,7 +134,8 @@ export class App implements AppApi {
   // ======================= DOM =======================
   private buildGameDom(): void {
     clear(this.root); const E = this.el;
-    E.cv = h('canvas', { id: 'cv' });
+    E.cv = h('div', { id: 'cv' });
+    E.combo = h('div', { class: 'combo' }, E.comboN = h('b', {}), h('small', {}, 'HIT')); E.cutin = h('div', { class: 'cutin' }); E.bossCard = h('div', { class: 'bosscard' });
     E.touch = h('div', { id: 'touch' });
     E.joyBase = h('div', { class: 'joy' }, E.joyKnob = h('div', { class: 'knob' }));
     E.hpfill = h('i', { class: 'hp' }); E.shfill = h('i', { class: 'sh' }); E.hptext = h('span', {});
@@ -160,7 +162,7 @@ export class App implements AppApi {
         E.toasts,
         h('div', { class: 'bl' }, E.chatlog, h('div', { class: 'row' }, h('button', { class: 'hudbtn chatbtn', onclick: () => this.openSheet('chat') }, '💬'), h('button', { class: 'hudbtn chatbtn', onclick: () => this.quickEmote() }, '😀'))),
         h('div', { class: 'br' }, E.slots, E.ult, E.auto),
-        E.down, E.lvlup, E.tutorial,
+        E.down, E.lvlup, E.tutorial, E.combo, E.cutin, E.bossCard,
         h('div', { class: 'xpbar' }, E.xpfill)),
       E.sheet = h('div', { id: 'sheet', class: 'hidden' }), h('div', { id: 'modal', class: 'hidden' }), E.loading);
     const down = () => { this.sheetPointer = true; }, up = () => { this.sheetPointer = false; };
@@ -194,7 +196,7 @@ export class App implements AppApi {
     const v = this.joy!.read(); g.input.x = v.x; g.input.y = v.y;
     if (this.tutorial && (v.x || v.y)) { this.tutorial = false; setTimeout(() => this.el.tutorial.classList.add('hidden'), 1200); }
     g.frame(t);
-    if (t - this.hudT > 100) { this.hudT = t; this.updateHud(); }
+    if (t - this.hudT > 100) { this.hudT = t; this.updateHud(); this.bossIntro(); this.renderCombo(g.combo); }
     this.updateBars();
   }
   private updateBars(): void {
@@ -217,7 +219,7 @@ export class App implements AppApi {
     const zone = ZONES[me.zone]; E.zone.textContent = zone ? `${zone.name}${me.zone >= 1 && me.zone <= 4 ? ` Lv${zone.minLv}~${zone.maxLv}` : ''}` : '';
     const humans = [...g.roster.values()].filter(r => !r.bot).length, bots = g.roster.size - humans;
     E.chan.textContent = `${g.online ? `CH${g.channel}` : '오프라인'} · 👥${humans}${bots ? `+AI${bots}` : ''}${g.online && g.rtt ? ` · ${Math.round(g.rtt)}ms` : ''}`;
-    if (me.zone !== this.lastZone) { const was = this.lastZone; this.lastZone = me.zone; this.snd.mood = g.wb.state === 'fight' ? 'boss' : me.zone === 0 ? 'town' : 'calm'; if (was >= 0 && zone) this.zoneBanner(zone.name, me.zone); }
+    if (me.zone !== this.lastZone) { const was = this.lastZone; this.lastZone = me.zone; if (was >= 0 && zone) this.zoneBanner(zone.name, me.zone); }
     // quest tracker
     const q = MAIN_QUESTS[me.quest.main];
     if (q) { E.questT.textContent = q.title; E.questP.textContent = q.n > 1 || q.kind === 'kill' || q.kind === 'killZone' ? `${q.desc.split('.')[0]} (${me.quest.prog}/${q.n})` : q.desc.split('.')[0]; }
@@ -239,7 +241,7 @@ export class App implements AppApi {
     // minimap
     this.drawMini();
     // world boss countdown text
-    if (g.wb.state !== 'idle') this.renderWb(g.wb, true);
+    if (g.wb.state !== 'idle') this.renderWb(g.wb);
     // re-render an open sheet only for fields it shows, at most every 400 ms, and never while the user is typing in it
     if (this.sheet && this.sheetDirty && now - this.sheetT > 400 && !this.sheetPointer && !(document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement || document.activeElement instanceof HTMLSelectElement)) { this.sheetDirty = false; this.renderSheet(); }
     // menu badges
@@ -295,13 +297,36 @@ export class App implements AppApi {
     c.fillStyle = '#fff'; c.strokeStyle = '#000'; c.lineWidth = 2; c.beginPath(); c.arc(S / 2, S / 2, 7, 0, 6.3); c.fill(); c.stroke();
     c.restore(); c.strokeStyle = 'rgba(255,224,138,0.8)'; c.lineWidth = 4; c.beginPath(); c.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); c.stroke();
   }
+  private lastBoss = -1; private comboShown = 0;
+  /** Boss title card the first time a boss comes into view (checked with the HUD tick). */
+  private bossIntro(): void {
+    const g = this.g; const b = g?.boss; if (!g || !b || b.id === this.lastBoss) return; const m = g.mons.get(b.id); const me = g.myPos();
+    if (!m || m.dieT > 0 || Math.hypot(m.x - me.x, m.y - me.y) > 640) return;
+    this.lastBoss = b.id; const d = MONSTERS[b.type]; this.titleCard(d.name, d.key === 'boss_bulgasari' ? '핏빛 달의 재앙' : ZONES[d.zone] ? `${ZONES[d.zone].name}의 주인` : '보스');
+  }
+  private renderCombo(n: number): void {
+    const E = this.el.combo; if (n === this.comboShown) return;
+    if (n < 5) { if (this.comboShown >= 5) E.classList.remove('show'); this.comboShown = n; return; }
+    this.el.comboN.textContent = String(n); E.classList.add('show'); E.classList.toggle('hot', n >= 50); E.classList.toggle('fire', n >= 200);
+    if (n > this.comboShown) { E.classList.remove('pop'); void E.offsetWidth; E.classList.add('pop'); } this.comboShown = n;
+  }
+  /** Full-width ultimate cut-in: class portrait sweeping across a slanted band with the skill name. */
+  private cutIn(cls: ClassId): void {
+    const E = this.el.cutin; const c = CLASSES[cls]; clear(E); E.style.setProperty('--c', c.color);
+    E.append(h('div', { class: 'band' }), h('img', { src: classIcon(cls, 160) }), h('div', { class: 'name' }, h('b', {}, c.ultName), h('small', {}, ULT_GLYPH[cls])));
+    E.classList.remove('show'); void E.offsetWidth; E.classList.add('show');
+  }
+  private titleCard(name: string, sub: string): void {
+    const E = this.el.bossCard; clear(E); E.append(h('small', {}, sub), h('b', {}, name), h('i', {}));
+    E.classList.remove('show'); void E.offsetWidth; E.classList.add('show'); this.snd.duck(0.4, 1.5);
+  }
   private renderBoss(b: BossInfo | null): void {
     const E = this.el.boss; if (!b) { E.classList.add('hidden'); return; } E.classList.remove('hidden'); clear(E);
     const def = MONSTERS[b.type]; E.append(h('div', { class: 'bn' }, h('b', {}, def.name), b.enr ? h('span', { class: 'chip red' }, '분노') : null, h('small', {}, `${Math.ceil(b.hp / b.maxHp * 100)}%`)), h('div', { class: 'bb' }, h('i', { style: { width: `${b.hp / b.maxHp * 100}%` } })));
   }
-  private renderWb(w: WorldBossState, tickOnly = false): void {
+  private renderWb(w: WorldBossState): void {
     const E = this.el.wb; if (!E) return;
-    if (w.state === 'idle') { E.classList.add('hidden'); if (!tickOnly && this.g) this.snd.mood = this.g.me.zone === 0 ? 'town' : 'calm'; return; }
+    if (w.state === 'idle') { E.classList.add('hidden'); return; }
     E.classList.remove('hidden'); clear(E); const g = this.g!; const secs = Math.max(0, Math.round(w.t));
     const far = Math.hypot(g.myPos().x - g.map.altar.x, g.myPos().y - g.map.altar.y) > 900;
     E.append(h('span', {}, w.state === 'warn' ? `🌕 핏빛 달 — 불가사리 출현까지 ${fmtTime(secs)}` : `🔥 불가사리 토벌 중! ${fmtTime(secs)}`));
@@ -357,15 +382,18 @@ export class App implements AppApi {
   settingsPanel(onTitle: boolean): HTMLElement {
     const S = this.set; const save = () => { store.saveSettings(S); this.snd.setVolumes(S.sfx, S.bgm); this.g?.applySettings(); };
     const slider = (label: string, key: 'sfx' | 'bgm') => h('label', { class: 'set' }, h('span', {}, label), h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: S[key], oninput: (e: Event) => { S[key] = Number((e.target as HTMLInputElement).value); save(); } }));
-    const toggle = (label: string, key: 'low' | 'dmgNums' | 'shake' | 'names') => h('label', { class: 'set' }, h('span', {}, label), h('input', { type: 'checkbox', checked: S[key], onchange: (e: Event) => { S[key] = (e.target as HTMLInputElement).checked; save(); } }));
+    const QL: [store.Quality, string][] = [['high', '고화질'], ['mid', '보통'], ['low', '저사양']];
+    const quality = h('div', { class: 'seg' }, ...QL.map(([q, label]) => h('button', { class: S.quality === q ? 'on' : '', onclick: (e: Event) => { S.quality = q; save(); for (const b of quality.children) b.classList.toggle('on', b === e.currentTarget); } }, label)));
+    const toggle = (label: string, key: 'dmgNums' | 'shake' | 'names') => h('label', { class: 'set' }, h('span', {}, label), h('input', { type: 'checkbox', checked: S[key], onchange: (e: Event) => { S[key] = (e.target as HTMLInputElement).checked; save(); } }));
     const server = h('input', { type: 'text', value: S.server, placeholder: '예: 192.168.0.10:8080 또는 game.example.com' }) as HTMLInputElement;
     server.addEventListener('change', () => { S.server = server.value.trim(); save(); });
     const g = this.g;
     return h('div', {},
       !onTitle && g ? h('div', { class: 'grid2' }, h('button', { onclick: () => this.openSheet('roster') }, '👥 접속자'), h('button', { onclick: () => this.openSheet('codex') }, '📖 요괴 도감'), h('button', { onclick: () => this.openSheet('chat') }, '💬 채팅'), h('button', { onclick: () => this.openSheet('smith') }, '⚒ 대장간')) : null,
-      h('h3', {}, '소리 · 화면'), slider('효과음', 'sfx'), slider('배경음', 'bgm'), toggle('저사양 모드 (빛·파티클 줄임)', 'low'), toggle('피해 숫자 표시', 'dmgNums'), toggle('이름표 표시', 'names'),
+      h('h3', {}, '소리 · 화면'), slider('효과음', 'sfx'), slider('배경음', 'bgm'), h('div', { class: 'set' }, h('span', {}, '그래픽'), quality), h('small', { class: 'hint' }, '고화질: 빛 번짐·왜곡 효과·고해상도 / 저사양: 효과를 줄여 배터리 절약'),
+      toggle('화면 흔들림', 'shake'), toggle('피해 숫자 표시', 'dmgNums'), toggle('이름표 표시', 'names'),
       h('h3', {}, '온라인 서버'), h('small', { class: 'hint' }, '게임 서버(npm start)를 켠 주소. 서버가 이 페이지를 직접 제공하면 비워두세요.'), server,
-      !onTitle && g ? h('div', { class: 'card' }, h('small', {}, `${g.online ? '온라인' : '오프라인 체험 월드'} · ${g.serverName} · 채널 ${g.channel} · FPS ${Math.round(g.fps)}${g.online ? ` · 핑 ${Math.round(g.rtt)}ms` : ''}`)) : null,
+      !onTitle && g ? h('div', { class: 'card' }, h('small', {}, `${g.online ? '온라인' : '오프라인 체험 월드'} · ${g.serverName} · 채널 ${g.channel} · FPS ${Math.round(g.fps)} · ${g.r?.p.kind === 'gl' ? 'WebGL' : 'Canvas'}${g.online ? ` · 핑 ${Math.round(g.rtt)}ms` : ''}`)) : null,
       h('h3', {}, '저장'), this.mode === 'offline' || onTitle ? this.backupBox() : h('small', { class: 'hint' }, '온라인 캐릭터는 서버에 저장됩니다. 이 기기의 접속 코드(백업)로 다른 기기에서도 이어할 수 있습니다.'),
       !onTitle ? h('button', { class: 'wide', onclick: () => { if (this.tr instanceof LocalTransport) this.tr.saveNow(); this.showTitle(); } }, '타이틀로 나가기') : null);
   }

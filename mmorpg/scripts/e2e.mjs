@@ -1,4 +1,5 @@
-// Real-browser test (headless Chromium, touch emulation). Offline flow on 3 phone viewports + 2-player online session.
+// Real-browser test (headless Chromium, touch emulation). Offline flow on 3 phone viewports (WebGL high/mid and the
+// Canvas2D fallback) + 2-player online session.
 // Needs a build first (npm run build). Screenshots → e2e-out/, log → e2e-out/report.txt
 import { chromium } from 'playwright-core';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
@@ -8,7 +9,13 @@ import { spawn } from 'node:child_process';
 const exe = process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 mkdirSync('e2e-out', { recursive: true });
 const report = []; const log = (m) => { console.log(m); report.push(m); };
-const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--use-gl=swiftshader', '--autoplay-policy=no-user-gesture-required'] });
+const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
+/** Web fonts come from Google Fonts; an unreachable font server is not an app error. */
+const watch = (page, errors) => {
+  page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+  page.on('console', m => { if (m.type() === 'error' && !m.text().startsWith('Failed to load resource')) errors.push('console: ' + m.text()); });
+  page.on('requestfailed', r => { if (!/fonts\.(googleapis|gstatic)\.com/.test(r.url())) errors.push('request failed: ' + r.url()); });
+};
 let failures = 0; const check = (ok, msg) => { if (!ok) { failures++; log('  ✗ ' + msg); } else log('  ✓ ' + msg); };
 
 const AUTOPILOT = () => {
@@ -23,14 +30,24 @@ const AUTOPILOT = () => {
     if (g.me.ult >= 100 && g.me.zone !== 0) g.send({ t: 'ult' });
   }, 120);
 };
+/** Tap until the UI reacts. Under software WebGL a frame can take ~0.4 s and Chromium then reads a tap as a long-press,
+ *  so a lost tap is retried; a control that never responds still fails. */
+const tapUntil = async (page, sel, cond, tries = 3) => {
+  for (let i = 0; i < tries; i++) { await page.tap(sel); for (let k = 0; k < 15; k++) { await page.waitForTimeout(100); if (await page.evaluate(cond)) return true; } }
+  return false;
+};
 const state = (page) => page.evaluate(() => { const g = window.__app.g; if (!g?.ready) return null; return { lvl: g.me.level, xp: g.me.xp, hp: g.me.hp, zone: g.me.zone, kills: g.me.lstats.kills, quest: g.me.quest.main, auto: g.me.auto, players: g.players.size, mons: g.mons.size, fps: Math.round(g.fps), roster: g.roster.size, humans: [...g.roster.values()].filter(r => !r.bot).length, pos: g.myPos() }; });
 
-async function offline(name, viewport) {
-  log(`\n[offline] ${name} ${viewport.width}x${viewport.height}`);
+async function offline(name, viewport, quality) {
+  log(`\n[offline] ${name} ${viewport.width}x${viewport.height}, graphics ${quality}`);
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  const page = await ctx.newPage(); const errors = [];
-  page.on('pageerror', e => errors.push('pageerror: ' + e.message)); page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  const page = await ctx.newPage(); const errors = []; watch(page, errors);
   await page.goto('file://' + resolve('play/index.html')); await page.waitForSelector('#title');
+  // Pick the graphics level like a player would (saved setting + reload). Not via addInitScript: a localStorage write at
+  // document creation during page.reload() intermittently wiped the whole origin's storage in headless Chromium
+  // (5 of 20 reloads with the init script, 0 of 11 without), which looked like a lost save.
+  await page.evaluate((q) => localStorage.setItem('moonlit.settings', JSON.stringify({ quality: q })), quality);
+  await page.reload(); await page.waitForSelector('#title');
   await page.screenshot({ path: `e2e-out/${name}-01-title.png` });
   await page.tap('text=모험 시작'); await page.waitForSelector('#create');
   await page.tap('.classcard >> nth=1'); await page.fill('#create input', '이투이');
@@ -39,6 +56,8 @@ async function offline(name, viewport) {
   await page.waitForTimeout(800);
   let s = await state(page); check(s && s.lvl === 1 && s.zone === 0 && s.roster === 7, `entered town as Lv1 with 6 AI companions (roster ${s?.roster})`);
   await page.screenshot({ path: `e2e-out/${name}-03-town.png` });
+  const ri = await page.evaluate(() => window.__app.g.r.info());
+  check(ri.painter === (quality === 'low' ? '2d' : 'gl') && ri.draws > 0 && ri.quads > 50, `renderer: ${ri.painter === 'gl' ? 'WebGL' : 'Canvas2D'} (${quality}), ${ri.quads} sprites in ${ri.draws} draw calls, art scale ${ri.art}`);
   // real touch drag on the play area moves the character
   const p0 = s.pos; const box = await page.locator('#touch').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height * 0.6;
@@ -48,25 +67,26 @@ async function offline(name, viewport) {
   await page.waitForTimeout(900); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   s = await state(page); check(s.pos.x > p0.x + 30, `touch-drag joystick moved the player (+${Math.round(s.pos.x - p0.x)}px)`);
   // hunt with an autopilot for 30 s
-  await page.evaluate(AUTOPILOT); await page.waitForTimeout(30000);
+  await page.evaluate(AUTOPILOT); await page.evaluate(() => { window.__fx = { parts: 0, combo: 0, waves: 0 }; setInterval(() => { const g = window.__app.g; const f = window.__fx; f.parts = Math.max(f.parts, g.fx.parts.length); f.combo = Math.max(f.combo, g.combo); f.waves = Math.max(f.waves, g.fx.waves.length); }, 100); });
+  await page.waitForTimeout(30000);
   s = await state(page); check(s.kills > 20 && s.lvl >= 2, `hunting works: Lv${s.lvl}, ${s.kills} kills, quest ${s.quest}, ${s.mons} monsters in view, ${s.fps} fps`);
+  const fxs = await page.evaluate(() => window.__fx); check(fxs.parts > 40 && fxs.combo >= 5, `combat effects: up to ${fxs.parts} particles, combo ${fxs.combo}, ${fxs.waves} shockwaves at once`);
   await page.screenshot({ path: `e2e-out/${name}-04-hunt.png` });
   // every sheet opens and closes
   for (const k of ['bag', 'tal', 'quest', 'map', 'settings']) {
-    await page.tap(`.tr .menu button[data-k="${k}"]`); await page.waitForTimeout(250);
-    const open = await page.evaluate(() => !document.getElementById('sheet').classList.contains('hidden'));
+    const open = await tapUntil(page, `.tr .menu button[data-k="${k}"]`, () => !document.getElementById('sheet').classList.contains('hidden'));
     if (k === 'bag' || k === 'map' || k === 'tal') await page.screenshot({ path: `e2e-out/${name}-05-${k}.png` });
-    await page.tap('#sheet .close'); await page.waitForTimeout(150);
-    const closed = await page.evaluate(() => document.getElementById('sheet').classList.contains('hidden'));
+    const closed = await tapUntil(page, '#sheet .close', () => document.getElementById('sheet').classList.contains('hidden'));
     check(open && closed, `sheet ${k} opens/closes`);
   }
   // chat bubble round-trip
-  await page.tap('.chatbtn >> nth=0'); await page.fill('#sheet input', '안녕하세요!'); await page.tap('#sheet button.primary');
-  let chatOk = false; for (let i = 0; i < 20 && !chatOk; i++) { await page.waitForTimeout(100); chatOk = await page.evaluate(() => window.__app.chatLines().some(l => l.text === '안녕하세요!')); }
+  await tapUntil(page, '.chatbtn >> nth=0', () => !!document.querySelector('#sheet:not(.hidden) input')); await page.fill('#sheet input', '안녕하세요!'); await page.press('#sheet input', 'Enter');
+  let chatOk = false; for (let i = 0; i < 40 && !chatOk; i++) { await page.waitForTimeout(100); chatOk = await page.evaluate(() => window.__app.chatLines().some(l => l.text === '안녕하세요!')); }
+  if (!chatOk) { await page.screenshot({ path: `e2e-out/${name}-chat-fail.png` }); log('    chat debug: ' + JSON.stringify(await page.evaluate(() => ({ sheet: window.__app.sheet?.name ?? null, lines: window.__app.chatLines().slice(-4).map(l => l.text), active: document.activeElement?.tagName })))); }
   check(chatOk, 'chat message comes back from the server into the chat log');
   // AUTO hunt: server-side AI takes over, joystick cancels it
   await page.evaluate(() => { window.__pilotOff = true; window.__app.joy.x = 0; window.__app.joy.y = 0; });
-  await page.tap('.autobtn'); await page.waitForTimeout(500); const a0 = await state(page);
+  await tapUntil(page, '.autobtn', () => !!window.__app.g.me.auto); const a0 = await state(page);
   let path = 0, wasDown = false, prev = a0.pos;
   for (let i = 0; i < 16; i++) { await page.waitForTimeout(500); const a = await state(page); path += Math.hypot(a.pos.x - prev.x, a.pos.y - prev.y); prev = a.pos; if (a.hp <= 0) wasDown = true; }
   check(a0.auto && (path > 60 || wasDown), `AUTO mode drives the character (walked ${Math.round(path)}px in 8s${wasDown ? ', was knocked down meanwhile' : ''})`);
@@ -77,7 +97,9 @@ async function offline(name, viewport) {
   const before = await state(page);
   await page.evaluate(() => window.__app.tr.saveNow());
   await page.reload(); await page.waitForSelector('#title');
-  const cont = await page.$('text=이어하기'); check(!!cont, 'title offers 이어하기 after reload');
+  const cont = await page.waitForSelector('text=이어하기', { timeout: 4000 }).catch(() => null);
+  if (!cont) { await page.screenshot({ path: `e2e-out/${name}-resume-fail.png` }); log('    resume debug: ' + JSON.stringify(await page.evaluate(() => ({ keys: Object.keys(localStorage), char: localStorage.getItem('moonlit.char.offline'), title: document.querySelector('#title .menu')?.textContent })))); }
+  check(!!cont, 'title offers 이어하기 after reload');
   if (cont) { await cont.tap(); await page.waitForFunction(() => window.__app?.g?.ready, null, { timeout: 8000 }); await page.waitForTimeout(500); const r = await state(page); check(r.lvl === before.lvl && r.kills >= before.kills - 5, `resumed Lv${r.lvl} (was Lv${before.lvl}), kills ${r.kills}`); }
   check(errors.length === 0, `no console/page errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
   await ctx.close();
@@ -92,7 +114,7 @@ async function online() {
   const pages = [];
   for (const [i, nm] of [[0, '온라인하나'], [1, '온라인둘']]) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-    const page = await ctx.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+    const page = await ctx.newPage(); const errors = []; watch(page, errors);
     await page.goto(`http://127.0.0.1:${port}/`); await page.waitForSelector('.online-box button', { timeout: 6000 });
     await page.tap('.online-box button'); await page.waitForSelector('#create'); await page.tap(`.classcard >> nth=${i * 2}`); await page.fill('#create input', nm); await page.tap('text=퇴마 시작!');
     await page.waitForFunction(() => window.__app?.g?.ready, null, { timeout: 8000 }); pages.push({ page, errors, ctx });
@@ -112,9 +134,9 @@ async function online() {
 }
 
 const only = process.env.E2E_ONLY;
-if (!only || only === 'phone') await offline('phone-390x844', { width: 390, height: 844 });
-if (!only || only === 'small') await offline('small-360x640', { width: 360, height: 640 });
-if (!only || only === 'land') await offline('landscape-844x390', { width: 844, height: 390 });
+if (!only || only === 'phone') await offline('phone-390x844', { width: 390, height: 844 }, 'high');
+if (!only || only === 'small') await offline('small-360x640', { width: 360, height: 640 }, 'low');
+if (!only || only === 'land') await offline('landscape-844x390', { width: 844, height: 390 }, 'mid');
 if (!only || only === 'online') await online();
 await browser.close();
 log(failures ? `\nE2E FAILED (${failures})` : '\nE2E OK'); writeFileSync('e2e-out/report.txt', report.join('\n'));

@@ -10,7 +10,7 @@ import { TAL_SLOT_LEVELS, TILE, TAL_MAX_LV } from '../../shared/constants.ts';
 import { EMOTES } from '../../shared/protocol.ts';
 import { fmtNum } from '../../shared/math.ts';
 import { h } from './dom.ts';
-import { itemIcon, talIcon, classIcon, npcIcon, monIcon } from '../render/sprites.ts';
+import { itemIcon, talIcon, classIcon, npcIcon, monIcon } from '../render/art/icons.ts';
 import type { AppApi } from './app.ts';
 
 const pct = (v: number) => `${Math.round(v * 1000) / 10}%`;

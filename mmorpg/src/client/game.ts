@@ -3,26 +3,29 @@ import { DT, PLAYER_R, TICK_HZ } from '../shared/constants.ts';
 import { mapFromWire, isWalkable, type GameMap } from '../shared/map.ts';
 import { stepPlayer } from '../shared/movement.ts';
 import { decodeSnap, PF, type S2C, type Ev, type BossInfo, type WorldBossState, type C2S } from '../shared/protocol.ts';
-import type { MeState, RosterEntry } from '../shared/types.ts';
+import type { ClassId, MeState, RosterEntry } from '../shared/types.ts';
 import { MONSTERS } from '../shared/data/monsters.ts';
 import { TAL_KINDS } from '../shared/data/talismans.ts';
 import { CLASSES } from '../shared/data/classes.ts';
 import { RARITY_COLORS } from '../shared/data/items.ts';
-import { Renderer, type REnt, type View } from './render/renderer.ts';
-import { FxSystem } from './render/fx.ts';
+import { Renderer, DIE_T, type REnt, type View, type Quality } from './render/world.ts';
+import { FxSystem, hexCol } from './render/fx.ts';
+import { EMIT } from './render/paint.ts';
+import { ZONE_SONG } from './audio/music.ts';
 import type { Transport } from './net.ts';
-import type { Sound } from './audio.ts';
+import type { Sound } from './audio/engine.ts';
 import type { Settings } from './storage.ts';
-import { emoteText } from './render/sprites.ts';
+import { emoteText } from './render/art/icons.ts';
 
 interface Snap { tick: number; x: number; y: number; hp: number; f: number; face: number }
 interface Ent extends REnt { snaps: Snap[]; lastTick: number }
 const INTERP = 2.8; // ticks of interpolation delay (snapshots arrive every 2 ticks)
+const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
 export interface GameHooks {
   onWelcome(): void; onMe(changed: Set<string>): void; onRoster(): void; onChat(name: string, text: string, sys: boolean, id: number): void;
   onAnn(text: string, kind: string): void; onToast(text: string, color?: string, big?: boolean): void; onBoss(b: BossInfo | null): void; onWb(w: WorldBossState): void;
-  onError(msg: string, fatal: boolean): void; onLevel(level: number): void; onHurt(): void;
+  onError(msg: string, fatal: boolean): void; onLevel(level: number): void; onHurt(): void; onUlt(cls: ClassId): void;
 }
 
 export class Game {
@@ -36,10 +39,12 @@ export class Game {
   private corrX = 0; private corrY = 0; private acc = 0; private lastIx = 0; private lastIy = 0;
   private evq: { tick: number; e: Ev }[] = [];
   input = { x: 0, y: 0 }; lastFrame = 0; fps = 60; private fpsAcc = 0; private fpsN = 0; rtt = 0; private pingT = 0;
-  canvas: HTMLCanvasElement; private downToastT = 0; private slowSecs = 0; private autoOffT = 0;
+  stage: HTMLElement; private downToastT = 0; private slowSecs = 0; private autoOffT = 0;
+  private visLag = 0; private lastHit = new Map<number, number>(); private swing = new Map<number, number>(); private hurtT = -99; private musicT = 0;
+  combo = 0; private comboT = 0;
 
-  constructor(tr: Transport, canvas: HTMLCanvasElement, snd: Sound, set: Settings, hooks: GameHooks) {
-    this.tr = tr; this.canvas = canvas; this.snd = snd; this.set = set; this.hooks = hooks;
+  constructor(tr: Transport, stage: HTMLElement, snd: Sound, set: Settings, hooks: GameHooks) {
+    this.tr = tr; this.stage = stage; this.snd = snd; this.set = set; this.hooks = hooks;
     tr.onMessage = (d) => this.onMessage(d);
   }
   send(m: C2S): void { this.tr.send(m); }
@@ -47,7 +52,8 @@ export class Game {
   // ---------- time ----------
   estTick(now = performance.now()): number { return this.tickBase + (now - this.timeBase) / (1000 / TICK_HZ); }
   serverTime(): number { return this.estTick() * DT; }
-  renderTick(): number { return this.estTick() - INTERP; }
+  /** Interpolation clock; lags a little extra after a hit-stop and catches up smoothly. */
+  renderTick(): number { return this.estTick() - INTERP - this.visLag; }
 
   // ---------- messages ----------
   onMessage(d: string | Uint8Array): void {
@@ -58,23 +64,26 @@ export class Game {
         this.map = mapFromWire(m.map); this.myId = m.id; this.me = m.me; this.channel = m.channel; this.serverName = m.server; this.online = m.online;
         this.roster.clear(); for (const r of m.roster) this.roster.set(r.id, r);
         this.tickBase = m.tick; this.timeBase = performance.now(); this.synced = true;
-        this.r = new Renderer(this.canvas, this.map); this.r.low = this.set.low; this.r.showNames = this.set.names; this.r.resize();
-        this.fx = new FxSystem({ entPos: (k, id) => this.entPos(k, id), serverTime: () => this.serverTime(), me: () => this.hasPos ? { x: this.predX + this.corrX, y: this.predY + this.corrY } : null, solidAt: (x, y) => !isWalkable(this.map, x, y), players: () => this.visiblePlayers() }, this.r.spr);
-        this.fx.low = this.set.low; this.r.fx = this.fx;
-        this.players.clear(); this.mons.clear(); this.pending = []; this.hasPos = false; this.evq = [];
+        this.r?.p.destroy(); this.stage.replaceChildren();
+        this.r = new Renderer(this.stage, this.map, this.set.quality); this.r.showNames = this.set.names;
+        this.fx = new FxSystem({ entPos: (k, id) => this.entPos(k, id), serverTime: () => this.serverTime(), me: () => this.hasPos ? { x: this.predX + this.corrX, y: this.predY + this.corrY } : null, solidAt: (x, y) => !isWalkable(this.map, x, y), players: () => this.visiblePlayers() }, this.r.art);
+        this.r.fx = this.fx; this.fx.shakeOn = this.set.shake; this.r.setQuality(this.set.quality);
+        this.r.art.prewarm([m.me.cls, ...(['sword', 'archer', 'shaman'] as ClassId[]).filter(c => c !== m.me.cls)], MONSTERS.filter(d => d.zone === (m.me.zone || 1)).map(d => d.key));
+        this.players.clear(); this.mons.clear(); this.pending = []; this.hasPos = false; this.evq = []; this.visLag = 0;
         this.wb = m.wb; this.ready = true; this.hooks.onWelcome(); this.hooks.onWb(this.wb); break;
       }
       case 'me': {
-        const ch = new Set(Object.keys(m.d)); const prevLv = this.me.level;
+        const ch = new Set(Object.keys(m.d)); const prevLv = this.me.level; const prevZone = this.me.zone;
         Object.assign(this.me, m.d); if (ch.has('level') && this.me.level > prevLv) this.hooks.onLevel(this.me.level);
+        if (ch.has('zone') && this.me.zone !== prevZone && this.r) this.r.art.prewarm([], MONSTERS.filter(d => d.zone === this.me.zone).map(d => d.key));
         this.hooks.onMe(ch); break;
       }
       case 'ev': for (const e of m.e) this.queueEv(m.tick, e); break;
       case 'roster': { for (const r of m.add ?? []) this.roster.set(r.id, r); for (const id of m.del ?? []) { this.roster.delete(id); this.players.delete(id); } this.hooks.onRoster(); break; }
       case 'chat': { this.hooks.onChat(m.name, m.text, !!m.sys, m.id); const p = this.players.get(m.id); if (p) p.bubble = { text: m.text, until: performance.now() + 4500 }; break; }
-      case 'ann': this.hooks.onAnn(m.text, m.kind); if (m.kind === 'legend') this.snd.play('legend'); else if (m.kind === 'boss' && m.text.includes('핏빛')) this.snd.play('horn'); break;
+      case 'ann': this.hooks.onAnn(m.text, m.kind); if (m.kind === 'legend') this.snd.play('legend'); else if (m.kind === 'boss' && m.text.includes('핏빛')) { this.snd.play('horn'); this.snd.duck(0.5, 2); } break;
       case 'boss': this.boss = m.b; this.hooks.onBoss(m.b); break;
-      case 'wb': { const was = this.wb.state; this.wb = m.w; this.hooks.onWb(m.w); if (was !== m.w.state && m.w.state === 'fight') this.snd.mood = 'boss'; break; }
+      case 'wb': { this.wb = m.w; this.hooks.onWb(m.w); break; }
       case 'pong': this.rtt = performance.now() - m.n; break;
       case 'err': this.hooks.onError(m.msg, !!m.fatal); break;
     }
@@ -121,6 +130,9 @@ export class Game {
       // adaptive resolution: sustained low FPS lowers the render scale (never below 1.0x)
       if (this.fps < 42 && !document.hidden) { if (++this.slowSecs >= 3 && this.r.dprCap > 1) { this.r.dprCap = Math.max(1, this.r.dprCap - 0.25); this.r.resize(); this.slowSecs = 0; } } else this.slowSecs = 0;
     }
+    // hit-stop: visuals run at a crawl, the interpolation clock falls behind and then catches up
+    const stop = this.fx.hitstop > 0; const vdt = stop ? dt * 0.06 : dt;
+    this.visLag = stop ? Math.min(4, this.visLag + (dt - vdt) * TICK_HZ) : Math.max(0, this.visLag - dt * TICK_HZ * 0.45);
     // fixed 20 Hz input/prediction
     this.acc += dt; let steps = 0;
     while (this.acc >= DT && steps < 4) { this.acc -= DT; steps++; this.inputStep(); }
@@ -130,20 +142,36 @@ export class Game {
     // interpolate everyone
     const rt = this.renderTick();
     for (const e of this.players.values()) this.interp(e, rt);
-    for (const [id, e] of this.mons) { this.interp(e, rt); if (e.dieT > 0) { e.dieT += dt; if (e.dieT > 0.35) this.mons.delete(id); } }
+    for (const [id, e] of this.mons) { this.interp(e, rt); if (e.dieT > 0) { e.dieT += vdt; if (e.dieT > DIE_T) this.mons.delete(id); } }
     // events whose time has come
-    if (this.evq.length) { const keep: typeof this.evq = []; for (const q of this.evq) { if (q.tick <= rt + 0.5) this.playEv(q.e, false); else keep.push(q); } this.evq = keep; }
+    if (this.evq.length) { const keep: typeof this.evq = []; for (const q of this.evq) { if (q.tick <= rt + 0.5) this.playEv(q.e); else keep.push(q); } this.evq = keep; }
     const alpha = this.acc / DT; const mx = this.prevX + (this.predX - this.prevX) * alpha + this.corrX, my = this.prevY + (this.predY - this.prevY) * alpha + this.corrY;
     const mine = this.players.get(this.myId);
     if (mine && this.hasPos && !(mine.f & PF.DOWN) && !this.me.auto) { mine.x = mx; mine.y = my; if (this.input.x || this.input.y) mine.face = ((Math.atan2(this.input.y, this.input.x) / (Math.PI * 2) * 255) + 256) % 256; }
-    this.fx.update(dt);
+    if (this.combo > 0 && (this.comboT -= dt) <= 0) this.combo = 0;
+    this.fx.update(vdt, dt);
+    const meX = mine?.x ?? this.predX, meY = mine?.y ?? this.predY;
     const view: View = {
-      myId: this.myId, meX: mine?.x ?? this.predX, meY: mine?.y ?? this.predY, players: [...this.players.values()], mons: [...this.mons.values()], roster: this.roster,
+      myId: this.myId, meX, meY, players: [...this.players.values()], mons: [...this.mons.values()], roster: this.roster,
       renderTime: rt * DT, serverTime: this.serverTime(), zone: this.me.zone ?? 0, bloodMoon: this.wb.state !== 'idle', downed: (this.me.downed ?? 0) > 0,
+      hpFrac: (this.me.hp ?? 1) / Math.max(1, this.me.maxHp ?? 1),
       revive: this.me.revive ?? 0, reviveOf: (id) => (id === this.myId ? this.me.revive ?? 0 : ((this.players.get(id)?.f ?? 0) & PF.REVIVING ? 0.5 : 0)),
     };
-    this.r.frame(view, dt);
-    this.snd.tick();
+    this.r.frame(view, dt, vdt);
+    this.snd.listen(meX, meY);
+    if ((this.musicT -= dt) <= 0) { this.musicT = 0.5; this.updateMusic(meX, meY, view); }
+  }
+  /** Adaptive music: town is calm, a crowd or recent damage raises the intensity, bosses switch to the boss song. */
+  private updateMusic(x: number, y: number, v: View): void {
+    const zone = this.me.zone ?? 0; let song = ZONE_SONG[zone] ?? 'forest', lv = zone === 0 ? 0 : 1;
+    const bossNear = v.mons.some(m => MONSTERS[m.t]?.beh === 'boss' && m.dieT <= 0 && (m.x - x) ** 2 + (m.y - y) ** 2 < 700 * 700);
+    if (bossNear || (this.wb.state === 'fight' && zone === 5)) { song = 'boss'; lv = 3; }
+    else if (zone !== 0) {
+      let n = 0; for (const m of v.mons) if (m.dieT <= 0 && (m.x - x) ** 2 + (m.y - y) ** 2 < 450 * 450) n++;
+      if (n >= 12 || performance.now() - this.hurtT < 4000 || this.wb.state !== 'idle') lv = 2;
+    }
+    if (v.downed) lv = Math.min(lv, 1);
+    this.snd.setScene(song, lv);
   }
   private interp(e: Ent, rt: number): void {
     const s = e.snaps; if (!s.length) return;
@@ -178,96 +206,179 @@ export class Game {
   private queueEv(tick: number, e: Ev): void {
     // private / time-critical events play now; world visuals wait for the interpolation clock
     switch (e.k) {
-      case 'tele': this.fx.telegraph({ sh: e.sh, x: e.x, y: e.y, r: e.r, x2: e.x2 ?? 0, y2: e.y2 ?? 0, due: tick * DT + e.d, s: e.s ?? 0 }); if (this.near(e.x, e.y, 500)) this.snd.play('tele'); return;
-      case 'proj': this.fx.enemyProj(e.x, e.y, e.vx, e.vy, e.r, e.life, e.s, tick * DT); return;
-      case 'dmg': case 'hurt': case 'loot': case 'toast': case 'quest': this.playEv(e, true); return;
+      case 'tele': this.fx.telegraph({ sh: e.sh, x: e.x, y: e.y, r: e.r, x2: e.x2 ?? 0, y2: e.y2 ?? 0, due: tick * DT + e.d, s: e.s ?? 0 }); if (this.near(e.x, e.y, 520)) this.snd.play('tele', 0.8, e.x, e.y); return;
+      case 'proj': this.fx.enemyProj(e.x, e.y, e.vx, e.vy, e.r, e.life, e.s, tick * DT); if (this.near(e.x, e.y, 480)) this.snd.play('enemy_shot', 0.4, e.x, e.y); return;
+      case 'dmg': case 'hurt': case 'loot': case 'toast': case 'quest': this.playEv(e); return;
     }
-    if ('p' in e && e.p === this.myId && (e.k === 'atk' || e.k === 'tal' || e.k === 'ult')) { this.playEv(e, true); return; }
+    if ('p' in e && e.p === this.myId && (e.k === 'atk' || e.k === 'tal' || e.k === 'ult')) { this.playEv(e); return; }
     this.evq.push({ tick, e });
   }
   private near(x: number, y: number, r: number): boolean { const m = this.myPos(); return (m.x - x) ** 2 + (m.y - y) ** 2 < r * r; }
 
-  private playEv(e: Ev, _immediate: boolean): void {
-    const fx = this.fx, snd = this.snd;
+  private playEv(e: Ev): void {
+    const fx = this.fx, snd = this.snd, A = this.r.art;
     switch (e.k) {
       case 'atk': {
         const p = this.players.get(e.p); const r = this.roster.get(e.p); if (!p || !r) return; const mine = e.p === this.myId; const vol = mine ? 1 : 0.35;
         const ang = Math.atan2(e.ty - p.y, e.tx - p.x); p.face = ((ang / (Math.PI * 2) * 255) + 256) % 256;
-        if (r.cls === 'sword') { fx.slash(p.x, p.y - 14, ang, 96, 'rgba(160,200,255,0.9)'); snd.play('slash', vol); }
-        else if (r.cls === 'archer') { fx.homing({ x: p.x, y: p.y - 22 }, e.tid ? { kind: 'm', id: e.tid } : { x: e.tx, y: e.ty }, 950, 'arrow', q => { fx.burst(q.x, q.y, 3, ['#fff'], 60, 2, 0.2); }); snd.play('arrow', vol); }
-        else { fx.homing({ x: p.x + 10, y: p.y - 28 }, e.tid ? { kind: 'm', id: e.tid } : { x: e.tx, y: e.ty }, 620, 'paper', q => { fx.ring(q.x, q.y, 8, 58, 0.25, '#ff7ab8', 5); fx.burst(q.x, q.y, 8, ['#ff7ab8', '#ffe07a'], 140, 3, 0.35); snd.play('boom', vol * 0.6); }); snd.play('bolt', vol); }
+        this.r.anim.attack(e.p, r.cls === 'sword' ? 0.26 : 0.3);
+        const to = e.tid ? { kind: 'm' as const, id: e.tid } : { x: e.tx, y: e.ty };
+        if (r.cls === 'sword') {
+          const dir = (this.swing.get(e.p) ?? 1) * -1; this.swing.set(e.p, dir);
+          fx.slash(p.x, p.y - 18, ang, CLASSES.sword.range, 0x9fd0ff, false, dir); snd.play(dir > 0 ? 'slash' : 'slash2', vol, p.x, p.y);
+          if (mine) fx.zoomPunch(0.004);
+        } else if (r.cls === 'archer') {
+          fx.homing({ x: p.x + Math.cos(ang) * 16, y: p.y - 26 }, to, 1100, 'arrow', q => { fx.sparks(q.x, q.y, 5, 0xfff2c0, 300, ang, 1.3, 8); fx.glow(q.x, q.y, 24, 0xfff0c0, 0.12); if (mine) snd.play('hit_arrow', 0.7, q.x, q.y); });
+          snd.play('bow', vol, p.x, p.y);
+        } else {
+          fx.homing({ x: p.x + 10, y: p.y - 32 }, to, 660, 'paper', q => {
+            fx.ring(q.x, q.y, 8, 62, 0.32, 0xff7ab8, true); fx.glow(q.x, q.y, 56, 0xff7ab8, 0.24); fx.burst(q.x, q.y, 9, [0xff7ab8, 0xffe07a, 0xffffff], 180, 7, 0.4);
+            fx.light(q.x, q.y, 120, 0xff7ab8, 0.8, 0.25); if (mine) { fx.wave(q.x, q.y, 70, 6, 0.35); snd.play('hit_magic', 0.6, q.x, q.y); }
+          });
+          snd.play('cast', vol, p.x, p.y);
+        }
         return;
       }
       case 'tal': {
         const kind = TAL_KINDS[e.tk]; const p = this.players.get(e.p); const ox = p ? p.x : e.x, oy = p ? p.y : e.y; const mine = e.p === this.myId; const vol = mine ? 1 : 0.3;
         switch (kind) {
-          case 'wisp': for (const id of e.pts ?? []) fx.homing({ x: ox, y: oy - 30 }, { kind: 'm', id }, 430, 'wisp', q => { fx.ring(q.x, q.y, 6, e.r ?? 52, 0.3, '#6fb6ff', 5); fx.burst(q.x, q.y, 10, ['#6fb6ff', '#eaf6ff'], 150, 3, 0.4); snd.play('boom', vol * 0.5); }, 1.4); snd.play('wisp', vol); break;
-          case 'thunder': { const pts = e.pts ?? []; for (let i = 0; i < pts.length; i += 4) { const x = pts[i], y = pts[i + 1]; fx.bolt(x + (Math.random() - 0.5) * 40, y - 320, x, y - 10, '#ffe066', 3); fx.ring(x, y, 4, 40, 0.25, '#fff3a0', 4, 0); fx.burst(x, y - 8, 8, ['#fff3a0', '#ffffff'], 160, 2.5, 0.3); if (pts[i + 2] >= 0) fx.bolt(x, y - 10, pts[i + 2], pts[i + 3] - 10, '#ffe066', 2, 0.18); } if (mine) fx.shake = Math.max(fx.shake, 3); snd.play('thunder', vol); break; }
-          case 'frost': fx.ring(ox, oy - 10, 10, e.r ?? 140, 0.4, '#bff3ff', 8); fx.ring(ox, oy - 10, 10, (e.r ?? 140) * 0.8, 0.5, '#ffffff', 3); fx.burst(ox, oy - 10, 24, ['#bff3ff', '#ffffff', '#7fd8ff'], (e.r ?? 140) * 2.2, 3, 0.45); snd.play('frost', vol); break;
-          case 'pierce': fx.homing({ x: ox, y: oy - 20 }, { x: e.tx ?? ox, y: (e.ty ?? oy) - 20 }, 1100, 'pierce'); snd.play('arrow', vol * 0.8); break;
-          case 'bell': fx.ring(ox, oy - 10, 10, e.r ?? 260, 0.6, '#fff1a8', 5, 0, true); for (let i = 0; i < 6; i++) fx.part({ x: ox + (Math.random() - 0.5) * 60, y: oy - 30, vx: (Math.random() - 0.5) * 40, vy: -60 - Math.random() * 40, life: 1, max: 1, size: 4, color: '#fff1a8', shape: 2 }); snd.play('bell', vol); break;
-          case 'guard': fx.ring(ox, oy - 10, 10, e.r ?? 220, 0.5, '#e0c3ff', 5, 0, true); snd.play('guard', vol); break;
+          case 'wisp': for (const id of e.pts ?? []) fx.homing({ x: ox, y: oy - 34 }, { kind: 'm', id }, 450, 'wisp', q => {
+            const R = e.r ?? 52; fx.ring(q.x, q.y, 6, R, 0.3, 0x6fb6ff, true); fx.glow(q.x, q.y, R * 1.1, 0x4f9cff, 0.3); fx.sparks(q.x, q.y, 6, 0x8fc8ff, 300);
+            fx.light(q.x, q.y, 150, 0x4f9cff, 0.9, 0.3); snd.play('wisp_boom', vol * 0.6, q.x, q.y);
+          }, 1.4); snd.play('wisp_cast', vol, ox, oy); break;
+          case 'thunder': {
+            const pts = e.pts ?? [];
+            for (let i = 0; i < pts.length; i += 4) {
+              const x = pts[i], y = pts[i + 1]; fx.bolt(x + rnd(-50, 50), y - 360, x, y - 8, 0xffe066, 9, 0.26, 46);
+              fx.glow(x, y - 8, 70, 0xfff3a0, 0.2); fx.ring(x, y, 6, 50, 0.28, 0xfff3a0, false, 0); fx.sparks(x, y - 8, 8, 0xfff3a0, 400);
+              fx.decal(x, y, 'scorch', 64, 0x1a1208, 1.6, 0.5); fx.light(x, y, 230, 0xfff0a0, 1.2, 0.22);
+              if (pts[i + 2] >= 0) fx.bolt(x, y - 10, pts[i + 2], pts[i + 3] - 10, 0xffe066, 5, 0.2, 26);
+            }
+            if (mine) { fx.shake(0.12); fx.flash(0xfff6d0, 0.07); } snd.play('thunder', vol, ox, oy); break;
+          }
+          case 'frost': {
+            const R = e.r ?? 140; fx.ring(ox, oy - 6, 10, R, 0.45, 0xbff3ff, false, 0); fx.ring(ox, oy - 6, 10, R * 0.85, 0.55, 0xffffff, true, 0); fx.glow(ox, oy - 10, R * 0.7, 0x9fe8ff, 0.3);
+            const hex = A.fx('hex'); fx.add(1, 0.45, (pp, k) => { const s = R * 2 / 96 * (0.55 + k * 0.5); pp.draw(EMIT, hex, ox, oy - 10, s, s * 0.62, 0, 0xcff4ff, (1 - k) * 0.55, 1); });
+            for (let i = 0; i < (this.r.low ? 6 : 16); i++) { const a = (i / 16) * Math.PI * 2 + rnd(-0.1, 0.1); fx.part({ tex: 'shard', x: ox, y: oy - 10, vx: Math.cos(a) * R * 3, vy: Math.sin(a) * R * 2, drag: 0.85, life: rnd(0.35, 0.55), size: 9, col: 0xdff8ff, face: true }); }
+            fx.decal(ox, oy, 'disc', R * 1.8, 0xcff4ff, 1.4, 0.2); fx.light(ox, oy, R * 1.6, 0x9fe8ff, 0.9, 0.4); if (mine) fx.wave(ox, oy - 10, R, 8, 0.45);
+            snd.play('frost', vol, ox, oy); break;
+          }
+          case 'pierce': fx.homing({ x: ox, y: oy - 22 }, { x: e.tx ?? ox, y: (e.ty ?? oy) - 22 }, 1300, 'pierce'); snd.play('pierce', vol, ox, oy); break;
+          case 'bell': {
+            const R = e.r ?? 260; fx.ring(ox, oy, 10, R, 0.7, 0xfff1a8, true, 0); fx.glow(ox, oy - 24, 80, 0xfff1a8, 0.5); fx.light(ox, oy, 240, 0xfff1a8, 0.8, 0.6);
+            for (let i = 0; i < 5; i++) fx.part({ tex: 'note', x: ox + rnd(-40, 40), y: oy - 34, vx: rnd(-30, 30), vy: -70 - rnd(0, 40), drag: 0.97, life: 1.2, size: 9, col: 0xfff1a8, spin: rnd(-1, 1), fadeIn: 0.1 });
+            snd.play('bell', vol, ox, oy); break;
+          }
+          case 'guard': {
+            const R = e.r ?? 220; fx.ring(ox, oy, 10, R, 0.5, 0xe0c3ff, true, 0); const hex = A.fx('hex');
+            fx.add(1, 0.5, (pp, k) => { const s = 1.1 + k * 0.5; pp.draw(EMIT, hex, ox, oy - 24, s, s, 0, 0xe0c3ff, (1 - k) * 0.8, 1); });
+            snd.play('guard', vol, ox, oy); break;
+          }
         }
         return;
       }
       case 'ult': {
-        const r = this.roster.get(e.p); const mine = e.p === this.myId; if (mine) { fx.shake = 10; snd.play('ult'); } else snd.play('ult', 0.4);
-        const cls = r?.cls ?? 'sword'; const col = CLASSES[cls].color;
-        fx.pillar(e.x, e.y, col, 0.8, 70, 320); fx.ring(e.x, e.y - 10, 20, cls === 'shaman' ? 330 : 180, 0.6, col, 8, 0, true);
+        const r = this.roster.get(e.p); const cls = r?.cls ?? 'sword'; const mine = e.p === this.myId; const col = hexCol(CLASSES[cls].color);
+        snd.play('ult_' + cls, mine ? 1 : 0.45, e.x, e.y);
+        if (mine) { snd.duck(0.5, 1.2); fx.flash(0xffffff, 0.35); fx.shake(0.5); fx.stop(0.09, true); fx.zoomPunch(0.07); fx.chroma(0.014); fx.wave(e.x, e.y - 20, 380, 20, 0.8); this.hooks.onUlt(cls); }
+        fx.pillar(e.x, e.y, col, 0.9, 80, 380); fx.sigil(e.x, e.y, cls === 'shaman' ? 300 : 170, col, 1.4, 'sigil', 1.2, mine ? 0.8 : 0.4); fx.ring(e.x, e.y, 20, cls === 'shaman' ? 330 : 200, 0.7, col, true, 0); fx.light(e.x, e.y, 420, col, 1.2, 0.8);
+        if (cls === 'sword') fx.burst(e.x, e.y - 20, 30, [0x9fd0ff, 0xffffff], 520, 9, 0.5, 'spark', 0, 0.004);
         if (cls === 'archer' && e.tx != null && e.ty != null) {
-          const tx = e.tx, ty = e.ty; fx.ring(tx, ty, 150, 160, 2.3, '#a6ff9e', 3, 0, true);
-          for (let v = 0; v < 8; v++) setTimeout(() => { for (let k = 0; k < 7; k++) { const x = tx + (Math.random() - 0.5) * 300, y = ty + (Math.random() - 0.5) * 300; fx.homing({ x: x - 60, y: y - 380 }, { x, y }, 1400, 'arrow', q => fx.burst(q.x, q.y, 4, ['#eaffe6', '#a6ff9e'], 90, 2, 0.25)); } if (mine) snd.play('arrow'); }, 300 + v * 250);
+          const tx = e.tx, ty = e.ty; fx.sigil(tx, ty, 165, 0xa6ff9e, 2.7, 'runes', 1.5, 0.8);
+          for (let v = 0; v < 8; v++) fx.later(0.3 + v * 0.25, () => {
+            for (let k = 0; k < 7; k++) { const x = tx + rnd(-150, 150), y = ty + rnd(-150, 150); fx.homing({ x: x - 70, y: y - 420 }, { x, y }, 1500, 'rain', q => { fx.sparks(q.x, q.y, 3, 0xc8ffc0, 220, -Math.PI / 2, 1.2, 7); fx.decal(q.x, q.y, 'crack', 26, 0x1a2a10, 1.2, 0.35); }); }
+            if (mine && v % 2 === 0) snd.play('bow', 0.6);
+          });
         }
-        if (cls === 'shaman') setTimeout(() => { fx.ring(e.x, e.y - 10, 30, 330, 0.5, '#ffe07a', 12); fx.burst(e.x, e.y - 20, 60, ['#ffe07a', '#ff7ab8', '#ffffff'], 420, 4, 0.7); if (mine) fx.shake = 14; snd.play('boom'); }, 350);
+        if (cls === 'shaman') fx.later(0.35, () => {
+          fx.ring(e.x, e.y, 30, 340, 0.55, 0xffe07a, false, 0); fx.glow(e.x, e.y - 30, 240, 0xffe07a, 0.5, mine ? 0.32 : 0.16); fx.burst(e.x, e.y - 20, mine ? 44 : 20, [0xffe07a, 0xff7ab8, 0xffffff], 460, 8, 0.8);
+          fx.debris(e.x, e.y - 20, 24, 'petal', [0xff9ac8, 0xffe07a, 0xffffff], 320, 8, 1.4); fx.stamp(e.x, e.y - 50, 110, 0.9);
+          if (mine) { fx.shake(0.6); fx.wave(e.x, e.y, 360, 26, 0.9); fx.flash(0xfff0c0, 0.3); } snd.play('boom', 0.8, e.x, e.y);
+        });
         return;
       }
       case 'dmg': {
-        if (!this.set.dmgNums) return; const m = this.mons.get(e.id); if (!m) return; const def = MONSTERS[m.t];
-        fx.text(m.x, m.y - def.r * 2 - 6, e.cr ? `${e.v}!` : String(e.v), e.cr ? '#ffb02e' : '#ffffff', e.cr ? 20 : 14, !!e.cr);
-        if (e.cr) fx.burst(m.x, m.y - def.r, 4, ['#ffe07a'], 120, 2, 0.25);
-        snd.play('hit', 0.6); return;
-      }
-      case 'hurt': { const p = this.myPos(); fx.text(p.x, p.y - 50, `-${e.v}`, '#ff5a5a', 15); snd.play('hurt'); this.hooks.onHurt(); fx.shake = Math.max(fx.shake, 2.5); return; }
-      case 'die': {
-        const m = this.mons.get(e.id); if (m) m.dieT = 0.001; const def = MONSTERS[e.t]; const near = this.near(e.x, e.y, 600);
-        const col = def.glow || '#c8b8ff';
-        fx.burst(e.x, e.y - def.r, def.beh === 'boss' ? 80 : e.el ? 30 : 12, [col, '#ffffff', '#8a7aa8'], def.beh === 'boss' ? 380 : 150, def.beh === 'boss' ? 5 : 3, 0.5);
-        if (!this.set.low) fx.part({ x: e.x, y: e.y - def.r, vx: 0, vy: -50, life: 0.7, max: 0.7, size: 6, color: 'rgba(220,230,255,0.8)' });
-        if (e.el || def.beh === 'boss') { fx.pillar(e.x, e.y, '#ffd54a', 1.2, def.beh === 'boss' ? 120 : 50, 400); if (near) fx.shake = Math.max(fx.shake, def.beh === 'boss' ? 16 : 5); }
-        if (near) snd.play(def.beh === 'boss' ? 'roar' : 'kill', 0.7);
+        const m = this.mons.get(e.id); if (!m) return; const def = MONSTERS[m.t]; const me = this.myPos(); const crit = !!e.cr;
+        const dx = m.x - me.x, dy = m.y - me.y; const hy = m.y - def.r * 1.1; this.lastHit.set(e.id, performance.now());
+        this.r.anim.hit('m', e.id, dx, dy, (crit ? 420 : 260) * (def.beh === 'boss' ? 0.25 : 1), 1);
+        fx.sparks(m.x, hy, crit ? 10 : 5, crit ? 0xffd27a : 0xffffff, crit ? 520 : 380, Math.atan2(dy, dx), 1.7, crit ? 12 : 9);
+        if (crit) { fx.glow(m.x, hy, 40, 0xffc060, 0.14); fx.part({ tex: 'star', x: m.x, y: hy, life: 0.22, size: 26, grow: -60, col: 0xfff0b0 }); fx.stop(0.035); fx.shake(0.1); fx.zoomPunch(0.008); snd.play('hit_crit', 0.7, m.x, m.y); }
+        else snd.play('hit', 0.55, m.x, m.y);
+        if (this.set.dmgNums) fx.text(m.x, m.y - def.r * 2 - 8, crit ? `${e.v}!` : String(e.v), crit ? '#ffb02e' : '#ffffff', crit ? 23 : 14, crit);
+        this.combo++; this.comboT = 2.4;
         return;
       }
-      case 'boom': { fx.burst(e.x, e.y, e.s === 0 ? 20 : 14, ['#ff8a5a', '#ffd0a0', '#ffffff'], 200, 3, 0.4); if (this.near(e.x, e.y, 350)) { fx.shake = Math.max(fx.shake, 6); snd.play('boom', 0.8); } return; }
+      case 'hurt': {
+        const p = this.myPos(); fx.text(p.x, p.y - 58, `-${e.v}`, '#ff4a5a', 18); snd.play('hurt'); this.hooks.onHurt(); this.hurtT = performance.now();
+        fx.shake(0.22); fx.flash(0xff2030, 0.1); fx.chroma(0.004); this.r.anim.hurt(this.myId); return;
+      }
+      case 'die': {
+        const m = this.mons.get(e.id); if (m) m.dieT = 0.001; const def = MONSTERS[e.t]; const near = this.near(e.x, e.y, 650); const boss = def.beh === 'boss';
+        const mine = performance.now() - (this.lastHit.get(e.id) ?? -1e9) < 900; this.lastHit.delete(e.id);
+        const col = def.glow ? hexCol(def.glow) : 0xc8b8ff; const cy = e.y - def.r;
+        fx.sparks(e.x, cy, boss ? 40 : e.el ? 18 : 8, col, boss ? 700 : 420, undefined, Math.PI, boss ? 16 : 11);
+        fx.burst(e.x, cy, boss ? 50 : e.el ? 20 : 7, [col, 0xffffff], boss ? 320 : 140, 7, 0.6, 'dot', -60);
+        fx.glow(e.x, cy, boss ? 180 : e.el ? 80 : 46, col, 0.25); fx.light(e.x, cy, 130, col, 0.8, 0.3);
+        fx.decal(e.x, e.y, 'ink' + Math.floor(Math.random() * 3), def.r * 3.4, 0x1c1030, 2.6, 0.5);
+        if (mine && near && !boss && !this.r.low) fx.part({ tex: 'dot', x: e.x, y: cy, vx: rnd(-80, 80), vy: -140, home: true, life: 1.5, size: 8, col: 0xbfe6ff, onDone: () => snd.play('soul', 0.22) });
+        if (e.el || boss) {
+          fx.pillar(e.x, e.y, 0xffd54a, 1.3, boss ? 130 : 56, boss ? 520 : 380); fx.ring(e.x, e.y, 20, boss ? 360 : 180, 0.6, 0xffd54a, true, 0);
+          if (near) { fx.wave(e.x, cy, boss ? 420 : 200, boss ? 22 : 12, boss ? 0.9 : 0.6); fx.shake(boss ? 0.8 : 0.35); fx.stop(boss ? 0.16 : 0.07, true); fx.flash(0xffffff, boss ? 0.45 : 0.15); fx.chroma(boss ? 0.012 : 0.006); fx.zoomPunch(boss ? 0.06 : 0.03); }
+        } else if (mine) { fx.stop(0.028); fx.shake(0.05); }
+        if (near) snd.play(boss || e.el ? 'kill_big' : 'kill', boss ? 1 : 0.7, e.x, e.y);
+        return;
+      }
+      case 'boom': {
+        const near = this.near(e.x, e.y, 420); const R = e.r || 80;
+        fx.glow(e.x, e.y - 10, R * 1.2, 0xff8a4a, 0.35); fx.ring(e.x, e.y, 10, R, 0.4, 0xffb070, false, 0); fx.sparks(e.x, e.y - 10, 12, 0xffb070, 480);
+        fx.smoke(e.x, e.y - 8, 6, 0x4a3a3a, 90, 30, 1.0, 0.5); fx.decal(e.x, e.y, 'scorch', R * 1.6, 0x140a06, 3, 0.6); fx.decal(e.x, e.y, 'crack', R * 1.3, 0x2a1a10, 3, 0.5); fx.light(e.x, e.y, R * 2.5, 0xff8a4a, 1.2, 0.35);
+        if (near) { fx.shake(0.3); fx.wave(e.x, e.y, R * 1.6, 12, 0.5); fx.chroma(0.006); snd.play(R > 150 ? 'slam' : 'boom', 0.8, e.x, e.y); }
+        return;
+      }
       case 'loot': {
-        const n = Math.min(6, 1 + Math.floor(Math.log2(1 + e.g / 5)));
-        for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2; fx.part({ x: e.x, y: e.y - 10, vx: Math.cos(a) * 160, vy: Math.sin(a) * 160 - 80, g: 0, drag: 0.86, life: 1.4, max: 1.4, size: 4, color: '#ffd54a', home: true, add: false, shape: 0, onDone: i === 0 ? () => snd.play('coin', 0.5) : undefined }); }
-        for (let i = 0; i < 2; i++) { const a = Math.random() * Math.PI * 2; fx.part({ x: e.x, y: e.y - 10, vx: Math.cos(a) * 120, vy: Math.sin(a) * 120, drag: 0.86, life: 1.4, max: 1.4, size: 3, color: '#7fd8ff', home: true, shape: 0 }); }
-        if (e.it != null) { const col = RARITY_COLORS[e.it]; fx.pillar(e.x, e.y, col, 1.4, 26, e.it >= 3 ? 420 : 200); fx.part({ x: e.x, y: e.y - 20, vx: 0, vy: -200, drag: 0.9, life: 1.6, max: 1.6, size: 7, color: col, home: true, shape: 2 }); snd.play(e.it >= 4 ? 'legend' : e.it >= 3 ? 'epic' : 'item'); }
-        if (e.tl) { fx.pillar(e.x, e.y, '#ffe07a', 1.2, 22, 220); fx.part({ x: e.x, y: e.y - 20, vx: 0, vy: -160, drag: 0.9, life: 1.5, max: 1.5, size: 7, color: '#ffe07a', home: true, shape: 2 }); snd.play('item'); }
+        const n = Math.min(7, 1 + Math.floor(Math.log2(1 + e.g / 5)));
+        for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2; fx.part({ tex: 'coin', layer: EMIT, add: 0, x: e.x, y: e.y - 10, vx: Math.cos(a) * 170, vy: Math.sin(a) * 170 - 90, drag: 0.86, life: 1.4, size: 7, spin: 8, home: true, onDone: i === 0 ? () => snd.play('coin', 0.45) : undefined }); }
+        for (let i = 0; i < 2; i++) { const a = Math.random() * Math.PI * 2; fx.part({ tex: 'dot', x: e.x, y: e.y - 10, vx: Math.cos(a) * 130, vy: Math.sin(a) * 130, drag: 0.86, life: 1.4, size: 6, col: 0x7fd8ff, home: true }); }
+        if (e.it != null) {
+          const col = hexCol(RARITY_COLORS[e.it]); fx.pillar(e.x, e.y, col, 1.5, 28, e.it >= 3 ? 460 : 220); fx.ring(e.x, e.y, 6, 70, 0.6, col, true, 0);
+          fx.part({ tex: 'star', x: e.x, y: e.y - 20, vx: 0, vy: -200, drag: 0.9, life: 1.6, size: 16, col, home: true, spin: 3 });
+          if (e.it >= 3) { fx.light(e.x, e.y, 200, col, 1, 1.2); fx.burst(e.x, e.y - 20, 16, [col, 0xffffff], 220, 6, 0.8, 'star'); }
+          snd.play(e.it >= 4 ? 'legend' : e.it >= 3 ? 'item_epic' : 'item');
+        }
+        if (e.tl) { fx.pillar(e.x, e.y, 0xffe07a, 1.2, 22, 240); fx.part({ tex: 'paper', layer: EMIT, add: 0, x: e.x, y: e.y - 20, vx: 0, vy: -160, drag: 0.9, life: 1.5, size: 9, home: true, spin: 6 }); snd.play('item'); }
         return;
       }
       case 'lvl': {
-        const p = this.players.get(e.p); const x = p?.x ?? 0, y = p?.y ?? 0; fx.pillar(x, y, '#ffd54a', 1.4, 60, 500); fx.ring(x, y - 10, 10, 160, 0.8, '#ffd54a', 8, 0, true);
-        fx.burst(x, y - 30, 40, ['#ffd54a', '#fff6c8', '#ffffff'], 260, 4, 0.9); fx.text(x, y - 80, 'LEVEL UP!', '#ffd54a', 22, true, 1.6);
-        if (e.p === this.myId) snd.play('level'); return;
+        const p = this.players.get(e.p); const x = p?.x ?? 0, y = p?.y ?? 0; const mine = e.p === this.myId;
+        fx.pillar(x, y, 0xffd54a, 1.6, 70, 560); fx.sigil(x, y, 150, 0xffd54a, 1.8, 'sigil', 1.5, mine ? 0.7 : 0.35); fx.ring(x, y, 10, 180, 0.9, 0xffd54a, true, 0);
+        fx.burst(x, y - 30, mine ? 24 : 10, [0xffd54a, 0xfff6c8, 0xffffff], 300, 9, 1.0, 'star'); fx.light(x, y, 360, 0xffd54a, 1.2, 1.2);
+        if (mine) {
+          snd.play('level'); snd.duck(0.5, 1.5); fx.flash(0xfff4c0, 0.25); fx.wave(x, y, 300, 14, 0.8); }
+        return;
       }
-      case 'heal': { const p = this.players.get(e.p); if (p && (e.p === this.myId || this.near(p.x, p.y, 400))) fx.text(p.x, p.y - 56, `+${e.v}`, '#7dffb0', e.p === this.myId ? 15 : 12); return; }
-      case 'shield': { const p = this.players.get(e.p); if (p) fx.ring(p.x, p.y - 20, 30, 34, 0.4, '#e0c3ff', 4); return; }
-      case 'down': { const p = this.players.get(e.p); if (p) fx.burst(p.x, p.y - 20, 20, ['#8a8aa0', '#ffffff'], 120, 3, 0.6); if (e.p === this.myId) snd.play('down');
+      case 'heal': { const p = this.players.get(e.p); if (p && (e.p === this.myId || this.near(p.x, p.y, 420))) { fx.text(p.x, p.y - 60, `+${e.v}`, '#7dffb0', e.p === this.myId ? 16 : 12); fx.burst(p.x, p.y - 24, 4, [0x7dffb0], 60, 5, 0.6, 'dot', -40); } return; }
+      case 'shield': { const p = this.players.get(e.p); if (p) fx.ring(p.x, p.y - 22, 28, 38, 0.4, 0xe0c3ff, true); return; }
+      case 'down': {
+        const p = this.players.get(e.p); if (p) { fx.burst(p.x, p.y - 20, 16, [0x8a8aa0, 0xffffff], 120, 6, 0.6); fx.smoke(p.x, p.y - 10, 5, 0x3a3448, 60, 26, 0.9, 0.5); }
+        if (e.p === this.myId) { snd.play('down'); fx.shake(0.4); }
         else if (p && this.near(p.x, p.y, 600) && performance.now() - this.downToastT > 15000) { this.downToastT = performance.now(); this.hooks.onToast(`${this.roster.get(e.p)?.name ?? '동료'}님이 쓰러졌습니다! 곁에 서면 일으킬 수 있어요`, '#ff9a9a'); }
-        return; }
+        return;
+      }
       case 'rev': {
         const p = this.players.get(e.p); const x = p?.x ?? 0, y = p?.y ?? 0;
-        if (e.by === -2 || e.by === -1) { fx.pillar(x, y, '#9fd7ff', 0.9, 50, 300); fx.burst(x, y - 20, 24, ['#9fd7ff', '#ffffff'], 200, 3, 0.6); if (e.p === this.myId) snd.play('tp'); }
-        else { fx.pillar(x, y, '#7dffb0', 1.2, 50, 300); fx.burst(x, y - 20, 30, ['#7dffb0', '#ffffff'], 220, 3, 0.7); fx.text(x, y - 70, '부활!', '#7dffb0', 18, true, 1.2); if (e.p === this.myId || e.by === this.myId) snd.play('revive'); }
+        if (e.by === -2 || e.by === -1) { fx.pillar(x, y, 0x9fd7ff, 0.9, 50, 300); fx.burst(x, y - 20, 24, [0x9fd7ff, 0xffffff], 200, 6, 0.6); if (e.p === this.myId) snd.play('tp'); }
+        else {
+          fx.pillar(x, y, 0x7dffb0, 1.2, 56, 320); fx.ring(x, y, 10, 120, 0.6, 0x7dffb0, true, 0); fx.debris(x, y - 30, 14, 'petal', [0xbfffd8, 0xffffff, 0xffc8dc], 220, 7, 1.2);
+          fx.text(x, y - 72, '부활!', '#7dffb0', 20, true, 1.2); fx.light(x, y, 240, 0x7dffb0, 1, 0.8); if (e.p === this.myId || e.by === this.myId) snd.play('revive');
+        }
         return;
       }
       case 'mon': {
         const m = this.mons.get(e.id); const x = e.x ?? m?.x ?? 0, y = e.y ?? m?.y ?? 0;
-        if (e.a === 'roar') { fx.ring(x, y - 30, 20, 260, 0.7, '#ff5a5a', 6); if (this.near(x, y, 700)) { snd.play('roar'); fx.shake = Math.max(fx.shake, 8); } }
-        else if (e.a === 'blink') { fx.burst(x, y - 30, 30, ['#b8a6ff', '#1b1426', '#ffffff'], 220, 4, 0.6, false); }
-        else if (e.a === 'summon') { fx.ring(x, y - 10, 20, 150, 0.6, '#b8a6ff', 6, 0, true); }
-        else if (e.a === 'dash') { fx.burst(x, y, 16, ['#a89880', '#6a5a4a'], 140, 4, 0.5, false); }
+        if (e.a === 'roar') { fx.ring(x, y - 30, 20, 280, 0.7, 0xff5a5a, false, 1); if (this.near(x, y, 720)) { snd.play('roar', 1, x, y); fx.shake(0.45); fx.wave(x, y - 30, 320, 16, 0.8); fx.chroma(0.008); } }
+        else if (e.a === 'blink') { fx.smoke(x, y - 20, 10, 0x2a1838, 120, 30, 0.8, 0.8); fx.burst(x, y - 30, 20, [0xb8a6ff, 0xffffff], 240, 6, 0.6); if (this.near(x, y, 600)) snd.play('blink', 0.6, x, y); }
+        else if (e.a === 'summon') { fx.sigil(x, y, 150, 0xb8a6ff, 1.2, 'sigil', -1.5); fx.ring(x, y - 10, 20, 150, 0.6, 0xb8a6ff, true, 0); if (this.near(x, y, 700)) snd.play('summon', 0.7, x, y); }
+        else if (e.a === 'dash') { fx.smoke(x, y, 8, 0x8a7a6a, 140, 26, 0.7, 0.55); if (this.near(x, y, 600)) snd.play('dash', 0.6, x, y); }
         return;
       }
       case 'emote': { const p = this.players.get(e.p); if (p) { p.bubble = { text: emoteText(e.e), until: performance.now() + 2600 }; if (this.near(p.x, p.y, 500)) snd.play('emote'); } return; }
@@ -276,5 +387,5 @@ export class Game {
     }
   }
   resize(): void { this.r?.resize(); }
-  applySettings(): void { if (!this.r) return; this.r.low = this.set.low; this.fx.low = this.set.low; this.r.showNames = this.set.names; this.r.resize(); }
+  applySettings(): void { if (!this.r) return; this.r.setQuality(this.set.quality as Quality); this.fx.shakeOn = this.set.shake; this.r.showNames = this.set.names; }
 }

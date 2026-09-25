@@ -19,9 +19,17 @@ export function token(kind: 'offline' | 'online'): string {
 }
 export function setToken(kind: 'offline' | 'online', t: string): boolean { if (!/^[A-Za-z0-9_-]{16,64}$/.test(t)) return false; return set('token.' + kind, t); }
 
-export interface Settings { sfx: number; bgm: number; low: boolean; dmgNums: boolean; shake: boolean; server: string; names: boolean }
-const DEF: Settings = { sfx: 0.7, bgm: 0.45, low: false, dmgNums: true, shake: true, server: '', names: true };
-export function loadSettings(): Settings { try { return { ...DEF, ...JSON.parse(get('settings') ?? '{}') }; } catch { return { ...DEF }; } }
+export type Quality = 'high' | 'mid' | 'low';
+export interface Settings { sfx: number; bgm: number; quality: Quality; dmgNums: boolean; shake: boolean; server: string; names: boolean }
+const DEF: Settings = { sfx: 0.7, bgm: 0.45, quality: 'high', dmgNums: true, shake: true, server: '', names: true };
+export function loadSettings(): Settings {
+  try {
+    const raw = JSON.parse(get('settings') ?? '{}'); const s: Settings = { ...DEF, ...raw };
+    if (!raw.quality && raw.low === true) s.quality = 'low'; // settings saved before quality levels existed
+    if (!['high', 'mid', 'low'].includes(s.quality)) s.quality = 'high';
+    delete (s as Partial<Settings> & { low?: boolean }).low; return s;
+  } catch { return { ...DEF }; }
+}
 export function saveSettings(s: Settings): void { set('settings', JSON.stringify(s)); }
 
 export interface KnownChar { name: string; cls: ClassId; level: number; t: number }
