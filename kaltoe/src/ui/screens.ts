@@ -5,7 +5,7 @@ import {
 import { TITLE_TAGLINES, CLEAR_QUOTES, GAMEOVER_QUOTES, SHARE_TEMPLATES, TIPS } from '../content/strings';
 import type { AchievementDef, CharacterDef } from '../content/types';
 import type { Profile } from '../platform/save';
-import { exportProfile, importProfile, newProfile } from '../platform/save';
+import { exportProfile, importProfile, newProfile, todayKey, yesterdayKey } from '../platform/save';
 import {
   achievementProgress, characterOwned, characterUnlocked, dailyInfo, featureUnlocked, hireCharacter, maxHeatFor, metaCost,
   metaUnlocked, stageUnlocked, buyMeta, refundMeta, weaponUnlocked, passiveUnlocked, lunchUnlocked, type Settlement,
@@ -20,6 +20,7 @@ export interface ScreenHost {
   root: HTMLElement;
   profile: Profile;
   save(): void;
+  checkAchievements(): void;
   startRun(opts: { char: string; stage: string; heat: number; daily: boolean }): void;
   applySettings(): void;
   show(name: string): void;
@@ -68,20 +69,35 @@ export class Screens {
   selChar = 'kim';
   selStage = 'office';
   selHeat = 0;
-  constructor(private host: ScreenHost) {}
+  curName = '';
+  constructor(private host: ScreenHost) { this.syncSel(); }
 
-  private mount(el: HTMLElement) {
+  /** 저장된 마지막 선택(캐릭터·근무지·강도)으로 맞춘다 */
+  syncSel() {
+    const p = this.host.profile;
+    this.selChar = characterOwned(p, p.sel.char) ? p.sel.char : 'kim';
+    this.selStage = stageUnlocked(p, p.sel.stage) ? p.sel.stage : 'office';
+    this.selHeat = featureUnlocked(p, 'heat') ? Math.min(p.sel.heat, maxHeatFor(p, this.selStage)) : 0;
+  }
+
+  private mount(el: HTMLElement, name = '') {
     this.cur?.remove();
     this.cur = el;
+    this.curName = name;
     this.host.root.appendChild(el);
   }
-  close() { this.cur?.remove(); this.cur = null; }
+  close() { this.cur?.remove(); this.cur = null; this.curName = ''; }
 
   // ───────────── 타이틀 ─────────────
   title() {
     const p = this.host.profile;
-    const unclaimedDaily = featureUnlocked(p, 'daily') && !p.daily.played;
+    const today = todayKey();
+    const dToday = p.daily.date === today;
+    const played = dToday && p.daily.played, cleared = dToday && p.daily.cleared;
+    const streak = p.daily.lastClear === today || p.daily.lastClear === yesterdayKey() ? p.daily.streak : 0;
+    const unclaimedDaily = featureUnlocked(p, 'daily') && !played;
     const di = featureUnlocked(p, 'daily') ? dailyInfo(p) : null;
+    if (di) this.host.save();
     const tag = h('div', { class: 'tagline' }, pickStr(TITLE_TAGLINES, '오늘은 반드시 칼퇴한다.'));
     const achDone = Object.keys(p.achievements).length;
     const el = h('div', { class: 'screen title-screen' },
@@ -97,9 +113,9 @@ export class Screens {
       ),
       h('div', { class: 'title-main' },
         di ? h('div', { class: `daily-card${unclaimedDaily ? ' badge-dot' : ''}`, onclick: () => { audio.play('click'); this.host.startRun({ char: di.char, stage: di.stage, heat: di.heat, daily: true }); } },
-          h('div', null, '📅 ', h('b', null, '오늘의 업무'), p.daily.cleared ? ' ✅ 완료' : p.daily.played ? ' (재도전 가능)' : ' — 보너스 월급!'),
+          h('div', null, '📅 ', h('b', null, '오늘의 업무'), cleared ? ' ✅ 완료' : played ? ' (재도전 가능)' : ' — 보너스 월급!'),
           h('div', { class: 'sub' }, `${CHARACTERS.find(c => c.id === di.char)?.name}${characterUnlocked(p, di.char) ? '' : '(체험 근무)'} · ${STAGES.find(s => s.id === di.stage)?.name} · ${di.modifiers.map(m => `${m.icon}${m.name}`).join(' · ')}`),
-          p.daily.streak > 1 ? h('div', { class: 'sub' }, `🔥 연속 ${p.daily.streak}일 달성 중`) : null,
+          streak > 1 ? h('div', { class: 'sub' }, `🔥 연속 ${streak}일 달성 중`) : null,
         ) : null,
         btn(h('span', null, '🏢 출근하기'), () => this.charSelect(), 'btn primary big'),
         h('div', { class: 'title-grid' },
@@ -116,7 +132,7 @@ export class Screens {
         ),
       ),
     );
-    this.mount(el);
+    this.mount(el, 'title');
     // 태그라인 순환
     const iv = window.setInterval(() => { if (!el.isConnected) { clearInterval(iv); return; } tag.textContent = pickStr(TITLE_TAGLINES, tag.textContent ?? ''); }, 5000);
   }
@@ -172,7 +188,7 @@ export class Screens {
     const heatBox = h('div');
     const renderHeat = () => {
       clear(heatBox);
-      if (!featureUnlocked(p, 'heat')) return;
+      if (!featureUnlocked(p, 'heat')) { this.selHeat = 0; return; }
       const max = maxHeatFor(p, this.selStage);
       this.selHeat = Math.min(this.selHeat, max);
       const lv = this.selHeat;
@@ -242,7 +258,7 @@ export class Screens {
             m.maxRank <= 12 ? pips : h('div', { class: 'bar', style: 'margin-top:6px' }, h('i', { style: `width:${(r / m.maxRank) * 100}%` })),
           ),
           un ? (max ? h('span', { class: 'pill y' }, 'MAX') : btn(`₩${cost.toLocaleString('ko-KR')}`, () => {
-            if (buyMeta(p, m.id)) { audio.play('buy'); this.host.save(); render(); } else audio.play('hurt');
+            if (buyMeta(p, m.id)) { audio.play('buy'); this.host.save(); this.host.checkAchievements(); render(); } else audio.play('hurt');
           }, p.coins >= cost ? 'btn small primary' : 'btn small ghost')) : null,
         ));
       }

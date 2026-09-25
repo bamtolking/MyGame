@@ -106,6 +106,7 @@ export function openLevelUp(w: World) {
     w.stats_.coins += 5 * n * w.coinMul;
     w.levelQueue = 0;
     w.choices = [];
+    w.phase = 'play';
     return;
   }
   w.phase = 'levelup';
@@ -131,7 +132,7 @@ export function applyChoice(w: World, idx: number) {
 
 function finishLevel(w: World) {
   w.levelQueue = Math.max(0, w.levelQueue - 1);
-  if (w.levelQueue > 0) w.choices = buildChoices(w);
+  if (w.levelQueue > 0) openLevelUp(w);   // 고를 게 없으면 여기서도 자동 처리
   else { w.choices = []; w.phase = 'play'; }
 }
 

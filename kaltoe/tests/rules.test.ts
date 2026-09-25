@@ -154,6 +154,17 @@ describe('점심', () => {
 });
 
 describe('칼퇴 / 야근 확정', () => {
+  /** 퇴근 정리(바닥 아이템 회수 1.6초)를 지나 칼퇴 화면까지 진행 */
+  function stepToVictory(w: World) {
+    for (let i = 0; i < 60 * 8 && w.phase !== 'victory'; i++) {
+      if (w.phase === 'play') stepWorld(w);
+      else if (w.phase === 'levelup') applyChoice(w, 0);
+      else if (w.phase === 'chest') closeChest(w);
+      else if (w.phase === 'lunch') applyLunch(w, w.lunchChoices[0].id);
+      else break;
+      w.events.length = 0;
+    }
+  }
   function fastForwardTo(w: World, t: number) {
     w.player.invulnT = 1e9;
     w.lunchOffered = true;
@@ -174,23 +185,28 @@ describe('칼퇴 / 야근 확정', () => {
       const boss = w.enemies.find(e => e.def.id === w.cfg.stage.finalBoss && !e.dead)!;
       expect(boss).toBeTruthy();
       killEnemy(w, boss, 0);
-      stepWorld(w);
     }
+    stepToVictory(w);
     expect(w.phase).toBe('victory');
     expect(w.cleared).toBe(true);
+    expect(clockText(w)).toBe('18:00');
+    // 보스 상자·코인은 퇴근 정리 중에 회수된다
+    expect(w.pickups.filter(k => !k.dead && k.kind === 'chest').length).toBe(0);
   });
   it('칼퇴 후 야근 모드로 계속 가능', () => {
     const w = createWorld(makeConfig({ seed: 8, overtime: true }));
     fastForwardTo(w, BALANCE.runSeconds + 1);
     const boss = w.enemies.find(e => e.def.id === w.cfg.stage.finalBoss && !e.dead);
-    if (boss) { killEnemy(w, boss, 0); stepWorld(w); }
+    if (boss) killEnemy(w, boss, 0);
+    stepToVictory(w);
     expect(w.phase).toBe('victory');
     continueOvertime(w);
     expect(w.phase).toBe('play');
     w.player.invulnT = 1e9;
     for (let i = 0; i < 60 * 70; i++) { if (w.phase === 'play') stepWorld(w); else if (w.phase === 'levelup') applyChoice(w, 0); else if (w.phase === 'chest') closeChest(w); w.events.length = 0; }
     expect(w.stats_.overtimeSec).toBeGreaterThan(60);
-    expect(clockText(w) >= '18:00').toBe(true);
+    expect(w.stats_.overtimeSec).toBeLessThan(75);   // 야근 확정 시간은 야근 모드에 포함되지 않는다
+    expect(clockText(w) >= '18:01').toBe(true);
   });
 });
 
@@ -198,7 +214,7 @@ describe('전투 규칙', () => {
   it('처치 시 경험치 보석이 떨어지고 한 번만 처치된다', () => {
     const w = createWorld(makeConfig({}));
     const def = ENEMY.get(STAGE.get('office')!.timeline[0].pool[0].enemy)!;
-    const e = spawnEnemy(w, def, 50, 0, hpScale(w, false));
+    const e = spawnEnemy(w, def, 50, 0, hpScale(w, false))!;
     killEnemy(w, e, 0);
     killEnemy(w, e, 0);
     expect(w.stats_.kills).toBe(1);
@@ -207,7 +223,7 @@ describe('전투 규칙', () => {
   it('보스는 상자(보스 상자)를 떨어뜨린다', () => {
     const w = createWorld(makeConfig({}));
     const boss = ENEMY.get(STAGE.get('office')!.finalBoss)!;
-    const e = spawnEnemy(w, boss, 100, 0, hpScale(w, true));
+    const e = spawnEnemy(w, boss, 100, 0, hpScale(w, true))!;
     expect(w.bossAlive).toBe(e);
     damageEnemy(w, e, e.hp * 10, 0, { flat: true });
     expect(e.dead).toBe(true);
@@ -218,7 +234,7 @@ describe('전투 규칙', () => {
   it('분열 적은 사망 시 자식을 낳는다', () => {
     const w = createWorld(makeConfig({}));
     const sp = [...ENEMY.values()].find(e => e.split)!;
-    const e = spawnEnemy(w, sp, 80, 0, 1);
+    const e = spawnEnemy(w, sp, 80, 0, 1)!;
     const n0 = w.enemies.length;
     killEnemy(w, e, 0);
     expect(w.enemies.length - n0).toBe(sp.split!.count);

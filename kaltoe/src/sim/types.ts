@@ -45,7 +45,7 @@ export interface Enemy {
   contactCd: number;
   slowT: number; slowAmt: number;
   freezeT: number; stunT: number;
-  burnT: number; burnDps: number; burnTick: number;
+  burnT: number; burnDps: number; burnTick: number; burnSlot: number;
   buffT: number; buffAmt: number;
   hitCd: Float32Array;             // 무기 슬롯별 재타격 가능 시각 (0..5 무기, 6 궁극기/장판, 7 예비)
   // 행동 상태
@@ -120,7 +120,7 @@ export interface Zone {
 export interface Beam {
   slot: number; x: number; y: number; ang: number; len: number; w: number;
   life: number; maxLife: number; dmg: number; hitCd: number; spin: number; color: string;
-  fx: WeaponStats; dead: boolean;
+  fx: WeaponStats; dead: boolean; knock: number;
 }
 
 export interface Ring {
@@ -144,6 +144,7 @@ export interface Pickup {
 
 export interface Player {
   x: number; y: number; r: number;
+  px: number; py: number;          // 직전 스텝 위치(렌더 보간)
   hp: number;
   fx: number; fy: number;          // 바라보는 방향(단위 벡터)
   mx: number; my: number;          // 이번 스텝 이동 입력(-1..1)
@@ -211,6 +212,7 @@ export interface RunConfig {
   unlockedPassives: Set<string>;
   unlockedLunches: Set<string>;
   daily: boolean;
+  dailyDate: string;               // 오늘의 업무 날짜(자정을 넘긴 판 정산 구분)
   overtimeAllowed: boolean;
 }
 
@@ -289,7 +291,11 @@ export interface World {
   gemCount: number;
   refillAcc: number;
   lsBudget: number;
-  shotBudget: number;              // 일반 원거리 적 초당 발사 예산                // 흡혈 회복 예산(초당 충전)               // 최소 생존 보충 누적                // 바닥의 경험치 보석 수(병합 판단)
+  shotBudget: number;
+  wrapUp: boolean;                 // 18:00 퇴근 정리 중
+  clearT: number;                  // 퇴근 정리 남은 시간
+  clearHp: number;                 // 칼퇴 순간 체력 비율(아슬아슬 칼퇴 업적)
+  overtimeStart: number;           // 야근 모드 시작 시각(t)              // 일반 원거리 적 초당 발사 예산                // 흡혈 회복 예산(초당 충전)               // 최소 생존 보충 누적                // 바닥의 경험치 보석 수(병합 판단)
   damageMulT: number; damageMulAmt: number;  // 궁극기 vacuum 버프
   fireMulT: number; fireMul: number;         // 궁극기 clone 버프
 }

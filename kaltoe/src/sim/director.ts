@@ -43,12 +43,15 @@ function runEvent(w: World, ev: StageEvent) {
       if (!def) return;
       const n = ev.count ?? 20;
       const ang = rand(w.rng) * TAU;
-      const R = Math.max(w.viewW, w.viewH) / 2 + 60;
+      // 화면 사각형 가장자리 바로 바깥(세로 화면에서도 무리가 즉시 사라지지 않게)
+      const ca = Math.abs(Math.cos(ang)) || 1e-6, sa = Math.abs(Math.sin(ang)) || 1e-6;
+      const R = Math.min((w.viewW / 2) / ca, (w.viewH / 2) / sa) + 60;
       const cx = p.x + Math.cos(ang) * R, cy = p.y + Math.sin(ang) * R;
       const dir = Math.atan2(p.y - cy, p.x - cx);
       for (let i = 0; i < n && aliveCount(w) < MAX_ENEMIES; i++) {
         const ox = randRange(w.rng, -70, 70), oy = randRange(w.rng, -70, 70);
         const e = spawnEnemy(w, def, cx + ox, cy + oy, hpScale(w, false, segMul));
+        if (!e) break;
         e.straight = true;
         const d = dir + randRange(w.rng, -0.08, 0.08);
         e.dx = Math.cos(d); e.dy = Math.sin(d);
@@ -107,7 +110,7 @@ export function updateDirector(w: World) {
   if (w.t >= BALANCE.runSeconds) {
     // 야근 확정/야근 모드: 마지막 구간 + 분당 증가
     const last = stage.timeline[stage.timeline.length - 1];
-    const min = (w.t - BALANCE.runSeconds) / 60;
+    const min = (w.t - (w.overtime ? w.overtimeStart : BALANCE.runSeconds)) / 60;
     const grow = 1 + BALANCE.overtimeSpawnGrowth * min;
     pool = w.overtime ? stage.overtimePool : last.pool;
     rate = (last.rateEnd ?? last.rate) * grow;
@@ -156,8 +159,8 @@ export function updateDirector(w: World) {
   }
   // 야근 모드: 주기적 엘리트
   if (w.overtime) {
-    const prev = Math.floor((w.t - DT - BALANCE.runSeconds) / 45);
-    const cur = Math.floor((w.t - BALANCE.runSeconds) / 45);
+    const prev = Math.floor((w.t - DT - w.overtimeStart) / 45);
+    const cur = Math.floor((w.t - w.overtimeStart) / 45);
     if (cur > prev && cur > 0) {
       const elites = [...new Set(stage.events.filter(e => e.kind === 'elite' && e.enemy).map(e => e.enemy!))];
       const id = elites.length ? elites[Math.floor(rand(w.rng) * elites.length)] : undefined;
@@ -170,9 +173,11 @@ export function updateDirector(w: World) {
 
 /** 표시용 게임 속 시각(분 단위, 09:00 = 540) */
 export function clockMinutes(w: World): number {
-  if (w.yageun && !w.cleared) return 17 * 60 + 59;
   const perSec = (9 * 60) / BALANCE.runSeconds;
-  return 9 * 60 + Math.floor(w.t * perSec);
+  if (w.overtime) return 18 * 60 + Math.floor((w.t - w.overtimeStart) * perSec);
+  if (w.cleared || w.wrapUp) return 18 * 60;
+  if (w.yageun) return 17 * 60 + 59;
+  return 9 * 60 + Math.floor(Math.min(w.t, BALANCE.runSeconds) * perSec);
 }
 
 export function clockText(w: World): string {

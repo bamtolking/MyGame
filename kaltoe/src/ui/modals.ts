@@ -62,7 +62,9 @@ export class Modals {
   close() { this.cur?.remove(); this.cur = null; this.kind = ''; this.banishMode = false; }
 
   private open(kind: string, ...children: (Node | null)[]) {
+    const keepBanish = kind === 'levelup' && this.kind === 'levelup' ? this.banishMode : false;
     this.close();
+    this.banishMode = keepBanish;
     this.kind = kind;
     const m = h('div', { class: 'modal' }, ...children);
     this.cur = h('div', { class: 'modal-wrap no-joy' }, m);
@@ -73,6 +75,7 @@ export class Modals {
   levelUp(w: World) {
     const p = w.player;
     const lockUntil = performance.now() + 380; // 조이스틱에서 손 떼며 잘못 누르는 것 방지
+    let toolLock = performance.now() + 250;   // 새로고침/제외 연타로 두 번 쓰이는 것 방지
     const list = h('div', { class: 'choices-grid' });
     w.choices.forEach((c, i) => {
       const inf = choiceInfo(w, c);
@@ -86,16 +89,18 @@ export class Modals {
         inf.tag ? h('span', { class: `tag ${inf.tagCls}` }, inf.tag) : null,
       );
       card.addEventListener('click', () => {
-        if (performance.now() < lockUntil) return;
+        if (performance.now() < lockUntil || performance.now() < toolLock) return;
+        toolLock = performance.now() + 350;
         if (this.banishMode) { this.banishMode = false; this.host.banish(i); return; }
         this.host.pick(i);
       });
       list.appendChild(card);
     });
     const tools = h('div', { class: 'lvl-tools' });
-    if (p.rerolls > 0) tools.appendChild(btn(`🔄 새로고침 ${p.rerolls}`, () => this.host.reroll(), 'btn small sky'));
-    if (p.skips > 0) tools.appendChild(btn(`⏭ 건너뛰기 ${p.skips}`, () => this.host.skip(), 'btn small ghost'));
-    if (p.banishes > 0) tools.appendChild(btn(this.banishMode ? '취소' : `🚫 제외 ${p.banishes}`, () => { this.banishMode = !this.banishMode; this.levelUp(w); }, 'btn small danger'));
+    const guard = (fn: () => void) => () => { if (performance.now() < toolLock) return; toolLock = performance.now() + 350; fn(); };
+    if (p.rerolls > 0) tools.appendChild(btn(`🔄 새로고침 ${p.rerolls}`, guard(() => this.host.reroll()), 'btn small sky'));
+    if (p.skips > 0) tools.appendChild(btn(`⏭ 건너뛰기 ${p.skips}`, guard(() => this.host.skip()), 'btn small ghost'));
+    if (p.banishes > 0) tools.appendChild(btn(this.banishMode ? '취소' : `🚫 제외 ${p.banishes}`, guard(() => { this.banishMode = !this.banishMode; this.levelUp(w); }), 'btn small danger'));
     this.open('levelup',
       h('div', { class: 'modal-title' }, `🎉 레벨 ${p.level - w.levelQueue + 1}!`),
       h('div', { class: 'modal-sub' }, this.banishMode ? '제외할 항목을 고르세요 (이번 판에서 다시 안 나옴)' : pickStr(LEVELUP_SHOUTS, '승진각!')),

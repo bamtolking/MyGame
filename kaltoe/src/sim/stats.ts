@@ -61,13 +61,13 @@ export function recalcStats(w: World) {
     growthMul: Math.max(0, 1 + s.growth),
     greedMul: Math.max(0, 1 + s.greed),
     curse: Math.max(0, s.curse),
-    crit: clamp(BALANCE.baseCrit + s.crit, 0, 1),
+    crit: clamp(BALANCE.baseCrit + s.crit + Math.max(0, s.luck) * 0.1, 0, 1),   // 행운 +100%당 치명타 +10%p
     ultMul: Math.max(0.1, 1 + s.ultCharge),
   };
   if (w.flags.has('oneHp')) { d.maxHp = 1; d.recovery = 0; }
   w.d = d;
   // 최대 체력이 늘면 늘어난 만큼 회복
-  if (prevMax > 0 && d.maxHp > prevMax) w.player.hp += d.maxHp - prevMax;
+  if (prevMax > 0 && d.maxHp > prevMax && !w.flags.has('noHeal')) w.player.hp += d.maxHp - prevMax;
   w.player.hp = Math.min(w.player.hp, d.maxHp);
 }
 

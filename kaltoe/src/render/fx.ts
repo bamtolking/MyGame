@@ -27,38 +27,62 @@ export class Fx {
   private numByUid = new Map<number, DmgNum>();
   private seed = 1;
 
-  private numCache = new Map<string, { c: HTMLCanvasElement; w: number; h: number }>();
   numScale = 2;
-  private numSprite(txt: string, crit: boolean) {
-    const key = txt + (crit ? '!' : '');
-    let s = this.numCache.get(key);
-    if (s) return s;
-    if (this.numCache.size > 500) this.numCache.clear();
-    const size = crit ? 15 : 11;
-    const S = this.numScale;
+  private atlas: { c: HTMLCanvasElement; x: Record<string, number>; w: number; h: number; scale: number } | null = null;
+  private static GLYPHS = '0123456789.k';
+
+  /** 숫자 글리프 아틀라스(일반 흰색 / 치명타 노랑 두 줄) — 피해 숫자는 글자 조각을 이어 붙여 그린다 */
+  private getAtlas() {
+    if (this.atlas && this.atlas.scale === this.numScale) return this.atlas;
+    const S = this.numScale, size = 15, cw = size * 0.72, h = size + 8;
+    const G = Fx.GLYPHS;
     const c = document.createElement('canvas');
-    const w = size * 0.62 * txt.length + 8, h = size + 8;
-    c.width = Math.ceil(w * S); c.height = Math.ceil(h * S);
+    c.width = Math.ceil(cw * G.length * S); c.height = Math.ceil(h * 2 * S);
     const g = c.getContext('2d')!;
     g.scale(S, S);
     g.font = `900 ${size}px ${UI_FONT}`;
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.75)'; g.lineJoin = 'round';
-    g.strokeText(txt, w / 2, h / 2);
-    g.fillStyle = crit ? '#ffd43b' : '#ffffff';
-    g.fillText(txt, w / 2, h / 2);
-    s = { c, w, h };
-    this.numCache.set(key, s);
-    return s;
+    g.lineJoin = 'round'; g.lineWidth = 3.4; g.strokeStyle = 'rgba(0,0,0,.8)';
+    const x: Record<string, number> = {};
+    for (let row = 0; row < 2; row++) {
+      g.fillStyle = row ? '#ffd43b' : '#ffffff';
+      for (let i = 0; i < G.length; i++) {
+        const cx = cw * i + cw / 2, cy = h * row + h / 2;
+        g.strokeText(G[i], cx, cy);
+        g.fillText(G[i], cx, cy);
+        x[G[i]] = cw * i;
+      }
+    }
+    this.atlas = { c, x, w: cw, h, scale: S };
+    return this.atlas;
+  }
+
+  private drawNumber(g: CanvasRenderingContext2D, txt: string, x: number, y: number, size: number, crit: boolean) {
+    const a = this.getAtlas();
+    const k = size / 15;
+    const adv = a.w * 0.78 * k;
+    let cx = x - (adv * txt.length) / 2;
+    const S = a.scale;
+    for (const ch of txt) {
+      const sx = a.x[ch];
+      if (sx !== undefined) g.drawImage(a.c, sx * S, (crit ? a.h : 0) * S, a.w * S, a.h * S, cx - (a.w * k - adv) / 2, y - (a.h * k) / 2, a.w * k, a.h * k);
+      cx += adv;
+    }
   }
 
   rnd() { this.seed = (this.seed * 16807) % 2147483647; return (this.seed - 1) / 2147483646; }
+
+  /** 새 판 시작 시 이전(데모 포함) 효과를 모두 지운다 */
+  reset() {
+    this.parts.length = 0; this.nums.length = 0; this.booms.length = 0; this.bolts.length = 0; this.texts.length = 0;
+    this.numByUid.clear(); this.shake = 0; this.flash = 0;
+  }
 
   setLow(low: boolean) { this.maxParts = low ? 220 : 700; }
 
   burst(x: number, y: number, color: string, n: number, speed = 160, size = 3, kind: 0 | 1 | 2 = 0, grav = 0) {
     for (let i = 0; i < n; i++) {
-      if (this.parts.length >= this.maxParts) this.parts.shift();
+      if (this.parts.length >= this.maxParts) return;   // 가득 차면 새 파티클을 버린다(앞에서 빼는 O(n) 대신)
       const a = this.rnd() * Math.PI * 2, s = speed * (0.35 + this.rnd() * 0.75);
       const life = 0.25 + this.rnd() * 0.35 + (kind === 2 ? 0.4 : 0);
       this.parts.push({
@@ -127,7 +151,7 @@ export class Fx {
   }
 
   /** 월드 좌표계(카메라 변환 적용된 상태)에서 호출 */
-  drawWorld(g: CanvasRenderingContext2D) {
+  drawWorld(g: CanvasRenderingContext2D, bS = 1, bx = 0, by = 0) {
     // 폭발 고리
     for (const b of this.booms) {
       const k = 1 - b.life / b.max;
@@ -170,7 +194,10 @@ export class Fx {
       g.fillStyle = p.color;
       if (p.kind === 1) { g.beginPath(); g.arc(p.x, p.y, p.size, 0, Math.PI * 2); g.fill(); }
       else if (p.kind === 2) {
-        g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.fillRect(-p.size, -p.size * 0.7, p.size * 2, p.size * 1.4); g.restore();
+        const c = Math.cos(p.rot) * bS, n = Math.sin(p.rot) * bS;
+        g.setTransform(c, n, -n, c, bx + p.x * bS, by + p.y * bS);
+        g.fillRect(-p.size, -p.size * 0.7, p.size * 2, p.size * 1.4);
+        g.setTransform(bS, 0, 0, bS, bx, by);
       } else g.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
     }
     g.globalAlpha = 1;
@@ -180,9 +207,7 @@ export class Fx {
       const pop = n.life > 0.5 ? 1 + (n.life - 0.5) * 4 : 1;
       g.globalAlpha = Math.min(1, k * 2);
       const txt = n.v >= 10000 ? (n.v / 1000).toFixed(0) + 'k' : n.v >= 1000 ? (n.v / 1000).toFixed(1) + 'k' : String(Math.max(1, Math.round(n.v)));
-      const sp = this.numSprite(txt, n.crit);
-      const sc = pop * (n.v >= 1000 ? 1.15 : 1);
-      g.drawImage(sp.c, n.x - sp.w * sc / 2, n.y - sp.h * sc / 2, sp.w * sc, sp.h * sc);
+      this.drawNumber(g, txt, n.x, n.y, (n.crit ? 15 : 11) * pop * (n.v >= 1000 ? 1.15 : 1), n.crit);
     }
     g.textAlign = 'center'; g.textBaseline = 'middle';
     // 떠오르는 글자

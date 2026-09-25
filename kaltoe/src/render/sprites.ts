@@ -395,10 +395,29 @@ export function shadow(radius: number): Sprite {
   return s;
 }
 
-/** 부드러운 원형 빛(가산 합성용) */
+/** 부드러운 원형 빛. 내부 해상도는 고정(반지름 40u)이고 그릴 때 원하는 크기로 늘린다 → 캐시가 커지지 않는다. */
 export function glow(color: string, radius: number): Sprite {
+  const R = 40;
+  const key = `gl|${color}`;
+  let base = cache.get(key);
+  if (!base) {
+    const W = R * 2;
+    const [c, g] = canvas(W, W);
+    const grd = g.createRadialGradient(R, R, 0, R, R, R);
+    grd.addColorStop(0, color);
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, W, W);
+    base = { c, w: W, h: W, ax: R, ay: R };
+    cache.set(key, base);
+  }
+  return { c: base.c, w: radius * 2, h: radius * 2, ax: radius, ay: radius };
+}
+
+/** (사용 안 함) 반지름별 원형 빛 */
+function glowSized(color: string, radius: number): Sprite {
   const r = Math.round(radius);
-  const key = `gl|${color}|${r}`;
+  const key = `gls|${color}|${r}`;
   let s = cache.get(key);
   if (s) return s;
   const W = r * 2;
@@ -432,3 +451,5 @@ export function drawSpriteRot(g: CanvasRenderingContext2D, s: Sprite, x: number,
   g.drawImage(s.c, -s.ax * scale, -s.ay * scale, s.w * scale, s.h * scale);
   g.restore();
 }
+
+void glowSized;

@@ -145,7 +145,7 @@ function fireVolley(w: World, wi: WeaponInst, e: Eff) {
         w.beams.push({
           slot: wi.slot, x: p.x, y: p.y, ang: base + (i / n) * TAU, len: e.range * w.d.areaMul, w: e.area,
           life: e.dur, maxLife: e.dur, dmg: e.dmg, hitCd: e.hitCd, spin: (wi.st.spinDeg ?? 0) * Math.PI / 180,
-          color: def.color, fx: wi.st, dead: false,
+          color: def.color, fx: wi.st, dead: false, knock: e.knock,
         });
       }
       w.events.push({ t: 'shoot', w: def.id });
@@ -195,7 +195,7 @@ function fireVolley(w: World, wi: WeaponInst, e: Eff) {
       for (let i = 0; i < e.amount; i++) {
         const tgt = randomEnemy(w, e.range, used) ?? randomEnemy(w, e.range);
         let x: number, y: number;
-        if (tgt) { used.add(tgt.uid); x = tgt.x + tgt.vx * 0.1; y = tgt.y; }
+        if (tgt) { used.add(tgt.uid); x = tgt.x; y = tgt.y; }
         else { const a = rand(w.rng) * TAU, d = randRange(w.rng, 60, e.range); x = p.x + Math.cos(a) * d; y = p.y + Math.sin(a) * d; }
         pushBlast(w, {
           kind: 'lob', slot: wi.slot, x, y, sx: p.x, sy: p.y, delay: wi.st.delay ?? 0.6, r: e.area, dmg: e.dmg, knock: e.knock,
@@ -295,14 +295,13 @@ export function orbitPositions(w: World, wi: WeaponInst): { x: number; y: number
 }
 
 function updateOrbit(w: World, wi: WeaponInst, e: Eff, fireMul: number) {
+  // 재사용 대기는 켜지는 순간부터 센다: 가동률 = duration / cooldown (duration ≥ cooldown이면 상시)
   const always = e.dur >= e.cd;
   if (!always) {
+    wi.cd -= DT * fireMul;
     if (wi.on > 0) wi.on -= DT;
-    else {
-      wi.cd -= DT * fireMul;
-      if (wi.cd <= 0) { wi.on = e.dur; wi.cd = e.cd; w.events.push({ t: 'shoot', w: wi.def.id }); }
-      return;
-    }
+    if (wi.cd <= 0) { wi.on = e.dur; wi.cd = e.cd; w.events.push({ t: 'shoot', w: wi.def.id }); }
+    if (wi.on <= 0) return;
   } else wi.on = 1;
   wi.angle += (e.speed * Math.PI / 180) * DT;
   const p = w.player;
@@ -365,7 +364,7 @@ export function updateBullets(w: World) {
     } else if (b.life <= 0) { b.dead = true; continue; }
 
     if (b.kind === 'homing') {
-      if (!b.tgt || b.tgt.dead || (w.step & 7) === 0) b.tgt = nearestEnemy(w, b.x, b.y, 320, e => b.hits.includes(e.uid));
+      if (!b.tgt || b.tgt.dead || b.hits.includes(b.tgt.uid) || (w.step & 7) === 0) b.tgt = nearestEnemy(w, b.x, b.y, 320, e => b.hits.includes(e.uid));
       if (b.tgt) {
         const want = Math.atan2(b.tgt.y - b.y, b.tgt.x - b.x);
         const cur = Math.atan2(b.vy, b.vx);
@@ -482,7 +481,7 @@ export function updateBeams(w: World) {
       const rr = b.w / 2 + en.r;
       if (segDist2(b.x, b.y, ex, ey, en.x, en.y) > rr * rr) return;
       en.hitCd[b.slot] = b.hitCd;
-      damageEnemy(w, en, b.dmg, b.slot, { fx: b.fx, knock: 4, kx: Math.cos(b.ang), ky: Math.sin(b.ang) });
+      damageEnemy(w, en, b.dmg, b.slot, { fx: b.fx, knock: b.knock, kx: Math.cos(b.ang), ky: Math.sin(b.ang) });
     });
   }
 }

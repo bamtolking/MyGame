@@ -21,14 +21,17 @@ export function stepWorld(w: World) {
   for (const e of w.enemies) if (!e.dead) w.grid.insert(e);
 
   updatePlayer(w);
-  updateDirector(w);
+  if (!w.wrapUp) updateDirector(w);   // 퇴근 정리 중에는 새 적이 오지 않는다
   updateEnemies(w);
+  if (w.phase !== 'play') { compact(w); return; }   // 쓰러지면 그 스텝의 나머지 전투는 없음
   separateEnemies(w);
   updateEnemyBullets(w);
+  if (w.phase !== 'play') { compact(w); return; }
   updateWeapons(w);
   updateBullets(w);
   updateBlasts(w);
   updateZones(w);
+  if (w.phase !== 'play') { compact(w); return; }
   updateBeams(w);
   updateRings(w);
   updateUlt(w);
@@ -45,22 +48,34 @@ export function stepWorld(w: World) {
       w.events.push({ t: 'hour', hour });
     }
   }
-  if (w.overtime) rs.overtimeSec = w.t - BALANCE.runSeconds;
+  if (w.overtime) rs.overtimeSec = w.t - w.overtimeStart;
 
   if (w.phase !== 'play') return; // 사망
 
   // 18:00 도달
   if (w.t >= BALANCE.runSeconds && !w.cleared) {
     if (w.finalBossDead) {
-      w.cleared = true;
-      rs.cleared = true;
-      rs.levelAt[18] = w.player.level;
-      rs.killsAt[18] = rs.kills;
-      w.phase = 'victory';
-      w.events.push({ t: 'clear' });
-      return;
-    }
-    if (!w.yageun) {
+      if (!w.wrapUp) {
+        // 퇴근 정리: 새 적은 멈추고, 바닥의 보석·코인·상자를 모두 끌어오고, 잠깐 무적
+        w.wrapUp = true;
+        w.clearT = 1.6;
+        w.clearHp = w.player.hp / w.d.maxHp;
+        w.player.invulnT = Math.max(w.player.invulnT, 4);
+        w.events.push({ t: 'toast', text: '18:00 — 퇴근 준비! 책상 정리 중…', kind: 'good' });
+      }
+      w.clearT = Math.max(0, w.clearT - DT);
+      for (const k of w.pickups) if (!k.dead) k.pull = true;
+      // 상자·레벨업이 남아 있으면 그것부터 처리한 뒤 퇴근
+      if (w.clearT <= 0 && w.chestQueue.length === 0 && w.levelQueue === 0 && !w.pickups.some(k => !k.dead && k.kind === 'chest')) {
+        w.cleared = true;
+        rs.cleared = true;
+        rs.levelAt[18] = w.player.level;
+        rs.killsAt[18] = rs.kills;
+        w.phase = 'victory';
+        w.events.push({ t: 'clear' });
+        return;
+      }
+    } else if (!w.yageun) {
       w.yageun = true;
       w.events.push({ t: 'yageun' });
     }
@@ -82,6 +97,8 @@ export function stepWorld(w: World) {
 export function continueOvertime(w: World) {
   if (w.phase !== 'victory') return;
   w.overtime = true;
+  w.overtimeStart = w.t;
+  w.wrapUp = false;
   w.phase = 'play';
   w.events.push({ t: 'toast', text: '야근 모드 시작… 오늘 집에 갈 수 있을까?', kind: 'warn' });
 }

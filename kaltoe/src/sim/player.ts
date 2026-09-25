@@ -47,6 +47,7 @@ export function healPlayer(w: World, amt: number) {
 
 export function updatePlayer(w: World) {
   const p = w.player;
+  p.px = p.x; p.py = p.y;
   const L = Math.hypot(p.mx, p.my);
   p.moving = L > 0.05;
   if (p.moving) {

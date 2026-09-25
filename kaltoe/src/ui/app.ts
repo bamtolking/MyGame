@@ -9,7 +9,7 @@ import type { World } from '../sim/types';
 import { autoChoose, autoMove } from '../sim/autopilot';
 import { Renderer } from '../render/renderer';
 import { Fx } from '../render/fx';
-import { loadProfile, saveProfile, type Profile } from '../platform/save';
+import { loadProfile, saveProfile, SAVE_KEY, type Profile } from '../platform/save';
 import { audio, vibrate } from '../platform/audio';
 import { buildRunConfig, checkAttendance, dailyInfo, dailyModifiersFor, evaluateAchievements, settleRun } from '../meta/progress';
 import { Input } from './input';
@@ -41,11 +41,17 @@ export class App {
   private hudT = 0;
   fps = 60;
   private slowSec = 0;
+  private fastSec = 0;
+  private fpsHist: number[] = [];
+  private workAcc = 0;
+  private frameN = 0;
+  private stepsThisFrame = 0;
   private combo = 0;
   private comboT = 0;
   private comboBest = 0;
   private phaseDelay = -1;
   private ultHinted = false;
+  private overtimeMin = 0;
   private fpsAcc = 0; private fpsN = 0;
   private lastRunOpts: { char: string; stage: string; heat: number; daily: boolean } | null = null;
   private deathT = 0;
@@ -94,7 +100,11 @@ export class App {
       startRun: o => this.startRun(o),
       applySettings: () => this.applySettings(),
       show: () => {},
-      replaceProfile: p => { this.profile = p; this.save(); this.applySettings(); },
+      replaceProfile: p => { this.profile = p; this.save(); this.applySettings(); this.screens.syncSel(); },
+      checkAchievements: () => {
+        const g = evaluateAchievements(this.profile);
+        if (g.length) { this.save(); for (const x of g) this.toasts.show(`🏆 업적 달성: ${x.a.name} — ${x.text}`, 'ach', 3500); audio.play('jackpot'); }
+      },
     });
     this.applySettings();
 
@@ -102,7 +112,13 @@ export class App {
     window.addEventListener('orientationchange', () => setTimeout(() => this.onResize(), 200));
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { if (this.world && this.world.phase === 'play') this.setPaused(true); audio.suspend(); }
-      else audio.resume();
+      else { audio.resume(); if (!this.world) this.checkDay(); }
+    });
+    // 다른 탭에서 저장이 바뀌면(판 진행 중이 아닐 때) 다시 읽는다
+    window.addEventListener('storage', e => {
+      if (e.key !== SAVE_KEY || this.world) return;
+      const lp = loadProfile();
+      if (lp.status === 'ok') { this.profile = lp.profile; this.screens.syncSel(); if (this.screens.curName === 'title') this.screens.title(); }
     });
     const unlock = () => { audio.unlock(); audio.startMusic(); };
     window.addEventListener('pointerdown', unlock, { once: false, passive: true });
@@ -117,22 +133,26 @@ export class App {
 
   private greet() {
     if (this.saveStatus === 'restored') this.toasts.show('저장 파일이 손상되어 백업에서 복구했습니다', 'warn', 4000);
-    if (this.saveStatus === 'corrupt') this.toasts.show('저장 파일을 읽지 못해 새로 시작합니다', 'warn', 4000);
-    const att = checkAttendance(this.profile);
-    if (att) {
-      this.save();
-      setTimeout(() => {
-        confirmBox(this.ui, `📅 출석 체크 ${att.day}일차`, `오늘도 출근해 주셨군요!\n출근 수당 ₩${att.coins} 지급 완료.\n(7일 주기, 7일차 보너스 두둑)`, '감사합니다', '닫기');
-        audio.play('coin');
-        this.screens.title();
-      }, 400);
-    }
+    if (this.saveStatus === 'corrupt') this.toasts.show('저장 파일을 읽지 못해 새로 시작합니다 (이전 파일은 따로 보관됨)', 'warn', 4000);
+    this.checkDay();
     const g = evaluateAchievements(this.profile);
     if (g.length) { this.save(); for (const x of g) this.toasts.show(`🏆 ${x.a.name} — ${x.text}`, 'ach', 3500); }
   }
 
   private demo = true;
   private demoAcc = 0;
+  /** 날짜가 바뀌었으면 출석 체크(앱을 켜 둔 채 자정을 넘긴 경우 포함) */
+  checkDay() {
+    const att = checkAttendance(this.profile);
+    if (!att) return;
+    this.save();
+    setTimeout(() => {
+      confirmBox(this.ui, `📅 출석 체크 ${att.day}일차`, `오늘도 출근해 주셨군요!\n출근 수당 ₩${att.coins} 지급 완료.\n(7일 주기, 7일차 보너스 두둑)`, '감사합니다', '닫기');
+      audio.play('coin');
+      if (this.screens.curName === 'title') this.screens.title();
+    }, 400);
+  }
+
   private makeIdleWorld(): World {
     const chars = ['kim', 'park', 'lee', 'choi', 'han', 'yoon'];
     const stages = ['office', 'crunch', 'dinner', 'holiday'];
@@ -147,7 +167,7 @@ export class App {
     return w;
   }
 
-  private stepDemo(w: World, dt: number) {
+  private stepDemo(w: World, dt: number): number {
     this.demoAcc += dt;
     let n = 0;
     while (this.demoAcc >= DT && n < 4) {
@@ -159,7 +179,7 @@ export class App {
       } else if (w.phase === 'levelup') applyChoice(w, autoChoose(w));
       else if (w.phase === 'chest') closeChest(w);
       else if (w.phase === 'lunch') applyLunch(w, w.lunchChoices[0].id);
-      else { this.idleWorld = this.makeIdleWorld(); return; }
+      else { this.idleWorld = this.makeIdleWorld(); return 0; }
     }
     if (n >= 4) this.demoAcc = 0;
     // 데모 이벤트: 시각 효과만(소리·토스트 없음)
@@ -171,6 +191,7 @@ export class App {
     }
     w.events.length = 0;
     if (w.t > 420) this.idleWorld = this.makeIdleWorld();
+    return n;
   }
 
   save() {
@@ -197,9 +218,13 @@ export class App {
   startRun(o: { char: string; stage: string; heat: number; daily: boolean }) {
     this.lastRunOpts = o;
     const p = this.profile;
-    const di = o.daily ? dailyInfo(p) : null;
+    const di = o.daily ? dailyInfo(p) : null;   // 자정이 지난 재도전이면 오늘 것으로 새로 정해진다
+    if (di) this.save();
     const seed = di ? di.seed : (Math.random() * 2 ** 32) >>> 0;
-    const cfg = buildRunConfig(p, { char: o.char, stage: o.stage, heat: di ? di.heat : o.heat, seed, modifiers: di ? dailyModifiersFor(p, di) : undefined, daily: o.daily });
+    const cfg = buildRunConfig(p, {
+      char: di ? di.char : o.char, stage: di ? di.stage : o.stage, heat: di ? di.heat : o.heat, seed,
+      modifiers: di ? dailyModifiersFor(p, di) : undefined, daily: o.daily, dailyDate: di?.date,
+    });
     const w = createWorld(cfg);
     const [vw, vh] = this.renderer.viewSize();
     w.viewW = vw; w.viewH = vh;
@@ -216,7 +241,8 @@ export class App {
     this.deathShown = false;
     this.combo = 0; this.comboT = 0; this.comboBest = 0; this.phaseDelay = -1; this.ultHinted = false;
     this.renderer.camX = 0; this.renderer.camY = 0;
-    this.fx.parts.length = 0; this.fx.nums.length = 0;
+    this.fx.reset();
+    this.overtimeMin = 0;
     audio.unlock(); audio.startMusic(); audio.setIntensity(1);
     this.toasts.show(`${w.cfg.stage.icon} ${w.cfg.stage.name} — 09:00 출근!`, 'info', 2200);
     if (o.daily) this.toasts.show(`📅 오늘의 업무: ${w.cfg.modifiers.filter(m => !m.id.startsWith('heat')).map(m => m.name).join(', ')}`, 'warn', 3500);
@@ -241,6 +267,8 @@ export class App {
     this.modals.close();
     this.hud?.root.remove(); this.hud = null;
     this.tutorial?.remove(); this.tutorial = null;
+    this.input.onFirstMove = null;
+    this.input.release();
     audio.setIntensity(0);
     this.screens.results(w, st, () => { if (this.lastRunOpts) this.startRun(this.lastRunOpts); });
     if (st.grants.length) audio.play('jackpot');
@@ -255,10 +283,14 @@ export class App {
     activateUlt(w);
   }
 
+  /** 확인창·인게임 설정 같은 덧창이 떠 있는지 */
+  private overlayOpen() { return !!this.ui.querySelector('.confirm-wrap, #ui > .screen'); }
+
   togglePause() {
     const w = this.world;
     if (!w) return;
     if (this.modals.kind && this.modals.kind !== 'pause') return;
+    if (this.overlayOpen()) return;
     this.setPaused(!this.paused);
   }
 
@@ -400,22 +432,31 @@ export class App {
     dt = Math.min(dt, 0.1);
     this.fpsAcc += dt; this.fpsN++;
     if (this.fpsAcc >= 1) {
-      this.fps = this.fpsN / this.fpsAcc; this.fpsAcc = 0; this.fpsN = 0;
-      // 동적 해상도: 전투 중 2초 연속 45fps 미만이면 해상도를 한 단계 낮춘다
-      if (this.world && this.world.phase === 'play' && !this.paused && this.fps < 45) {
-        this.slowSec++;
-        if (this.slowSec >= 2 && this.renderer.dprCap > 1) {
-          this.renderer.dprCap = Math.max(1, this.renderer.dprCap - 0.5);
-          this.renderer.resize();
-          this.slowSec = 0;
-        }
-      } else this.slowSec = 0;
+      this.fps = this.fpsN / this.fpsAcc;
+      const work = this.workAcc / Math.max(1, this.fpsN);   // 프레임당 실제 작업 시간(ms)
+      this.fpsAcc = 0; this.fpsN = 0; this.workAcc = 0;
+      // 동적 해상도: fps(GPU 병목)와 프레임당 JS 작업 시간(CPU 병목)을 함께 본다.
+      // 저전력 모드처럼 30fps로 '고정'된 기기(최근 3초가 모두 29~31fps)는 느린 기기로 오판하지 않는다.
+      this.fpsHist.push(this.fps); if (this.fpsHist.length > 3) this.fpsHist.shift();
+      const capped30 = this.fpsHist.length === 3 && this.fpsHist.every(f => f > 28.5 && f < 31.5);
+      if (this.world && this.world.phase === 'play' && !this.paused) {
+        const slow = work > 13 || (this.fps < 45 && !capped30);
+        if (slow) { this.slowSec++; this.fastSec = 0; }
+        else if (work < 6 && (this.fps > 56 || capped30)) { this.fastSec++; this.slowSec = 0; }
+        else { this.slowSec = 0; this.fastSec = 0; }
+        if (this.slowSec >= 2 && this.renderer.dprCap > 1) { this.renderer.dprCap = Math.max(1, this.renderer.dprCap - 0.5); this.renderer.resize(); this.slowSec = 0; }
+        if (this.fastSec >= 8 && this.renderer.dprCap < 2) { this.renderer.dprCap = Math.min(2, this.renderer.dprCap + 0.5); this.renderer.resize(); this.fastSec = 0; }
+      }
     }
+    const t0 = performance.now();
 
     const w = this.world;
+    this.input.enabled = !!w && w.phase === 'play' && !this.paused && !this.modals.kind && !this.overlayOpen();
+    if (!this.input.enabled && this.input.joy.active) this.input.release();
     if (w) {
       const [mx, my] = this.input.vector();
       w.player.mx = mx; w.player.my = my;
+      this.stepsThisFrame = 0;
       if (!this.paused && w.phase === 'play') {
         if (w.hitStop > 0) { w.hitStop -= dt; }
         else {
@@ -424,6 +465,7 @@ export class App {
           let n = 0;
           while (this.acc >= DT && n < 8 && w.phase === 'play') { stepWorld(w); this.acc -= DT; n++; }
           if (n >= 8) this.acc = 0;
+          this.stepsThisFrame = n;
         }
         // 실시간 업적(1초마다)
         this.achT += dt;
@@ -433,7 +475,7 @@ export class App {
           if (g.length) { this.save(); for (const x of g) { this.toasts.show(`🏆 업적 달성: ${x.a.name} — ${x.text}`, 'ach', 3500); audio.play('jackpot'); } }
           if (w.overtime) {
             const min = Math.floor(w.stats_.overtimeSec / 60);
-            if (min > 0 && Math.floor((w.stats_.overtimeSec - 1) / 60) < min) this.toasts.show(pickStr(OVERTIME_MESSAGES, `야근 ${min}분째…`), 'warn');
+            if (min > this.overtimeMin) { this.overtimeMin = min; this.toasts.show(pickStr(OVERTIME_MESSAGES, `야근 ${min}분째…`), 'warn'); }
           }
         }
       }
@@ -462,18 +504,26 @@ export class App {
       // 궁극기 첫 충전 힌트
       if (!this.ultHinted && w.player.ult >= w.player.ultMax) { this.ultHinted = true; this.hint('ult'); }
       if (this.world) {
+        const live = !this.paused && w.phase === 'play';
         this.fx.update(dt);
-        this.renderer.render(w, dt, this.input.joy);
+        // 모달·일시정지 중에는 월드가 멈춰 있으니 3프레임에 한 번만 그린다
+        this.frameN++;
+        if (live || this.frameN % 3 === 0 || this.phaseDelay >= 0) {
+          this.renderer.live = live;
+          this.renderer.render(w, dt, this.input.joy, this.stepsThisFrame);
+        }
         this.hudT += dt;
         if (this.hud) this.hud.update(w);
       }
-    } else if (this.idleWorld) {
-      // 메뉴 배경: 자동 조종 데모 플레이(어트랙트 모드)
+    } else if (this.idleWorld && this.screens.curName === 'title') {
+      // 메뉴 배경: 자동 조종 데모 플레이(어트랙트 모드). 불투명한 다른 메뉴 화면 뒤에서는 돌리지 않는다.
       const iw = this.idleWorld;
-      if (this.demo) this.stepDemo(iw, dt);
+      const n = this.demo ? this.stepDemo(iw, dt) : 0;
       this.fx.update(dt);
-      this.renderer.render(iw, dt, null);
+      this.renderer.live = true;
+      this.renderer.render(this.idleWorld ?? iw, dt, null, n);
     }
+    this.workAcc += performance.now() - t0;
   }
 
   debugState() {

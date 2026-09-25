@@ -21,8 +21,14 @@ export class Renderer {
   private pattern: CanvasPattern | null = null;
   private bS = 1; private bx = 0; private by = 0;   // 월드 기본 변환
   dprCap = 2;
+  private ipx = 0; private ipy = 0;   // 보간된 플레이어 위치
   private patternKey = '';
   time = 0;
+  live = true;         // 시뮬레이션이 진행 중인지(일시정지·모달 중엔 불씨 등 생성 안 함)
+  frameDt = 1 / 60;
+  private vigKey = '';
+  private vig: HTMLCanvasElement | null = null;
+  private vigRed: HTMLCanvasElement | null = null;
 
   constructor(public canvas: HTMLCanvasElement, public fx: Fx) {
     this.g = canvas.getContext('2d', { alpha: false })!;
@@ -71,15 +77,20 @@ export class Renderer {
     return pat;
   }
 
-  render(w: World, dt: number, joy: Joy | null) {
+  /** steps = 이번 프레임에 진행된 시뮬레이션 스텝 수. 카메라도 스텝 단위로 움직여 90/120Hz 화면에서 월드와 어긋나지 않는다. */
+  render(w: World, dt: number, joy: Joy | null, steps = 1) {
     const g = this.g;
     const fx = this.fx;
     this.time += dt;
+    this.frameDt = dt;
     const p = w.player;
-    // 카메라: 플레이어를 부드럽게 따라감
-    this.camX += (p.x - this.camX) * Math.min(1, dt * 12);
-    this.camY += (p.y - this.camY) * Math.min(1, dt * 12);
-    if (Math.abs(p.x - this.camX) > 300 || Math.abs(p.y - this.camY) > 300) { this.camX = p.x; this.camY = p.y; }
+    const px = p.x, py = p.y;
+    this.ipx = px; this.ipy = py;
+    // 카메라: 플레이어를 부드럽게 따라감(스텝당 18%)
+    const ck = 1 - Math.pow(0.82, steps);
+    this.camX += (px - this.camX) * ck;
+    this.camY += (py - this.camY) * ck;
+    if (Math.abs(px - this.camX) > 300 || Math.abs(py - this.camY) > 300) { this.camX = px; this.camY = py; }
     const [sx, sy] = fx.shakeOffset();
     const S = this.zoom * this.dpr;
     const cx = this.camX + sx / this.zoom, cy = this.camY + sy / this.zoom;
@@ -121,13 +132,13 @@ export class Renderer {
     for (const wi of w.weapons) {
       if (wi.def.archetype !== 'aura') continue;
       const r = wi.st.area * w.d.areaMul;
-      const gl = glow(hexA(wi.def.color, 0.55), Math.min(260, r));
+      const gl = glow(hexA(wi.def.color, 0.55), r);
       g.globalAlpha = 0.55 + Math.sin(this.time * 5) * 0.08;
-      g.drawImage(gl.c, p.x - r, p.y - r, r * 2, r * 2);
+      g.drawImage(gl.c, px - r, py - r, r * 2, r * 2);
       g.globalAlpha = 0.5;
       g.strokeStyle = wi.def.color; g.lineWidth = 2;
       g.setLineDash([10, 8]); g.lineDashOffset = -this.time * 30;
-      g.beginPath(); g.arc(p.x, p.y, r, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.stroke();
       g.setLineDash([]);
       g.globalAlpha = 1;
     }
@@ -163,7 +174,7 @@ export class Renderer {
         g.strokeStyle = b.color; g.lineWidth = 1.5;
         g.beginPath(); g.arc(b.x, b.y, b.r, 0, Math.PI * 2); g.stroke();
         g.globalAlpha = 1;
-        drawSpriteRot(g, emoji(b.sprite || '●', 16), px, py - h, k * 8);
+        this.rot(emoji(b.sprite || '●', 16), px, py - h, k * 8);
       } else if (b.kind === 'mine') {
         const blink = b.armed && Math.floor(this.time * 6 + b.x) % 2 === 0;
         g.globalAlpha = b.armed ? 1 : 0.6;
@@ -201,13 +212,13 @@ export class Renderer {
         g.drawImage(s.c, e.x - s.ax, e.y + e.r * 0.7 - s.ay, s.w, s.h);
       }
       const ps = shadow(12);
-      g.drawImage(ps.c, p.x - ps.ax, p.y + 10 - ps.ay, ps.w, ps.h);
+      g.drawImage(ps.c, px - ps.ax, py + 10 - ps.ay, ps.w, ps.h);
     }
 
     // 적
     let bossList: Enemy[] | null = null;
     for (const e of w.enemies) {
-      if (e.dead || !vis(e.x, e.y, e.r + 30)) continue;
+      if (e.dead || !vis(e.x, e.y, e.r * (e.def.label || e.def.body ? 3.2 : 1.4) + 30)) continue;
       if (e.boss) { (bossList ??= []).push(e); continue; }
       this.drawEnemy(w, e);
     }
@@ -222,7 +233,7 @@ export class Renderer {
       if (wi.def.archetype === 'orbit' && wi.on > 0) {
         const sz = Math.max(14, wi.st.area * w.d.areaMul * 2.2);
         const s = emoji(wi.def.projectile, Math.round(sz));
-        for (const pos of orbitPositions(w, wi)) drawSpriteRot(g, s, pos.x, pos.y, this.time * 6);
+        for (const pos of orbitPositions(w, wi)) this.rot(s, pos.x + px - p.x, pos.y + py - p.y, this.time * 6);
       } else if (wi.def.archetype === 'drone') {
         const s = emoji(wi.def.projectile, 18);
         for (const d of wi.drones) drawSprite(g, s, d.x, d.y + Math.sin(this.time * 5 + d.x) * 2);
@@ -240,21 +251,22 @@ export class Renderer {
         continue;
       }
       const s = emoji(b.sprite, Math.round(Math.max(13, b.r * 2.4)));
-      drawSpriteRot(g, s, b.x, b.y, b.kind === 'boomerang' ? b.rot : b.rot + Math.PI / 4);
+      this.rot(s, b.x, b.y, b.kind === 'boomerang' ? b.rot : b.rot + Math.PI / 4);
     }
 
     // 광선 & 고리 (가산 합성)
     g.globalCompositeOperation = 'lighter';
     for (const b of w.beams) {
       const k = Math.min(1, b.life / b.maxLife * 3) * Math.min(1, (b.maxLife - b.life) * 12);
-      const ex = b.x + Math.cos(b.ang) * b.len, ey = b.y + Math.sin(b.ang) * b.len;
+      const bx = px, by = py;
+      const ex = bx + Math.cos(b.ang) * b.len, ey = by + Math.sin(b.ang) * b.len;
       g.lineCap = 'round';
       g.globalAlpha = 0.35 * k; g.strokeStyle = b.color; g.lineWidth = b.w * 1.8;
-      g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(ex, ey); g.stroke();
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(ex, ey); g.stroke();
       g.globalAlpha = 0.9 * k; g.lineWidth = b.w * 0.8;
-      g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(ex, ey); g.stroke();
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(ex, ey); g.stroke();
       g.globalAlpha = k; g.strokeStyle = '#ffffff'; g.lineWidth = Math.max(1.5, b.w * 0.25);
-      g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(ex, ey); g.stroke();
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(ex, ey); g.stroke();
     }
     for (const r of w.rings) {
       const k = 1 - r.r / r.maxR;
@@ -276,7 +288,7 @@ export class Renderer {
       g.beginPath(); g.arc(b.x, b.y, b.r * 0.55, 0, Math.PI * 2); g.fill();
     }
 
-    fx.drawWorld(g);
+    fx.drawWorld(g, this.bS, this.bx, this.by);
 
     // 말풍선(최상단)
     for (const e of w.enemies) {
@@ -292,11 +304,12 @@ export class Renderer {
     this.drawIndicators(w, cx, cy);
     // 비네트 + 저체력 경고
     const lowHp = p.hp / w.d.maxHp < 0.3;
-    const vg = g.createRadialGradient(this.W / 2, this.H / 2, Math.min(this.W, this.H) * 0.35, this.W / 2, this.H / 2, Math.max(this.W, this.H) * 0.75);
-    vg.addColorStop(0, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, lowHp ? `rgba(200,0,30,${0.35 + Math.sin(this.time * 6) * 0.15})` : hexA(pal.fog, 0.55));
-    g.fillStyle = vg;
-    g.fillRect(0, 0, this.W, this.H);
+    this.ensureVignette(pal.fog);
+    if (lowHp) {
+      g.globalAlpha = 0.7 + Math.sin(this.time * 6) * 0.3;
+      g.drawImage(this.vigRed!, 0, 0, this.W, this.H);
+      g.globalAlpha = 1;
+    } else g.drawImage(this.vig!, 0, 0, this.W, this.H);
     if (p.clockT > 0) { g.fillStyle = 'rgba(120,200,255,.12)'; g.fillRect(0, 0, this.W, this.H); }
     if (fx.flash > 0) { g.globalAlpha = fx.flash; g.fillStyle = fx.flashColor; g.fillRect(0, 0, this.W, this.H); g.globalAlpha = 1; }
     if (joy && joy.active) {
@@ -308,6 +321,26 @@ export class Renderer {
       g.beginPath(); g.arc(joy.kx, joy.ky, 24, 0, Math.PI * 2); g.fill();
       g.globalAlpha = 1;
     }
+  }
+
+  /** 비네트는 화면 크기·색이 바뀔 때만 다시 그린다 */
+  private ensureVignette(fog: string) {
+    const key = `${this.W}x${this.H}|${fog}`;
+    if (this.vig && this.vigKey === key) return;
+    this.vigKey = key;
+    const mk = (color: string) => {
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(this.W / 2)); c.height = Math.max(1, Math.round(this.H / 2));
+      const g = c.getContext('2d')!;
+      const vg = g.createRadialGradient(c.width / 2, c.height / 2, Math.min(c.width, c.height) * 0.35, c.width / 2, c.height / 2, Math.max(c.width, c.height) * 0.75);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, color);
+      g.fillStyle = vg;
+      g.fillRect(0, 0, c.width, c.height);
+      return c;
+    };
+    this.vig = mk(hexA(fog, 0.55));
+    this.vigRed = mk('rgba(200,0,30,0.45)');
   }
 
   private drawDecor(w: World, x0: number, y0: number, x1: number, y1: number) {
@@ -338,6 +371,15 @@ export class Renderer {
     if (d.label) return bubble(d.label, e.r, d.tint ?? '#ff5a7a');
     if (d.body) return person(d.sprite, d.body.suit, d.body.tie, e.r, Math.floor(this.time * 6 + e.seed) & 3);
     return angry(d.sprite, Math.round(e.r * 2.1), d.tint ?? (e.elite ? '#ffb000' : '#ff3b5c'));
+  }
+
+  /** 회전 스프라이트: save/restore 없이 행렬 직접 설정 */
+  private rot(s: Sprite, x: number, y: number, a: number, sc = 1) {
+    const g = this.g, S = this.bS;
+    const c = Math.cos(a) * S * sc, n = Math.sin(a) * S * sc;
+    g.setTransform(c, n, -n, c, this.bx + x * S, this.by + y * S);
+    g.drawImage(s.c, -s.ax, -s.ay, s.w, s.h);
+    g.setTransform(S, 0, 0, S, this.bx, this.by);
   }
 
   private drawEnemy(w: World, e: Enemy) {
@@ -396,7 +438,7 @@ export class Renderer {
       g.beginPath(); g.moveTo(e.x, e.y); g.lineTo(e.x + e.dx * 120, e.y + e.dy * 120); g.stroke();
       g.globalAlpha = 1;
     }
-    if (e.burnT > 0 && Math.random() < 0.15) this.fx.burst(e.x, e.y - e.r * 0.5, '#ff7a1a', 1, 40, 2.5, 1, -80);
+    if (this.live && e.burnT > 0 && this.fx.parts.length < this.fx.maxParts * 0.6 && this.fx.rnd() < this.frameDt * 8) this.fx.burst(e.x, e.y - e.r * 0.5, '#ff7a1a', 1, 40, 2.5, 1, -80);
     if (e.elite && !e.boss) {
       const bw = e.r * 2.2, bh = 3;
       g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(e.x - bw / 2, e.y - e.r - 10, bw, bh);
@@ -406,7 +448,8 @@ export class Renderer {
 
   private drawPlayer(w: World) {
     const g = this.g;
-    const p = w.player;
+    const p0 = w.player;
+    const p = { ...p0, x: this.ipx, y: this.ipy };
     const look = w.cfg.character.look;
     const frame = p.moving ? Math.floor(p.walk) & 3 : 0;
     const s = worker(look, frame, w.flags.has('bigHead') ? 40 : 34);

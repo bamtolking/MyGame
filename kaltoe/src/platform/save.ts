@@ -31,6 +31,7 @@ export interface Profile {
   settings: Settings;
   sel: { char: string; stage: string; heat: number };
   daily: { date: string; played: boolean; cleared: boolean; streak: number; lastClear: string };
+  dailyPick: { date: string; char: string; stage: string; heat: number; mods: string[] } | null;
   attendance: { last: string; day: number; total: number };
   tutorialDone: boolean;
   hints: string[];                     // 한 번 본 온보딩 힌트
@@ -54,6 +55,7 @@ export function newProfile(): Profile {
     settings: { sfx: 0.8, bgm: 0.5, shake: true, vibrate: true, low: false, dmgNums: true, joystick: 'float' },
     sel: { char: 'kim', stage: 'office', heat: 0 },
     daily: { date: '', played: false, cleared: false, streak: 0, lastClear: '' },
+    dailyPick: null,
     attendance: { last: '', day: 0, total: 0 },
     tutorialDone: false,
     hints: [],
@@ -88,12 +90,36 @@ export function normalize(raw: unknown): Profile | null {
     settings: obj(r.settings, d.settings),
     sel: obj(r.sel, d.sel),
     daily: obj(r.daily, d.daily),
+    dailyPick: r.dailyPick && typeof r.dailyPick === 'object' && typeof r.dailyPick.date === 'string' && Array.isArray(r.dailyPick.mods) ? r.dailyPick : null,
     attendance: obj(r.attendance, d.attendance),
     tutorialDone: !!r.tutorialDone,
     hints: arr(r.hints),
     last: r.last && typeof r.last === 'object' ? (r.last as LastRun) : null,
   };
+  // 중첩 필드 교정: 숫자 사전은 숫자만, 최고 기록은 필드별 숫자로
   for (const k of Object.keys(p.lifetime) as (keyof Profile['lifetime'])[]) p.lifetime[k] = num(p.lifetime[k], 0);
+  const numDict = (o: Record<string, unknown>) => { const out: Record<string, number> = {}; for (const [k, v] of Object.entries(o)) if (typeof v === 'number' && isFinite(v)) out[k] = v; return out; };
+  p.metaRanks = numDict(p.metaRanks);
+  p.achievements = numDict(p.achievements);
+  p.progress = numDict(p.progress);
+  p.heatCleared = numDict(p.heatCleared);
+  const bests: Record<string, StageBest> = {};
+  for (const [k, v] of Object.entries(p.bests as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object') continue;
+    const b = v as Partial<StageBest>;
+    bests[k] = { bestTime: num(b.bestTime, 0), clears: num(b.clears, 0), bestHeat: num(b.bestHeat, -1), bestKills: num(b.bestKills, 0), bestLevel: num(b.bestLevel, 0), bestOvertime: num(b.bestOvertime, 0) };
+  }
+  p.bests = bests;
+  const st = p.settings;
+  st.sfx = Math.min(1, Math.max(0, num(st.sfx, d.settings.sfx)));
+  st.bgm = Math.min(1, Math.max(0, num(st.bgm, d.settings.bgm)));
+  for (const k of ['shake', 'vibrate', 'low', 'dmgNums'] as const) if (typeof st[k] !== 'boolean') st[k] = d.settings[k];
+  if (st.joystick !== 'fixed' && st.joystick !== 'float') st.joystick = 'float';
+  if (typeof p.sel.char !== 'string') p.sel.char = d.sel.char;
+  if (typeof p.sel.stage !== 'string') p.sel.stage = d.sel.stage;
+  p.sel.heat = Math.max(0, Math.floor(num(p.sel.heat, 0)));
+  p.daily = { date: String(p.daily.date ?? ''), played: !!p.daily.played, cleared: !!p.daily.cleared, streak: num(p.daily.streak, 0), lastClear: String(p.daily.lastClear ?? '') };
+  p.attendance = { last: String(p.attendance.last ?? ''), day: num(p.attendance.day, 0), total: num(p.attendance.total, 0) };
   return p;
 }
 
@@ -107,7 +133,10 @@ export function loadProfile(): { profile: Profile; status: 'new' | 'ok' | 'resto
   const tryParse = (k: string) => { try { const s = ls.getItem(k); return s ? normalize(JSON.parse(s)) : null; } catch { return null; } };
   const main = tryParse(SAVE_KEY);
   if (main) return { profile: main, status: 'ok' };
-  const had = (() => { try { return ls.getItem(SAVE_KEY) !== null; } catch { return false; } })();
+  const raw = (() => { try { return ls.getItem(SAVE_KEY); } catch { return null; } })();
+  const had = raw !== null;
+  // 읽을 수 없는(손상/더 새 버전) 저장은 덮어쓰기 전에 따로 보관
+  if (had) { try { ls.setItem(SAVE_KEY + '_unreadable', raw as string); } catch { /* 무시 */ } }
   const bak = tryParse(SAVE_KEY + '_bak');
   if (bak) return { profile: bak, status: 'restored' };
   return { profile: newProfile(), status: had ? 'corrupt' : 'new' };
@@ -142,7 +171,7 @@ export function exportProfile(p: Profile): string {
 
 export function importProfile(code: string): Profile | null {
   try {
-    const m = code.trim().match(/^KALTOE1\.([0-9a-z]+)\.(.+)$/);
+    const m = code.replace(/\s+/g, '').match(/^KALTOE1\.([0-9a-z]+)\.(.+)$/);
     if (!m) return null;
     const json = decodeURIComponent(escape(atob(m[2])));
     if (checksum(json) !== m[1]) return null;

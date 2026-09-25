@@ -1,6 +1,6 @@
 // 메타 진행: 해금 판정, 복지(영구 강화) 스탯, 업적 평가·보상, 판 정산, 일일 도전·출석
 import {
-  ACHIEVEMENTS, BALANCE, CHARACTER, CHARACTERS, DAILY_MODIFIERS, LUNCHES, META, META_UPGRADES, PASSIVES, STAGE, STAGES, WEAPON, WEAPONS,
+  ACHIEVEMENTS, BALANCE, CHARACTER, CHARACTERS, DAILY_MODIFIERS, LUNCHES, META, META_UPGRADES, MODIFIER, PASSIVES, STAGE, STAGES, WEAPON, WEAPONS,
 } from '../content';
 import type { AchievementDef, ModifierDef, StatBlock, StatKey } from '../content/types';
 import { ATTENDANCE_REWARDS, DAILY_CLEAR_REWARD, DAILY_PLAY_REWARD } from '../content/meta';
@@ -79,7 +79,7 @@ export function hireCharacter(p: Profile, id: string): boolean {
 
 // ───────────── 판 설정 ─────────────
 
-export function buildRunConfig(p: Profile, opts: { char: string; stage: string; heat: number; seed: number; modifiers?: ModifierDef[]; daily?: boolean }): RunConfig {
+export function buildRunConfig(p: Profile, opts: { char: string; stage: string; heat: number; seed: number; modifiers?: ModifierDef[]; daily?: boolean; dailyDate?: string }): RunConfig {
   return {
     stage: STAGE.get(opts.stage) ?? STAGES[0],
     character: CHARACTER.get(opts.char) ?? CHARACTERS[0],
@@ -91,6 +91,7 @@ export function buildRunConfig(p: Profile, opts: { char: string; stage: string; 
     unlockedPassives: new Set(PASSIVES.filter(x => passiveUnlocked(p, x.id)).map(x => x.id)),
     unlockedLunches: new Set(LUNCHES.filter(x => lunchUnlocked(p, x.id)).map(x => x.id)),
     daily: !!opts.daily,
+    dailyDate: opts.dailyDate ?? '',
     overtimeAllowed: featureUnlocked(p, 'overtime'),
   };
 }
@@ -99,7 +100,21 @@ export interface DailyInfo { date: string; seed: number; char: string; stage: st
 
 const RISKY_FLAGS = ['noHeal', 'oneHp', 'glassCannon'];
 
+/** 오늘의 업무: 그날 처음 볼 때 한 번 정해 프로필에 고정(하루 중에 바뀌지 않게) */
 export function dailyInfo(p: Profile, date = todayKey()): DailyInfo {
+  const c = p.dailyPick;
+  if (c && c.date === date) {
+    const mods = c.mods.map(id => MODIFIER.get(id)).filter((m): m is ModifierDef => !!m);
+    if (CHARACTER.has(c.char) && STAGE.has(c.stage) && mods.length === c.mods.length) {
+      return { date, seed: hashStr('kaltoe-daily-' + date), char: c.char, stage: c.stage, heat: c.heat, modifiers: mods };
+    }
+  }
+  const info = computeDaily(p, date);
+  p.dailyPick = { date, char: info.char, stage: info.stage, heat: info.heat, mods: info.modifiers.map(m => m.id) };
+  return info;
+}
+
+function computeDaily(p: Profile, date: string): DailyInfo {
   const seed = hashStr('kaltoe-daily-' + date);
   const r = makeRng(seed);
   const stages = STAGES.filter(s => stageUnlocked(p, s.id));
@@ -171,7 +186,7 @@ export function metricValue(p: Profile, a: AchievementDef, live?: World): number
     case 'noHitSec': return Math.max(prog(p, 'noHitSec'), rs?.maxNoHit ?? 0, live ? live.player.noHitT : 0);
     case 'chestsOpened': return p.lifetime.chests + (rs?.chests ?? 0);
     case 'weaponKills': return prog(p, `weaponKills:${par}`) + (rs ? weaponKillsOf(rs.weaponKills, par) : 0);
-    case 'metaRanks': return p.lifetime.metaRanks;
+    case 'metaRanks': return Object.values(p.metaRanks).reduce((a, b) => a + (b || 0), 0);   // 환불하면 줄어든다(환불 파밍 방지)
     case 'lowHpClear': return prog(p, 'lowHpClear');
     case 'runCoins': return Math.max(prog(p, 'runCoins'), rs?.coins ?? 0);
     case 'charLevel': return Math.max(prog(p, `charLevel:${par}`), live && live.cfg.character.id === par ? live.player.level : 0);
@@ -249,7 +264,7 @@ export function settleRun(p: Profile, w: World): Settlement {
   const overtimeBonus = Math.round(BALANCE.overtimeCoinPerMin * (rs.overtimeSec / 60) * w.coinMul);
   let dailyBonus = 0;
   const today = todayKey();
-  if (w.cfg.daily) {
+  if (w.cfg.daily && w.cfg.dailyDate === today) {
     if (p.daily.date !== today) p.daily = { ...p.daily, date: today, played: false, cleared: false };
     if (!p.daily.played) { p.daily.played = true; dailyBonus += DAILY_PLAY_REWARD; }
     if (cleared && !p.daily.cleared) {
@@ -308,13 +323,15 @@ export function settleRun(p: Profile, w: World): Settlement {
   if (cleared) {
     b.clears++;
     bump(p, `clearWithChar:${ch}`);
-    if (w.player.hp / w.d.maxHp < 0.1) bump(p, 'lowHpClear');
+    if (w.clearHp < 0.1) bump(p, 'lowHpClear');
     if (!w.cfg.daily) {
       b.bestHeat = Math.max(b.bestHeat, w.cfg.heat);
       const prev = p.heatCleared[stage] ?? -1;
       if (w.cfg.heat > prev) {
+        const before = maxHeatFor(p, stage);
         p.heatCleared[stage] = w.cfg.heat;
-        if (featureUnlocked(p, 'heat') && w.cfg.heat + 1 <= BALANCE.heatLevels.length) heatUnlocked = w.cfg.heat + 1;
+        const after = maxHeatFor(p, stage);
+        if (after > before) heatUnlocked = after;
       }
       maxp(p, 'heatClear', w.cfg.heat);
     }

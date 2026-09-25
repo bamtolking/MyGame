@@ -35,6 +35,7 @@ export function makeConfig(o: BotOpts): RunConfig {
     unlockedPassives: new Set(PASSIVES.filter(p => all || !p.unlockedBy).map(p => p.id)),
     unlockedLunches: new Set(LUNCHES.filter(l => all || !l.unlockedBy).map(l => l.id)),
     daily: false,
+    dailyDate: '',
     overtimeAllowed: !!o.overtime,
   };
 }

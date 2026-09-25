@@ -26,6 +26,7 @@ export class Hud {
   private comboEl: HTMLElement;
   private cache = new Map<string, string>();
   private slotKey = '';
+  private lastXp = -1; private lastDay = -1; private lastBoss = -1;
 
   constructor(parent: HTMLElement, onUlt: () => void, onPause: () => void) {
     this.xp = h('i');
@@ -103,11 +104,13 @@ export class Hud {
 
   update(w: World) {
     const p = w.player;
-    this.xp.style.width = `${Math.min(100, (p.xp / p.xpNext) * 100)}%`;
+    const xk = Math.round(Math.min(1, p.xp / p.xpNext) * 200) / 200;
+    if (xk !== this.lastXp) { this.lastXp = xk; this.xp.style.transform = `scaleX(${xk})`; }
     this.set(this.clock, 'clock', clockText(w));
     const yg = w.yageun && !w.cleared;
     this.clock.classList.toggle('yageun', yg);
-    this.dayFill.style.width = `${Math.min(100, (w.t / BALANCE.runSeconds) * 100)}%`;
+    const dk = Math.round(Math.min(1, w.t / BALANCE.runSeconds) * 200) / 200;
+    if (dk !== this.lastDay) { this.lastDay = dk; this.dayFill.style.transform = `scaleX(${dk})`; }
     this.set(this.lvl, 'lvl', `Lv ${p.level}`);
     this.set(this.kills, 'kills', `💀 ${w.stats_.kills.toLocaleString('ko-KR')}`);
     this.set(this.coins, 'coins', `₩ ${Math.floor(w.stats_.coins).toLocaleString('ko-KR')}`);
@@ -132,7 +135,8 @@ export class Hud {
     if (b && !b.dead) {
       this.boss.classList.remove('hidden');
       this.set(this.bossName, 'bossn', `${b.def.name}${b.enraged ? ' 💢격노' : ''}`);
-      this.bossFill.style.width = `${Math.max(0, (b.hp / b.maxHp) * 100)}%`;
+      const bk = Math.round(Math.max(0, b.hp / b.maxHp) * 300) / 300;
+      if (bk !== this.lastBoss) { this.lastBoss = bk; this.bossFill.style.transform = `scaleX(${bk})`; }
     } else this.boss.classList.add('hidden');
     // 궁극기
     const k = Math.min(1, p.ult / p.ultMax);

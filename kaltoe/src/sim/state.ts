@@ -31,7 +31,7 @@ export function createWorld(cfg: RunConfig): World {
     fxRng: makeRng(cfg.seed ^ 0x5bd1e995),
     t: 0, clockT: 0, step: 0, phase: 'play',
     player: {
-      x: 0, y: 0, r: 12, hp: 100, fx: 1, fy: 0, mx: 0, my: 0, moving: false,
+      x: 0, y: 0, r: 12, px: 0, py: 0, hp: 100, fx: 1, fy: 0, mx: 0, my: 0, moving: false,
       level: 1, xp: 0, xpNext: BALANCE.xpToLevel(1), hurtT: 0, invulnT: 0,
       ult: 0, ultMax: ult.charge, ultActiveT: 0, clockT: 0,
       revivals: 0, rerolls: 0, skips: 0, banishes: 0, noHitT: 0, walk: 0,
@@ -46,7 +46,7 @@ export function createWorld(cfg: RunConfig): World {
     events: [], viewW: 440, viewH: 800, hitStop: 0,
     stats_: emptyRunStats(),
     enemyHpMul, enemySpeedMul, enemyDmgMul, spawnMul, xpMul, coinMul, flags,
-    lastHour: 9, lunchOffered: false, gemCount: 0, refillAcc: 0, lsBudget: 0, shotBudget: 5, damageMulT: 0, damageMulAmt: 0, fireMulT: 0, fireMul: 1,
+    lastHour: 9, lunchOffered: false, gemCount: 0, refillAcc: 0, lsBudget: 0, shotBudget: 5, wrapUp: false, clearT: 0, clearHp: 1, overtimeStart: 0, damageMulT: 0, damageMulAmt: 0, fireMulT: 0, fireMul: 1,
   };
   recalcBase(w);
   w.player.hp = w.d.maxHp;

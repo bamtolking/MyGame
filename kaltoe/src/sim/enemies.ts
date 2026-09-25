@@ -21,7 +21,7 @@ export function segmentHpMul(w: World, t = w.t): number {
   if (w.overtime || t >= BALANCE.runSeconds) {
     const last = tl[tl.length - 1];
     const base = last.hpMulEnd ?? last.hpMul;
-    const min = Math.max(0, (w.t - BALANCE.runSeconds) / 60);
+    const min = Math.max(0, (w.t - (w.overtime ? w.overtimeStart : BALANCE.runSeconds)) / 60);
     return base * Math.pow(1 + BALANCE.overtimeHpGrowth, min);
   }
   for (const g of tl) {
@@ -43,8 +43,10 @@ export function hpScale(w: World, boss: boolean, segMul?: number): number {
   return seg * stageMul * w.enemyHpMul * (boss ? 1 : 1 + w.d.curse);
 }
 
-export function spawnEnemy(w: World, def: EnemyDef, x: number, y: number, scale: number): Enemy {
+/** 적 생성. 일반 적은 전체 상한(MAX_ENEMIES + 60, 이벤트 여유분)을 넘으면 만들지 않고 null. */
+export function spawnEnemy(w: World, def: EnemyDef, x: number, y: number, scale: number): Enemy | null {
   const boss = !!def.boss, elite = !!def.elite;
+  if (!boss && !elite && w.enemies.length >= MAX_ENEMIES + 60) return null;
   const hp = Math.max(1, def.hp * scale);
   const e: Enemy = {
     uid: w.nextUid++, def, x, y, r: def.radius * (w.flags.has('bigHead') ? 1.35 : 1),
@@ -52,7 +54,7 @@ export function spawnEnemy(w: World, def: EnemyDef, x: number, y: number, scale:
     speed: def.speed * w.enemySpeedMul * (1 + w.d.curse * 0.5),
     damage: def.damage * w.enemyDmgMul, xp: def.xp,
     elite, boss, dead: false, flash: 0, contactCd: 0,
-    slowT: 0, slowAmt: 0, freezeT: 0, stunT: 0, burnT: 0, burnDps: 0, burnTick: 0, buffT: 0, buffAmt: 0,
+    slowT: 0, slowAmt: 0, freezeT: 0, stunT: 0, burnT: 0, burnDps: 0, burnTick: 0, burnSlot: 7, buffT: 0, buffAmt: 0,
     hitCd: new Float32Array(8), t: rand(w.rng) * 2, st: 0, stT: 0, dx: 0, dy: 0, seed: rand(w.fxRng) * TAU,
     abil: (def.abilities ?? []).map(a => a.cooldown * (0.5 + rand(w.rng) * 0.5)),
     enraged: false, spdMul: 1, cdMul: 1, shout: '', shoutT: 0, face: 1, spawnT: 0.25, lastHitSlot: -1,
@@ -63,8 +65,13 @@ export function spawnEnemy(w: World, def: EnemyDef, x: number, y: number, scale:
     w.seenEnemies.add(def.id);
     if (def.intro && !boss) w.events.push({ t: 'toast', text: def.intro, kind: elite ? 'warn' : 'info' });
   }
+  if (def.behavior === 'straight') {
+    const a = Math.atan2(w.player.y - y, w.player.x - x);
+    e.dx = Math.cos(a); e.dy = Math.sin(a);
+  }
   if (boss) {
-    if (!w.bossAlive) w.bossAlive = e;
+    // 최종 보스는 중간 보스가 살아 있어도 상단 체력바를 차지한다
+    if (!w.bossAlive || def.id === w.cfg.stage.finalBoss) w.bossAlive = e;
     w.events.push({ t: 'bossSpawn', name: def.name, id: def.id });
     if (def.id === w.cfg.stage.finalBoss) w.finalBossSpawned = true;
   } else if (elite) {
@@ -218,9 +225,13 @@ export function updateEnemies(w: World) {
       e.burnT -= DT; e.burnTick -= DT;
       if (e.burnTick <= 0) {
         e.burnTick = 0.25;
-        e.hp -= e.burnDps * 0.25; e.flash = Math.max(e.flash, 0.04);
-        if (e.hp <= 0) { killEnemy(w, e, e.lastHitSlot); continue; }
+        const bd = e.burnDps * 0.25;
+        e.hp -= bd; e.flash = Math.max(e.flash, 0.04);
+        const bw = e.burnSlot < 6 ? w.weapons.find(x => x.slot === e.burnSlot) : undefined;
+        if (bw) bw.dmg += bd;
+        if (e.hp <= 0) { killEnemy(w, e, e.burnSlot); continue; }
       }
+      if (e.burnT <= 0) e.burnDps = 0;
     }
 
     const dxp = p.x - e.x, dyp = p.y - e.y;
@@ -267,7 +278,8 @@ export function updateEnemies(w: World) {
         e.stT -= DT;
         if (e.stT <= 0) { e.st = 2; e.stT = e.chargeDur; }
       } else if (e.st === 2 && abil) {
-        mvx = e.dx * e.chargeSpeed; mvy = e.dy * e.chargeSpeed;
+        const k = spd / Math.max(1, e.speed);
+        mvx = e.dx * e.chargeSpeed * k; mvy = e.dy * e.chargeSpeed * k;
         e.stT -= DT;
         if (e.stT <= 0) e.st = 0;
       } else {
@@ -318,7 +330,7 @@ export function updateEnemies(w: World) {
               if (def) for (let k = 0; k < n && aliveCount(w) < MAX_ENEMIES; k++) {
                 const a = rand(w.rng) * TAU;
                 const c = spawnEnemy(w, def, e.x + Math.cos(a) * (e.r + 8), e.y + Math.sin(a) * (e.r + 8), hpScale(w, false));
-                c.vx = Math.cos(a) * 80; c.vy = Math.sin(a) * 80;
+                if (c) { c.vx = Math.cos(a) * 80; c.vy = Math.sin(a) * 80; }
               }
             }
             break;
@@ -384,8 +396,9 @@ export function updateEnemies(w: World) {
     // 너무 멀어지면 진행 방향 앞쪽으로 재배치(일반 적만)
     if (!e.boss && !e.elite) {
       const ax = Math.abs(e.x - p.x), ay = Math.abs(e.y - p.y);
-      if (ax > farX || ay > farY) {
-        if (e.straight || e.def.behavior === 'straight') { e.dead = true; continue; }
+      const straight = e.straight || e.def.behavior === 'straight';
+      if (ax > farX + (straight ? 300 : 0) || ay > farY + (straight ? 300 : 0)) {
+        if (straight) { e.dead = true; continue; }
         const q = edgePoint(w, 30);
         e.x = q.x; e.y = q.y;
       }

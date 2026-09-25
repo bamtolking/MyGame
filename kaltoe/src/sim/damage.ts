@@ -26,7 +26,7 @@ export function damageEnemy(w: World, e: Enemy, raw: number, slot: number, o: Hi
     if (w.damageMulT > 0) dmg *= 1 + w.damageMulAmt;
     if (!o.noCrit && rand(w.rng) < w.d.crit + (o.fx?.critBonus ?? 0)) { crit = true; dmg *= BALANCE.critMul; }
   }
-  const armor = e.def.armor ?? 0;
+  const armor = o.flat ? 0 : e.def.armor ?? 0;
   if (armor > 0) dmg = Math.max(dmg * 0.25, dmg - armor);
   let dealt = dmg;
   if (e.shield > 0) {
@@ -44,15 +44,16 @@ export function damageEnemy(w: World, e: Enemy, raw: number, slot: number, o: Hi
   if (fx) {
     if (fx.slow && fx.slow > 0) {
       const amt = e.boss ? fx.slow * 0.5 : fx.slow;
-      if (amt >= e.slowAmt || e.slowT <= 0) e.slowAmt = amt;
-      e.slowT = Math.max(e.slowT, fx.slowDur ?? 1);
+      if (e.slowT <= 0 || amt > e.slowAmt) { e.slowAmt = amt; e.slowT = fx.slowDur ?? 1; }
+      else if (amt === e.slowAmt) e.slowT = Math.max(e.slowT, fx.slowDur ?? 1);
     }
     if (fx.burnDps && fx.burnDps > 0) {
-      e.burnDps = Math.max(e.burnDps, fx.burnDps * w.d.mightMul);
+      const dps = fx.burnDps * w.d.mightMul;
+      if (e.burnT <= 0 || dps >= e.burnDps) { e.burnDps = dps; e.burnSlot = slot; }
       e.burnT = Math.max(e.burnT, fx.burnDur ?? 2);
     }
     if (fx.freezeChance && !e.boss && rand(w.rng) < fx.freezeChance) e.freezeT = Math.max(e.freezeT, e.elite ? 0.5 : 1.2);
-    if (fx.lifesteal && fx.lifesteal > 0 && !w.flags.has('noHeal')) {
+    if (fx.lifesteal && fx.lifesteal > 0 && !w.flags.has('noHeal') && w.phase === 'play') {
       // 다단히트 무기의 흡혈 폭주 방지: 초당 3까지
       const heal = Math.min(dealt * fx.lifesteal, w.lsBudget);
       if (heal > 0) { w.lsBudget -= heal; w.player.hp = Math.min(w.d.maxHp, w.player.hp + heal); }
@@ -102,7 +103,7 @@ export function killEnemy(w: World, e: Enemy, slot: number) {
   rs.kills++;
   const wi = slot < 6 ? w.weapons.find(x => x.slot === slot) : undefined;
   if (wi) { wi.kills++; rs.weaponKills[wi.def.id] = (rs.weaponKills[wi.def.id] ?? 0) + 1; }
-  if (w.player.ultActiveT <= 0) {
+  if (w.player.ultActiveT <= 0 && slot !== SLOT_ULT) {
     // 사용할수록 충전이 조금씩 느려짐(후반 무한 궁극기 방지)
     const dim = 1 / (1 + rs.ultUses * 0.12);
     w.player.ult = Math.min(w.player.ultMax, w.player.ult + (e.boss ? 50 : e.elite ? 20 : 1) * w.d.ultMul * dim);
@@ -158,6 +159,7 @@ export function killEnemy(w: World, e: Enemy, slot: number) {
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + rand(w.fxRng);
         const c = spawnEnemy(w, child, e.x + Math.cos(a) * e.r, e.y + Math.sin(a) * e.r, e.maxHp / Math.max(1, e.def.hp));
+        if (!c) break;
         c.vx = Math.cos(a) * 120; c.vy = Math.sin(a) * 120;
         c.spawnT = 0;
       }

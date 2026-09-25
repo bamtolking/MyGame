@@ -6,12 +6,17 @@ export class SpatialGrid<T extends { x: number; y: number; r: number }> {
 
   private key(cx: number, cy: number) { return ((cx + 32768) << 16) | ((cy + 32768) & 0xffff); }
 
+  /** 이번에 넣은 객체의 최대 반지름(질의 여유폭) — 큰 보스의 가장자리도 놓치지 않게 */
+  maxR = 0;
+
   clear() {
     for (const arr of this.cells.values()) { arr.length = 0; this.pool.push(arr); }
     this.cells.clear();
+    this.maxR = 0;
   }
 
   insert(o: T) {
+    if (o.r > this.maxR) this.maxR = o.r;
     const k = this.key(Math.floor(o.x / this.cell), Math.floor(o.y / this.cell));
     let arr = this.cells.get(k);
     if (!arr) { arr = this.pool.pop() ?? []; this.cells.set(k, arr); }
@@ -19,7 +24,7 @@ export class SpatialGrid<T extends { x: number; y: number; r: number }> {
   }
 
   /** (x,y) 반경 r 안에 "닿는"(중심거리 < r + o.r) 객체마다 fn 호출. fn이 true를 돌려주면 중단. */
-  query(x: number, y: number, r: number, fn: (o: T) => boolean | void, pad = 32) {
+  query(x: number, y: number, r: number, fn: (o: T) => boolean | void, pad = this.maxR) {
     const c = this.cell;
     const x0 = Math.floor((x - r - pad) / c), x1 = Math.floor((x + r + pad) / c);
     const y0 = Math.floor((y - r - pad) / c), y1 = Math.floor((y + r + pad) / c);
