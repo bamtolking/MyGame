@@ -33,7 +33,7 @@ export type PlayerData = {
 	tutorial: number,
 	lastOnline: number,
 	playTime: number,
-	settings: { music: boolean, sfx: boolean },
+	settings: { music: boolean, sfx: boolean, fx: boolean }, -- fx=false: 효과 줄이기
 	receipts: { string },
 	stats: { bought: number, merges: number, bonks: number, stolenFrom: number },
 }

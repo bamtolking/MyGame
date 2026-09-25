@@ -29,7 +29,7 @@ function Offline.init()
 		LayoutOrder = 1,
 		Parent = p.content,
 	})
-	Kit.button({ Text = Lang.t("collectIt"), Color = Kit.colors.green, Size = UDim2.fromOffset(240, 64), LayoutOrder = 2, Parent = p.content }, function()
+	Kit.button({ Text = Lang.t("collectIt"), Color = Kit.colors.green, Size = UDim2.fromOffset(240, 64), LayoutOrder = 2, Shine = true, Parent = p.content }, function()
 		State.action("ClaimOffline")
 		Sound.play("collect")
 		Panel.close("Offline")

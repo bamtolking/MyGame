@@ -8,6 +8,8 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Calc = require(Shared.Logic.Calc)
+local Slimes = require(Shared.Config.Slimes)
+local Rarities = require(Shared.Config.Rarities)
 local SlimeBuilder = require(Shared.SlimeBuilder)
 
 local Client = script.Parent.Parent
@@ -16,6 +18,7 @@ local State = require(Client.State)
 local SlimeLabel = require(Client.SlimeLabel)
 local Notify = require(Client.UI.Notify)
 local Manage = require(Client.UI.Panels.Manage)
+local Prompts = require(Client.UI.Prompts)
 local Sound = require(script.Parent.Sound)
 
 local BaseSlimes = {}
@@ -71,13 +74,16 @@ local function setup(model: Instance)
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.RequiresLineOfSight = false
 	prompt.MaxActivationDistance = 9
-	prompt.ObjectText = Lang.slime(id)
+	local rarity = Rarities.byId[Slimes.byId[id].rarity]
+	local accent = if rarity.id == "secret" then Color3.new(1, 1, 1) else rarity.color
+	prompt.ObjectText = Lang.slime(id) .. " " .. string.rep("★", star)
 	prompt.Parent = attach
 	prompts[model] = prompt
 
 	if owner == player.UserId then
 		prompt.ActionText = Lang.t("manage")
 		prompt.HoldDuration = 0
+		Prompts.style(prompt, "manage", accent)
 		prompt.Triggered:Connect(function()
 			Manage.open(uid)
 		end)
@@ -86,6 +92,7 @@ local function setup(model: Instance)
 		prompt.ActionText = if fav then Lang.t("protectedFav") else Lang.t("steal")
 		prompt.Enabled = not fav
 		prompt.HoldDuration = Calc.stealHold(info)
+		Prompts.style(prompt, "steal", accent)
 		local payload = { plot = plotIndex, uid = uid }
 		prompt.PromptButtonHoldBegan:Connect(function()
 			task.spawn(function()

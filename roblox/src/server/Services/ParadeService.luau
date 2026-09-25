@@ -135,7 +135,14 @@ function ParadeService.buy(session: Sessions.Session, key: any): (boolean, strin
 		session.data.tutorial = 1
 		session.dirty = true
 	end
-	Remote.fxAll("bought", { key = key, plot = session.plot, uid = uid, userId = session.userId })
+	Remote.fxAll("bought", {
+		key = key,
+		plot = session.plot,
+		uid = uid,
+		userId = session.userId,
+		id = entry.id,
+		mut = mut,
+	})
 	return true, nil
 end
 

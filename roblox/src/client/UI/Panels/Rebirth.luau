@@ -72,6 +72,7 @@ function Rebirth.init()
 		Color = Kit.colors.pink,
 		Size = UDim2.fromOffset(260, 64),
 		LayoutOrder = 7,
+		Shine = true,
 		Parent = p.content,
 	}, function()
 		local result = State.action("Rebirth")

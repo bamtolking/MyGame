@@ -179,7 +179,9 @@ function SlimeService.merge(session: Sessions.Session, uid: string): (boolean, s
 		return false, "cantMerge"
 	end
 	local result = Merge.result(session.data.slimes, set)
+	local fromPads: { number } = {}
 	for i = 2, #set do
+		table.insert(fromPads, session.data.slimes[set[i]].pad)
 		SlimeService.remove(session, set[i])
 	end
 	session.data.slimes[uid] = result
@@ -188,7 +190,14 @@ function SlimeService.merge(session: Sessions.Session, uid: string): (boolean, s
 	session.data.stats.merges += 1
 	Bus.quest:Fire(session, "merge", 1)
 	Bus.incomeChanged:Fire(session)
-	Remote.fx(session.player, "merge", { uid = uid, star = result.star })
+	Remote.fxAll("merge", {
+		plot = session.plot,
+		uid = uid,
+		star = result.star,
+		from = fromPads,
+		id = result.id,
+		owner = session.userId,
+	})
 	return true, nil
 end
 

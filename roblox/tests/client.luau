@@ -20,6 +20,7 @@ local starterScripts = Engine.game:GetService("StarterPlayer"):FindFirstChildOfC
 	or Instance.new("StarterPlayerScripts")
 starterScripts.Parent = Engine.game:GetService("StarterPlayer")
 local client = Engine.mount("src/client", starterScripts, "Client")
+local first = Engine.mount("src/first", Engine.game:GetService("ReplicatedFirst"), "First")
 
 local SL = Engine.loader() -- 서버 모듈 캐시
 local CL = Engine.loader() -- 클라이언트 모듈 캐시
@@ -88,6 +89,11 @@ local function main()
 		return Sessions.get(player)
 	end)
 	check(session ~= nil, "server session")
+	CL.runScript(first.Loading)
+	check(waitFor(function()
+		return gui:FindFirstChild("LoadingScreen")
+	end) ~= nil, "loading screen shown")
+	check(Engine.defaultLoadingRemoved == true, "default loading screen removed")
 	CL.runScript(client.Main)
 	check(waitFor(function()
 		return gui:FindFirstChild("HUD")
@@ -98,6 +104,27 @@ local function main()
 	check(waitFor(function()
 		return State.view
 	end) ~= nil, "client received state")
+	check(waitFor(function()
+		return player:GetAttribute("ClientReady") == true
+	end), "client marked ready")
+	check(waitFor(function()
+		return gui:FindFirstChild("LoadingScreen") == nil
+	end, 6), "loading screen faded out")
+
+	print("== audio")
+	local audio = Engine.game:GetService("SoundService"):FindFirstChild("SlimeHeistAudio")
+	local soundService = Engine.game:GetService("SoundService")
+	check(
+		audio ~= nil and soundService:FindFirstChild("Music") ~= nil and soundService:FindFirstChild("SFX") ~= nil,
+		"sound groups created"
+	)
+	check(waitFor(function()
+		local n = 0
+		for _, count in Engine.soundsPlayed do
+			n += count
+		end
+		return n >= 3
+	end, 4), "music box is playing notes")
 
 	print("== parade on client")
 	local entry = ParadeService.spawn("common", "blobby", "gold")
@@ -106,7 +133,7 @@ local function main()
 	end)
 	local model = waitFor(function()
 		for _, m in folder:GetChildren() do
-			if m:FindFirstChild("Body") then
+			if m:GetAttribute("ParadeKey") == entry.key and m:FindFirstChild("Body") then
 				return m
 			end
 		end
@@ -118,6 +145,16 @@ local function main()
 	local prompt = body and body:FindFirstChildOfClass("Attachment"):FindFirstChildOfClass("ProximityPrompt")
 	check(prompt ~= nil, "buy prompt exists")
 	check(model and model:FindFirstChild("SlimeLabel") ~= nil, "parade label")
+	check(prompt and prompt.Style == roblox.Enum.ProximityPromptStyle.Custom, "buy prompt uses custom style")
+	Engine.sig(Engine.game:GetService("ProximityPromptService"), "PromptShown"):Fire(prompt, roblox.Enum.ProximityPromptInputType.Keyboard)
+	local promptGui = waitFor(function()
+		return gui:FindFirstChild("SlimePrompt")
+	end)
+	check(promptGui ~= nil and promptGui.Adornee == prompt.Parent, "custom prompt card shown")
+	Engine.sig(Engine.game:GetService("ProximityPromptService"), "PromptHidden"):Fire(prompt)
+	check(waitFor(function()
+		return gui:FindFirstChild("SlimePrompt") == nil
+	end), "custom prompt card hidden")
 	local pos = ParadeService.positionOf(entry)
 	Engine.moveTo(player, pos + Vector3.new(2, 3, 0))
 	Engine.sig(prompt, "Triggered"):Fire()
@@ -169,6 +206,13 @@ local function main()
 	end
 	check(clicked > 0, "clicked upgrade buttons (" .. clicked .. ")")
 	check((session.data.upgrades.pads or 0) >= 1, "upgrade bought through UI")
+	local arrows = 0
+	for _, d in shopRoot:GetDescendants() do
+		if d:IsA("TextLabel") and string.find(d.Text, "→", 1, true) then
+			arrows += 1
+		end
+	end
+	check(arrows >= 5, "shop shows current → next effects (" .. arrows .. ")")
 	Panel.open("Quests")
 	for _, d in gui.Panels.Quests:GetDescendants() do
 		if d:IsA("TextButton") then
@@ -177,6 +221,36 @@ local function main()
 	end
 	task.wait(0.3)
 	check(session.data.daily.streak == 1, "daily claimed through UI")
+
+	print("== settings")
+	local Sound = CL.require(client.Controllers.Sound)
+	local Fx = CL.require(client.Controllers.Fx)
+	Panel.open("Settings")
+	task.wait(0.2)
+	local tracks = {}
+	for _, d in gui.Panels.Settings:GetDescendants() do
+		if d:IsA("TextButton") and d.Text == "" and d:FindFirstChildOfClass("TextLabel") and d:FindFirstChildOfClass("TextLabel").Text == "ON" then
+			table.insert(tracks, d)
+		end
+	end
+	check(#tracks == 3, "three settings toggles (" .. #tracks .. ")")
+	for _, t in tracks do
+		Engine.sig(t, "Activated"):Fire()
+		task.wait(0.6)
+	end
+	check(waitFor(function()
+		return session.data.settings.music == false and session.data.settings.sfx == false and session.data.settings.fx == false
+	end), "settings saved on server")
+	check(Sound.enabled == false and Sound.musicEnabled == false and Fx.reduced == true, "settings applied on client")
+	for _, t in tracks do
+		Engine.sig(t, "Activated"):Fire()
+		task.wait(0.6)
+	end
+	check(waitFor(function()
+		return session.data.settings.music and session.data.settings.sfx and session.data.settings.fx
+	end), "settings toggled back on")
+	check(Sound.enabled and Sound.musicEnabled and not Fx.reduced, "sound and effects re-enabled")
+	Panel.close("Settings")
 
 	print("== fx & world events")
 	local other = Engine.addPlayer("Other")
@@ -193,6 +267,26 @@ local function main()
 	Remote.fx(player, "reward", { cash = 50, boost = "cash2x", seconds = 60, slime = "king", serverLuck = 300 })
 	Remote.fx(player, "rebirth", { n = 1 })
 	Remote.fx(player, "lock", { seconds = 60 })
+	Remote.fxAll("zap", { pos = Vector3.new(0, 3, 0) })
+	Remote.fxAll("stealSuccess", { thief = other.UserId, victim = player.UserId })
+	Remote.fxAll("mutate", { plot = 1, uid = "1", mut = "gold" })
+	local before = 0
+	for _ in session.data.slimes do
+		before += 1
+	end
+	for _ = 1, 3 do
+		SlimeService.add(session, { id = "blobby", star = 1, mut = "none" })
+	end
+	local mergeOk = false
+	for uid, sd in session.data.slimes do
+		if sd.id == "blobby" and sd.star == 1 then
+			local r = Engine.invoke(player, "Merge", uid)
+			mergeOk = r and r.ok
+			break
+		end
+	end
+	check(mergeOk, "merge through server (fx payload)")
+	task.wait(0.8)
 	Remote.notify(player, "success", "stealSuccess", { slime = "dragon" })
 	Remote.notifyAll("rare", "rareSpawn", { slime = "slimegod", mut = "galaxy", rarity = "secret" })
 	WeatherService.startEvent("meteor")
@@ -208,6 +302,18 @@ local function main()
 		bonkAction("SlimeHeistBonk", roblox.Enum.UserInputState.Begin, nil)
 	end
 	task.wait(0.3)
+	check(Engine.renderSteps.SlimeHeistShake ~= nil, "camera shake bound to render step")
+	local Hud = CL.require(client.UI.Hud)
+	check(Hud.onHome ~= nil, "home button wired")
+	Hud.onHome()
+	task.wait(0.2)
+	local beamOn = false
+	for _, d in S.Workspace:GetDescendants() do
+		if d:IsA("Beam") and d.Parent.Name == "TutorialTarget" and d.Enabled then
+			beamOn = true
+		end
+	end
+	check(beamOn, "home guide beam shown")
 
 	print("== offline popup")
 	session.offline = { amount = 999, seconds = 3600 }

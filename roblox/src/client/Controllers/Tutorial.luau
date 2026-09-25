@@ -4,6 +4,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -15,6 +16,7 @@ local State = require(Client.State)
 local Hud = require(Client.UI.Hud)
 local Notify = require(Client.UI.Notify)
 local Parade = require(script.Parent.Parade)
+local Sound = require(script.Parent.Sound)
 
 local Tutorial = {}
 
@@ -56,6 +58,14 @@ local function showTips()
 	end)
 end
 
+local guideUntil = 0
+local lastStep = -1
+
+-- 집(내 기지) 방향 안내: seconds 동안 빔으로 가리킴
+function Tutorial.guideHome(seconds: number)
+	guideUntil = os.clock() + seconds
+end
+
 local function update()
 	local data = State.data()
 	local r = root()
@@ -67,28 +77,39 @@ local function update()
 		a0.Parent = r
 	end
 	local step = data.tutorial
+	if lastStep ~= -1 and step > lastStep then
+		Sound.play("questDone")
+	end
+	lastStep = step
 	local target: Vector3? = nil
-	if step == 0 then
+	if os.clock() < guideUntil then
+		local spawnPart = plotPart("CollectPlate")
+		target = if spawnPart then spawnPart.Position else nil
+		Hud.setTutorial(Lang.t("homeGuide"))
+		if target and (target - r.Position).Magnitude < 14 then
+			guideUntil = 0
+		end
+	elseif step == 0 then
 		local slime = Parade.nearestAffordable(r.Position)
 		if slime then
 			target = slime.Position
 		else
 			target = Vector3.new(World.parade.x, 2, r.Position.Z)
 		end
-		Hud.setTutorial(Lang.t("tut0"))
+		Hud.setTutorial(Lang.t("tut0"), 1)
 	elseif step == 1 then
 		local plate = plotPart("CollectPlate")
 		if State.vault < 1 then
-			Hud.setTutorial(Lang.t("tut1wait"))
+			Hud.setTutorial(Lang.t("tut1wait"), 2)
 			target = nil
 		else
 			target = if plate then plate.Position else nil
-			Hud.setTutorial(Lang.t("tut1"))
+			Hud.setTutorial(Lang.t("tut1"), 2)
 		end
 	elseif step == 2 then
 		local plate = plotPart("LockPlate")
 		target = if plate then plate.Position else nil
-		Hud.setTutorial(Lang.t("tut2"))
+		Hud.setTutorial(Lang.t("tut2"), 3)
 	else
 		Hud.setTutorial(nil)
 		showTips()
@@ -123,8 +144,8 @@ function Tutorial.init()
 	beam.FaceCamera = true
 	beam.LightEmission = 1
 	beam.Segments = 20
-	beam.CurveSize0 = 0
-	beam.CurveSize1 = 0
+	beam.CurveSize0 = 4
+	beam.CurveSize1 = -4
 	beam.Color = ColorSequence.new(Color3.fromRGB(255, 240, 120), Color3.fromRGB(120, 255, 160))
 	beam.Transparency = NumberSequence.new(0.2)
 	beam.Enabled = false
@@ -149,6 +170,16 @@ function Tutorial.init()
 			task.wait(0.25)
 			local ok = pcall(update)
 			arrow.Enabled = ok and beam.Enabled
+		end
+	end)
+	-- 화살표 둥실 + 빔 색 흐름
+	RunService.RenderStepped:Connect(function()
+		if beam.Enabled then
+			local t = os.clock()
+			arrow.StudsOffset = Vector3.new(0, 4 + math.abs(math.sin(t * 3)) * 1.5, 0)
+			beam.TextureLength = 4
+			local k = (t * 0.8) % 1
+			beam.Color = ColorSequence.new(Color3.fromHSV(0.14 + k * 0.1, 0.6, 1), Color3.fromHSV(0.33 + k * 0.1, 0.6, 1))
 		end
 	end)
 end

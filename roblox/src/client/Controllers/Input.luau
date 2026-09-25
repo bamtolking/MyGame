@@ -19,6 +19,7 @@ local Quests = require(Client.UI.Panels.Quests)
 local Gifts = require(Client.UI.Panels.Gifts)
 local Rebirth = require(Client.UI.Panels.Rebirth)
 local Fx = require(script.Parent.Fx)
+local Tutorial = require(script.Parent.Tutorial)
 
 local Input = {}
 
@@ -52,6 +53,9 @@ end
 function Input.init()
 	Hud.onBonk = bonk
 	Hud.onLock = lock
+	Hud.onHome = function()
+		Tutorial.guideHome(8)
+	end
 	ContextActionService:BindAction("SlimeHeistBonk", function(_name, inputState, _obj)
 		if inputState == Enum.UserInputState.Begin then
 			bonk()

@@ -9,6 +9,8 @@
 |---|---|---|
 | ![맵](docs/preview/top.png) | ![기지](docs/preview/base.png) | ![행진](docs/preview/plaza.png) |
 
+![슬라임 가까이: 눈·광택·그림자·오라](docs/preview/closeup.png)
+
 *(위 그림은 게임 코드로 만든 모델을 간단한 렌더러로 그린 미리보기입니다. 실제 Studio 화면은 조명·그림자·글자·효과가 더해집니다.)*
 
 기획 의도와 설계는 [`docs/GDD.md`](docs/GDD.md), 밸런스 수치는 [`docs/BALANCE.md`](docs/BALANCE.md),
@@ -91,9 +93,22 @@
 | 출석·선물·퀘스트 보상 | `Config/Rewards.luau` |
 | 게임패스·상품 | `Config/Products.luau` |
 | 화면 문구(영어/한국어) | `Config/Text.luau` |
+| 효과음·배경음악 | `Config/Audio.luau` |
 | 맵 배치 | `Config/World.luau`, `server/Services/MapService.luau` |
 
 수치를 바꾼 뒤에는 `lune run tests/balance.luau 20 8 --write`로 성장 속도를 다시 확인할 수 있습니다.
+
+**소리 바꾸기** — 기본은 로블록스에 내장된 소리라서 아무것도 안 해도 소리가 납니다.
+더 좋은 소리를 쓰려면 Creator Store(도구 상자 → 오디오)에서 고른 소리의 ID를 `Config/Audio.luau`의 `custom` 표에 넣으세요.
+```lua
+local custom = {
+	ping = "rbxassetid://1234567890",   -- 동전·화음에 쓰는 짧은 "딩" 소리
+	music = "rbxassetid://9876543210",  -- 평소 배경음악(비우면 코드로 연주하는 오르골 음악)
+	musicFrenzy = "",                   -- 대폭주 배경음악
+	...
+}
+```
+효과 하나하나(수금·합성·환생 등)는 같은 파일의 `cues` 표에서 음정(`p`)·볼륨(`v`)·시작 시간(`d`)을 겹쳐서 만듭니다.
 
 ## 5. 개발자용
 
@@ -107,7 +122,8 @@ roblox/
     SlimeBuilder.luau       파트만으로 슬라임 3D 모델 조립(에셋 불필요)
   src/server/               ServerScriptService.Server — Main + 서비스 13개
     Services/               Data · Map · Weather · Economy · Plot · Slime · Parade · Steal · Progress · Shop · Leaderboard · Admin
-  src/client/               StarterPlayerScripts.Client — UI(HUD·창 9개) · 행진 렌더링 · 프롬프트 · 연출 · 튜토리얼
+  src/client/               StarterPlayerScripts.Client — UI(HUD·창 9개·커스텀 프롬프트) · 행진 렌더링 · 연출(Fx·WorldFx) · 소리(Sound·Music) · 튜토리얼
+  src/first/                ReplicatedFirst — 로딩 화면(준비되면 페이드아웃)
   tests/                    Lune 테스트(단위 · 서버 통합 · 풀스택) + 밸런스 시뮬레이션 + 가짜 로블록스 엔진
   scripts/                  check.sh(전체 검사) · bake-map.luau(미리보기 맵) · preview/(미리보기 렌더러)
   build/                    SlimeHeist.rbxlx(바로 여는 파일) · MapPreview.rbxm
@@ -134,6 +150,6 @@ lune run tests/balance.luau 20 8 --write    # 밸런스 시뮬레이션 → docs
 `check.sh`가 하는 일:
 1. **luau-lsp strict 타입 검사** — 실제 Roblox API 정의로 모든 파일 검사(속성 이름·타입·메서드 오타를 잡음)
 2. **StyLua** 포맷 검사
-3. **단위 테스트** 56개 — 공식·뽑기 분포·합성·저장 복구·퀘스트·출석·문구 키·슬라임 420종 조립
-4. **서버 통합 테스트** 73개 — 가짜 로블록스 엔진에서 실제 서버 코드를 부팅해 입장→구매→수금→합성→업그레이드→훔치기→뿅망치→배달→잠금→날씨 변이→환생→보상→관리자 명령→결제→퇴장·재입장·오프라인 수입→종료 저장까지 실행
-5. **풀스택 테스트** 26개 — 서버+클라이언트를 함께 실행해 UI 생성, 모든 창, 행진 렌더링·구매 프롬프트, 연출, 입력을 확인
+3. **단위 테스트** 61개 — 공식·뽑기 분포·합성·저장 복구·퀘스트·출석·문구 키·슬라임 420종 조립·소리 설정(큐·음정 범위·코드에서 부르는 소리 이름)
+4. **서버 통합 테스트** 75개 — 가짜 로블록스 엔진에서 실제 서버 코드를 부팅해 입장→구매→수금→합성→업그레이드→훔치기→뿅망치→배달→잠금→날씨 변이→환생→보상→관리자 명령→결제→퇴장·재입장·오프라인 수입→종료 저장까지 실행
+5. **풀스택 테스트** 45개 — 서버+클라이언트를 함께 실행해 로딩 화면, 소리·음악, UI 생성, 모든 창, 설정 저장·적용, 상점 효과 미리보기, 행진 렌더링·커스텀 프롬프트, 합성·구매 등 연출, 입력·집 안내를 확인

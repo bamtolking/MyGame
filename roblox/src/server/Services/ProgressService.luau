@@ -233,6 +233,9 @@ function ProgressService.start()
 			if type(payload.sfx) == "boolean" then
 				session.data.settings.sfx = payload.sfx
 			end
+			if type(payload.fx) == "boolean" then
+				session.data.settings.fx = payload.fx
+			end
 			session.dirty = true
 		end
 		return { ok = true }

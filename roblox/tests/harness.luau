@@ -65,6 +65,10 @@ local robloxGlobals = {
 	NumberSequence = roblox.NumberSequence,
 	ColorSequence = roblox.ColorSequence,
 	NumberRange = roblox.NumberRange,
+	NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
+	ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
+	Font = roblox.Font,
+	Rect = roblox.Rect,
 	Instance = roblox.Instance,
 }
 

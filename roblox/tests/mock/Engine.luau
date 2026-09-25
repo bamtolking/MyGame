@@ -98,7 +98,9 @@ local EVENTS = {
 	TextChatCommand = { "Triggered" },
 	GuiButton = { "Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "MouseEnter", "MouseLeave" },
 	GuiObject = { "InputBegan", "InputEnded" },
-	ProximityPrompt = { "Triggered", "PromptButtonHoldBegan", "PromptButtonHoldEnded" },
+	ProximityPrompt = { "Triggered", "PromptButtonHoldBegan", "PromptButtonHoldEnded", "PromptShown", "PromptHidden" },
+	ProximityPromptService = { "PromptShown", "PromptHidden", "PromptTriggered" },
+	Sound = { "Ended", "Loaded", "Played" },
 	UserInputService = { "InputBegan", "InputEnded" },
 }
 for class, names in EVENTS do
@@ -201,6 +203,10 @@ svc("Debris")
 svc("ContextActionService")
 svc("UserInputService")
 svc("LocalizationService")
+svc("ContentProvider")
+svc("ProximityPromptService")
+svc("GuiService")
+svc("ReplicatedFirst")
 
 Engine.isServer = true
 Engine.isStudio = true
@@ -264,9 +270,13 @@ roblox.implementMethod("Instance", "GetAttributeChangedSignal", function(self, n
 	return sig(self, "attr:" .. name)
 end)
 
+local modelPivots = setmetatable({}, { __mode = "k" })
 local function pivotOf(model)
 	if model.PrimaryPart then
 		return model.PrimaryPart.CFrame
+	end
+	if modelPivots[model] then
+		return modelPivots[model]
 	end
 	for _, d in model:GetDescendants() do
 		if d:IsA("BasePart") then
@@ -287,6 +297,9 @@ roblox.implementMethod("Model", "PivotTo", function(self, cf)
 		if d:IsA("BasePart") then
 			setPart(d, delta * d.CFrame)
 		end
+	end
+	if modelPivots[self] then
+		modelPivots[self] = cf
 	end
 end)
 roblox.implementMethod("BasePart", "GetPivot", function(self)
@@ -380,6 +393,84 @@ roblox.implementMethod("Debris", "AddItem", function(_self, inst, seconds)
 	end)
 end)
 roblox.implementMethod("SoundService", "PlayLocalSound", function() end)
+
+-- 소리: 재생 기록만 남김(Engine.soundsPlayed[SoundId] = 횟수)
+Engine.soundsPlayed = {}
+roblox.implementMethod("Sound", "Play", function(self)
+	Engine.soundsPlayed[self.SoundId] = (Engine.soundsPlayed[self.SoundId] or 0) + 1
+	self.Playing = true
+	self.IsPlaying = true
+end)
+roblox.implementMethod("Sound", "Stop", function(self)
+	self.Playing = false
+	self.IsPlaying = false
+end)
+roblox.implementMethod("Sound", "Pause", function(self)
+	self.Playing = false
+	self.IsPlaying = false
+end)
+roblox.implementMethod("Sound", "Resume", function(self)
+	self.Playing = true
+	self.IsPlaying = true
+end)
+roblox.implementMethod("ContentProvider", "PreloadAsync", function(_self, list, callback)
+	for _, item in list do
+		if callback then
+			local id = if type(item) == "string" then item else item.SoundId
+			callback(id, Enum.AssetFetchStatus.Success)
+		end
+	end
+end)
+
+-- 프롬프트 길게 누르기(터치용 사용자 정의 프롬프트)
+roblox.implementMethod("ProximityPrompt", "InputHoldBegin", function(self)
+	sig(self, "PromptButtonHoldBegan"):Fire()
+end)
+roblox.implementMethod("ProximityPrompt", "InputHoldEnd", function(self)
+	sig(self, "PromptButtonHoldEnded"):Fire()
+end)
+
+-- 렌더 단계 바인딩: RenderStepped에 연결
+Engine.renderSteps = {}
+roblox.implementMethod("RunService", "BindToRenderStep", function(self, name, _priority, fn)
+	if Engine.renderSteps[name] then
+		Engine.renderSteps[name]:Disconnect()
+	end
+	Engine.renderSteps[name] = sig(self, "RenderStepped"):Connect(fn)
+end)
+roblox.implementMethod("RunService", "UnbindFromRenderStep", function(_self, name)
+	if Engine.renderSteps[name] then
+		Engine.renderSteps[name]:Disconnect()
+		Engine.renderSteps[name] = nil
+	end
+end)
+
+-- 카메라 투영(간단한 원근): 화면 가운데 기준
+roblox.implementMethod("Camera", "WorldToViewportPoint", function(self, pos)
+	local rel = self.CFrame:PointToObjectSpace(pos)
+	local size = self.ViewportSize
+	local depth = -rel.Z
+	if depth <= 0.01 then
+		return roblox.Vector3.new(size.X / 2, size.Y / 2, depth), false
+	end
+	local f = (size.Y / 2) / math.tan(math.rad(self.FieldOfView / 2))
+	local x = size.X / 2 + rel.X / depth * f
+	local y = size.Y / 2 - rel.Y / depth * f
+	return roblox.Vector3.new(x, y, depth), x >= 0 and x <= size.X and y >= 0 and y <= size.Y
+end)
+roblox.implementMethod("GuiService", "GetGuiInset", function()
+	return roblox.Vector2.new(0, 58), roblox.Vector2.new(0, 0)
+end)
+roblox.implementMethod("ReplicatedFirst", "RemoveDefaultLoadingScreen", function()
+	Engine.defaultLoadingRemoved = true
+end)
+
+-- 모델 기준점(WorldPivot): 설정한 모델은 PivotTo가 이 값을 기준으로 움직임
+roblox.implementProperty("Model", "WorldPivot", function(self)
+	return pivotOf(self)
+end, function(self, cf)
+	modelPivots[self] = cf
+end)
 roblox.implementMethod("ContextActionService", "BindAction", function(_self, name, fn)
 	Engine.actions = Engine.actions or {}
 	Engine.actions[name] = fn
@@ -595,13 +686,37 @@ local TweenInfo = {
 	end,
 }
 
+-- Lune에는 기본값이 없는 읽기 전용 속성 → 만들 때 채워 줌
+local function withDefaults(inst)
+	if inst:IsA("Sound") then
+		inst.TimeLength = 1
+		inst.IsPlaying = false
+	elseif inst:IsA("BasePart") then
+		inst.Position = roblox.Vector3.zero -- CFrame을 바꾸면 syncPositions가 매 프레임 맞춰 줌
+	elseif inst:IsA("GuiBase2d") then
+		inst.AbsolutePosition = roblox.Vector2.new(0, 0)
+		inst.AbsoluteSize = roblox.Vector2.new(100, 40)
+	end
+	return inst
+end
+local InstanceShim = {
+	new = function(className, parent)
+		local inst = withDefaults(Instance.new(className))
+		if parent then
+			inst.Parent = parent
+		end
+		return inst
+	end,
+}
+Engine.withDefaults = withDefaults
+
 local baseGlobals = {
 	game = gameProxy,
 	workspace = Workspace,
 	task = task,
 	Random = FakeRandom,
 	TweenInfo = TweenInfo,
-	Instance = Instance,
+	Instance = InstanceShim,
 	Enum = Enum,
 	warn = function(...)
 		local parts = {}

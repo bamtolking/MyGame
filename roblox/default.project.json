@@ -54,7 +54,11 @@
           0.55,
           0.55,
           0.6
-        ]
+        ],
+        "EnvironmentDiffuseScale": 1,
+        "EnvironmentSpecularScale": 1,
+        "ShadowSoftness": 0.25,
+        "ExposureCompensation": 0.15
       }
     },
     "SoundService": {
@@ -65,6 +69,11 @@
     "TextChatService": {
       "$properties": {
         "ChatVersion": "TextChatService"
+      }
+    },
+    "ReplicatedFirst": {
+      "Loading": {
+        "$path": "src/first/Loading.client.luau"
       }
     }
   }

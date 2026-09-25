@@ -390,26 +390,54 @@ function SlimeBuilder.build(info: BuildInfo, origin: CFrame?, scaleMult: number?
 		body:SetAttribute("Rainbow", true)
 	end
 
-	-- 광택
+	-- 바닥 그림자(얇은 원판) — 들고 가거나 공중에 띄울 때는 호출한 쪽에서 떼어 냅니다
+	makePart(ctx, "Shadow", v(0.08, 3.9, 3.9), at(0, 0.05, 0) * UPRIGHT, Color3.new(0, 0, 0), {
+		shape = "cylinder",
+		transparency = 0.72,
+	})
+
+	-- 광택(큰 것 + 작은 것)
 	makePart(ctx, "Shine", v(0.9, 0.45, 0.6), at(-0.85, 2.75, -0.95) * CFrame.Angles(0, rad(-30), rad(20)), Color3.new(1, 1, 1), {
 		shape = "sphere",
 		transparency = 0.45,
 	})
+	makePart(ctx, "Shine2", v(0.34, 0.2, 0.24), at(-0.35, 3.02, -0.95) * CFrame.Angles(0, rad(-15), rad(10)), Color3.new(1, 1, 1), {
+		shape = "sphere",
+		transparency = 0.4,
+	})
 
-	-- 눈·하이라이트·입·볼
+	-- 눈: 흰자 + 눈동자 + 반짝임 2개(깜빡임은 클라이언트가 Eye/EyeWhite 크기로 연출)
 	local black = Color3.fromRGB(25, 22, 30)
+	local white = Color3.fromRGB(255, 255, 255)
 	for _, side in { -1, 1 } do
 		local ex, ey = 0.72 * side, 2.0
 		local ez = frontZ(ex, ey)
-		makePart(ctx, "Eye", v(0.55, 0.8, 0.35), CFrame.new(ex, ey, ez + 0.06), black, { shape = "sphere" })
-		makePart(ctx, "EyeShine", v(0.2, 0.2, 0.2), CFrame.new(ex - 0.08, ey + 0.18, ez - 0.07), Color3.new(1, 1, 1), { shape = "ball" })
+		makePart(ctx, "EyeWhite", v(0.64, 0.88, 0.3), CFrame.new(ex, ey, ez + 0.08), white, { shape = "sphere" })
+		makePart(ctx, "Eye", v(0.46, 0.66, 0.3), CFrame.new(ex - 0.04 * side, ey - 0.05, ez - 0.02), black, { shape = "sphere" })
+		makePart(ctx, "EyeShine", v(0.2, 0.2, 0.2), CFrame.new(ex - 0.1, ey + 0.13, ez - 0.14), white, { shape = "ball" })
+		makePart(ctx, "EyeShine2", v(0.09, 0.09, 0.09), CFrame.new(ex + 0.08, ey - 0.16, ez - 0.13), white, { shape = "ball" })
 		local cx, cy = 1.25 * side, 1.55
 		makePart(ctx, "Cheek", v(0.55, 0.3, 0.3), CFrame.new(cx, cy, frontZ(cx, cy) + 0.08), Color3.fromRGB(255, 130, 150), {
 			shape = "sphere",
 			transparency = 0.25,
 		})
 	end
-	makePart(ctx, "Mouth", v(0.5, 0.26, 0.25), CFrame.new(0, 1.45, frontZ(0, 1.45) + 0.06), black, { shape = "sphere" })
+	-- 입 + 혀
+	local mz = frontZ(0, 1.45)
+	makePart(ctx, "Mouth", v(0.52, 0.26, 0.24), CFrame.new(0, 1.45, mz + 0.06), black, { shape = "sphere" })
+	makePart(ctx, "Tongue", v(0.26, 0.13, 0.16), CFrame.new(0, 1.39, mz - 0.03), Color3.fromRGB(255, 110, 140), { shape = "sphere" })
+
+	-- 전설 이상: 발밑 빛 고리
+	if rarity.glow then
+		local auraColor = if rarity.id == "secret" then Color3.fromRGB(255, 255, 255) else rarity.color
+		for i = 1, 12 do
+			local a = rad(i * 30)
+			makePart(ctx, "Aura", v(0.28, 0.28, 0.28), at(math.cos(a) * 2.35, 0.16, math.sin(a) * 2.35), auraColor, {
+				shape = "ball",
+				material = Enum.Material.Neon,
+			})
+		end
+	end
 
 	for _, accName in species.accessories do
 		local fn = ACCESSORIES[accName]

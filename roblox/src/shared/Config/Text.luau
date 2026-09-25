@@ -169,6 +169,17 @@ local T: { [string]: Entry } = {
 	-- 설정·튜토리얼
 	settingsTitle = { en = "Settings", ko = "설정" },
 	sfx = { en = "Sound", ko = "효과음" },
+	music = { en = "Music", ko = "배경음악" },
+	effects = { en = "Screen effects", ko = "화면 효과(흔들림)" },
+	homeButton = { en = "HOME", ko = "우리 집" },
+	homeGuide = { en = "🏠 Follow the arrow back to your base!", ko = "🏠 화살표를 따라 우리 기지로!" },
+	effectPads = { en = "{a} → {b} pads", ko = "발판 {a} → {b}" },
+	effectSpeed = { en = "Speed {a} → {b}", ko = "속도 {a} → {b}" },
+	effectLock = { en = "Lock {a}s → {b}s", ko = "잠금 {a}초 → {b}초" },
+	effectOffline = { en = "{a}% · {c}h → {b}% · {d}h", ko = "{a}% · {c}시간 → {b}% · {d}시간" },
+	effectLuck = { en = "Mutation {a}% → {b}%", ko = "변이 {a}% → {b}%" },
+	effectBonk = { en = "Cooldown {a}s → {b}s", ko = "재사용 {a}초 → {b}초" },
+	effectMax = { en = "Fully upgraded!", ko = "최대 강화 완료!" },
 	skipTutorial = { en = "Skip tutorial", ko = "튜토리얼 건너뛰기" },
 	howToPlay = {
 		en = "HOW TO PLAY\n1. Buy slimes from the Slime Parade in the middle.\n2. Slimes make cash at your base. Step on the GREEN plate to collect.\n3. Merge 3 same slimes into a bigger ★ slime.\n4. Steal slimes from other bases (hold E) and run home!\n5. BONK thieves with F. Step on the RED plate to lock your base.\n6. Weather turns slimes Gold, Diamond, Rainbow... Every hour: SLIME FRENZY!",

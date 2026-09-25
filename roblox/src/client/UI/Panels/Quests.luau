@@ -156,6 +156,7 @@ function Quests.init()
 		Color = Kit.colors.yellow,
 		Size = UDim2.fromOffset(240, 50),
 		LayoutOrder = 3,
+		Shine = true,
 		Parent = panel.content,
 	}, function()
 		local result = State.action("ClaimDaily")

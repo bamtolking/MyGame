@@ -8,6 +8,7 @@ local Lang = require(Client.Lang)
 local State = require(Client.State)
 local Kit = require(Client.UI.Kit)
 local Notify = require(Client.UI.Notify)
+local Prompts = require(Client.UI.Prompts)
 local Hud = require(Client.UI.Hud)
 local Panels = Client.UI.Panels
 local Shop = require(Panels.Shop)
@@ -21,6 +22,7 @@ local Manage = require(Panels.Manage)
 local Offline = require(Panels.Offline)
 local Controllers = Client.Controllers
 local Sound = require(Controllers.Sound)
+local Music = require(Controllers.Music)
 local Fx = require(Controllers.Fx)
 local Parade = require(Controllers.Parade)
 local BaseSlimes = require(Controllers.BaseSlimes)
@@ -35,6 +37,7 @@ Kit.setClickSound(function(name: string)
 end)
 State.init()
 Notify.init()
+Prompts.init()
 Hud.init()
 for _, panel in { Shop, Index, Rebirth, Quests, Gifts, Store, Settings, Manage, Offline } :: { { init: () -> () } } do
 	panel.init()
@@ -45,10 +48,24 @@ BaseSlimes.init()
 WorldFx.init()
 Tutorial.init()
 Input.init()
+Music.init()
+
+-- 저장된 설정(음악·효과음·화면 효과) 적용, 첫 상태를 받으면 로딩 화면 닫기
+local player = Players.LocalPlayer
+State.changed:Connect(function()
+	Settings.apply()
+	if player:GetAttribute("ClientReady") ~= true then
+		player:SetAttribute("ClientReady", true)
+	end
+end)
+if State.view then
+	Settings.apply()
+	player:SetAttribute("ClientReady", true)
+end
 
 -- 서버가 입장 때 보낸 상태를 놓쳤을 수도 있으니 한 번 더 요청
 task.spawn(function()
 	State.action("GetState")
 end)
 
-print("[SlimeHeist] client ready for " .. Players.LocalPlayer.Name)
+print("[SlimeHeist] client ready for " .. player.Name)

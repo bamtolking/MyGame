@@ -98,6 +98,12 @@ local function attachCarried(theft: Theft)
 		scaleMult
 	)
 	model.Name = "CarriedSlime"
+	-- 바닥 그림자·발밑 빛 고리는 머리 위에서는 어색하므로 제거
+	for _, child in model:GetChildren() do
+		if child.Name == "Shadow" or child.Name == "Aura" then
+			child:Destroy()
+		end
+	end
 	local modelRoot = model.PrimaryPart :: BasePart
 	for _, d in model:GetDescendants() do
 		if d:IsA("BasePart") then
@@ -220,7 +226,10 @@ local function begin(thief: Sessions.Session, victim: Sessions.Session, uid: str
 	Remote.notify(thief.player, "info", "carryHint")
 	Remote.notify(victim.player, "steal", "stealAlert", { slime = s.id, name = thief.player.DisplayName })
 	Remote.fx(victim.player, "revenge", { thief = thief.userId, seconds = Economy.steal.revengeSeconds })
-	Net.event("Fx"):FireAllClients({ kind = "carryStart", data = { thief = thief.userId } })
+	Net.event("Fx"):FireAllClients({
+		kind = "carryStart",
+		data = { thief = thief.userId, victim = victim.userId, plot = victim.plot, pad = s.pad },
+	})
 end
 
 local function tick()

@@ -33,7 +33,7 @@ function Data.default(): PlayerData
 		tutorial = 0,
 		lastOnline = 0,
 		playTime = 0,
-		settings = { music = true, sfx = true },
+		settings = { music = true, sfx = true, fx = true },
 		receipts = {},
 		stats = { bought = 0, merges = 0, bonks = 0, stolenFrom = 0 },
 	}
@@ -145,6 +145,7 @@ function Data.reconcile(raw: any): PlayerData
 	local settings = tbl(src.settings)
 	d.settings.music = bool(settings.music, true)
 	d.settings.sfx = bool(settings.sfx, true)
+	d.settings.fx = bool(settings.fx, true)
 
 	for _, r in tbl(src.receipts) do
 		if type(r) == "string" then

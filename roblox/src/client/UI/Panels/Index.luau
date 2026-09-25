@@ -30,6 +30,7 @@ type Card = {
 
 local cards: { Card } = {}
 local summary: TextLabel
+local setProgress: (number) -> ()
 local built = false
 local panel: Panel.PanelObj
 
@@ -39,7 +40,7 @@ local function build()
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
-		LayoutOrder = 2,
+		LayoutOrder = 3,
 		Parent = panel.content,
 	}) :: Frame
 	local layout = Instance.new("UIGridLayout")
@@ -102,6 +103,7 @@ local function refresh()
 		b = Calc.indexTotal(),
 		p = Format.number(count * Economy.indexBonusPer * 100),
 	})
+	setProgress(count / Calc.indexTotal())
 	for _, card in cards do
 		local found = data.index[card.id]
 		local any = found ~= nil and next(found) ~= nil
@@ -117,6 +119,8 @@ function Index.init()
 	panel = Panel.new("Index", "📖 " .. Lang.t("indexTitle"), Kit.colors.blue)
 	Kit.list(panel.content, true, 10, Enum.HorizontalAlignment.Center)
 	summary = Kit.label({ Size = UDim2.new(1, 0, 0, 32), Text = "", TextColor3 = Kit.colors.yellow, LayoutOrder = 1, Parent = panel.content })
+	local _bar
+	_bar, setProgress = Kit.progress(panel.content, Kit.colors.blue, { LayoutOrder = 2, Size = UDim2.new(0.9, 0, 0, 16) })
 	panel.onOpen = refresh
 	State.changed:Connect(function()
 		if panel.isOpen then

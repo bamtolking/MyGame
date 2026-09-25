@@ -1,10 +1,14 @@
 --!strict
 -- 가운데 모달 창. 한 번에 하나만 열립니다.
+-- 열릴 때: 배경 흐림(블러) + 어두운 막 + 창이 아래에서 튀어 오르며 커짐 + 소리
+-- 닫힐 때: 창이 작아지며 사라짐
 
+local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local Kit = require(script.Parent.Kit)
+local Sound = require(script.Parent.Parent.Controllers.Sound)
 
 local Panel = {}
 
@@ -20,6 +24,7 @@ export type PanelObj = {
 }
 
 local gui: ScreenGui? = nil
+local blur: BlurEffect? = nil
 local panels: { [string]: PanelObj } = {}
 local current: PanelObj? = nil
 
@@ -34,6 +39,11 @@ function Panel.gui(): ScreenGui
 			Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 		}) :: ScreenGui
 		gui = g
+		local b = Instance.new("BlurEffect")
+		b.Name = "PanelBlur"
+		b.Size = 0
+		b.Parent = Lighting
+		blur = b
 		return g
 	end
 	return gui :: ScreenGui
@@ -48,13 +58,20 @@ local function fitScale(): number
 	return math.clamp(math.min(size.Y / 560, size.X / 640), 0.6, 1.15)
 end
 
+local function setBlur(on: boolean)
+	local b = blur
+	if b then
+		Kit.tween(b, 0.25, { Size = if on then 12 else 0 })
+	end
+end
+
 function Panel.new(name: string, titleText: string, color: Color3): PanelObj
 	local screen = Panel.gui()
 	local root = Kit.new("Frame", {
 		Name = name,
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.55,
+		BackgroundColor3 = Color3.fromRGB(12, 6, 26),
+		BackgroundTransparency = 1,
 		Visible = false,
 		Active = true,
 		Parent = screen,
@@ -76,30 +93,55 @@ function Panel.new(name: string, titleText: string, color: Color3): PanelObj
 		BackgroundColor3 = Kit.colors.bg,
 		Parent = root,
 	}) :: Frame
-	Kit.corner(window, 22)
+	Kit.corner(window, 24)
 	Kit.stroke(window, 5)
+	Kit.gradient(window, Color3.fromRGB(255, 255, 255), Color3.fromRGB(190, 185, 215))
 	local scale = Instance.new("UIScale")
+	scale.Name = "FitScale"
 	scale.Parent = window
+
+	-- 창 아래 두께감
+	local base = Kit.new("Frame", {
+		Name = "Base",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 1, -18),
+		Size = UDim2.new(1, 0, 0, 28),
+		BackgroundColor3 = Kit.darken(Kit.colors.bg, 0.4),
+		ZIndex = 0,
+		Parent = window,
+	}) :: Frame
+	Kit.corner(base, 24)
 
 	local header = Kit.new("Frame", {
 		Name = "Header",
-		Size = UDim2.new(1, 0, 0, 64),
+		Size = UDim2.new(1, 0, 0, 66),
 		BackgroundColor3 = color,
 		Parent = window,
 	}) :: Frame
-	Kit.corner(header, 22)
-	Kit.gradient(header, Color3.new(1, 1, 1), Color3.fromRGB(175, 175, 175))
-	-- 헤더 아래쪽 모서리를 네모로 보이게 덮개
-	Kit.new("Frame", {
-		Size = UDim2.new(1, 0, 0, 20),
-		Position = UDim2.new(0, 0, 1, -20),
-		BackgroundColor3 = color,
+	Kit.corner(header, 24)
+	Kit.gradient(header, Kit.lighten(color, 0.25), Kit.darken(color, 0.15))
+	-- 헤더 아래 모서리를 네모로 보이게 덮개
+	local cover = Kit.new("Frame", {
+		Size = UDim2.new(1, 0, 0, 22),
+		Position = UDim2.new(0, 0, 1, -22),
+		BackgroundColor3 = Kit.darken(color, 0.15),
 		BorderSizePixel = 0,
 		Parent = header,
-	})
+	}) :: Frame
+	assert(cover)
+	-- 헤더 광택
+	local gloss = Kit.new("Frame", {
+		Size = UDim2.new(1, -24, 0, 22),
+		Position = UDim2.fromOffset(12, 5),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 0.8,
+		BorderSizePixel = 0,
+		Parent = header,
+	}) :: Frame
+	Kit.corner(gloss, 11)
 	local title = Kit.label({
 		Size = UDim2.new(1, -140, 0, 46),
-		Position = UDim2.fromOffset(70, 9),
+		Position = UDim2.fromOffset(70, 10),
 		Text = titleText,
 		stroke = 3,
 		Parent = header,
@@ -116,8 +158,8 @@ function Panel.new(name: string, titleText: string, color: Color3): PanelObj
 
 	local content = Kit.new("ScrollingFrame", {
 		Name = "Content",
-		Position = UDim2.fromOffset(12, 74),
-		Size = UDim2.new(1, -24, 1, -86),
+		Position = UDim2.fromOffset(12, 76),
+		Size = UDim2.new(1, -24, 1, -88),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ScrollBarThickness = 8,
@@ -129,8 +171,9 @@ function Panel.new(name: string, titleText: string, color: Color3): PanelObj
 	}) :: ScrollingFrame
 	local pad = Instance.new("UIPadding")
 	pad.PaddingRight = UDim.new(0, 10)
-	pad.PaddingTop = UDim.new(0, 4)
-	pad.PaddingBottom = UDim.new(0, 8)
+	pad.PaddingTop = UDim.new(0, 6)
+	pad.PaddingBottom = UDim.new(0, 12)
+	pad.PaddingLeft = UDim.new(0, 2)
 	pad.Parent = content
 
 	local obj: PanelObj = {
@@ -151,7 +194,9 @@ function Panel.new(name: string, titleText: string, color: Color3): PanelObj
 	closeBtn.Activated:Connect(close)
 	backdrop.Activated:Connect(close)
 	window:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-		scale.Scale = fitScale()
+		if obj.isOpen then
+			scale.Scale = fitScale()
+		end
 	end)
 	scale.Scale = fitScale()
 	return obj
@@ -163,35 +208,60 @@ function Panel.open(name: string)
 		return
 	end
 	if current and current ~= p then
-		Panel.close(current.name)
+		Panel.close(current.name, true)
 	end
+	local wasOpen = p.isOpen
 	current = p
 	p.isOpen = true
 	p.root.Visible = true
-	local scale = p.window:FindFirstChildOfClass("UIScale")
-	if scale then
-		local target = fitScale()
-		scale.Scale = target * 0.85
-		Kit.tween(scale, 0.22, { Scale = target }, Enum.EasingStyle.Back)
+	if not wasOpen then
+		Sound.play("open")
+		setBlur(true)
+		p.root.BackgroundTransparency = 1
+		Kit.tween(p.root, 0.2, { BackgroundTransparency = 0.45 })
+		local scale = p.window:FindFirstChild("FitScale")
+		if scale and scale:IsA("UIScale") then
+			local target = fitScale()
+			scale.Scale = target * 0.8
+			Kit.tween(scale, 0.28, { Scale = target }, Enum.EasingStyle.Back)
+		end
+		p.window.Position = UDim2.new(0.5, 0, 0.52, 40)
+		Kit.tween(p.window, 0.28, { Position = UDim2.fromScale(0.5, 0.52) }, Enum.EasingStyle.Back)
 	end
 	if p.onOpen then
 		p.onOpen()
 	end
 end
 
-function Panel.close(name: string)
+-- instant: 다른 창으로 바로 바꿀 때(닫힘 애니메이션·블러 해제 생략)
+function Panel.close(name: string, instant: boolean?)
 	local p = panels[name]
 	if not p or not p.isOpen then
 		return
 	end
 	p.isOpen = false
-	p.root.Visible = false
 	if current == p then
 		current = nil
 	end
 	if p.onClose then
 		p.onClose()
 	end
+	if instant then
+		p.root.Visible = false
+		return
+	end
+	Sound.play("close")
+	setBlur(false)
+	Kit.tween(p.root, 0.16, { BackgroundTransparency = 1 })
+	local scale = p.window:FindFirstChild("FitScale")
+	if scale and scale:IsA("UIScale") then
+		Kit.tween(scale, 0.16, { Scale = fitScale() * 0.85 })
+	end
+	task.delay(0.16, function()
+		if not p.isOpen then
+			p.root.Visible = false
+		end
+	end)
 end
 
 function Panel.toggle(name: string)
@@ -206,6 +276,10 @@ end
 function Panel.isOpen(name: string): boolean
 	local p = panels[name]
 	return p ~= nil and p.isOpen
+end
+
+function Panel.anyOpen(): boolean
+	return current ~= nil
 end
 
 function Panel.clear(p: PanelObj)
