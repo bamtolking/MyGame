@@ -2,14 +2,16 @@
 // 민감정보(API 키·토큰·비밀번호·인증서·.env 등) 검사. 발견되면 종료 코드 1.
 //   node scripts/check-secrets.mjs            # 현재 작업 트리 (추적 파일 + 아직 추적되지 않은 파일, .gitignore 대상 제외)
 //   node scripts/check-secrets.mjs --history  # 모든 브랜치의 모든 커밋까지 검사 — push 전에 반드시 실행
+//   node scripts/check-secrets.mjs --dir <폴더> # git 밖의 폴더 검사 (배포 때 원본 브랜치에서 받아 온 live 게임 소스)
 // 오탐이면 .secrets-allowlist 에 한 줄에 정규식 하나를 적습니다 ("경로:내용" 문자열에 매칭되면 무시).
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync, statSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
+import { resolve, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const history = process.argv.includes('--history');
+const dirArg = process.argv.includes('--dir') ? process.argv[process.argv.indexOf('--dir') + 1] : null;
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
 // 파일 이름만으로 위험한 것들
@@ -57,7 +59,30 @@ function scanName(path, where) {
   }
 }
 
-if (!history) {
+if (dirArg) {
+  const base = resolve(dirArg);
+  if (!existsSync(base)) { console.error(`폴더가 없습니다: ${base}`); process.exit(2); }
+  const files = [];
+  const walk = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const abs = join(d, e.name);
+      const rel = relative(base, abs).split('\\').join('/');
+      if (e.name === '.git' || SKIP_PATH.test(rel)) continue;
+      if (e.isDirectory()) walk(abs);
+      else if (e.isFile()) files.push(rel);
+    }
+  };
+  walk(base);
+  for (const p of files) {
+    scanName(p, '');
+    const abs = join(base, p);
+    if (statSync(abs).size > 4 * 1024 * 1024) continue;
+    const buf = readFileSync(abs);
+    if (isBinary(buf)) continue;
+    scanContent(p, buf.toString('utf8'), '');
+  }
+  console.log(`폴더 검사: ${relative(root, base) || base} 파일 ${files.length}개`);
+} else if (!history) {
   const files = git('ls-files', '-co', '--exclude-standard', '-z').split('\0').filter(Boolean).filter((p) => !SKIP_PATH.test(p));
   for (const p of files) {
     scanName(p, '');

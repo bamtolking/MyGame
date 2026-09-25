@@ -14,7 +14,8 @@ const base = JSON.parse(readFileSync(join(root, 'games.json'), 'utf8')).site.bas
 const port = Number(process.env.PORT || 8080);
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.woff2': 'font/woff2', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav' };
+  '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.woff2': 'font/woff2', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav',
+  '.wasm': 'application/wasm', '.webp': 'image/webp', '.gif': 'image/gif', '.jpeg': 'image/jpeg', '.woff': 'font/woff' };
 
 if (!existsSync(site)) { console.error('_site/ 가 없습니다. 먼저 node scripts/build-site.mjs 를 실행하세요.'); process.exit(1); }
 

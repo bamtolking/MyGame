@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="{{GAME_TAGLINE}}" />
+  <title>{{GAME_TITLE}} · 실행 파일 받기</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>" />
+  <style>
+    :root {
+      --bg: #0b1020; --bg2: #121a33; --card: #172142; --card-hi: #1d2a52;
+      --line: #2a375f; --text: #eef2ff; --muted: #9aa7cc; --accent: #7cc4ff; --accent-ink: #041424; --tag: #263566;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Segoe UI", Roboto, sans-serif;
+      line-height: 1.6; -webkit-text-size-adjust: 100%;
+      padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+      background: radial-gradient(1200px 600px at 50% -200px, #1e2b5a 0%, var(--bg) 60%);
+      min-height: 100vh;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    .back { display: inline-block; color: #cfd8ff; font-size: 14px; text-decoration: none; margin: 4px 0 14px; }
+    header { text-align: center; margin-bottom: 18px; }
+    header .icon { font-size: 44px; line-height: 1; }
+    h1 { margin: 8px 0 6px; font-size: 26px; letter-spacing: -0.4px; line-height: 1.3; }
+    header p { margin: 0; color: var(--muted); font-size: 15px; }
+    .box { background: linear-gradient(180deg, var(--card-hi), var(--card)); border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin: 14px 0; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+    .download {
+      display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; border-radius: 14px;
+      background: var(--accent); color: var(--accent-ink); text-decoration: none; font-weight: 800; font-size: 18px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .download:active { transform: scale(.98); }
+    .download:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+    .meta { margin: 10px 0 0; text-align: center; color: var(--muted); font-size: 13px; }
+    h2 { margin: 0 0 10px; font-size: 18px; }
+    ol { margin: 0; padding-left: 22px; }
+    li { margin: 6px 0; }
+    li b, p b { color: #fff; }
+    .box p { margin: 6px 0; }
+    .note { color: var(--muted); font-size: 13.5px; }
+    kbd { background: var(--tag); border-radius: 6px; padding: 1px 6px; font-size: 13px; font-family: inherit; }
+    a { color: #cfd8ff; }
+    .shots { display: grid; gap: 10px; grid-template-columns: 1fr; margin-top: 4px; }
+    @media (min-width: 600px) { .shots { grid-template-columns: 1fr 1fr; } }
+    .shots img { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--bg2); display: block; }
+    .copy { margin-top: 8px; display: flex; gap: 8px; }
+    .copy input { flex: 1; min-width: 0; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 13px; }
+    .copy button { background: var(--tag); color: #fff; border: 0; border-radius: 10px; padding: 0 14px; font-size: 14px; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="{{BASE_PATH}}">← 게임 목록</a>
+    <header>
+      <div class="icon" aria-hidden="true">{{GAME_EMOJI}}</div>
+      <h1>{{GAME_TITLE}}</h1>
+      <p>{{GAME_TAGLINE}}</p>
+    </header>
+
+    <section class="box">
+      <a class="download" href="{{FILE_HREF}}" download="{{FILE_NAME}}">⬇ 실행 파일 받기 ({{FILE_SIZE}})</a>
+      <p class="meta">{{FILE_NAME}} · 마지막 업데이트 {{UPDATED}} (한국 시간, 커밋 {{COMMIT}}) · 개발할 때마다 이 주소의 파일이 새 버전으로 바뀝니다</p>
+    </section>
+
+    <section class="box">
+      <h2>🖥️ PC·Mac 에서 바로 실행</h2>
+      <ol>
+        <li><a href="https://create.roblox.com/" rel="noopener">Roblox Studio</a> 를 설치하고 로그인합니다 (무료).</li>
+        <li>위 버튼으로 받은 <b>{{FILE_NAME}}</b> 파일을 더블클릭합니다. 열리지 않으면 Studio 에서 <b>File → Open from File</b>.</li>
+        <li>위쪽 <b>▶ Play</b> (<kbd>F5</kbd>) 를 누르면 게임이 시작됩니다.
+          여러 명으로 시험하려면 <b>Test</b> 탭 → Clients and Servers → 플레이어 2~3명 → <b>Start</b>.</li>
+      </ol>
+      <p class="note">처음 Play 하면 Output 창에 “DataStore 사용 불가 → 메모리 저장” 경고가 뜨는데 정상입니다.</p>
+    </section>
+
+    <section class="box">
+      <h2>📱 아이폰·안드로이드 로블록스 앱에서 하려면</h2>
+      <p>로블록스 게임은 파일로는 휴대폰에서 실행할 수 없고, <b>한 번 로블록스에 올려야</b> 앱에서 할 수 있습니다.</p>
+      <ol>
+        <li>PC 의 Roblox Studio 에서 파일을 열고 <b>File → Publish to Roblox</b> → 새 게임으로 올립니다.</li>
+        <li><b>Game Settings → Places</b> 에서 최대 플레이어를 <b>8명</b>으로 둡니다 (기지가 8개).</li>
+        <li>휴대폰 로블록스 앱에서 같은 계정으로 로그인하면 내 창작물(Creations)에서 바로 실행할 수 있습니다.
+          친구도 하게 하려면 Game Settings 에서 공개(Public)로 바꿉니다.</li>
+      </ol>
+      <p class="note">새 버전이 나오면 새 파일을 Studio 로 열고 같은 게임에 다시 Publish 하면 됩니다.</p>
+      <p class="note">지금 휴대폰으로 이 페이지를 보고 있다면 아래 주소를 PC 로 보내서 여세요.</p>
+      <div class="copy">
+        <input id="url" readonly aria-label="이 페이지 주소" />
+        <button type="button" id="copy">복사</button>
+      </div>
+    </section>
+
+    <section class="box">
+      <h2>🖼️ 미리보기</h2>
+      <p class="note">게임 코드로 만든 모델을 간단한 렌더러로 그린 그림입니다. 실제 Studio 화면에는 조명·그림자·효과가 더해집니다.</p>
+      <div class="shots">
+<!--PREVIEW_IMAGES-->
+      </div>
+    </section>
+
+    <p class="note" style="text-align:center">게임 방법·관리자 명령·수익화 설정: <a href="{{DOC_URL}}" rel="noopener">README</a></p>
+  </main>
+  <script>
+    (function () {
+      var input = document.getElementById('url');
+      var url = location.origin + location.pathname;
+      input.value = url;
+      document.getElementById('copy').addEventListener('click', function () {
+        var btn = this;
+        var done = function () { btn.textContent = '복사됨'; setTimeout(function () { btn.textContent = '복사'; }, 1500); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { input.select(); });
+        else { input.select(); try { document.execCommand('copy'); done(); } catch (e) {} }
+      });
+    })();
+  </script>
+</body>
+</html>
