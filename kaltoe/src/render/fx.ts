@@ -4,9 +4,10 @@
 // 모든 훅은 변환이 이미 설정된 컨텍스트와 '그 컨텍스트의' View를 받는다(저해상도 블룸·조명 버퍼는 S/bx/by가 그 버퍼 기준).
 // 진입 시 globalAlpha = 1. 나갈 때 globalAlpha = 1, 받은 합성 모드, 월드 변환 setTransform(v.S,0,0,v.S,v.bx,v.by)을 그대로 둔다.
 //   바닥·소품 → fx.drawGround(g, v)  [월드, 적 아래: 잉크 자국·그을음·바닥 먼지 고리]
-//   그림자·픽업·적·플레이어·투사체 → fx.drawWorld(g, v)  [월드, 적 위: 파티클·불꽃·번개·폭발·피해 숫자·글자]
+//   그림자·픽업·적·플레이어·투사체 → fx.drawWorld(g, v)  [월드, 적 위: 파티클·불꽃·번개·폭발]
 //   조명 레이어(가산) → fx.drawLights(g, v)  [폭발·번개·레벨업·궁극기 같은 동적 광원]
 //   블룸 버퍼(저해상도, 가산) → fx.drawGlow(g, v)  [빛나야 할 심만]
+//   조명·블룸 뒤, 월드 UI 앞 → fx.drawLabels(g, v)  [월드: 피해 숫자·떠오르는 글자 — 어둠에 묻히지 않게 조명 다음. 모든 품질에서 부른다]
 //   화면 공간 → fx.drawScreen(g, v)  [CSS px: 번쩍임·충격파·집중선·레터박스·피격 테두리]
 // 품질 'low'에서는 drawGlow/drawLights가 불리지 않는다 → drawWorld만으로도 완성된 모습이어야 한다.
 // 카메라: 렌더러가 fx.shakeOffset()(CSS px)과 fx.zoomPunch()(배율, 1 = 없음)를 적용한다.
@@ -316,6 +317,7 @@ export class Fx {
   private camX = 0; private camY = 0;   // 마지막으로 그린 화면 중심(킥 방향 계산용)
   // 화면 연출 타이머
   private hurtT = 0; private chromaT = 0; private boxT = 0;
+  private hurtFl = 0;   // 피격 붉은 번쩍임(흰·금색 섬광과 따로 겹쳐 그린다)
   private pulseT = 0; private pulseMax = 1; private pulseKey: 'red' | 'gold' | 'cyan' = 'red';
   private swT = -1; private swX = 0; private swY = 0; private swCol = '#ffffff'; private swDur = 0.55;
   private linesT = 0;
@@ -329,6 +331,7 @@ export class Fx {
   private atlasId = 0;
   private textCache = new Map<string, TextSpr>();
   private textScale = 0;
+  private labelsHooked = false;   // 렌더러가 drawLabels를 부르면 drawWorld는 숫자·글자를 건너뛴다
 
   rnd() { this.seed = (this.seed * 16807) % 2147483647; return (this.seed - 1) / 2147483646; }
   private rr(a: number, b: number) { return a + (b - a) * this.rnd(); }
@@ -350,7 +353,7 @@ export class Fx {
     this.parts.length = 0; this.nums.length = 0; this.booms.length = 0; this.bolts.length = 0; this.texts.length = 0;
     this.pops.length = 0; this.waves.length = 0; this.lights.length = 0; this.marks.length = 0; this.rays.length = 0; this.pend.length = 0;
     this.numByUid.clear(); this.shake = 0; this.flash = 0;
-    this.hurtT = 0; this.chromaT = 0; this.boxT = 0; this.pulseT = 0; this.swT = -1; this.linesT = 0;
+    this.hurtT = 0; this.hurtFl = 0; this.chromaT = 0; this.boxT = 0; this.pulseT = 0; this.swT = -1; this.linesT = 0;
     this.zp = 0; this.zpFrom = 0; this.kx = this.ky = this.kvx = this.kvy = 0;
   }
 
@@ -815,13 +818,16 @@ export class Fx {
   dmg(x: number, y: number, v: number, crit: boolean, uid: number) {
     if (!this.showNums) return;
     const ex = this.numByUid.get(uid);
-    if (ex && ex.age < 0.4 && ex.max - ex.age > 0.2) {
-      // 같은 적의 연속 타격은 한 숫자로 합치고 다시 튀긴다
-      ex.v += v;
-      if (crit && !ex.crit) { ex.crit = true; ex.tilt = (this.rnd() - 0.5) * 0.4; }
-      ex.txt = fmtDmg(ex.v, ex.crit); ex.base = numBase(ex.v, ex.crit); ex.dirty = true;
-      ex.pt = 0; ex.amp = 0.45; ex.max = Math.max(ex.max, ex.age + 0.6);
-      return;
+    // 같은 적의 연속 타격은 한 숫자로 합치고 다시 튀긴다
+    if (ex && ex.age < 0.4 && ex.max - ex.age > 0.2) { this.bump(ex, v, crit); return; }
+    if (!crit) {
+      // 붙어 있는 다른 적들의 작은 타격(오라·궤도·장판 틱)도 지금 겹쳐 보일 막 생긴 숫자 하나로 합친다
+      // — 플레이어를 둘러싼 무리 위에 '10'이 수십 개 쌓여 캐릭터를 가리지 않게. 치명타는 따로 튄다.
+      for (const o of this.nums) {
+        if (o.crit || o.age >= 0.3 || o.max - o.age <= 0.2) continue;
+        const u = o.age / o.max, dx = o.x + o.vx * u - x, dy = o.y - easeOut3(u) * 22 - y;
+        if (dx < 20 && dx > -20 && dy < 13 && dy > -13) { this.bump(o, v, false); return; }
+      }
     }
     let n: DmgNum;
     if (this.nums.length >= this.maxNums) {
@@ -838,6 +844,14 @@ export class Fx {
     n.age = 0; n.max = crit ? 0.95 : 0.72; n.pt = 0; n.amp = 0.8; n.uid = uid;
     n.txt = fmtDmg(v, crit); n.base = numBase(v, crit); n.tilt = crit ? (this.rnd() - 0.5) * 0.4 : 0; n.dirty = true;
     this.numByUid.set(uid, n);
+  }
+
+  /** 살아 있는 숫자에 피해를 더하고 다시 튀긴다 */
+  private bump(n: DmgNum, v: number, crit: boolean) {
+    n.v += v;
+    if (crit && !n.crit) { n.crit = true; n.tilt = (this.rnd() - 0.5) * 0.4; }
+    n.txt = fmtDmg(n.v, n.crit); n.base = numBase(n.v, n.crit); n.dirty = true;
+    n.pt = 0; n.amp = 0.45; n.max = Math.max(n.max, n.age + 0.6);
   }
 
   /** 숫자 글리프 아틀라스(디스플레이 서체): 0행 흰색, 1행 치명타 노랑→주황 */
@@ -944,7 +958,11 @@ export class Fx {
 
   /** 흔들림(트라우마 0~1). cap: 이 값 이상으로는 올리지 않음(잦은 작은 폭발이 화면을 계속 흔들지 않게) */
   addShake(v: number, cap = 1) { if (this.shakeOn && this.shake < cap) this.shake = Math.min(cap, this.shake + v); }
-  addFlash(v: number, color = '#ffffff') { this.flash = Math.min(0.85, Math.max(this.flash, v)); this.flashColor = color; }
+  /** 화면 번쩍임. 지금 것보다 약한 번쩍임은 무시한다(색까지 덮어써 흰 섬광이 다른 색으로 바뀌지 않게) */
+  addFlash(v: number, color = '#ffffff') {
+    const nv = Math.min(0.85, v);
+    if (nv >= this.flash) { this.flash = nv; this.flashColor = color; }
+  }
   /** 카메라 킥(CSS px 방향 충격 → 스프링으로 튕기며 복귀) */
   kick(dx: number, dy: number) {
     if (!this.shakeOn) return;
@@ -982,7 +1000,7 @@ export class Fx {
   /** 화면을 가로지르는 충격파(월드 위치에서 시작) */
   shockScreen(x: number, y: number, color: string, dur = 0.55) { this.swT = 0; this.swX = x; this.swY = y; this.swCol = neonOf(color); this.swDur = dur; }
   /** 피격: 붉은 테두리 펄스 + 색수차 번쩍임 + 킥 */
-  hurtScreen() { this.hurtT = 1; this.chromaT = 0.18; this.addFlash(0.14, '#ff2244'); this.addShake(0.26); this.kickRand(9); }
+  hurtScreen() { this.hurtT = 1; this.chromaT = 0.18; this.hurtFl = Math.max(this.hurtFl, 0.14); this.addShake(0.26); this.kickRand(9); }
   /** 궁극기: 흰 섬광 → 화면 충격파 → 집중선 → 줌 펀치 1.08 */
   ultScreen(x: number, y: number, color: string) {
     this.addFlash(0.75, '#ffffff'); this.shockScreen(x, y, color); this.linesT = 0.8;
@@ -993,7 +1011,7 @@ export class Fx {
   /** 화면 테두리 맥동 */
   pulse(key: 'red' | 'gold' | 'cyan', dur: number) { this.pulseT = dur; this.pulseMax = dur; this.pulseKey = key; }
   /** 사망 */
-  death() { this.addFlash(0.6, '#000000'); this.hurtT = 1.6; this.chromaT = 0.28; this.punch(0.05, 1.1); this.kickRand(14); this.addShake(0.5); }
+  death() { this.flash = Math.max(this.flash, 0.6); this.flashColor = '#000000'; this.hurtT = 1.6; this.chromaT = 0.28; this.punch(0.05, 1.1); this.kickRand(14); this.addShake(0.5); }
 
   // ───────────── 갱신 ─────────────
 
@@ -1001,6 +1019,7 @@ export class Fx {
     this.time += dt;
     this.shake = Math.max(0, this.shake - dt * 1.9);
     this.flash = Math.max(0, this.flash - dt * 2.6);
+    this.hurtFl = Math.max(0, this.hurtFl - dt * 2.6);
     this.hurtT = Math.max(0, this.hurtT - dt * 2.2);
     this.chromaT = Math.max(0, this.chromaT - dt);
     this.boxT = Math.max(0, this.boxT - dt);
@@ -1134,7 +1153,7 @@ export class Fx {
     g.globalAlpha = 1;
   }
 
-  /** 월드 레이어(적 위): 연기 → 불길·불덩이 → 색종이·파편 → 충격파·빛줄기·고리·불꽃·번개 → (가산) 섬광·번개 빛 → 숫자·글자 */
+  /** 월드 레이어(적 위): 연기 → 불길·불덩이 → 색종이·파편 → 충격파·빛줄기·고리·불꽃·번개 → (가산) 섬광·번개 빛. 숫자·글자는 drawLabels */
   drawWorld(g: CanvasRenderingContext2D, v: View) {
     const S = v.S, bx = v.bx, by = v.by, op = g.globalCompositeOperation;
     this.camX = (v.x0 + v.x1) / 2; this.camY = (v.y0 + v.y1) / 2;
@@ -1314,6 +1333,22 @@ export class Fx {
       g.drawImage(q.img, G_CORE, 0, 64, 64, q.x - r, q.y - r, r * 2, r * 2);
     }
     g.globalCompositeOperation = op;
+    // 숫자·글자는 조명 뒤 drawLabels에서 그린다(그 훅을 부르지 않는 렌더러면 여기서 그대로 그린다)
+    if (!this.labelsHooked) this.labels(g, v);
+    g.globalAlpha = 1;
+  }
+
+  /** 글자 레이어(월드, 조명·블룸 뒤 · 월드 UI 앞): 피해 숫자·떠오르는 글자.
+   *  어둠 오버레이·비네트 아래에 깔리면 플레이어 등불 밖의 숫자가 회색으로 죽어서, 조명과 무관하게 또렷한 흰색·노랑으로 얹는다. */
+  drawLabels(g: CanvasRenderingContext2D, v: View) {
+    this.labelsHooked = true;
+    this.labels(g, v);
+    g.globalAlpha = 1;
+  }
+
+  private labels(g: CanvasRenderingContext2D, v: View) {
+    const S = v.S, bx = v.bx, by = v.by;
+    const x0 = v.x0 - 40, x1 = v.x1 + 40, y0 = v.y0 - 40, y1 = v.y1 + 40;
     // 피해 숫자
     if (this.nums.length) {
       const A = this.getAtlas();
@@ -1345,7 +1380,6 @@ export class Fx {
       const w = t.spr.w * pop, h = t.spr.h * pop, y = t.y - easeOut3(Math.min(1, u * 1.3)) * t.rise;
       g.drawImage(t.spr.c, t.x - w / 2, y - h / 2, w, h);
     }
-    g.globalAlpha = 1;
   }
 
   /** 블룸 버퍼용: 빛나는 심만(가산 합성, 저해상도 버퍼) */
@@ -1487,6 +1521,7 @@ export class Fx {
     }
     // 번쩍임
     if (this.flash > 0) { g.globalAlpha = this.flash; g.fillStyle = this.flashColor; g.fillRect(0, 0, W, H); }
+    if (this.hurtFl > 0) { g.globalAlpha = this.hurtFl; g.fillStyle = '#ff2244'; g.fillRect(0, 0, W, H); }
     g.globalAlpha = 1;
   }
 }
