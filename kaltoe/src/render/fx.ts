@@ -76,6 +76,7 @@ function hashStr(t: string) { let h = 2166136261; for (let i = 0; i < t.length; 
 class Sheets {
   private m = new Map<string, Img>();
   constructor(private cap: number, private build: (c: string) => Img) {}
+  clear() { this.m.clear(); }
   get(k: string): Img {
     let s = this.m.get(k);
     if (!s) {
@@ -355,6 +356,14 @@ export class Fx {
     this.numByUid.clear(); this.shake = 0; this.flash = 0;
     this.hurtT = 0; this.hurtFl = 0; this.chromaT = 0; this.boxT = 0; this.pulseT = 0; this.swT = -1; this.linesT = 0;
     this.zp = 0; this.zpFrom = 0; this.kx = this.ky = this.kvx = this.kvy = 0;
+  }
+
+  /** GPU 문맥을 잃었다 되찾았을 때(렌더러가 부름): 모듈 캐시 캔버스를 버리고 새 캔버스로 다시 굽게 한다 — 예전 캔버스는 메인보다 늦게 복구돼 제자리에 다시 그리면 버려질 수 있다 */
+  resetCanvases() {
+    glowSheets.clear(); inkSheets.clear(); shared = null; borders.clear();
+    for (const n of this.nums) { n.c = null; n.cg = null; n.dirty = true; }
+    for (const n of this.freeN) { n.c = null; n.cg = null; }
+    this.invalidateText();
   }
 
   /** 글꼴이 바뀌면 글자 캐시(숫자 아틀라스·글자 스프라이트)를 다시 만든다 */

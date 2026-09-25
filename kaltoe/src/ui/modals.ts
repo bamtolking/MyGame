@@ -193,7 +193,7 @@ export class Modals {
           c.classList.add('done');
           const d = it.kind === 'passive' ? PASSIVE.get(it.id) : it.kind === 'coins' ? null : WEAPON.get(it.id);
           c.textContent = d ? d.icon : '💰';
-          if (it.kind === 'evolve') { c.classList.add('evo'); stage.classList.add('evo'); audio.play('evolve'); } else audio.play('coin');
+          if (it.kind === 'evolve') { c.classList.add('evo'); stage.classList.add('evo'); audio.play('evolve'); audio.stinger('evolve'); } else audio.play('coin');
           const name = d ? d.name : `월급 ${it.level}`;
           const from = it.from ? WEAPON.get(it.from) : null;
           list.appendChild(h('div', { class: `it${it.kind === 'evolve' ? ' evo' : ''}` },

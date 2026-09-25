@@ -22,9 +22,10 @@
 ### 레이어와 후처리 (렌더 담당)
 1. 바닥(타일 텍스처 + 스테이지 소품: 책상·파티션·화분·케이블 등 절차적 그림, 은은한 그림자) → `fx.drawGround`(잉크 자국·그을음)
 2. 그림자 → 픽업 → 적 → 플레이어 → 궤도체·드론 → 투사체(잔상/리본 트레일) → 광선·고리 → 적 탄
-3. `fx.drawWorld`(파티클·불꽃·숫자)
+3. `fx.drawWorld`(파티클·불꽃)
 4. **조명 레이어:** 화면을 어둡게 덮고(곱하기) 플레이어 주변·광원 자리만 밝게. 광원 = 플레이어, 폭발·번개(`fx.drawLights`), 보스·엘리트 림라이트, 불타는 적.
 5. **블룸:** 1/4 해상도 버퍼(+ 1/8 추가 패스)에 빛나야 하는 것만(투사체·광선·폭발·불꽃·보석·오라 가장자리·`fx.drawGlow`) 그린 뒤 가산 합성으로 확대해 얹는다.
+5b. `fx.drawLabels`(피해 숫자·떠오르는 글자 — 조명·블룸 뒤, 월드 UI 앞: 어둠에 묻히지 않게)
 6. 비네트(근무지 색) → `fx.drawScreen`(번쩍임·집중선·레터박스·피격 붉은 테두리) → 조이스틱·방향 표시
 - 품질 단계: `high`(블룸 2단 + 동적 조명 + 트레일 + 파티클 많이) / `medium`(블룸 1단, 조명 단순, 파티클 60%) / `low`(블룸·조명 없음, 그림자 없음, 파티클 30%). 앱이 자동 사다리로 품질과 해상도를 조절한다(`QUALITY_LADDER` in app.ts).
 
@@ -95,7 +96,7 @@
 공용 파일 변경이 필요하면 결과 보고의 `requests`에 적는다(통합 담당이 반영).
 
 ## 6. 계약(인터페이스) — 바꾸지 말 것
-- `Fx` 레이어 훅: `drawGround / drawWorld / drawGlow / drawLights / drawScreen(g, View)`, `zoomPunch()`, `shakeOffset()`, `update(dt)`, `reset()`, `invalidateText()`, `setLow()`, 그리고 juice가 부르는 생성 메서드들(`burst, dmg, boom, bolt, text, addShake, addFlash` — VFX가 새 메서드를 더하는 건 자유). `View`, `Quality` 타입은 fx.ts.
+- `Fx` 레이어 훅: `drawGround / drawWorld / drawGlow / drawLights / drawLabels / drawScreen(g, View)`, `zoomPunch()`, `shakeOffset()`, `update(dt)`, `reset()`, `invalidateText()`, `setLow()`, 그리고 juice가 부르는 생성 메서드들(`burst, dmg, boom, bolt, text, addShake, addFlash` — VFX가 새 메서드를 더하는 건 자유). `View`, `Quality` 타입은 fx.ts.
 - `juiceEvent(fx, ev, w, {vibrate})`, `juiceDeath(fx)` — app.ts가 부른다.
 - `Renderer`: `render(w, dt, joy, steps)`, `resize()`, `viewSize()`, `setQuality(q)`, `dprCap`, `camX/camY`, `live`, `fx`. 렌더러는 `fx.zoomPunch()`/`fx.shakeOffset()`을 적용하고 레이어 훅을 위 순서로 부른다.
 - 오디오: `createMusic(core, live): MusicAPI`(start/stop/setTrack/setIntensity/stinger/scheduleRange), `createSfx(core): SfxAPI`(play/onSimEvent), `SFX_NAMES`, `TRACK_IDS`, `STINGER_IDS`. 기존 효과음 이름은 계속 동작해야 한다(새 이름 추가 가능). 오프라인 렌더링(`scheduleRange`)이 실시간과 같은 소리를 내야 한다.

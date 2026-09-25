@@ -58,13 +58,15 @@
 kaltoe/
   src/content/   게임 데이터(무기·패시브·적·스테이지·캐릭터·점심·복지·업적·규칙·밸런스·문구) — 스키마는 types.ts
   src/sim/       순수 TS 시뮬레이션(DOM 없음, 고정 스텝 1/60초, 결정적 난수) — 헤드리스로 테스트/밸런스 가능
-  src/render/    Canvas 2D 렌더러, 이모지·절차적 스프라이트 캐시, 효과(파티클·피해 숫자·흔들림)
+  src/render/    Canvas 2D 렌더러(야근 네온: 조명·블룸 post.ts, 근무지 바닥·소품 env.ts), 기기 해상도 스프라이트 캐시,
+                 타격감 효과 fx.ts(불꽃·색종이·폭발·번개·피해 숫자·화면 연출) + juice.ts(이벤트 → 연출)
   src/ui/        화면(타이틀 자동 플레이 데모·선택·복지·업적·도감·설정·결과), HUD, 모달, 입력, 공유 카드
   src/meta/      업적 평가·해금·정산·일일 도전·출석
-  src/platform/  저장(검증·백업·내보내기/불러오기), 절차적 사운드(WebAudio)
+  src/platform/  저장(검증·백업·내보내기/불러오기), 절차적 사운드(WebAudio): 오디오 코어 audio.ts,
+                 작곡 엔진 music.ts(곡 7개·강도 레이어·스팅어), 효과음 sfx.ts(무기별 소리·팬·보이스 캡)
   tests/         콘텐츠 무결성·규칙 테스트, 헤드리스 봇 밸런스 스윕
-  scripts/       단일 파일 빌드, 실브라우저(Chromium) 휴대폰 뷰포트 e2e
-  docs/          BRIEF(고정 로스터), GDD(기획서), balance-results(봇 결과)
+  scripts/       단일 파일 빌드, 실브라우저(Chromium) 휴대폰 뷰포트 e2e, 스크린샷 투어(shots.mjs), 오디오 레벨 점검(audio-check.mjs)
+  docs/          BRIEF(고정 로스터), GDD(기획서), STYLE(비주얼·사운드 방향서), balance-results(봇 결과)
 ```
 
 ## 명령

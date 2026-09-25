@@ -19,7 +19,7 @@ import { Input } from './input';
 import { Hud } from './hud';
 import { Modals } from './modals';
 import { Screens } from './screens';
-import { h, Toasts, setClickSound, confirmBox } from './dom';
+import { h, Toasts, Banners, setClickSound, confirmBox, onCanvasGlyphs } from './dom';
 
 const pickStr = (arr: readonly string[], f: string) => (arr.length ? arr[Math.floor(Math.random() * arr.length)] : f);
 
@@ -42,6 +42,7 @@ export class App {
   modals: Modals;
   screens: Screens;
   toasts: Toasts;
+  private banners: Banners;
   paused = false;
   private acc = 0;
   private last = 0;
@@ -68,6 +69,7 @@ export class App {
   private lastRunOpts: { char: string; stage: string; heat: number; daily: boolean } | null = null;
   private deathT = 0;
   private deathShown = false;
+  private renderErr = false;
   private tutorial: HTMLElement | null = null;
   private idleWorld: World | null = null;
 
@@ -85,6 +87,7 @@ export class App {
     this.profile = lp.profile;
     this.saveStatus = lp.status;
     this.toasts = new Toasts(this.ui);
+    this.banners = new Banners(this.ui);
     setClickSound(() => audio.play('click'));
     const self = this;
     this.modals = new Modals({
@@ -94,7 +97,7 @@ export class App {
       skip: () => { if (self.world && skipLevel(self.world)) self.afterModal(); },
       banish: i => { if (self.world && banish(self.world, i)) self.modals.levelUp(self.world); },
       closeChest: () => { if (self.world) { closeChest(self.world); self.afterModal(); } },
-      lunch: id => { if (self.world) { applyLunch(self.world, id); audio.play('lunch'); self.afterModal(); } },
+      lunch: id => { if (self.world) { applyLunch(self.world, id); audio.play('buy'); self.afterModal(); } },
       resume: () => self.setPaused(false),
       quit: async () => {
         if (await confirmBox(self.ui, '조퇴하시겠습니까?', '지금까지 번 월급은 받고 판이 끝납니다.', '조퇴', '계속 일하기', true)) self.finishRun();
@@ -121,6 +124,7 @@ export class App {
     this.applySettings();
     loadFonts();
     onFontsReady(() => { clearSpriteCache(); this.fx.invalidateText(); });
+    onCanvasGlyphs(() => { clearSpriteCache(); this.fx.invalidateText(); });   // 캔버스 글자 조각이 늦게 도착하면 한 번 더 굽는다
 
     window.addEventListener('resize', () => this.onResize());
     window.addEventListener('orientationchange', () => setTimeout(() => this.onResize(), 200));
@@ -257,6 +261,7 @@ export class App {
     this.world = w;
     this.screens.close();
     this.modals.close();
+    this.banners.clear();
     this.hud?.root.remove();
     this.hud = new Hud(this.ui, () => this.useUlt(), () => this.togglePause());
     this.hud.setUltIcon(w.ultimate.icon, w.ultimate.name);
@@ -291,6 +296,7 @@ export class App {
     const st = settleRun(this.profile, w);
     this.save();
     this.modals.close();
+    this.banners.clear();
     this.hud?.root.remove(); this.hud = null;
     this.tutorial?.remove(); this.tutorial = null;
     this.input.onFirstMove = null;
@@ -367,11 +373,13 @@ export class App {
     this.toasts.show(`💡 ${text}`, 'good', 3200);
   }
 
-  private banner(text: string, cls: string, sub = '') {
-    const b = h('div', { class: `banner ${cls}` }, text, sub ? h('small', null, sub) : null);
-    this.ui.appendChild(b);
-    setTimeout(() => b.remove(), 1900);
+  /** 그리기 한 번이 예외를 던져도 HUD 갱신·다음 프레임이 멈추지 않게(오류는 한 번만 기록) */
+  private safeRender(...args: Parameters<Renderer['render']>) {
+    try { this.renderer.render(...args); } catch (e) { if (!this.renderErr) { this.renderErr = true; console.error('render', e); } }
   }
+
+  /** 큰 배너는 한 번에 하나(우선순위: 퇴사 > 보스 > 궁극기·진화·야근 > 콤보·부활) — ui/dom.ts Banners */
+  private banner(text: string, cls: string, sub = '') { this.banners.show(text, cls, sub); }
 
   // ───────────── 이벤트 → 연출 ─────────────
 
@@ -406,7 +414,6 @@ export class App {
           const to = WEAPON.get(ev.to);
           this.toasts.show(`⭐ 진화! ${WEAPON.get(ev.from)?.name} → ${to?.name}`, 'ach', 3500);
           this.banner(`⭐ 진화! ${to?.icon ?? ''} ${to?.name ?? ''}`, 'ult', to?.desc ?? '');
-          audio.stinger('evolve');
           break;
         }
         case 'hour': {
@@ -501,7 +508,7 @@ export class App {
       if (!this.modals.kind && !this.paused) {
         if (w.phase === 'dead') {
           this.deathT += dt;
-          if (!this.deathShown) { this.deathShown = true; audio.play('death'); audio.stinger('defeat'); juiceDeath(this.fx); this.banner('퇴사 위기…', 'yageun'); }
+          if (!this.deathShown) { this.deathShown = true; audio.play('death'); audio.stinger('defeat'); juiceDeath(this.fx); this.banner('퇴사 위기…', 'yageun death'); }
           if (this.deathT > 1.4) this.finishRun();
         } else if (w.phase !== 'play') {
           // 레벨업/상자 창은 아주 짧게 뜸을 들여 폭발·글자가 보이게 한다
@@ -526,8 +533,8 @@ export class App {
         // 모달·일시정지 중에는 월드가 멈춰 있으니 3프레임에 한 번만 그린다
         this.frameN++;
         if (live || w.phase === 'dead' || this.phaseDelay >= 0 || this.fx.flash > 0 || this.frameN % 3 === 0) {
-          this.renderer.live = live;
-          this.renderer.render(w, dt, this.input.joy, this.stepsThisFrame);
+          this.renderer.live = live; this.renderer.demo = false;
+          this.safeRender(w, dt, this.input.joy, this.stepsThisFrame);
         }
         this.hudT += dt;
         if (this.hud) this.hud.update(w);
@@ -537,8 +544,8 @@ export class App {
       const iw = this.idleWorld;
       const n = this.demo ? this.stepDemo(iw, dt) : 0;
       this.fx.update(dt);
-      this.renderer.live = true;
-      this.renderer.render(this.idleWorld ?? iw, dt, null, n);
+      this.renderer.live = true; this.renderer.demo = true;
+      this.safeRender(this.idleWorld ?? iw, dt, null, n);
     }
     this.workAcc += performance.now() - t0;
   }

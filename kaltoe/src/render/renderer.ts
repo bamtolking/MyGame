@@ -1,5 +1,5 @@
 // 캔버스 렌더러(야근 네온): 바닥·소품 → fx.drawGround → 장판·오라·예고 → 그림자·픽업·적·플레이어·궤도체·투사체·광선·적 탄
-// → fx.drawWorld → 조명(어둠 오버레이 + fx.drawLights) → 블룸(fx.drawGlow) → 월드 UI(말풍선·체력바·명판) → 화면 공간(fx.drawScreen·조이스틱)
+// → fx.drawWorld → 조명(어둠 오버레이 + fx.drawLights) → 블룸(fx.drawGlow) → fx.drawLabels(숫자·글자) → 월드 UI(말풍선·체력바·명판) → 화면 공간(fx.drawScreen·조이스틱)
 // 선명함·속도: 스프라이트는 실제 기기 픽셀 배율로 캐시돼 있고, 변형이 없을 때는 정수 픽셀 위치에 1:1로 찍는다.
 import type { World, Enemy, WeaponInst } from '../sim/types';
 import { orbitPositions } from '../sim/weapons';
@@ -36,6 +36,7 @@ export class Renderer {
   low = false;
   dprCap = 2;
   time = 0;
+  demo = false;        // 타이틀 어트랙트 데모: 플레이어 체력바를 그리지 않는다(app이 켠다)
   live = true;         // 시뮬레이션이 진행 중인지(일시정지·모달 중엔 먼지·불씨 등 생성 안 함)
   frameDt = 1 / 60;
   /** 그래픽 품질: 'auto'는 앱이 프레임 시간으로 high/medium/low를 오가며 정한다 */
@@ -293,6 +294,10 @@ export class Renderer {
       fx.drawGlow(bg, bv);
       this.post.bloomEnd(g, this.quality === 'high', 0.85);
     } else this.post.overlay(g, env, st.palette.fog, false, 0);
+
+    // ── 피해 숫자·떠오르는 글자(조명·블룸 뒤: 등불 밖에서도 어둠에 묻히지 않게) ──
+    this.world(); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    fx.drawLabels(g, view);
 
     // ── 월드 UI(조명 영향 없이 또렷하게) ──
     this.drawWorldUi(w, vis);
@@ -945,6 +950,7 @@ export class Renderer {
       g.fillStyle = '#ffcf33'; g.fillRect(bx, by, bw * Math.max(0, e.hp / e.maxHp), bh);
       g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(bx, by, bw * Math.max(0, e.hp / e.maxHp), 1);
     }
+    if (this.demo) return;
     // 플레이어 체력바
     const p = w.player;
     const bw = 30, bh = 3.6, bx = this.ipx - bw / 2, by = this.ipy + 18;
