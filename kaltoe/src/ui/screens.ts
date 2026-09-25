@@ -11,10 +11,11 @@ import {
   metaUnlocked, stageUnlocked, buyMeta, refundMeta, weaponUnlocked, passiveUnlocked, lunchUnlocked, type Settlement,
 } from '../meta/progress';
 import type { World } from '../sim/types';
+import { clockText } from '../sim/director';
 import { h, btn, clear, confirmBox, promptBox, statLabel, fmtTime } from './dom';
 import { worker } from '../render/sprites';
 import { audio } from '../platform/audio';
-import { shareCard } from './sharecard';
+import { shareCard, shareCardDataUrl } from './sharecard';
 
 export interface ScreenHost {
   root: HTMLElement;
@@ -451,14 +452,32 @@ export class Screens {
     if (st.heatUnlocked) grants.appendChild(h('div', { class: 'grant' }, h('span', { class: 'e' }, '🔥'), h('div', null, h('b', null, `야근 강도 ${st.heatUnlocked} 해금`), h('span', null, '더 높은 강도에 도전해 보세요'))));
     const shareText = () => {
       const tpl = pickStr(SHARE_TEMPLATES, '[칼퇴 서바이버] {char}로 {stage}에서 {time} 버팀! Lv{level}, {kills}처치');
-      return tpl.replace('{stage}', w.cfg.stage.name).replace('{time}', win ? '18:00 칼퇴 성공' : fmtTime(w.t) + ' 생존')
+      return tpl.replace('{stage}', w.cfg.stage.name).replace('{time}', clockText(w))
         .replace('{level}', String(w.player.level)).replace('{kills}', rs.kills.toLocaleString('ko-KR')).replace('{char}', w.cfg.character.name);
     };
     const share = btn('📣 자랑하기', async () => {
       const text = shareText();
       const r = await shareCard(w, st.total, text);
-      if (r === 'downloaded') { await promptBox(this.host.root, '결과 이미지를 저장했어요! 문구도 복사해 가세요', text, true); return; }
-      if (r === 'failed') await promptBox(this.host.root, '복사해서 자랑하세요', text, true);
+      if (r === 'shared') return;
+      // 공유 시트가 없으면 카드 이미지를 보여 준다(길게 눌러 저장) + 문구 복사
+      const url = shareCardDataUrl(w, st.total);
+      const wrap = h('div', { class: 'modal-wrap confirm-wrap' });
+      const ta = h('textarea', { class: 'prompt-text', style: 'height:64px', readonly: 'true' }) as HTMLTextAreaElement;
+      ta.value = text;
+      const copy = btn('문구 복사', () => {
+        ta.select();
+        const done = () => { copy.textContent = '복사됨!'; };
+        try { navigator.clipboard.writeText(text).then(done, () => { try { document.execCommand('copy'); done(); } catch { /* 선택된 상태로 둔다 */ } }); }
+        catch { try { document.execCommand('copy'); done(); } catch { /* 선택된 상태로 둔다 */ } }
+      }, 'btn primary');
+      wrap.appendChild(h('div', { class: 'modal' },
+        h('div', { class: 'modal-title' }, '📣 결과 카드'),
+        h('div', { class: 'modal-sub' }, '이미지를 길게 눌러 저장하거나 공유하세요'),
+        url ? h('img', { src: url, alt: '칼퇴 서바이버 결과 카드', style: 'width:100%;border-radius:14px;display:block;margin-bottom:10px;-webkit-touch-callout:default;user-select:auto;pointer-events:auto' }) : null,
+        ta,
+        h('div', { class: 'row gap' }, btn('닫기', () => wrap.remove(), 'btn ghost grow'), copy),
+      ));
+      this.host.root.appendChild(wrap);
     }, 'btn ghost');
     const killed = rs.killedBy;
     const goals = nextGoals(p, 3);

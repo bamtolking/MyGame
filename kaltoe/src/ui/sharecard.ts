@@ -93,26 +93,26 @@ export function drawShareCard(w: World, coins: number): HTMLCanvasElement {
   return c;
 }
 
-export async function shareCard(w: World, coins: number, text: string): Promise<'shared' | 'downloaded' | 'failed'> {
+/** 공유: 기기 공유 시트(지원 시) → 안 되면 카드 이미지를 화면에 띄워 길게 눌러 저장하게 한다(다운로드가 막힌 환경 대비) */
+export async function shareCard(w: World, coins: number, text: string): Promise<'shared' | 'show'> {
   const c = drawShareCard(w, coins);
-  const blob: Blob | null = await new Promise(res => c.toBlob(b => res(b), 'image/png'));
-  if (!blob) return 'failed';
-  const file = new File([blob], 'kaltoe-result.png', { type: 'image/png' });
-  const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean; share?: (d: unknown) => Promise<void> };
-  try {
-    if (nav.canShare && nav.canShare({ files: [file] }) && nav.share) {
-      await nav.share({ files: [file], text, title: '칼퇴 서바이버' });
-      return 'shared';
+  const blob: Blob | null = await new Promise(res => { try { c.toBlob(b => res(b), 'image/png'); } catch { res(null); } });
+  if (blob) {
+    const file = new File([blob], 'kaltoe-result.png', { type: 'image/png' });
+    const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean; share?: (d: unknown) => Promise<void> };
+    try {
+      if (nav.canShare && nav.canShare({ files: [file] }) && nav.share) {
+        await nav.share({ files: [file], text, title: '칼퇴 서바이버' });
+        return 'shared';
+      }
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') return 'shared';
     }
-  } catch (e) {
-    if ((e as Error)?.name === 'AbortError') return 'shared';
   }
-  try {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'kaltoe-result.png';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-    return 'downloaded';
-  } catch { return 'failed'; }
+  return 'show';
+}
+
+/** 공유 카드 이미지(data URL) — 모달에 보여 줄 때 사용 */
+export function shareCardDataUrl(w: World, coins: number): string {
+  try { return drawShareCard(w, coins).toDataURL('image/png'); } catch { return ''; }
 }

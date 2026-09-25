@@ -217,7 +217,7 @@ export class Modals {
       build, pas, stats,
       w.lunch ? h('div', { class: 'small', style: 'margin-bottom:8px' }, `점심: ${w.lunch.icon} ${w.lunch.name}`) : null,
       h('div', { class: 'small', style: 'margin-bottom:10px;color:#cfd3ff' }, `💡 ${pickStr(TIPS, '')}`),
-      h('div', { class: 'col gap' },
+      h('div', { class: 'col gap pause-actions' },
         btn('▶ 계속 일하기', () => this.host.resume(), 'btn primary big'),
         h('div', { class: 'row gap' },
           btn('⚙ 설정', () => this.host.settings(), 'btn ghost grow'),
