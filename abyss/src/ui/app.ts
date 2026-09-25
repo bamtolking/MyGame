@@ -53,6 +53,9 @@ export class App {
   private bossTarget = 0;
   private canvasTip = 0;
   fps = 0; private fpsN = 0; private fpsT = 0;
+  private hitStop = 0; private slowMo = 0; private slowDur = 1;
+  private lowFps = 0; private playT = 0;
+  private readonly lockQ = /[?&]hq\b/.test(location.search);
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -64,6 +67,8 @@ export class App {
       else this.audio.resume();
     });
     window.addEventListener('beforeunload', () => this.saveNow());
+    // any first gesture starts audio, so sounds and music are synthesized while the title screen is up
+    for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, () => this.unlockAudio(), { capture: true, passive: true });
     this.showTitle();
   }
 
@@ -153,6 +158,7 @@ export class App {
         const spell = p.cls === 'sorcerer';
         drawBiped(c, p.look, { t: tt, walk: 0, moving: false, atk: spell ? -1 : atk, cast: spell ? atk : -1, hit: 0, dead: -1, flip: false, back: false, alpha: 1, frozen: false, chill: false });
       }
+      this.audio.tick();
       this.titleAnim = requestAnimationFrame(loop);
     };
     this.titleAnim = requestAnimationFrame(loop);
@@ -175,6 +181,7 @@ export class App {
     this.panelL = null; this.panelR = null; this.modal = null; this.mapOpen = false; this.sel = null; this.deadShown = false; this.victoryPending = 0;
     this.wpDiff = this.g.diff;
     this.buildGameDom();
+    this.audio.prepare(CLASSES[cls].skills.map((id) => `cast_${id}`));
     if (!save) this.saveNow();
     this.emitIntro();
     this.lastT = performance.now();
@@ -286,7 +293,7 @@ export class App {
   applySettings(): void {
     const s = this.settings;
     this.audio.setVolumes(s.sfx, s.bgm);
-    if (this.r) { this.r.lowFx = s.lowFx; this.r.showAll = s.showLabels; }
+    if (this.r) { this.r.lowFx = s.lowFx; this.r.showAll = s.showLabels; this.r.setQuality(this.r.quality); }
     store.saveSettings(s);
   }
 
@@ -296,12 +303,25 @@ export class App {
     const g = this.g, r = this.r;
     const dt = Math.min(0.1, (now - this.lastT) / 1000);
     this.lastT = now;
-    this.fpsN++; this.fpsT += dt; if (this.fpsT >= 1) { this.fps = this.fpsN / this.fpsT; this.fpsN = 0; this.fpsT = 0; }
+    this.fpsN++; this.fpsT += dt;
+    if (this.fpsT >= 1) {
+      this.fps = this.fpsN / this.fpsT; this.fpsN = 0; this.fpsT = 0;
+      // adaptive quality: step down after a few slow seconds (never while paused or just after loading)
+      if (!this.lockQ && !this.paused && this.playT > 4 && r.quality > 0) {
+        this.lowFps = this.fps < 36 ? this.lowFps + 1 : 0;
+        if (this.lowFps >= 3) { r.setQuality(r.quality - 1); this.lowFps = 0; }
+      }
+    }
     this.paused = this.modal === 'menu' || this.modal === 'waypoint' || this.modal === 'victory' || document.hidden || ((this.panelL !== null || this.panelR !== null || this.mapOpen) && (this.touchMode || window.innerWidth < 820) && g.world.floor > 0);
     r.mouse.x = this.input.mouse.x; r.mouse.y = this.input.mouse.y; r.mouse.inside = this.input.mouse.inside && !this.touchMode;
+    // hit-stop freezes the action for a few frames on heavy blows; slow motion eases back after boss kills
+    let scale = 1;
+    if (this.hitStop > 0) { this.hitStop -= dt; scale = 0.04; }
+    else if (this.slowMo > 0) { this.slowMo -= dt; const k = 1 - Math.max(0, this.slowMo) / this.slowDur; scale = 0.22 + 0.78 * k * k; }
     if (!this.paused) {
+      this.playT += dt;
       this.input.frame();
-      this.acc += dt;
+      this.acc += dt * scale;
       let n = 0;
       while (this.acc >= DT && n < 6) { g.update(DT); this.acc -= DT; n++; }
       if (n >= 6) this.acc = 0;
@@ -309,9 +329,11 @@ export class App {
     const events = g.drain();
     if (!this.settings.dmgNumbers) for (let i = events.length - 1; i >= 0; i--) { const e = events[i]; if (e.t === 'dmg' && e.kind !== 'hero' && e.kind !== 'gold') events.splice(i, 1); }
     if (!this.settings.shake) for (let i = events.length - 1; i >= 0; i--) if (events[i].t === 'shake') events.splice(i, 1);
+    this.audio.listen(g.hero.x, g.hero.y);
     r.handle(events, g);
     for (const e of events) this.onEvent(e);
-    r.render(g, this.paused ? 0 : dt);
+    r.render(g, this.paused ? 0 : dt * scale, this.paused ? 0 : dt);
+    this.audio.setIntensity(this.combatIntensity(g));
     this.updateHud(dt);
     this.audio.tick();
     this.saveT += dt;
@@ -335,16 +357,49 @@ export class App {
     requestAnimationFrame((t) => this.frame(t));
   }
 
+  /** 0..1: awake monsters close to the hero (bosses count as a full fight). */
+  private combatIntensity(g: Game): number {
+    const h = g.hero;
+    if (h.dead) return 0;
+    let v = 0;
+    for (const m of g.world.monsters) {
+      if (m.dead || !m.awake) continue;
+      const d = Math.hypot(m.x - h.x, m.y - h.y);
+      if (d < 10) v += m.rank === 'boss' ? 4 : m.rank === 'unique' || m.rank === 'champion' ? 1 : 0.35;
+    }
+    return Math.min(1, v / 2);
+  }
+
   private onEvent(e: GEvent): void {
     const g = this.g!;
     switch (e.t) {
-      case 'sfx': this.audio.play(e.id); break;
+      case 'sfx': this.audio.play(e.id, 1, e.x, e.y); break;
+      case 'impact': {
+        const a = this.audio;
+        const magic = g.hero.cls === 'sorcerer';
+        const id = e.elem === 'fire' ? 'hitFire' : e.elem === 'cold' ? 'hitCold' : e.elem === 'light' ? 'hitLight' : e.elem === 'poison' ? 'hitPoison'
+          : e.via === 'proj' ? (magic ? 'hitMagic' : 'hitArrow') : e.via === 'spell' ? 'hitMagic' : e.crit || e.power > 0.3 || e.kill ? 'hitHeavy' : 'hit';
+        a.play(id, 0.75 + Math.min(0.5, e.power), e.x, e.y);
+        if (e.via === 'melee' && id !== 'hit' && id !== 'hitHeavy') a.play('hit', 0.6, e.x, e.y);
+        if (e.crit) a.play('crit', 1, e.x, e.y);
+        if (e.via === 'melee' && (e.crit || e.power > 0.3 || e.kill)) this.hitStop = Math.max(this.hitStop, e.crit ? 0.065 : 0.045);
+        else if (e.crit) this.hitStop = Math.max(this.hitStop, 0.03);
+        break;
+      }
+      case 'kill':
+        if (e.rank === 'boss') { this.slowMo = this.slowDur = 1.6; this.hitStop = 0.12; this.audio.muffle(2.2); }
+        else if (e.rank === 'unique' || e.rank === 'champion') { this.hitStop = Math.max(this.hitStop, 0.09); this.audio.play('eliteKill', 1, e.x, e.y); }
+        break;
+      case 'dmg':
+        if (e.kind === 'hero' && e.v >= g.hero.st.maxHp * 0.15) this.hitStop = Math.max(this.hitStop, 0.05);
+        break;
       case 'msg': this.showMsg(e.text, e.color ?? '#e8d8b0', !!e.big); break;
       case 'itemDrop': this.audio.play(e.rarity === 'unique' ? 'uniqueDrop' : e.rarity === 'rare' ? 'rareDrop' : 'itemDrop'); break;
       case 'pickup': this.showMsg(`획득: ${e.item.name}`, e.item.rarity === 'unique' ? '#c8a45a' : e.item.rarity === 'rare' ? '#f2e05a' : e.item.rarity === 'magic' ? '#8a9aff' : '#d8d0c0'); this.refresh(); break;
       case 'levelup': this.refresh(true); this.saveNow(); break;
-      case 'death': this.deadShown = false; setTimeout(() => { if (this.g === g && g.hero.dead && !this.deadShown) { this.deadShown = true; this.openModal('death'); } }, 1400); this.audio.setMusic('none'); break;
+      case 'death': this.audio.muffle(3); this.slowMo = this.slowDur = 1.2; this.deadShown = false; setTimeout(() => { if (this.g === g && g.hero.dead && !this.deadShown) { this.deadShown = true; this.openModal('death'); } }, 1400); this.audio.setMusic('none'); break;
       case 'zone': {
+        this.audio.prepare(ZONES[g.world.zone].monsters.flatMap((id) => [`die_${MONSTERS[id].art}`, MONSTERS[id].proj ? `mshoot_${MONSTERS[id].proj}` : '']).filter((n) => n));
         this.banner(e.name, e.floor > 0 ? `${DIFFICULTIES[g.diff].name} · 몬스터 레벨 ${g.world.mlvl}` : '안전 지대');
         this.audio.setMusic(ZONES[g.world.zone].music);
         this.bossTarget = 0;

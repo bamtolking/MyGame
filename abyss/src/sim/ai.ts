@@ -132,8 +132,9 @@ function runAct(g: Game, m: Monster, dt: number): boolean {
   if (!a.done && a.t >= a.hitAt) {
     a.done = true;
     if (a.kind === 'melee') {
+      g.emit({ t: 'mattack', id: m.id, x: m.x, y: m.y, ang: Math.atan2(h.y - m.y, h.x - m.x), r: reachOf(g, m), heavy: t.scale >= 1.3 });
       if (Math.hypot(h.x - m.x, h.y - m.y) <= reachOf(g, m) + 0.45) hurtHero(g, monDmg(g, m), m, 'melee');
-      g.emit({ t: 'sfx', id: 'mswing', x: m.x, y: m.y });
+      g.emit({ t: 'sfx', id: t.scale >= 1.3 ? 'mswingHeavy' : 'mswing', x: m.x, y: m.y });
     } else if (a.kind === 'shoot') {
       const multi = m.mods.includes('multishot') ? 3 : 1;
       shoot(g, m, t.proj ?? 'arrow', a.tx, a.ty, t.projSpeed ?? 9, 1, 0.22, multi);
@@ -153,9 +154,10 @@ function castSpecial(g: Game, m: Monster, spec: string): void {
     case 'revive': {
       let n = 0;
       for (const o of w.monsters) {
-        if (!o.dead || o.tpl !== 'fallen' || o.deadT > 40 || n >= 3) continue;
+        // blown-apart or shattered corpses cannot be raised
+        if (!o.dead || o.tpl !== 'fallen' || o.deadT > 40 || n >= 3 || o.deathStyle === 'gib' || o.deathStyle === 'shatter') continue;
         if (Math.hypot(o.x - m.x, o.y - m.y) > 8) continue;
-        o.dead = false; o.hp = o.maxHp; o.deadT = 0; o.awake = true; o.summoned = true; o.fleeT = 0;
+        o.dead = false; o.hp = o.maxHp; o.deadT = 0; o.awake = true; o.summoned = true; o.fleeT = 0; o.deathStyle = 'normal';
         g.emit({ t: 'fx', kind: 'resurrect', x: o.x, y: o.y });
         n++;
       }
@@ -287,7 +289,7 @@ export function updateMonster(g: Game, m: Monster, dt: number): void {
     case 'summoner': {
       if (m.timers.special <= 0) {
         m.timers.special = t.special ?? 6;
-        if (g.world.monsters.some((o) => o.dead && o.tpl === 'fallen' && o.deadT < 40 && Math.hypot(o.x - m.x, o.y - m.y) < 8)) { startAct(m, 'cast', 0.9, 0.7, m.x, m.y, 'revive'); break; }
+        if (g.world.monsters.some((o) => o.dead && o.tpl === 'fallen' && o.deadT < 40 && o.deathStyle !== 'gib' && o.deathStyle !== 'shatter' && Math.hypot(o.x - m.x, o.y - m.y) < 8)) { startAct(m, 'cast', 0.9, 0.7, m.x, m.y, 'revive'); break; }
       }
       if (dist <= t.range && canSee() && dist > 3) {
         m.moving = false; m.facing = Math.atan2(dy, dx);

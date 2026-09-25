@@ -64,6 +64,7 @@ export interface Dmg {
   freeze?: number;    // seconds (hard CC)
   chill?: number;     // seconds (50% slow)
   src?: number;       // source entity id (0 = hero)
+  via?: 'melee' | 'proj' | 'spell';
   noLeech?: boolean;
   srcX?: number; srcY?: number;
 }
@@ -127,8 +128,11 @@ export interface Monster extends Entity {
   packId: number; leaderId: number; homeX: number; homeY: number;
   timers: Record<string, number>;
   summoned: boolean; phase: number; alpha: number;
+  deathStyle: DeathStyle;
   lastHitBy: number;
 }
+
+export type DeathStyle = 'normal' | 'gib' | 'burn' | 'shatter' | 'zap' | 'bones' | 'boss';
 
 export type PropKind =
   | 'barrel' | 'crate' | 'chest' | 'bigchest' | 'sarco' | 'shrine' | 'torch' | 'brazier' | 'pillar' | 'candle'
@@ -199,4 +203,8 @@ export type GEvent =
   | { t: 'npc'; kind: NpcKind }
   | { t: 'save' }
   | { t: 'open'; ui: 'shop' | 'healer' | 'elder' | 'gambler' | 'stash' | 'waypoint' }
-  | { t: 'victory'; diff: number };
+  | { t: 'victory'; diff: number }
+  | { t: 'impact'; id: number; x: number; y: number; dx: number; dy: number; power: number; crit: boolean; elem: Elem; via: 'melee' | 'proj' | 'spell'; kill: boolean }
+  | { t: 'kill'; id: number; x: number; y: number; dx: number; dy: number; style: DeathStyle; rank: MonsterRank; art: string; scale: number }
+  | { t: 'swing'; x: number; y: number; ang: number; skill: string; r: number; elem: Elem }
+  | { t: 'mattack'; id: number; x: number; y: number; ang: number; r: number; heavy: boolean };

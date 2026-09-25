@@ -4,7 +4,7 @@ import { addArea, breakPropsNear, heroRoll, hurtMonster, scaleDmg, spawnProj, us
 import { circleFree, los, nearestWalkable } from './path';
 import { skillRank } from './stats';
 import type { Game } from './game';
-import type { HeroAct, Monster, Prop } from './types';
+import type { Elem, HeroAct, Monster, Prop } from './types';
 
 export function skillIdForSlot(g: Game, slot: number): string {
   const c = CLASSES[g.hero.cls];
@@ -160,6 +160,13 @@ function meleeTargets(g: Game, a: HeroAct, radius: number, arc: boolean): Monste
   return out;
 }
 
+/** Element tint for weapon trails (from the strongest elemental add on gear). */
+function swingElem(g: Game): Elem {
+  const a = g.hero.st.adds;
+  const best = (['fire', 'cold', 'light', 'poison'] as const).reduce((b, e) => (a[e][1] > a[b][1] ? e : b), 'fire' as 'fire' | 'cold' | 'light' | 'poison');
+  return a[best][1] > 0 ? best : 'phys';
+}
+
 const angDiff = (a: number, b: number) => { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; };
 
 function hitProp(g: Game, a: HeroAct): void {
@@ -176,22 +183,25 @@ function applyAct(g: Game, a: HeroAct): void {
   switch (a.skill) {
     case 'attack': {
       const ts = meleeTargets(g, a, h.st.reach + h.r, false);
-      for (const m of ts) hurtMonster(g, m, heroRoll(g, 100));
+      g.emit({ t: 'swing', x: h.x, y: h.y, ang: ang, skill: 'attack', r: h.st.reach + 0.6, elem: swingElem(g) });
+      for (const m of ts) hurtMonster(g, m, { ...heroRoll(g, 100), via: 'melee' });
       if (!ts.length) hitProp(g, a);
-      g.emit({ t: 'sfx', id: ts.length ? 'hit' : 'swing' });
+      g.emit({ t: 'sfx', id: 'swing' });
       break;
     }
     case 'bash': {
       const ts = meleeTargets(g, a, h.st.reach + h.r, false);
-      for (const m of ts) { const d = heroRoll(g, def.pct(rank)); d.stun = 0.5 + 0.05 * rank; d.kb = 1.3; hurtMonster(g, m, d); }
+      g.emit({ t: 'swing', x: h.x, y: h.y, ang: ang, skill: 'bash', r: h.st.reach + 0.7, elem: swingElem(g) });
+      for (const m of ts) { const d = heroRoll(g, def.pct(rank)); d.stun = 0.5 + 0.05 * rank; d.kb = 1.3; d.via = 'melee'; hurtMonster(g, m, d); }
       if (!ts.length) hitProp(g, a);
-      g.emit({ t: 'sfx', id: ts.length ? 'bash' : 'swing' });
+      g.emit({ t: 'sfx', id: 'swingHeavy' });
       if (ts.length) g.emit({ t: 'fx', kind: 'bash', x: ts[0].x, y: ts[0].y });
       break;
     }
     case 'cleave': {
       const r = 2.3 + 0.05 * rank;
-      for (const m of meleeTargets(g, a, r, true)) { const d = heroRoll(g, def.pct(rank)); d.kb = 0.4; hurtMonster(g, m, d); }
+      g.emit({ t: 'swing', x: h.x, y: h.y, ang: ang, skill: 'cleave', r, elem: swingElem(g) });
+      for (const m of meleeTargets(g, a, r, true)) { const d = heroRoll(g, def.pct(rank)); d.kb = 0.4; d.via = 'melee'; hurtMonster(g, m, d); }
       breakPropsNear(g, h.x, h.y, r);
       g.emit({ t: 'fx', kind: 'cleave', x: h.x, y: h.y, r });
       g.emit({ t: 'sfx', id: 'cleave' });
@@ -208,7 +218,7 @@ function applyAct(g: Game, a: HeroAct): void {
     }
     case 'leap': {
       const r = 2.4;
-      for (const m of g.world.monsters) if (!m.dead && Math.hypot(m.x - h.x, m.y - h.y) <= r + m.r) { const d = heroRoll(g, def.pct(rank)); d.kb = 1.6; d.stun = 0.4; hurtMonster(g, m, d); }
+      for (const m of g.world.monsters) if (!m.dead && Math.hypot(m.x - h.x, m.y - h.y) <= r + m.r) { const d = heroRoll(g, def.pct(rank)); d.kb = 1.6; d.stun = 0.4; d.via = 'melee'; hurtMonster(g, m, d); }
       breakPropsNear(g, h.x, h.y, r);
       g.emit({ t: 'fx', kind: 'stomp', x: h.x, y: h.y, r });
       g.emit({ t: 'shake', v: 0.5 });

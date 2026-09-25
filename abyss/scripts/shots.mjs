@@ -9,7 +9,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'e2e-out');
 mkdirSync(out, { recursive: true });
 const exe = process.env.CHROME_PATH || ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium'].find((p) => existsSync(p));
-const url = 'file://' + resolve(root, 'play/index.html');
+const url = 'file://' + resolve(root, 'play/index.html') + (process.env.ADAPTIVE ? '' : '?hq');
 const log = [];
 const L = (m) => { console.log(m); log.push(m); };
 const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--use-gl=swiftshader', '--autoplay-policy=no-user-gesture-required'] });
@@ -205,8 +205,11 @@ async function flows() {
   await page.screenshot({ path: join(out, 'flow-07-floor7.png') });
   // 7) death → respawn
   await page.evaluate(() => { const g = window.__app.g; g.hero.hp = 1; g.hero.invulnT = 0; for (const m of g.world.monsters) { if (!m.dead) { m.x = g.hero.x + 0.8; m.y = g.hero.y; m.awake = true; m.dmg = [999, 999]; break; } } });
-  await page.waitForTimeout(3500);
-  const dead = await page.evaluate(() => ({ dead: window.__app.g.hero.dead, modal: window.__app.modal }));
+  let dead = { dead: false, modal: null };
+  for (let i = 0; i < 20 && dead.modal !== 'death'; i++) {
+    await page.waitForTimeout(500);
+    dead = await page.evaluate(() => ({ dead: window.__app.g.hero.dead, modal: window.__app.modal }));
+  }
   L(`flows: death dead=${dead.dead} modal=${dead.modal}`);
   await page.screenshot({ path: join(out, 'flow-08-death.png') });
   if (dead.modal === 'death') { await page.locator('.modalbox button').first().click(); await page.waitForTimeout(600); }

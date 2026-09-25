@@ -139,6 +139,7 @@ export function runBot(cls: ClassId, seed: number, opts: { maxFloor?: number; ma
   const stats = { potUsed: 0 };
   let floorDeaths = 0, floorKills = 0, potAtStart = 0;
   let exploreGoal: { x: number; y: number } | null = null;
+  let focusId = 0;
   let victory = false;
   const tries = new Map<number, number>();
   let t = 0;
@@ -194,11 +195,13 @@ export function runBot(cls: ClassId, seed: number, opts: { maxFloor?: number; ma
     for (const m of w.monsters) {
       if (m.dead) continue;
       const d = Math.hypot(m.x - h.x, m.y - h.y);
-      if (d > 14) continue;
+      // hysteresis: keep chasing the current target a bit further, so the bot doesn't flip-flop at the range edge
+      if (d > (m.id === focusId ? 18 : 14)) continue;
       const fd = w.flow[Math.floor(m.y) * w.w + Math.floor(m.x)];
       const eff = d + (m.awake ? 0 : 2) + (fd === 65535 ? 50 : 0) + (los(w, h.x, h.y, m.x, m.y) ? 0 : 4);
       if (eff < bd) { bd = eff; best = m; }
     }
+    focusId = best && bd < 40 ? best.id : 0;
     if (best && bd < 40) {
       const crowd = w.monsters.filter((m) => !m.dead && Math.hypot(m.x - best!.x, m.y - best!.y) < 3.5).length;
       const seen = los(w, h.x, h.y, best.x, best.y);

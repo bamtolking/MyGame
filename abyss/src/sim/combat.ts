@@ -8,7 +8,7 @@ import { circleFree, los, nearestWalkable, opaque } from './path';
 import { makeMonster } from './spawn';
 import { armorReduction, computeStats } from './stats';
 import type { Game } from './game';
-import type { Area, AreaKind, Dmg, Elem, Item, Monster, Prop, Proj, ProjKind } from './types';
+import type { Area, AreaKind, DeathStyle, Dmg, Elem, Item, Monster, Prop, Proj, ProjKind } from './types';
 
 export const emptyDmg = (): Dmg => ({ phys: 0, fire: 0, cold: 0, light: 0, poison: 0 });
 const HIT_ELEMS: Exclude<Elem, 'poison'>[] = ['phys', 'fire', 'cold', 'light'];
@@ -81,6 +81,11 @@ export function hurtMonster(g: Game, m: Monster, d: Dmg): number {
     if (h.st.manaSteal > 0) h.mp = Math.min(h.st.maxMp, h.mp + Math.min(total * h.st.manaSteal / 100, h.st.maxMp * 0.08));
   }
   if (total >= 0.5 || d.crit) g.emit({ t: 'dmg', x: m.x, y: m.y, v: Math.round(total), kind: d.crit ? 'crit' : 'normal', elem: dominant(d) });
+  if (d.src === 0 && (total > 0 || d.stun || d.freeze)) {
+    let dx = m.x - (d.srcX ?? h.x), dy = m.y - (d.srcY ?? h.y);
+    const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+    g.emit({ t: 'impact', id: m.id, x: m.x, y: m.y, dx, dy, power: Math.min(1, total / Math.max(1, m.maxHp)), crit: !!d.crit, elem: dominant(d), via: d.via ?? 'spell', kill: m.hp <= 0 });
+  }
   if (m.res.phys >= 75 && d.phys > 0 && total < 1) g.emit({ t: 'dmg', x: m.x, y: m.y, v: 0, kind: 'immune' });
   g.emit({ t: 'hit', id: m.id });
   if (m.mods.includes('lightEnch') && g.rng.chance(0.3)) {
@@ -90,7 +95,7 @@ export function hurtMonster(g: Game, m: Monster, d: Dmg): number {
       spawnProj(g, 'spark', 'mon', m.x, m.y, Math.cos(a) * 5, Math.sin(a) * 5, { ...emptyDmg(), light: (m.dmg[0] + m.dmg[1]) * 0.35, src: m.id }, { life: 1.4, r: 0.2 });
     }
   }
-  if (m.hp <= 0) killMonster(g, m);
+  if (m.hp <= 0) killMonster(g, m, d, total);
   return total;
 }
 
@@ -156,12 +161,38 @@ export function giveXp(g: Game, amount: number): void {
   if (h.level >= MAX_LEVEL) h.xp = 0;
 }
 
-export function killMonster(g: Game, m: Monster): void {
+/** How a monster dies visually: overkill blows gib, elements burn/shatter/zap, skeletons fall apart.
+ *  Cosmetic only, so it rolls from a hash instead of the game RNG (visuals never change loot or combat). */
+function deathStyleOf(m: Monster, d: Dmg | undefined, dealt: number): DeathStyle {
+  const t = MONSTERS[m.tpl];
+  if (m.rank === 'boss') return 'boss';
+  if (!d) return t.undead && t.art.startsWith('skel') ? 'bones' : 'normal';
+  const roll = (salt: number): number => {
+    let x = (Math.imul(m.id, 2654435761) + Math.imul(salt, 40503) + Math.floor(dealt * 7)) >>> 0;
+    x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13;
+    return x / 4294967296;
+  };
+  const el = dominant(d);
+  const heavy = dealt >= m.maxHp * 0.45 || (!!d.crit && roll(1) < 0.5);
+  if (el === 'fire' && (heavy || roll(2) < 0.45)) return 'burn';
+  if (el === 'cold' && (heavy || m.chillT > 0 || roll(3) < 0.5)) return 'shatter';
+  if (el === 'light' && (heavy || roll(4) < 0.5)) return 'zap';
+  if (t.art.startsWith('skel')) return 'bones';
+  if (heavy && t.art !== 'wraith' && t.art !== 'fireSpirit') return 'gib';
+  return 'normal';
+}
+
+export function killMonster(g: Game, m: Monster, d?: Dmg, dealt = 0): void {
   if (m.dead) return;
   const w = g.world, h = g.hero, rng = g.rng;
   m.dead = true; m.hp = 0; m.deadT = 0; m.act = null; m.poison = null; m.burn = null; m.freezeT = 0;
-  g.emit({ t: 'sfx', id: 'die_' + MONSTERS[m.tpl].art, x: m.x, y: m.y });
-  g.emit({ t: 'fx', kind: MONSTERS[m.tpl].undead ? 'bones' : 'blood', x: m.x, y: m.y, n: m.rank === 'boss' ? 40 : 12 });
+  m.deathStyle = deathStyleOf(m, d, dealt);
+  const t = MONSTERS[m.tpl];
+  let kdx = m.x - (d?.srcX ?? h.x), kdy = m.y - (d?.srcY ?? h.y);
+  const kl = Math.hypot(kdx, kdy) || 1; kdx /= kl; kdy /= kl;
+  g.emit({ t: 'sfx', id: m.deathStyle === 'gib' ? 'gib' : m.deathStyle === 'shatter' ? 'shatter' : m.deathStyle === 'burn' ? 'burnDie' : 'die_' + t.art, x: m.x, y: m.y });
+  if (m.deathStyle !== 'normal' && m.deathStyle !== 'bones') g.emit({ t: 'sfx', id: 'die_' + t.art, x: m.x, y: m.y });
+  g.emit({ t: 'kill', id: m.id, x: m.x, y: m.y, dx: kdx, dy: kdy, style: m.deathStyle, rank: m.rank, art: t.art, scale: t.scale });
   if (!m.summoned) {
     const gap = h.level - m.lvl;
     const pen = gap > 5 ? Math.max(0.1, 1 - 0.1 * (gap - 5)) : 1;
@@ -310,6 +341,7 @@ export function useProp(g: Game, p: Prop): void {
 
 // ---------------------------------------------------------------- projectiles
 export function spawnProj(g: Game, kind: ProjKind, side: 'hero' | 'mon', x: number, y: number, vx: number, vy: number, dmg: Dmg, o: Partial<Proj> = {}): Proj {
+  if (!dmg.via) dmg.via = 'proj';
   const p: Proj = { id: g.world.nextId++, kind, side, x, y, vx, vy, r: 0.18, dmg, life: 1.6, pierce: 0, hit: [], aoe: 0, aoeMult: 0.8, homing: 0, targetId: 0, src: dmg.src ?? 0, age: 0, ...o };
   g.world.projs.push(p);
   return p;
@@ -322,7 +354,7 @@ function explode(g: Game, p: Proj, x: number, y: number, directId: number): void
   if (p.side === 'hero') {
     for (const m of g.world.monsters) {
       if (m.dead || m.id === directId) continue;
-      if (Math.hypot(m.x - x, m.y - y) <= p.aoe + m.r) hurtMonster(g, m, scaleDmg(p.dmg, p.aoeMult));
+      if (Math.hypot(m.x - x, m.y - y) <= p.aoe + m.r) hurtMonster(g, m, { ...scaleDmg(p.dmg, p.aoeMult), via: 'spell', srcX: x, srcY: y });
     }
     breakPropsNear(g, x, y, p.aoe);
   } else if (Math.hypot(g.hero.x - x, g.hero.y - y) <= p.aoe + g.hero.r && g.hero.id !== directId) {

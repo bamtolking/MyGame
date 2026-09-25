@@ -21,6 +21,7 @@ export interface Look {
   offhand?: 'shield' | 'quiver' | 'orb' | null; offTier?: number; offColor?: string;
   bones?: boolean; eyes?: string; horns?: string; mitre?: boolean; beard?: string; tail?: string; wings?: string;
   feathers?: boolean; digitigrade?: boolean; zombieArms?: boolean; trim?: string; glow?: string; hat?: string;
+  armorTier?: number;
 }
 
 const TAU = Math.PI * 2;
@@ -28,8 +29,18 @@ const ease = (x: number) => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
 
 function limb(c: CanvasRenderingContext2D, x: number, y: number, ang: number, len: number, w: number, col: string): [number, number] {
   const ex = x + Math.sin(ang) * len, ey = y + Math.cos(ang) * len;
-  c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round';
+  c.lineCap = 'round';
+  c.strokeStyle = shade(col, -0.35); c.lineWidth = w + 0.9;
   c.beginPath(); c.moveTo(x, y); c.lineTo(ex, ey); c.stroke();
+  c.strokeStyle = col; c.lineWidth = w;
+  c.beginPath(); c.moveTo(x, y); c.lineTo(ex, ey); c.stroke();
+  if (w > 2.2) {
+    // cylindrical highlight on the lit (upper-left) side
+    const nx = -Math.cos(ang), ny = Math.sin(ang);
+    const o = w * 0.22, sgn = nx + ny < 0 ? 1 : -1;
+    c.strokeStyle = shade(col, 0.28); c.lineWidth = w * 0.32;
+    c.beginPath(); c.moveTo(x + nx * o * sgn, y + ny * o * sgn); c.lineTo(ex + nx * o * sgn, ey + ny * o * sgn); c.stroke();
+  }
   return [ex, ey];
 }
 
@@ -42,6 +53,14 @@ function eyesAt(c: CanvasRenderingContext2D, x: number, y: number, col: string, 
 }
 
 // ------------------------------------------------------------------ weapons
+/** Brushed-metal gradient across a blade (light edge → base → dark edge). */
+function metal(c: CanvasRenderingContext2D, x0: number, x1: number, base: string): CanvasGradient | string {
+  if (!base.startsWith('#')) return base;
+  const g = c.createLinearGradient(x0, 0, x1, 0);
+  g.addColorStop(0, shade(base, 0.5)); g.addColorStop(0.45, base); g.addColorStop(1, shade(base, -0.45));
+  return g;
+}
+
 export function drawWeapon(c: CanvasRenderingContext2D, kind: WeaponKind, x: number, y: number, ang: number, tier: number, col?: string, glow?: string, k = 1): void {
   c.save();
   c.translate(x, y); c.rotate(-ang);
@@ -53,8 +72,9 @@ export function drawWeapon(c: CanvasRenderingContext2D, kind: WeaponKind, x: num
   switch (kind) {
     case 'sword': case 'sword2h': {
       const len = L(kind === 'sword2h' ? 30 : 21 + tier * 1.2), w = L(kind === 'sword2h' ? 3.6 : 2.8);
-      c.fillStyle = steel; c.beginPath(); c.moveTo(-w / 2, 2); c.lineTo(w / 2, 2); c.lineTo(w / 2 * 0.8, len); c.lineTo(0, len + 3); c.lineTo(-w / 2 * 0.8, len); c.closePath(); c.fill();
+      c.fillStyle = metal(c, -w / 2, w / 2, steel); c.beginPath(); c.moveTo(-w / 2, 2); c.lineTo(w / 2, 2); c.lineTo(w / 2 * 0.8, len); c.lineTo(0, len + 3); c.lineTo(-w / 2 * 0.8, len); c.closePath(); c.fill();
       c.fillStyle = edge; c.fillRect(-0.4, 3, 0.8, len - 2);
+      c.fillStyle = 'rgba(255,255,255,0.55)'; c.fillRect(-w / 2 + 0.3, 3, 0.5, len * 0.8);
       c.fillStyle = tier >= 3 ? '#c8a040' : '#6a5030'; c.fillRect(L(-4.5), 0, L(9), L(2));
       c.fillStyle = '#4a3020'; c.fillRect(L(-1), L(-5), L(2), L(5));
       c.fillStyle = tier >= 3 ? '#e0c050' : '#8a7050'; c.beginPath(); c.arc(0, L(-5.5), L(1.4), 0, TAU); c.fill();
@@ -63,7 +83,7 @@ export function drawWeapon(c: CanvasRenderingContext2D, kind: WeaponKind, x: num
     case 'axe': case 'axe2h': {
       const len = L(kind === 'axe2h' ? 30 : 22);
       c.fillStyle = '#5a3a20'; c.fillRect(L(-1.1), L(-3), L(2.2), len);
-      c.fillStyle = steel;
+      c.fillStyle = metal(c, L(1), L(kind === 'axe2h' ? 14 : 10), steel);
       const hx = len - L(6);
       c.beginPath(); c.moveTo(L(1), hx - L(5)); c.quadraticCurveTo(L(kind === 'axe2h' ? 14 : 10), hx - L(8), L(kind === 'axe2h' ? 13 : 9), hx + L(4)); c.quadraticCurveTo(L(6), hx + L(2), L(1), hx + L(4)); c.closePath(); c.fill();
       if (kind === 'axe2h') { c.beginPath(); c.moveTo(L(-1), hx - L(4)); c.quadraticCurveTo(L(-10), hx - L(6), L(-9), hx + L(3)); c.lineTo(L(-1), hx + L(3)); c.fill(); }
@@ -240,86 +260,161 @@ export function drawBiped(c: CanvasRenderingContext2D, L: Look, p: Pose): void {
   const sw = p.moving ? Math.sin(phase) : 0;
   const bob = p.moving ? Math.abs(Math.cos(phase)) * 1.6 : Math.sin(p.t * 2) * 0.4;
   const hipY = -legL + bob * 0.5;
-  const shX = hunch * 14, shY = hipY - torsoH + hunch * 5;
   const legW = (L.bones ? 2.2 : 4.6) * b;
   const armW = (L.bones ? 2 : 3.8) * b;
   const dark = (col: string) => shade(col, -0.3);
+  const wk = L.weapon ?? 'none';
+  const heavyW = wk === 'sword2h' || wk === 'axe2h' || wk === 'hammer' || wk === 'club' || wk === 'cleaver';
+  const melee = wk !== 'bow' && wk !== 'staff' && wk !== 'crozier' && wk !== 'wand';
+  // attack body motion: anticipation lean back, strike lunge forward, recover
+  let lean = hunch * 0.15, lunge = 0;
+  if (p.atk >= 0 && melee && wk !== 'none') {
+    const t = p.atk;
+    if (t < 0.4) { lean -= ease(t / 0.4) * (heavyW ? 0.2 : 0.12); lunge = -ease(t / 0.4) * 1.5; }
+    else if (t < 0.6) { const k = ease((t - 0.4) / 0.2); lean += -0.12 + k * (heavyW ? 0.42 : 0.3); lunge = -1.5 + k * (heavyW ? 6 : 4.5); }
+    else { const k = ease((t - 0.6) / 0.4); lean += (heavyW ? 0.22 : 0.18) * (1 - k); lunge = (heavyW ? 4.5 : 3) * (1 - k); }
+  } else if (p.atk >= 0 && wk === 'bow') lean -= 0.05;
+  if (p.cast >= 0) { const k = Math.sin(Math.min(1, p.cast) * Math.PI); lean -= 0.08 * k; }
+  if (p.hit > 0) lean -= 0.18 * Math.min(1, p.hit * 6);
+  const shX = hunch * 14, shY = hipY - torsoH + hunch * 5;
+
+  // tail
+  if (L.tail) { c.strokeStyle = L.tail; c.lineWidth = 3 * b; c.lineCap = 'round'; c.beginPath(); c.moveTo(-3, hipY + 2); c.quadraticCurveTo(-16, hipY + 6 + Math.sin(p.t * 3) * 3, -20, hipY - 6); c.stroke(); }
+  // legs (not affected by the upper-body lean)
+  const legCol = L.bones ? L.skin : L.legs;
+  const digit = !!L.digitigrade;
+  const stance = p.atk >= 0 && melee ? Math.sin(Math.min(1, p.atk) * Math.PI) * 0.25 : 0;
+  const drawLeg = (s: number, col: string, front: boolean) => {
+    const a = s * 0.5 + (front ? stance : -stance * 0.6);
+    const lift = p.moving ? Math.max(0, -s) * 0.7 : 0;
+    const [kx, ky] = limb(c, 0, hipY, a, legL * 0.5, legW, col);
+    const [fx, fy] = limb(c, kx, ky, digit ? a + 0.6 - lift : a * 0.3 - lift, legL * 0.52, legW * 0.85, col);
+    const boot = L.bones ? L.skin : L.boots ?? shade(col, -0.35);
+    c.fillStyle = shade(boot, -0.3); c.beginPath(); c.ellipse(fx + 2, fy + 0.4, legW * 1.0, legW * 0.52, 0, 0, TAU); c.fill();
+    c.fillStyle = boot; c.beginPath(); c.ellipse(fx + 2, fy, legW * 0.92, legW * 0.46, 0, 0, TAU); c.fill();
+  };
+  // upper body transform around the hips
+  c.save();
+  c.translate(lunge, 0);
+  c.translate(0, hipY); c.rotate(lean); c.translate(0, -hipY);
   // wings
   if (L.wings) {
     const f = Math.sin(p.t * 3) * 0.2;
-    c.fillStyle = L.wings;
-    for (const s of [1, 0.7]) {
+    for (const [s, col] of [[1, L.wings], [0.7, shade(L.wings, -0.3)]] as [number, string][]) {
+      const g = c.createLinearGradient(shX - 34 * s, shY - 20, shX, shY + 10);
+      g.addColorStop(0, shade(col, -0.4)); g.addColorStop(1, col);
+      c.fillStyle = g;
       c.beginPath(); c.moveTo(shX - 3, shY + 4);
       c.quadraticCurveTo(shX - 26 * s, shY - 22 * s - f * 20, shX - 34 * s, shY - 4 * s);
       c.quadraticCurveTo(shX - 22 * s, shY + 2, shX - 20 * s, shY + 14 * s);
       c.quadraticCurveTo(shX - 12, shY + 8, shX - 3, shY + 10); c.fill();
-      c.fillStyle = shade(L.wings, -0.3);
+      c.strokeStyle = shade(col, -0.5); c.lineWidth = 0.8;
+      for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(shX - 3, shY + 5); c.lineTo(shX - (14 + i * 7) * s, shY - (14 - i * 5) * s - f * 12); c.stroke(); }
     }
   }
-  // tail
-  if (L.tail) { c.strokeStyle = L.tail; c.lineWidth = 3 * b; c.lineCap = 'round'; c.beginPath(); c.moveTo(-3, hipY + 2); c.quadraticCurveTo(-16, hipY + 6 + Math.sin(p.t * 3) * 3, -20, hipY - 6); c.stroke(); }
   // cloak (behind)
   if (L.cloak) {
-    c.fillStyle = dark(L.cloak);
-    c.beginPath(); c.moveTo(shX - 5 * b, shY + 1); c.quadraticCurveTo(-12 * b - (p.moving ? 4 : 0), hipY + 6, -9 * b - (p.moving ? 5 + sw * 2 : 0), -1); c.lineTo(3, -2); c.lineTo(shX + 2, shY + 3); c.fill();
+    const g = c.createLinearGradient(-12 * b, shY, 4, 0);
+    g.addColorStop(0, shade(L.cloak, -0.55)); g.addColorStop(1, dark(L.cloak));
+    c.fillStyle = g;
+    c.beginPath(); c.moveTo(shX - 5 * b, shY + 1); c.quadraticCurveTo(-12 * b - (p.moving ? 4 : 0) - lunge * 0.4, hipY + 6, -9 * b - (p.moving ? 5 + sw * 2 : 0) - lunge * 0.6, -1); c.lineTo(3, -2); c.lineTo(shX + 2, shY + 3); c.fill();
   }
   // quiver on back
   if (L.offhand === 'quiver') {
     c.save(); c.translate(shX - 6 * b, shY + 3); c.rotate(-0.5);
-    c.fillStyle = '#5a3a1e'; c.fillRect(-2.5, -4, 5, 15);
-    c.strokeStyle = '#d8d0c0'; c.lineWidth = 0.8; for (let i = -1; i <= 1; i++) { c.beginPath(); c.moveTo(i * 1.4, -4); c.lineTo(i * 1.6, -9); c.stroke(); }
+    c.fillStyle = '#4a2e16'; c.fillRect(-2.8, -4, 5.6, 15); c.fillStyle = '#6a4424'; c.fillRect(-2.8, -4, 2.2, 15);
+    c.fillStyle = '#b09060'; c.fillRect(-2.8, 1, 5.6, 1); c.fillRect(-2.8, 7, 5.6, 1);
+    c.strokeStyle = '#d8d0c0'; c.lineWidth = 0.8; for (let i = -1; i <= 1; i++) { c.beginPath(); c.moveTo(i * 1.4, -4); c.lineTo(i * 1.6, -9); c.stroke(); c.fillStyle = '#c04040'; c.fillRect(i * 1.6 - 0.8, -10.5, 1.6, 2); }
     c.restore();
   }
+  c.restore();
+  // back leg behind everything of the upper body except wings/cloak
+  if (!L.robe) drawLeg(-sw, dark(legCol), false);
+  c.save();
+  c.translate(lunge, 0);
+  c.translate(0, hipY); c.rotate(lean); c.translate(0, -hipY);
   // back arm
   const armRest = 0.12 + (p.moving ? -sw * 0.35 : Math.sin(p.t * 2) * 0.03);
   let backA = armRest + 0.1;
   if (L.zombieArms) backA = 1.35 + Math.sin(p.t * 3) * 0.1;
   if (p.cast >= 0) backA = 1.2 + ease(p.cast * 2) * 0.6;
-  if (L.weapon === 'bow') backA = 1.45;
+  if (wk === 'bow') backA = 1.45;
+  if (p.atk >= 0 && melee && heavyW) backA = 1.0 + Math.sin(Math.min(1, p.atk) * Math.PI) * 0.8;
+  if ((p.block ?? 0) > 0) backA = 1.25;
   const bsx = shX - 2 * b, bsy = shY + 2;
   const [bex, bey] = limb(c, bsx, bsy, backA, armL * 0.52, armW, dark(L.bones ? L.skin : L.body2 ?? L.body));
-  const [bhx, bhy] = limb(c, bex, bey, backA + (L.weapon === 'bow' ? 0.2 : 0.35), armL * 0.5, armW * 0.9, dark(L.skin));
+  const [bhx, bhy] = limb(c, bex, bey, backA + (wk === 'bow' ? 0.2 : 0.35), armL * 0.5, armW * 0.9, dark(L.skin));
   if (L.offhand === 'shield') drawShield(c, bhx + 3, bhy - 3 - (p.block ?? 0) * 6, L.offTier ?? 0, L.offColor);
-  if (L.offhand === 'orb') { c.save(); c.shadowColor = L.offColor ?? '#80c0ff'; c.shadowBlur = 10; c.fillStyle = L.offColor ?? '#80c0ff'; c.beginPath(); c.arc(bhx + 3, bhy - 5 + Math.sin(p.t * 3) * 1.5, 3, 0, TAU); c.fill(); c.restore(); }
-  if (p.cast >= 0 && L.weapon !== 'staff' && L.weapon !== 'crozier') { c.save(); c.shadowColor = L.glow ?? '#80a0ff'; c.shadowBlur = 12; c.fillStyle = L.glow ?? '#c0d0ff'; c.beginPath(); c.arc(bhx, bhy, 2.5 + p.cast * 2, 0, TAU); c.fill(); c.restore(); }
-  // legs
-  const legCol = L.bones ? L.skin : L.legs;
-  const digit = !!L.digitigrade;
-  const drawLeg = (s: number, col: string) => {
-    const a = s * 0.5;
-    const lift = p.moving ? Math.max(0, -s) * 0.7 : 0;
-    const [kx, ky] = limb(c, 0, hipY, a, legL * 0.5, legW, col);
-    const [fx, fy] = limb(c, kx, ky, digit ? a + 0.6 - lift : a * 0.3 - lift, legL * 0.52, legW * 0.85, col);
-    c.fillStyle = L.bones ? L.skin : L.boots ?? shade(col, -0.35);
-    c.beginPath(); c.ellipse(fx + 2, fy, legW * 0.95, legW * 0.5, 0, 0, TAU); c.fill();
-  };
-  if (!L.robe) drawLeg(-sw, dark(legCol));
-  if (!L.robe) drawLeg(sw, legCol);
+  if (L.offhand === 'orb') {
+    const oy = bhy - 5 + Math.sin(p.t * 3) * 1.5;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    const g = c.createRadialGradient(bhx + 3, oy, 0, bhx + 3, oy, 8); g.addColorStop(0, L.offColor ?? '#80c0ff'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(bhx + 3, oy, 8, 0, TAU); c.fill(); c.restore();
+    const g2 = c.createRadialGradient(bhx + 2, oy - 1, 0.3, bhx + 3, oy, 3.2); g2.addColorStop(0, '#ffffff'); g2.addColorStop(0.4, L.offColor ?? '#80c0ff'); g2.addColorStop(1, '#101030');
+    c.fillStyle = g2; c.beginPath(); c.arc(bhx + 3, oy, 3.2, 0, TAU); c.fill();
+  }
+  if (p.cast >= 0 && wk !== 'staff' && wk !== 'crozier') handGlow(c, bhx, bhy, L.glow ?? '#9ab0ff', 2.5 + p.cast * 3, p.t);
+  c.restore();
+  // front leg
+  if (!L.robe) drawLeg(sw, legCol, true);
+  c.save();
+  c.translate(lunge, 0);
+  c.translate(0, hipY); c.rotate(lean); c.translate(0, -hipY);
   // torso
   if (L.bones) {
-    c.strokeStyle = L.skin; c.lineWidth = 2.2; c.lineCap = 'round';
+    c.strokeStyle = shade(L.skin, -0.35); c.lineWidth = 3; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(0, hipY); c.lineTo(shX, shY); c.stroke();
+    c.strokeStyle = L.skin; c.lineWidth = 2.2;
     c.beginPath(); c.moveTo(0, hipY); c.lineTo(shX, shY); c.stroke();
     for (let i = 0; i < 4; i++) { const yy = shY + 3 + i * 3; const xx = shX * (1 - (i + 1) / 5); c.beginPath(); c.moveTo(xx - 5, yy + 1); c.quadraticCurveTo(xx, yy - 1.5, xx + 5, yy + 1); c.stroke(); }
     c.beginPath(); c.ellipse(0, hipY, 4, 2, 0, 0, TAU); c.stroke();
-    if (L.robe) { c.fillStyle = L.robe; c.beginPath(); c.moveTo(shX - 6, shY + 1); c.lineTo(shX + 6, shY + 1); c.lineTo(9 + (p.moving ? sw * 2 : 0), -1); c.lineTo(-9, -1); c.closePath(); c.fill(); }
+    if (L.robe) {
+      const g = c.createLinearGradient(-9, 0, 9, 0); g.addColorStop(0, shade(L.robe, 0.15)); g.addColorStop(1, shade(L.robe, -0.4));
+      c.fillStyle = g; c.beginPath(); c.moveTo(shX - 6, shY + 1); c.lineTo(shX + 6, shY + 1); c.lineTo(9 + (p.moving ? sw * 2 : 0), -1); c.lineTo(-9, -1); c.closePath(); c.fill();
+      c.strokeStyle = shade(L.robe, -0.5); c.lineWidth = 0.6; for (const x of [-4, 0, 4]) { c.beginPath(); c.moveTo(shX * 0.5 + x * 0.5, shY + 6); c.lineTo(x * 1.6, -1); c.stroke(); }
+    }
   } else {
     const ww = 6.2 * b, sw2 = 7.4 * b;
     if (L.robe) {
-      c.fillStyle = L.robe;
+      const g = c.createLinearGradient(-10 * b, 0, 10 * b, 0); g.addColorStop(0, shade(L.robe, 0.18)); g.addColorStop(0.55, L.robe); g.addColorStop(1, shade(L.robe, -0.45));
+      c.fillStyle = g;
       c.beginPath(); c.moveTo(shX - sw2, shY + 1); c.lineTo(shX + sw2 * 0.9, shY + 1);
       c.quadraticCurveTo(8 * b, hipY, 10 * b + (p.moving ? sw * 2.5 : 0), -1);
       c.lineTo(-10 * b + (p.moving ? sw * 1.5 : 0), -1); c.quadraticCurveTo(-8 * b, hipY, shX - sw2, shY + 1); c.fill();
-      c.fillStyle = shade(L.robe, -0.25); c.fillRect(-10 * b, -3, 20 * b, 2);
-      if (L.trim) { c.fillStyle = L.trim; c.fillRect(-1, shY + 2, 2.5, -shY - 3); }
+      c.strokeStyle = shade(L.robe, -0.45); c.lineWidth = 0.7;
+      for (const x of [-5, -1, 3, 7]) { c.beginPath(); c.moveTo(shX * 0.6 + x * 0.4, hipY - 2); c.quadraticCurveTo(x * 0.9, hipY / 2, x * 1.25 + (p.moving ? sw * 1.5 : 0), -1.5); c.stroke(); }
+      c.fillStyle = shade(L.robe, -0.3); c.fillRect(-10 * b, -3, 20 * b, 2);
+      if (L.trim) { c.fillStyle = L.trim; c.fillRect(-1, shY + 2, 2.5, -shY - 3); c.fillRect(-10 * b, -3.5, 20 * b, 1); }
     }
-    c.fillStyle = L.body;
+    const tg = c.createLinearGradient(shX - sw2, 0, shX + sw2, 0);
+    tg.addColorStop(0, shade(L.body, 0.22)); tg.addColorStop(0.5, L.body); tg.addColorStop(1, shade(L.body, -0.42));
+    c.fillStyle = tg;
     c.beginPath(); c.moveTo(-ww, hipY + 2); c.lineTo(ww, hipY + 2); c.lineTo(shX + sw2, shY + 2); c.quadraticCurveTo(shX, shY - 3, shX - sw2, shY + 2); c.closePath(); c.fill();
-    if (L.body2) { c.fillStyle = L.body2; c.fillRect(-ww, hipY - 1, ww * 2, 3.2); }
+    c.strokeStyle = shade(L.body, -0.55); c.lineWidth = 0.7; c.stroke();
+    const tier = L.armorTier ?? -1;
+    if (tier === 1) { // chain mail rings
+      c.fillStyle = 'rgba(255,255,255,0.18)';
+      for (let yy = shY + 4; yy < hipY; yy += 2.2) for (let xx = -ww + 1; xx < ww; xx += 2.2) c.fillRect(xx + ((yy / 2.2) % 2) + shX * (1 - (yy - shY) / (hipY - shY)), yy, 0.8, 0.8);
+    }
+    if (tier >= 2) { // plate: chest ridge, specular, pauldrons
+      c.strokeStyle = shade(L.body, 0.45); c.lineWidth = 1.1;
+      c.beginPath(); c.moveTo(shX + 0.5, shY + 3); c.lineTo(0.5, hipY - 1); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.22)'; c.beginPath(); c.ellipse(shX - 2.5, shY + 7, 1.6, 3.5, -0.2, 0, TAU); c.fill();
+      for (const [px, sc] of [[shX - sw2 + 0.5, 0.85], [shX + sw2 - 0.5, 1]] as [number, number][]) {
+        const pg = c.createRadialGradient(px - 1, shY - 0.5, 0.3, px, shY + 1, 5 * b * sc);
+        pg.addColorStop(0, shade(L.body, 0.45)); pg.addColorStop(1, shade(L.body, -0.35));
+        c.fillStyle = pg; c.beginPath(); c.ellipse(px, shY + 1.5, 4.2 * b * sc, 3.2 * b * sc, 0, Math.PI, TAU); c.lineTo(px + 4.2 * b * sc, shY + 3); c.lineTo(px - 4.2 * b * sc, shY + 3); c.fill();
+        if (L.trim) { c.strokeStyle = L.trim; c.lineWidth = 0.7; c.stroke(); }
+      }
+    }
+    if (L.body2) {
+      c.fillStyle = shade(L.body2, -0.2); c.fillRect(-ww, hipY - 1.2, ww * 2, 3.4);
+      c.fillStyle = L.body2; c.fillRect(-ww, hipY - 1.2, ww * 2, 1.4);
+      c.fillStyle = tier >= 2 ? '#d8b860' : '#a08850'; c.fillRect(-1.3, hipY - 1.5, 2.6, 3.4);
+    }
     if (L.trim && !L.robe) { c.strokeStyle = L.trim; c.lineWidth = 1; c.beginPath(); c.moveTo(shX - sw2 + 1, shY + 2.5); c.quadraticCurveTo(shX, shY - 1.5, shX + sw2 - 1, shY + 2.5); c.stroke(); }
     if (L.apron) { c.fillStyle = L.apron; c.beginPath(); c.moveTo(shX - 2, shY + 5); c.lineTo(shX + ww, shY + 5); c.lineTo(ww + 3, -3); c.lineTo(-2, -3); c.fill(); }
-    // shading
-    c.fillStyle = 'rgba(0,0,0,0.18)'; c.beginPath(); c.moveTo(-ww, hipY + 2); c.lineTo(-ww * 0.2, hipY + 2); c.lineTo(shX - sw2 * 0.3, shY + 2); c.lineTo(shX - sw2, shY + 2); c.fill();
-    if (L.glow) { c.save(); c.shadowColor = L.glow; c.shadowBlur = 10; c.fillStyle = L.glow; c.globalAlpha = 0.8; c.beginPath(); c.arc(shX + 1, shY + 7, 2.2, 0, TAU); c.fill(); c.restore(); }
+    if (L.glow) { c.save(); c.globalCompositeOperation = 'lighter'; const gg = c.createRadialGradient(shX + 1, shY + 7, 0, shX + 1, shY + 7, 7); gg.addColorStop(0, L.glow); gg.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gg; c.beginPath(); c.arc(shX + 1, shY + 7, 7, 0, TAU); c.fill(); c.restore(); }
   }
   // head
   const hx = shX + 1.5 + hunch * 5, hy = shY - headR + 0.5 + hunch * 3;
@@ -327,20 +422,30 @@ export function drawBiped(c: CanvasRenderingContext2D, L: Look, p: Pose): void {
   // front arm + weapon
   let a = armRest;
   if (L.zombieArms) a = 1.4 + Math.sin(p.t * 3 + 1) * 0.1;
-  const wk = L.weapon ?? 'none';
   if (wk === 'staff' || wk === 'crozier') a = 0.55;
   if (wk === 'bow') a = 1.55;
-  if (p.atk >= 0) {
-    if (wk === 'bow') a = 1.55;
-    else if (wk === 'staff' || wk === 'crozier' || wk === 'wand') a = 0.5 + Math.sin(ease(p.atk) * Math.PI) * 1.2;
-    else {
-      const e = p.atk < 0.45 ? ease(p.atk / 0.45) : 1;
-      const f = p.atk >= 0.45 ? ease((p.atk - 0.45) / 0.25) : 0;
-      a = armRest + e * 2.6 - f * 2.9;
-    }
-  }
+  const armAt = (t: number): number => {
+    if (wk === 'bow') return 1.55;
+    if (wk === 'staff' || wk === 'crozier' || wk === 'wand') return 0.5 + Math.sin(ease(t) * Math.PI) * 1.2;
+    // windup high behind, snap through, follow-through low
+    if (t < 0.4) return armRest + ease(t / 0.4) * (heavyW ? 2.9 : 2.6);
+    if (t < 0.6) return armRest + (heavyW ? 2.9 : 2.6) - ease((t - 0.4) / 0.2) * (heavyW ? 3.4 : 3.1);
+    return armRest - (heavyW ? 0.5 : 0.5) + ease((t - 0.6) / 0.4) * 0.5;
+  };
+  if (p.atk >= 0) a = armAt(p.atk);
   if (p.cast >= 0 && wk !== 'bow') a = 1.3 + ease(p.cast * 2) * 0.8;
   const fsx = shX + 2, fsy = shY + 2.2;
+  // weapon smear during the strike
+  if (p.atk >= 0.36 && p.atk <= 0.66 && melee && wk !== 'none') {
+    c.save(); c.globalAlpha = 0.18;
+    for (const back of [0.09, 0.05]) {
+      const aa = armAt(Math.max(0, p.atk - back));
+      const ex0 = fsx + Math.sin(aa) * armL * 0.52, ey0 = fsy + Math.cos(aa) * armL * 0.52;
+      const fa0 = aa + 0.3;
+      drawWeapon(c, wk, ex0 + Math.sin(fa0) * armL * 0.5, ey0 + Math.cos(fa0) * armL * 0.5, fa0 + 0.35, L.wTier ?? 0, '#ffffff', undefined);
+    }
+    c.restore();
+  }
   const [ex, ey] = limb(c, fsx, fsy, a, armL * 0.52, armW, L.bones ? L.skin : L.body2 ?? L.body);
   const fa = a + (wk === 'bow' ? 0.05 : 0.3);
   const [hx2, hy2] = limb(c, ex, ey, fa, armL * 0.5, armW * 0.9, L.skin);
@@ -348,6 +453,18 @@ export function drawBiped(c: CanvasRenderingContext2D, L: Look, p: Pose): void {
   else if (wk === 'staff' || wk === 'crozier') drawWeapon(c, wk, hx2, hy2, 0, L.wTier ?? 0, L.wColor, L.wGlow);
   else if (wk !== 'none') drawWeapon(c, wk, hx2, hy2, fa + 0.35, L.wTier ?? 0, L.wColor, L.wGlow);
   if (wk === 'none' && L.zombieArms) { c.fillStyle = L.skin; c.beginPath(); c.arc(hx2, hy2, 2, 0, TAU); c.fill(); }
+  if (p.cast >= 0 && (wk === 'staff' || wk === 'crozier')) handGlow(c, hx2, hy2 - 30, L.wGlow ?? L.glow ?? '#9ab0ff', 3 + p.cast * 4, p.t);
+  c.restore();
+}
+
+function handGlow(c: CanvasRenderingContext2D, x: number, y: number, col: string, r: number, t: number): void {
+  c.save(); c.globalCompositeOperation = 'lighter';
+  const g = c.createRadialGradient(x, y, 0, x, y, r * 2.4);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(0.25, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g; c.beginPath(); c.arc(x, y, r * 2.4, 0, TAU); c.fill();
+  c.strokeStyle = col; c.lineWidth = 0.7; c.globalAlpha = 0.8;
+  for (let i = 0; i < 3; i++) { const a = t * 6 + (i * TAU) / 3; c.beginPath(); c.arc(x, y, r * 1.6, a, a + 1.2); c.stroke(); }
+  c.restore();
 }
 
 // ------------------------------------------------------------------ creatures

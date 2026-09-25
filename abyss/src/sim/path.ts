@@ -134,7 +134,7 @@ const DY = [0, 0, 1, -1, 1, -1, 1, -1];
 const COST = [10, 10, 10, 10, 14, 14, 14, 14];
 
 /** A* over tiles (8-way, no corner cutting). Returns tile-center waypoints excluding the start, or null. */
-export function astar(w: World, sx: number, sy: number, gx: number, gy: number, maxNodes = 6000): { x: number; y: number }[] | null {
+export function astar(w: World, sx: number, sy: number, gx: number, gy: number, maxNodes = w.w * w.h): { x: number; y: number }[] | null {
   const W = w.w, H = w.h;
   sx = Math.floor(sx); sy = Math.floor(sy); gx = Math.floor(gx); gy = Math.floor(gy);
   if (!walkable(w, gx, gy)) return null;

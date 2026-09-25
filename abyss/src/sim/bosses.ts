@@ -102,6 +102,7 @@ export function updateBoss(g: Game, m: Monster, dt: number, dist: number): void 
       a.done = true;
       switch (a.spec) {
         case 'melee':
+          g.emit({ t: 'mattack', id: m.id, x: m.x, y: m.y, ang: Math.atan2(h.y - m.y, h.x - m.x), r: reachOf(g, m) + 0.4, heavy: true });
           if (Math.hypot(h.x - m.x, h.y - m.y) <= reachOf(g, m) + 0.6) hurtHero(g, monDmg(g, m), m, 'melee');
           g.emit({ t: 'sfx', id: 'bossSwing', x: m.x, y: m.y });
           break;

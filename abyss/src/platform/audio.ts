@@ -1,260 +1,231 @@
-// Procedural WebAudio: synthesized sound effects and adaptive music (plucked-string town theme,
-// dark drones in the dungeon, drums for boss fights). Starts only after a user gesture.
-type Music = 'none' | 'title' | 'town' | 'dungeon1' | 'dungeon2' | 'dungeon3' | 'dungeon4' | 'boss';
+// Audio engine: pre-rendered, layered sound effects (see sfx.ts) played with pitch variation, stereo
+// position relative to the hero and a shared convolution reverb; adaptive music (see music.ts) with a
+// combat layer that swells when monsters close in. Starts only after a user gesture.
+import { Rand, SR } from './dsp';
+import { renderNote, trackFor, type Inst, type Music, type NoteOut, type TrackDef } from './music';
+import { WARM_CORE, renderSfx, resolveSfx, sfxMeta, type SfxMeta } from './sfx';
+
+export type { Music };
+
+interface Track { def: TrackDef; bus: GainNode; combat: GainNode; step: number; next: number; r: Rand; name: Music }
+
+const SUSTAINED = new Set<Inst>(['pad', 'choir', 'choirO', 'cello', 'brass', 'wind', 'whisper', 'swell']);
+const VARIED = new Set<Inst>(['taiko', 'frame', 'hat', 'tom']);
+const NOTE_CAP = 5_000_000; // samples kept in the note cache (~20 MB)
+const BOSS_SFX = ['bossRoar', 'bossSwing', 'bossCast', 'breath', 'meteor'];
 
 export class Audio {
   ctx: AudioContext | null = null;
-  master!: GainNode; sfxBus!: GainNode; musicBus!: GainNode; verb!: ConvolverNode; verbGain!: GainNode;
+  private master!: GainNode; private sfxBus!: GainNode; private musicBus!: GainNode; private muffleF!: BiquadFilterNode;
+  private verb!: ConvolverNode; private sfxVerbIn!: GainNode; private musicVerbIn!: GainNode;
   sfxVol = 0.75; bgmVol = 0.55;
-  private noiseBuf: AudioBuffer | null = null;
+  private bank = new Map<string, AudioBuffer[]>();
+  private notes = new Map<string, AudioBuffer>();
+  private noteSamples = 0;
   private last = new Map<string, number>();
+  private voices = new Map<string, number[]>();
+  private active: number[] = [];
+  private warmQ: (() => void)[] = [];
   private music: Music = 'none';
-  private next = 0; private step = 0;
-  private drones: { o: OscillatorNode; g: GainNode }[] = [];
-  private pluckCache = new Map<number, AudioBuffer>();
+  private track: Track | null = null;
+  private lx = 0; private ly = 0;
+  private intensity = 0; private combatLvl = 0;
+  private varN = 0;
 
   unlock(): void {
     if (this.ctx) { if (this.ctx.state === 'suspended') void this.ctx.resume(); return; }
     try {
-      const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const W = window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+      const AC = W.AudioContext ?? W.webkitAudioContext;
       if (!AC) return;
       const c = new AC();
       this.ctx = c;
-      this.master = c.createGain(); this.master.gain.value = 0.9; this.master.connect(c.destination);
-      const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(this.master);
-      this.sfxBus = c.createGain(); this.sfxBus.gain.value = this.sfxVol; this.sfxBus.connect(comp);
-      this.musicBus = c.createGain(); this.musicBus.gain.value = this.bgmVol * 0.5; this.musicBus.connect(comp);
-      // simple reverb (decaying noise impulse)
-      this.verb = c.createConvolver();
-      const len = Math.floor(c.sampleRate * 2.2); const ir = c.createBuffer(2, len, c.sampleRate);
-      for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
-      this.verb.buffer = ir;
-      this.verbGain = c.createGain(); this.verbGain.gain.value = 0.35;
-      this.verb.connect(this.verbGain); this.verbGain.connect(comp);
-      const n = Math.floor(c.sampleRate * 1.5); this.noiseBuf = c.createBuffer(1, n, c.sampleRate);
-      const d = this.noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      const limiter = c.createDynamicsCompressor();
+      limiter.threshold.value = -4; limiter.knee.value = 2; limiter.ratio.value = 16; limiter.attack.value = 0.002; limiter.release.value = 0.2;
+      limiter.connect(c.destination);
+      this.master = c.createGain(); this.master.gain.value = 0.95; this.master.connect(limiter);
+      const glue = c.createDynamicsCompressor();
+      glue.threshold.value = -20; glue.knee.value = 8; glue.ratio.value = 3; glue.attack.value = 0.005; glue.release.value = 0.18;
+      glue.connect(this.master);
+      this.sfxBus = c.createGain(); this.sfxBus.connect(glue);
+      this.muffleF = c.createBiquadFilter(); this.muffleF.type = 'lowpass'; this.muffleF.frequency.value = 20000; this.muffleF.connect(this.master);
+      this.musicBus = c.createGain(); this.musicBus.connect(this.muffleF);
+      this.verb = c.createConvolver(); this.verb.buffer = this.impulse(c, 3.2);
+      const verbOut = c.createGain(); verbOut.gain.value = 0.55; this.verb.connect(verbOut); verbOut.connect(this.master);
+      this.sfxVerbIn = c.createGain(); this.sfxVerbIn.connect(this.verb);
+      this.musicVerbIn = c.createGain(); this.musicVerbIn.connect(this.verb);
+      this.setVolumes(this.sfxVol, this.bgmVol);
+      for (const n of WARM_CORE) this.queueSfx(n);
+      if (this.music !== 'none') this.startTrack();
     } catch { this.ctx = null; }
   }
   setVolumes(sfx: number, bgm: number): void {
     this.sfxVol = sfx; this.bgmVol = bgm;
-    if (this.ctx) { this.sfxBus.gain.value = sfx; this.musicBus.gain.value = bgm * 0.5; }
+    if (!this.ctx) return;
+    this.sfxBus.gain.value = sfx; this.sfxVerbIn.gain.value = sfx;
+    this.musicBus.gain.value = bgm * 0.7; this.musicVerbIn.gain.value = bgm * 0.7;
   }
   suspend(): void { void this.ctx?.suspend(); }
   resume(): void { void this.ctx?.resume(); }
+  /** Renders sounds that are about to be needed (class skills, the zone's monsters) in the background. */
+  prepare(names: string[]): void { for (const n of names) { const id = resolveSfx(n); if (id) this.queueSfx(id); } }
+  /** Hero position: sound effects are panned and attenuated relative to it. */
+  listen(x: number, y: number): void { this.lx = x; this.ly = y; }
+  /** 0..1 — how hard the fight is; drives the music's combat layer. */
+  setIntensity(v: number): void { this.intensity = Math.max(0, Math.min(1, v)); }
+  /** Briefly muffles the music (boss kill, hero death). */
+  muffle(sec: number): void {
+    if (!this.ctx) return;
+    const f = this.muffleF.frequency, t = this.ctx.currentTime;
+    f.cancelScheduledValues(t); f.setValueAtTime(500, t); f.exponentialRampToValueAtTime(20000, t + sec);
+  }
 
-  // ------------------------------------------------------------ primitives
-  private env(g: GainNode, t: number, a: number, peak: number, dur: number): void {
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + a);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + a + dur);
-  }
-  tone(freq: number, dur: number, type: OscillatorType, vol: number, o: { slide?: number; delay?: number; attack?: number; dest?: AudioNode; verb?: number; vib?: number; detune?: number } = {}): void {
-    const c = this.ctx!; const t = c.currentTime + (o.delay ?? 0);
-    const osc = c.createOscillator(); const g = c.createGain();
-    osc.type = type; osc.frequency.setValueAtTime(freq, t);
-    if (o.detune) osc.detune.value = o.detune;
-    if (o.slide) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq + o.slide), t + dur);
-    if (o.vib) { const l = c.createOscillator(); const lg = c.createGain(); l.frequency.value = 6; lg.gain.value = o.vib; l.connect(lg); lg.connect(osc.frequency); l.start(t); l.stop(t + dur + (o.attack ?? 0.005) + 0.1); }
-    this.env(g, t, o.attack ?? 0.005, vol, dur);
-    osc.connect(g); g.connect(o.dest ?? this.sfxBus);
-    if (o.verb) { const vg = c.createGain(); vg.gain.value = o.verb; g.connect(vg); vg.connect(this.verb); }
-    osc.start(t); osc.stop(t + (o.attack ?? 0.005) + dur + 0.05);
-  }
-  noise(dur: number, vol: number, type: BiquadFilterType, freq: number, o: { delay?: number; sweep?: number; q?: number; attack?: number; dest?: AudioNode; verb?: number } = {}): void {
-    const c = this.ctx!; if (!this.noiseBuf) return;
-    const t = c.currentTime + (o.delay ?? 0);
-    const src = c.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;
-    const f = c.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = o.q ?? 0.8;
-    if (o.sweep) f.frequency.exponentialRampToValueAtTime(Math.max(40, freq + o.sweep), t + dur);
-    const g = c.createGain(); this.env(g, t, o.attack ?? 0.004, vol, dur);
-    src.connect(f); f.connect(g); g.connect(o.dest ?? this.sfxBus);
-    if (o.verb) { const vg = c.createGain(); vg.gain.value = o.verb; g.connect(vg); vg.connect(this.verb); }
-    src.start(t, Math.random()); src.stop(t + dur + (o.attack ?? 0.004) + 0.05);
-  }
-  private pluck(freq: number, vol: number, delay: number, dest: AudioNode): void {
-    const c = this.ctx!;
-    const key = Math.round(freq);
-    let buf = this.pluckCache.get(key);
-    if (!buf) {
-      // Karplus-Strong string
-      const sr = c.sampleRate, len = Math.floor(sr * 2.2), N = Math.max(2, Math.round(sr / freq));
-      buf = c.createBuffer(1, len, sr);
-      const d = buf.getChannelData(0); const ring = new Float32Array(N);
-      for (let i = 0; i < N; i++) ring[i] = Math.random() * 2 - 1;
-      let p = 0;
-      for (let i = 0; i < len; i++) { const nx = (p + 1) % N; const v = (ring[p] + ring[nx]) * 0.5 * 0.996; d[i] = ring[p]; ring[p] = v; p = nx; }
-      this.pluckCache.set(key, buf);
+  /** Stereo room impulse: early reflections, then a tail that darkens as it decays. */
+  private impulse(c: AudioContext, dur: number): AudioBuffer {
+    const sr = c.sampleRate, n = Math.floor(sr * dur), ir = c.createBuffer(2, n, sr);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      const r = new Rand(ch ? 91 : 17);
+      let lp = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        lp += (r.bi() - lp) * (0.06 + 0.9 * Math.exp(-t * 2.5));
+        d[i] = lp * Math.exp((-t * 6.9) / dur) * Math.min(1, t / 0.015);
+      }
+      for (let e = 0; e < 10; e++) { const at = Math.floor(sr * r.range(0.006, 0.09)); d[at] += r.bi() * 0.6 * (1 - at / (sr * 0.1)); }
     }
-    const t = c.currentTime + delay;
-    const s = c.createBufferSource(); s.buffer = buf;
-    const g = c.createGain(); g.gain.value = vol;
-    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2600;
-    s.connect(f); f.connect(g); g.connect(dest);
-    const vg = c.createGain(); vg.gain.value = 0.5; g.connect(vg); vg.connect(this.verb);
-    s.start(t); s.stop(t + 2.2);
+    return ir;
   }
 
   // ------------------------------------------------------------ sfx
-  play(name: string, vol = 1): void {
-    if (!this.ctx || this.sfxVol <= 0 || this.ctx.state !== 'running') return;
-    const now = performance.now();
-    const gap = name === 'hit' || name.startsWith('mshoot') || name === 'heroHit' ? 55 : name.startsWith('die_') ? 40 : name === 'gold' ? 60 : 25;
-    if (now - (this.last.get(name) ?? 0) < gap) return;
-    this.last.set(name, now);
-    const v = vol;
-    if (name.startsWith('die_')) { this.death(name.slice(4), v); return; }
-    if (name.startsWith('mshoot_')) { this.mshoot(name.slice(7), v * 0.6); return; }
-    switch (name) {
-      case 'swing': this.noise(0.14, 0.18 * v, 'bandpass', 700, { sweep: 1800, q: 1.2 }); break;
-      case 'hit': this.noise(0.08, 0.3 * v, 'lowpass', 1600); this.tone(140, 0.12, 'sine', 0.3 * v, { slide: -80 }); break;
-      case 'bash': this.noise(0.1, 0.35 * v, 'lowpass', 1400); this.tone(110, 0.2, 'sine', 0.4 * v, { slide: -60 }); this.tone(620, 0.12, 'square', 0.05 * v, { slide: -200 }); break;
-      case 'cleave': this.noise(0.28, 0.24 * v, 'bandpass', 500, { sweep: 2200, q: 1 }); this.tone(120, 0.18, 'sine', 0.25 * v, { slide: -60, delay: 0.1 }); break;
-      case 'warcry': this.tone(130, 0.7, 'sawtooth', 0.14 * v, { vib: 12, attack: 0.05, verb: 0.6 }); this.tone(196, 0.6, 'sawtooth', 0.08 * v, { vib: 10, attack: 0.05 }); this.noise(0.5, 0.12 * v, 'lowpass', 600, { attack: 0.05 }); break;
-      case 'stomp': case 'meteor': this.tone(70, 0.6, 'sine', 0.6 * v, { slide: -40 }); this.noise(0.6, 0.4 * v, 'lowpass', 500, { sweep: -300, verb: 0.4 }); break;
-      case 'berserk': this.tone(90, 0.6, 'sawtooth', 0.16 * v, { slide: 80, vib: 8 }); this.noise(0.4, 0.12 * v, 'lowpass', 900); break;
-      case 'explode': this.noise(0.5, 0.45 * v, 'lowpass', 1000, { sweep: -700, verb: 0.3 }); this.tone(80, 0.35, 'sine', 0.35 * v, { slide: -45 }); break;
-      case 'frost': case 'cast_frostnova': for (let i = 0; i < 5; i++) this.tone(1800 + Math.random() * 1600, 0.3, 'sine', 0.06 * v, { delay: i * 0.03, verb: 0.5 }); this.noise(0.3, 0.12 * v, 'highpass', 4000); break;
-      case 'lightning': case 'thunder': this.noise(0.35, 0.35 * v, 'highpass', 2500, { verb: 0.2 }); for (let i = 0; i < 4; i++) this.noise(0.04, 0.25 * v, 'bandpass', 3000, { delay: i * 0.05 + Math.random() * 0.03 }); this.tone(1200, 0.15, 'sawtooth', 0.06 * v, { slide: -900 }); if (name === 'thunder') this.tone(55, 0.8, 'sine', 0.4 * v, { slide: -20 }); break;
-      case 'teleport': case 'cast_teleport': this.tone(300, 0.3, 'sine', 0.14 * v, { slide: 1100, verb: 0.6 }); this.noise(0.25, 0.08 * v, 'highpass', 5000); break;
-      case 'block': this.tone(900, 0.12, 'square', 0.07 * v, { slide: -300 }); this.tone(1400, 0.15, 'triangle', 0.08 * v); this.noise(0.05, 0.2 * v, 'highpass', 3000); break;
-      case 'heroHit': this.noise(0.07, 0.22 * v, 'lowpass', 900); this.tone(170, 0.12, 'sawtooth', 0.06 * v, { slide: -60 }); break;
-      case 'heroDeath': this.tone(220, 1.4, 'sawtooth', 0.14 * v, { slide: -170, verb: 0.8 }); this.tone(110, 1.6, 'sine', 0.3 * v, { slide: -60 }); break;
-      case 'levelup': [392, 494, 587, 784, 988].forEach((f, i) => this.tone(f, 0.6, 'triangle', 0.11 * v, { delay: i * 0.08, verb: 0.7 })); this.tone(1568, 1.2, 'sine', 0.05 * v, { delay: 0.4, verb: 1 }); break;
-      case 'gold': for (let i = 0; i < 3; i++) this.tone(2200 + Math.random() * 900, 0.09, 'sine', 0.06 * v, { delay: i * 0.045 }); break;
-      case 'potPick': case 'pickup': this.noise(0.05, 0.12 * v, 'bandpass', 1800); this.tone(900, 0.08, 'sine', 0.06 * v, { delay: 0.03 }); break;
-      case 'drop': this.noise(0.08, 0.2 * v, 'lowpass', 700); break;
-      case 'equip': this.noise(0.12, 0.16 * v, 'bandpass', 1300, { q: 2 }); this.tone(700, 0.08, 'triangle', 0.06 * v, { delay: 0.05 }); break;
-      case 'potion': for (let i = 0; i < 3; i++) this.tone(320 - i * 40, 0.08, 'sine', 0.14 * v, { delay: i * 0.1, slide: -80 }); break;
-      case 'error': this.tone(140, 0.15, 'square', 0.06 * v); break;
-      case 'nomana': this.tone(260, 0.12, 'triangle', 0.08 * v, { slide: -80 }); break;
-      case 'barrel': this.noise(0.18, 0.3 * v, 'bandpass', 600, { q: 1.5 }); this.tone(180, 0.1, 'square', 0.06 * v, { slide: -60 }); break;
-      case 'chest': this.tone(200, 0.35, 'sawtooth', 0.05 * v, { slide: 80, vib: 20 }); this.tone(1600, 0.2, 'sine', 0.06 * v, { delay: 0.3 }); break;
-      case 'stone': this.noise(0.5, 0.25 * v, 'lowpass', 300, { attack: 0.05 }); break;
-      case 'shrine': [262, 330, 392, 523].forEach((f) => this.tone(f, 1.4, 'sine', 0.07 * v, { attack: 0.3, verb: 1 })); break;
-      case 'portal': this.noise(0.8, 0.14 * v, 'bandpass', 400, { sweep: 1800, attack: 0.2, verb: 0.5 }); this.tone(520, 0.9, 'sine', 0.06 * v, { attack: 0.2, vib: 10, verb: 0.8 }); break;
-      case 'waypoint': [523, 659, 784].forEach((f, i) => this.tone(f, 0.8, 'sine', 0.07 * v, { delay: i * 0.06, verb: 0.9 })); break;
-      case 'stairs': for (let i = 0; i < 4; i++) this.noise(0.06, 0.18 * v, 'lowpass', 500, { delay: i * 0.13 }); break;
-      case 'learn': this.tone(880, 0.3, 'triangle', 0.09 * v, { verb: 0.5 }); this.tone(1320, 0.4, 'sine', 0.05 * v, { delay: 0.08, verb: 0.5 }); break;
-      case 'mswing': this.noise(0.1, 0.1 * v, 'bandpass', 900, { sweep: 900 }); break;
-      case 'roar': this.tone(100, 0.5, 'sawtooth', 0.12 * v, { vib: 15, slide: -30 }); this.noise(0.4, 0.12 * v, 'lowpass', 500); break;
-      case 'blink': this.tone(900, 0.15, 'sine', 0.08 * v, { slide: -600 }); break;
-      case 'resurrect': [220, 277, 330].forEach((f) => this.tone(f, 0.9, 'sine', 0.06 * v, { attack: 0.2, slide: f * 0.5, verb: 1 })); break;
-      case 'bossRoar': this.tone(70, 1.3, 'sawtooth', 0.22 * v, { vib: 9, slide: -25, attack: 0.08, verb: 0.8 }); this.tone(105, 1.1, 'sawtooth', 0.1 * v, { vib: 7, attack: 0.08 }); this.noise(1.0, 0.2 * v, 'lowpass', 400, { attack: 0.1 }); break;
-      case 'bossCast': this.tone(160, 0.6, 'sawtooth', 0.1 * v, { slide: 200, verb: 0.6 }); this.noise(0.5, 0.15 * v, 'bandpass', 800, { sweep: 1200 }); break;
-      case 'bossSwing': this.noise(0.25, 0.25 * v, 'bandpass', 400, { sweep: 1200 }); break;
-      case 'bossDeath': this.noise(2.2, 0.4 * v, 'lowpass', 700, { sweep: -600, verb: 0.8 }); this.tone(60, 2.4, 'sawtooth', 0.2 * v, { slide: -35, verb: 0.8 }); [262, 311, 392, 523].forEach((f, i) => this.tone(f, 2.2, 'sine', 0.06 * v, { delay: 0.8 + i * 0.1, attack: 0.4, verb: 1 })); break;
-      case 'breath': this.noise(1.3, 0.3 * v, 'bandpass', 600, { q: 0.6, attack: 0.1, sweep: 400 }); break;
-      case 'uniqueDrop': this.tone(1320, 0.9, 'triangle', 0.1 * v, { verb: 1 }); this.tone(1980, 1.1, 'sine', 0.06 * v, { delay: 0.05, verb: 1 }); this.tone(660, 0.6, 'sine', 0.08 * v); break;
-      case 'rareDrop': this.tone(1100, 0.5, 'triangle', 0.07 * v, { verb: 0.7 }); break;
-      case 'itemDrop': this.noise(0.06, 0.12 * v, 'bandpass', 1500); break;
-      case 'click': this.tone(1200, 0.03, 'square', 0.025 * v); break;
-      case 'open': this.noise(0.12, 0.12 * v, 'bandpass', 900); break;
-      // hero skills
-      case 'cast_fireball': this.noise(0.3, 0.2 * v, 'bandpass', 500, { sweep: 900, q: 0.8 }); this.tone(220, 0.2, 'sawtooth', 0.04 * v, { slide: -80 }); break;
-      case 'cast_chain': this.play('lightning', v); break;
-      case 'cast_meteor': this.tone(1200, 0.9, 'sine', 0.05 * v, { slide: -1000, attack: 0.1 }); break;
-      case 'cast_bolt': this.tone(900, 0.14, 'sine', 0.08 * v, { slide: -500 }); this.noise(0.08, 0.06 * v, 'highpass', 3000); break;
-      case 'cast_shoot': case 'cast_multishot': case 'cast_explode': case 'cast_strafe': this.tone(420, 0.09, 'triangle', 0.1 * v, { slide: -180 }); this.noise(0.06, 0.12 * v, 'bandpass', 2400, { delay: 0.01 }); break;
-      case 'cast_rain': for (let i = 0; i < 4; i++) this.tone(400 + i * 30, 0.08, 'triangle', 0.06 * v, { delay: i * 0.06, slide: -150 }); break;
-      case 'cast_dash': case 'cast_leap': this.noise(0.25, 0.18 * v, 'bandpass', 600, { sweep: 1500 }); break;
-      case 'cast_warcry': this.play('warcry', v); break;
-      case 'cast_berserk': this.play('berserk', v); break;
-      case 'cast_attack': case 'cast_bash': case 'cast_cleave': this.play('swing', v * 0.8); break;
-    }
+  private queueSfx(id: string, front = false): void {
+    const meta = sfxMeta(id);
+    if (!meta || this.bank.has(id)) return;
+    const task = (): void => { this.sfxBuffers(id, meta); };
+    if (front) this.warmQ.unshift(task); else this.warmQ.push(task);
   }
-  private death(art: string, v: number): void {
-    switch (art) {
-      case 'skeleton': case 'skelArcher': case 'skelMage': case 'ordes': for (let i = 0; i < 6; i++) this.noise(0.04, 0.15 * v, 'bandpass', 1800 + Math.random() * 1500, { delay: i * 0.05 + Math.random() * 0.03, q: 3 }); break;
-      case 'zombie': case 'ghoul': case 'brute': this.tone(110, 0.5, 'sawtooth', 0.1 * v, { slide: -50, vib: 10 }); this.noise(0.3, 0.12 * v, 'lowpass', 500); break;
-      case 'fallen': case 'shaman': this.tone(700, 0.25, 'square', 0.05 * v, { slide: -400 }); break;
-      case 'bat': this.tone(2400, 0.12, 'sine', 0.06 * v, { slide: 800 }); break;
-      case 'spider': this.noise(0.25, 0.14 * v, 'highpass', 3000); break;
-      case 'wraith': this.tone(500, 0.8, 'sine', 0.08 * v, { slide: -300, vib: 18, verb: 0.9 }); break;
-      case 'fireSpirit': this.noise(0.5, 0.16 * v, 'highpass', 2000, { sweep: -1500 }); break;
-      case 'eye': this.noise(0.2, 0.2 * v, 'lowpass', 400); this.tone(300, 0.2, 'sine', 0.08 * v, { slide: -200 }); break;
-      default: this.tone(130, 0.45, 'sawtooth', 0.1 * v, { slide: -60, vib: 8 }); this.noise(0.25, 0.12 * v, 'lowpass', 600);
+  private sfxBuffers(id: string, meta: SfxMeta): AudioBuffer[] {
+    let b = this.bank.get(id);
+    if (!b) {
+      b = [];
+      for (let v = 0; v < meta.v; v++) {
+        const data = renderSfx(id, v);
+        const ab = this.ctx!.createBuffer(1, data.length, SR);
+        ab.getChannelData(0).set(data);
+        b.push(ab);
+      }
+      this.bank.set(id, b);
     }
+    return b;
   }
-  private mshoot(kind: string, v: number): void {
-    switch (kind) {
-      case 'arrow': this.tone(460, 0.07, 'triangle', 0.08 * v, { slide: -150 }); break;
-      case 'firebolt': case 'fireball': case 'spit': this.noise(0.25, 0.18 * v, 'bandpass', 500, { sweep: 700 }); break;
-      case 'coldbolt': this.tone(1600, 0.2, 'sine', 0.06 * v, { slide: -600 }); break;
-      case 'lightning': case 'spark': this.noise(0.12, 0.18 * v, 'highpass', 3000); break;
-      default: this.tone(600, 0.15, 'sine', 0.06 * v, { slide: -300 }); break;
+
+  play(name: string, vol = 1, x?: number, y?: number): void {
+    const c = this.ctx;
+    if (!c || this.sfxVol <= 0 || c.state !== 'running') return;
+    const id = resolveSfx(name);
+    if (!id) return;
+    const meta = sfxMeta(id)!;
+    const now = c.currentTime;
+    if ((now - (this.last.get(id) ?? -9)) * 1000 < meta.cd) return;
+    const vs = (this.voices.get(id) ?? []).filter((e) => e > now);
+    if (vs.length >= meta.max) return;
+    this.active = this.active.filter((e) => e > now);
+    if (this.active.length > 30 && meta.g < 0.6) return;
+    let pan = 0, dist = 1;
+    if (x !== undefined && y !== undefined) {
+      const dx = x - this.lx, dy = y - this.ly;
+      pan = Math.max(-0.8, Math.min(0.8, (dx - dy) / 10));
+      dist = 1 / (1 + Math.max(0, Math.hypot(dx, dy) - 2.5) * 0.13);
+      if (dist < 0.12) return;
     }
+    const bufs = this.sfxBuffers(id, meta);
+    const b = bufs[Math.floor(Math.random() * bufs.length)];
+    const rate = 1 + (Math.random() * 2 - 1) * meta.pj;
+    const src = c.createBufferSource(); src.buffer = b; src.playbackRate.value = rate;
+    const g = c.createGain(); g.gain.value = vol * meta.g * dist;
+    src.connect(g);
+    let out: AudioNode = g;
+    if (pan !== 0 && typeof c.createStereoPanner === 'function') { const p = c.createStereoPanner(); p.pan.value = pan; g.connect(p); out = p; }
+    out.connect(this.sfxBus);
+    if (meta.verb > 0) { const s = c.createGain(); s.gain.value = meta.verb * (1.4 - dist * 0.4); out.connect(s); s.connect(this.sfxVerbIn); }
+    src.start(now);
+    const end = now + b.duration / rate;
+    this.last.set(id, now); vs.push(end); this.voices.set(id, vs); this.active.push(end);
   }
 
   // ------------------------------------------------------------ music
   setMusic(m: Music): void {
     if (m === this.music) return;
     this.music = m;
-    this.step = 0; this.next = 0;
-    this.stopDrones();
-    if (!this.ctx) return;
-    if (m.startsWith('dungeon') || m === 'title') this.startDrones(m);
+    if (m === 'boss') for (const s of BOSS_SFX) this.queueSfx(s, true);
+    if (this.ctx) this.startTrack();
   }
-  private stopDrones(): void {
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    for (const d of this.drones) { try { d.g.gain.setTargetAtTime(0.0001, t, 0.6); d.o.stop(t + 3); } catch { /* ignore */ } }
-    this.drones = [];
-  }
-  private startDrones(m: Music): void {
-    const c = this.ctx!; const t = c.currentTime;
-    const root = m === 'dungeon1' ? 55 : m === 'dungeon2' ? 49 : m === 'dungeon3' ? 46.25 : m === 'dungeon4' ? 41.2 : 55;
-    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380; lp.Q.value = 2; lp.connect(this.musicBus);
-    const lfo = c.createOscillator(); const lg = c.createGain(); lfo.frequency.value = 0.07; lg.gain.value = 180; lfo.connect(lg); lg.connect(lp.frequency); lfo.start();
-    for (const [f, type, vol, det] of [[root, 'sawtooth', 0.09, -6], [root * 1.5, 'sawtooth', 0.05, 5], [root * 2, 'triangle', 0.05, 0], [root * (m === 'dungeon4' ? 1.414 : 1.2), 'sine', 0.04, 0]] as [number, OscillatorType, number, number][]) {
-      const o = c.createOscillator(); const g = c.createGain();
-      o.type = type; o.frequency.value = f; o.detune.value = det;
-      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 4);
-      o.connect(g); g.connect(lp); o.start();
-      this.drones.push({ o, g });
+  private startTrack(): void {
+    const c = this.ctx!, t = c.currentTime;
+    if (this.track) {
+      const old = this.track;
+      old.bus.gain.cancelScheduledValues(t); old.bus.gain.setTargetAtTime(0, t, 0.5);
+      setTimeout(() => { try { old.bus.disconnect(); } catch { /* already gone */ } }, 4000);
+      this.track = null;
     }
-    this.drones.push({ o: lfo, g: lg });
+    const def = trackFor(this.music);
+    if (!def) return;
+    const bus = c.createGain(); bus.gain.setValueAtTime(0.0001, t); bus.gain.linearRampToValueAtTime(1, t + 2);
+    bus.connect(this.musicBus);
+    const combat = c.createGain(); combat.gain.value = 0; combat.connect(bus);
+    this.combatLvl = 0;
+    this.track = { def, bus, combat, step: 0, next: t + 0.8, r: new Rand(7 + this.music.length * 31), name: this.music };
+    for (const [inst, m, dur] of [...def.warm].reverse()) this.warmQ.unshift(() => { this.note(inst, m, dur); });
   }
+  private note(inst: Inst, m: number, dur: number): AudioBuffer {
+    const d = SUSTAINED.has(inst) ? Math.round(dur * 10) / 10 : 0;
+    const v = VARIED.has(inst) ? this.varN++ % 3 : 0;
+    const key = `${inst}|${m}|${d}|${v}`;
+    let b = this.notes.get(key);
+    if (b) { this.notes.delete(key); this.notes.set(key, b); return b; }
+    const { data, sr } = renderNote(inst, m, d, v + 1);
+    b = this.ctx!.createBuffer(1, data.length, sr);
+    b.getChannelData(0).set(data);
+    this.notes.set(key, b);
+    this.noteSamples += data.length;
+    for (const [k, old] of this.notes) {
+      if (this.noteSamples <= NOTE_CAP) break;
+      if (k === key) continue;
+      this.notes.delete(k); this.noteSamples -= old.length;
+    }
+    return b;
+  }
+  private readonly out: NoteOut = (inst, m, when, vol, o = {}) => {
+    const c = this.ctx!, tr = this.track;
+    if (!tr) return;
+    if (o.layer === 'combat' && this.combatLvl < 0.02) return;
+    const b = this.note(inst, m, o.dur ?? 0);
+    const src = c.createBufferSource(); src.buffer = b;
+    const g = c.createGain(); g.gain.value = vol;
+    src.connect(g);
+    let out: AudioNode = g;
+    if (o.pan && typeof c.createStereoPanner === 'function') { const p = c.createStereoPanner(); p.pan.value = o.pan; g.connect(p); out = p; }
+    out.connect(o.layer === 'combat' ? tr.combat : tr.bus);
+    const send = c.createGain(); send.gain.value = o.verb ?? 0.35; out.connect(send); send.connect(this.musicVerbIn);
+    src.start(Math.max(when, c.currentTime));
+  };
 
   tick(): void {
-    if (!this.ctx || this.ctx.state !== 'running' || this.bgmVol <= 0) return;
-    const c = this.ctx; const t = c.currentTime;
-    if (this.next === 0) this.next = t + 0.1;
-    const m = this.music;
-    if (m === 'town' || m === 'title') {
-      // 70 bpm 8th notes, Am - F - C - G / Am - Dm - E7 - Am (original arpeggio)
-      const beat = 60 / 72 / 2;
-      const chords: number[][] = [[220, 262, 330, 440], [175, 220, 262, 349], [131, 196, 262, 330], [196, 247, 294, 392], [220, 262, 330, 440], [147, 220, 294, 349], [165, 208, 247, 330], [220, 262, 330, 440]];
-      const melody = [659, 0, 587, 523, 0, 494, 523, 0, 440, 0, 523, 587, 659, 0, 587, 0, 523, 0, 494, 440, 0, 392, 440, 0, 415, 0, 494, 587, 523, 0, 440, 0];
-      while (this.next < t + 0.5) {
-        const i = this.step; const bar = Math.floor(i / 8) % chords.length; const ch = chords[bar]; const pos = i % 8;
-        const d = this.next - t;
-        const pat = [0, 2, 1, 3, 2, 1, 3, 2];
-        this.pluck(ch[pat[pos]] * (pos === 0 ? 0.5 : 1), pos === 0 ? 0.22 : 0.13, d, this.musicBus);
-        if (m === 'town' && i % 2 === 0) { const n = melody[(i / 2) % melody.length]; if (n && bar % 4 !== 3 || (n && pos < 4)) this.pluck(n, 0.1, d, this.musicBus); }
-        this.next += beat; this.step++;
-      }
-    } else if (m.startsWith('dungeon')) {
-      // sparse bells and distant thuds over the drone
-      while (this.next < t + 0.5) {
-        const d = this.next - t;
-        const r = Math.random();
-        const root = m === 'dungeon1' ? 220 : m === 'dungeon2' ? 196 : m === 'dungeon3' ? 185 : 165;
-        if (r < 0.18) { const ratios = [1, 1.2, 1.5, 1.8, 2, 2.4, 1.059]; const f = root * ratios[Math.floor(Math.random() * ratios.length)] * (Math.random() < 0.3 ? 2 : 1); this.tone(f, 2.5, 'sine', 0.035, { delay: d, attack: 0.02, dest: this.musicBus, verb: 1.2 }); this.tone(f * 2.76, 1.2, 'sine', 0.01, { delay: d, dest: this.musicBus, verb: 1 }); }
-        else if (r < 0.26) { this.tone(50, 0.7, 'sine', 0.12, { delay: d, slide: -20, dest: this.musicBus, verb: 0.6 }); }
-        else if (r < 0.3 && m === 'dungeon4') { this.noise(1.6, 0.03, 'bandpass', 300, { delay: d, attack: 0.6, dest: this.musicBus, verb: 1 }); }
-        this.next += 0.9 + Math.random() * 1.2;
-      }
-    } else if (m === 'boss') {
-      const beat = 60 / 126 / 2;
-      while (this.next < t + 0.4) {
-        const i = this.step; const d = this.next - t; const pos = i % 16;
-        if (pos % 4 === 0 || pos === 10) this.tone(58, 0.3, 'sine', 0.35, { delay: d, slide: -25, dest: this.musicBus });
-        if (pos === 4 || pos === 12) this.noise(0.12, 0.12, 'bandpass', 1400, { delay: d, dest: this.musicBus });
-        if (pos % 2 === 1) this.noise(0.03, 0.03, 'highpass', 7000, { delay: d, dest: this.musicBus });
-        if (pos === 0 && Math.floor(i / 16) % 2 === 0) [110, 131, 165].forEach((f) => this.tone(f, 1.2, 'sawtooth', 0.035, { delay: d, attack: 0.05, dest: this.musicBus }));
-        if (pos === 0 && Math.floor(i / 16) % 2 === 1) [104, 123, 156].forEach((f) => this.tone(f, 1.2, 'sawtooth', 0.035, { delay: d, attack: 0.05, dest: this.musicBus }));
-        this.next += beat; this.step++;
-      }
+    const c = this.ctx;
+    if (!c || c.state !== 'running') return;
+    const t0 = performance.now();
+    while (this.warmQ.length && performance.now() - t0 < 5) this.warmQ.shift()!();
+    const tr = this.track;
+    if (!tr || this.bgmVol <= 0) return;
+    const now = c.currentTime;
+    const dungeon = tr.name.startsWith('dungeon');
+    const target = dungeon ? this.intensity : 0;
+    this.combatLvl += (target - this.combatLvl) * (target > this.combatLvl ? 0.03 : 0.006);
+    tr.combat.gain.setTargetAtTime(this.combatLvl, now, 0.15);
+    if (tr.next < now - 0.3) tr.next = now + 0.05;
+    while (tr.next < now + 0.35) {
+      tr.def.play(tr.step, tr.next, this.out, tr.r);
+      tr.step++; tr.next += tr.def.step;
     }
   }
 }

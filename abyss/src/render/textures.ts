@@ -2,7 +2,7 @@
 import { ZONES } from '../data/zones';
 import { HALF_H, HALF_W, TH, TW, WALL_H, shade } from './iso';
 
-export const S = 2; // sprite supersampling
+export let S = 2; // sprite supersampling (raised on high-DPI / zoomed-in screens)
 const VARIANTS = 6;
 
 function mk(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
@@ -44,6 +44,11 @@ function crack(c: CanvasRenderingContext2D, col: string, width = 0.6): void {
 
 export interface ZoneTex { floors: HTMLCanvasElement[]; walls: HTMLCanvasElement[]; up: HTMLCanvasElement; down: HTMLCanvasElement; lava: HTMLCanvasElement[]; extra: Record<string, HTMLCanvasElement[]> }
 const cache = new Map<number, ZoneTex>();
+
+/** Change the supersampling factor; cached tiles are repainted lazily at the new resolution. */
+export function setTexScale(n: number): void {
+  if (n !== S) { S = n; cache.clear(); }
+}
 
 export function zoneTex(zone: number): ZoneTex {
   let t = cache.get(zone);

@@ -36,7 +36,7 @@ export function makeMonster(w: World, tplId: string, lvl: number, rank: MonsterR
     kbx: 0, kby: 0, fleeT: 0,
     packId: 0, leaderId: 0, homeX: x, homeY: y,
     timers: { special: t.special ? rng.range(1, t.special) : 0 },
-    summoned: false, phase: 0, alpha: 1, lastHitBy: 0,
+    summoned: false, phase: 0, alpha: 1, lastHitBy: 0, deathStyle: 'normal',
   };
   w.monsters.push(m);
   return m;
