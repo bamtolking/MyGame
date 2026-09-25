@@ -15,7 +15,7 @@ import { drawBiped } from '../render/actors';
 import { skillIconUrl } from '../render/icons';
 import { Renderer, heroLook } from '../render/renderer';
 import { BASE_BY_ID } from '../data/items';
-import { $, clear, esc, fmt, h } from './dom';
+import { $, clear, fmt, h } from './dom';
 import { Input } from './input';
 import { charPanel, deathModal, elderPanel, gamblerPanel, healerPanel, invPanel, menuModal, shopPanel, skillsPanel, stashPanel, victoryModal, waypointModal } from './panels';
 import { itemTooltipHtml, type PriceMode } from './tooltip';
@@ -96,19 +96,27 @@ export class App {
       else { const rng = new Rng(1); for (const id of c.startGear) { const b = BASE_BY_ID[id]; hero.equip[b.slot === 'ring' ? 'ring1' : (b.slot as EquipSlot)] = genItem(rng, 1, 1, { base: id, rarity: 'normal' }); } }
       const pc = h('canvas', { class: 'portrait', width: 180, height: 200 });
       portraits.push({ cv: pc, cls, look: heroLook(hero) });
-      const nameIn = h('input', { class: 'namein', maxlength: '12', value: save?.name ?? c.name, 'aria-label': '이름' }) as HTMLInputElement;
+      const nameIn = h('input', { class: 'namein', id: `name-${cls}`, maxlength: '12', value: save?.name ?? c.name, 'aria-label': '이름' }) as HTMLInputElement;
+      const begin = () => this.startGame(cls, nameIn.value.trim() || c.name, null);
       const start = () => {
         this.unlockAudio();
-        if (save && !confirm(`${save.name} (레벨 ${save.level}) 저장을 지우고 새로 시작할까요?`)) return;
-        const name = nameIn.value.trim() || c.name;
-        this.startGame(cls, name, null);
+        if (!save) { begin(); return; }
+        // in-page confirmation (browser dialogs are not available everywhere)
+        const box = h('div', { class: 'confirm' },
+          h('div', {}, `${save.name} (레벨 ${save.level}) 저장을 지우고 새로 시작할까요?`),
+          h('div', { class: 'row' },
+            h('button', { class: 'danger', onclick: begin }, '지우고 시작'),
+            h('button', { onclick: () => box.remove() }, '취소')));
+        card.querySelector('.confirm')?.remove();
+        card.appendChild(box);
       };
-      cards.appendChild(h('div', { class: 'ccard', style: `--cc:${c.color};--ca:${c.accent}` },
-        pc,
+      const card = h('div', { class: 'ccard', style: `--cc:${c.color};--ca:${c.accent}` });
+      cards.appendChild(card);
+      card.append(...[pc,
         h('div', { class: 'cname' }, c.name, h('small', {}, c.title)),
         h('div', { class: 'cdesc' }, c.desc),
-        save ? h('button', { class: 'primary', onclick: () => { this.unlockAudio(); this.startGame(cls, save.name, save); } }, `이어하기 · ${esc(save.name)} Lv.${save.level}`, h('small', {}, `${DIFFICULTIES[Math.min(save.diff, 2)].name} · 최심 ${Math.max(...save.maxFloor)}층`)) : null,
-        h('div', { class: 'newrow' }, nameIn, h('button', { class: save ? '' : 'primary', onclick: start }, save ? '새로 시작' : '시작'))));
+        save ? h('button', { class: 'primary', onclick: () => { this.unlockAudio(); this.startGame(cls, save.name, save); } }, `이어하기 · ${save.name} Lv.${save.level}`, h('small', {}, `${DIFFICULTIES[Math.min(save.diff, 2)].name} · 최심 ${Math.max(...save.maxFloor)}층`)) : null,
+        h('div', { class: 'newrow' }, nameIn, h('button', { class: save ? '' : 'primary', onclick: start }, save ? '새로 시작' : '시작'))].filter((x) => x !== null) as HTMLElement[]);
     }
     const t = h('div', { id: 'title' }, bg,
       h('div', { class: 'logo' }, h('small', {}, 'ABYSS · 액션 RPG'), h('h1', {}, '심연의 군주'), h('div', { class: 'sub' }, '대성당 아래 열린 심연 속으로. 괴물을 베고, 전리품을 줍고, 심연의 군주를 쓰러뜨려라.')),

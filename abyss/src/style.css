@@ -40,6 +40,9 @@ input[type=range] { accent-color: var(--gold); }
 .ccard button small { display: block; font-size: 11px; opacity: 0.8; font-weight: 400; }
 .newrow { display: flex; gap: 6px; }
 .namein { flex: 1; min-width: 0; font: inherit; background: #0c0907; color: var(--text); border: 1px solid var(--edge); border-radius: 4px; padding: 8px; }
+.confirm { border: 1px solid #8a3a2a; background: rgba(40,10,6,0.9); padding: 8px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; border-radius: 4px; }
+.confirm .row { display: flex; gap: 6px; }
+.confirm .row button { flex: 1; }
 #title .foot { font-size: 12px; color: #a89880; text-align: center; line-height: 1.7; margin-bottom: 10px; }
 
 /* ------------------------------------------------ game */
