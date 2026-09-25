@@ -117,7 +117,7 @@ export function drawShareCard(w: World, coins: number): HTMLCanvasElement {
   pool.addColorStop(0, 'rgba(255,255,255,.4)'); pool.addColorStop(0.4, acc + '55'); pool.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = pool; g.beginPath(); g.arc(0, 0, 220, 0, Math.PI * 2); g.fill();
   g.restore();
-  const s = worker(w.cfg.character.look, 0, 34);
+  const s = worker(w.cfg.character.look, 0, 34, 8);
   const k = 320 / s.c.height;
   g.save();
   g.shadowColor = acc; g.shadowBlur = 36;

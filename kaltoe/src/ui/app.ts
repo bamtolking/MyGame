@@ -204,12 +204,7 @@ export class App {
     }
     if (n >= 4) this.demoAcc = 0;
     // 데모 이벤트: 시각 효과만(소리·토스트 없음)
-    for (const ev of w.events) {
-      if (ev.t === 'kill') this.fx.burst(ev.x, ev.y, ENEMY.get(ev.id)?.tint ?? '#fff', ev.boss ? 30 : 4, 140, 3, 2, 260);
-      else if (ev.t === 'explode') this.fx.boom(ev.x, ev.y, ev.r, ev.color, ev.big);
-      else if (ev.t === 'chain') this.fx.bolt(ev.pts, ev.color);
-      else if (ev.t === 'hit' && this.profile.settings.dmgNums) this.fx.dmg(ev.x, ev.y, ev.dmg, ev.crit, ev.uid);
-    }
+    for (const ev of w.events) juiceEvent(this.fx, ev, w, { vibrate: false, demo: true });
     w.events.length = 0;
     if (w.t > 420) this.idleWorld = this.makeIdleWorld();
     return n;
@@ -355,7 +350,7 @@ export class App {
 
   private confetti() {
     const c = h('div', { class: 'confetti' });
-    const colors = ['#ffd84d', '#ff5a5f', '#3ddc97', '#4d9fff', '#a36bff'];
+    const colors = ['#ffd84d', '#ff4d6d', '#3ddc97', '#3de0ff', '#ff5cf0'];
     for (let i = 0; i < 70; i++) {
       c.appendChild(h('i', { style: `left:${Math.random() * 100}%;background:${colors[i % 5]};animation-duration:${1.8 + Math.random() * 1.8}s;animation-delay:${Math.random() * 0.6}s` }));
     }

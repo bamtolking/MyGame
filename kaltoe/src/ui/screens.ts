@@ -51,7 +51,7 @@ function nextGoals(p: Profile, n: number): { a: AchievementDef; k: number; v: nu
 function portrait(c: CharacterDef, w = 72, hgt = 80): HTMLCanvasElement {
   const cv = h('canvas', { width: String(w * 2), height: String(hgt * 2) }) as HTMLCanvasElement;
   const g = cv.getContext('2d')!;
-  const s = worker(c.look, 0, 34);
+  const s = worker(c.look, 0, 34, 4);
   const k = Math.min((w * 2) / s.c.width, (hgt * 2) / s.c.height) * 0.95;
   g.drawImage(s.c, (w * 2 - s.c.width * k) / 2, (hgt * 2 - s.c.height * k) / 2 + 6, s.c.width * k, s.c.height * k);
   return cv;

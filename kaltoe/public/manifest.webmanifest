@@ -6,8 +6,8 @@
   "scope": "./",
   "display": "fullscreen",
   "orientation": "portrait",
-  "background_color": "#141729",
-  "theme_color": "#141729",
+  "background_color": "#070a14",
+  "theme_color": "#070a14",
   "lang": "ko",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
