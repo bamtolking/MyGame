@@ -55,7 +55,7 @@ export const BODY_CONNECTIONS: [number, number][] = [
 ];
 
 /** 몸 전체가 보이는지 판단할 때 쓰는 핵심 관절 */
-export const CORE_POINTS = [
+export const CORE_POINTS: number[] = [
   LM.nose, LM.leftShoulder, LM.rightShoulder, LM.leftHip, LM.rightHip,
   LM.leftKnee, LM.rightKnee, LM.leftAnkle, LM.rightAnkle,
 ];

@@ -542,6 +542,8 @@ button.list-item:active {
 
 .chip {
   display: inline-flex;
+  flex: none;
+  white-space: nowrap;
   align-items: center;
   gap: 6px;
   height: 38px;
@@ -569,6 +571,7 @@ button.list-item:active {
 
 .badge {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 4px;
   height: 24px;
@@ -1076,4 +1079,140 @@ input[type='range'].slider {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* ── 스캔 연출 ───────────────────────────── */
+
+.scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 70px;
+  top: -70px;
+  background: linear-gradient(to bottom, rgba(255, 107, 44, 0), rgba(255, 107, 44, 0.45), rgba(255, 107, 44, 0));
+  animation: scan 1.5s ease-in-out infinite;
+}
+
+.scanline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  background: #ffc2a3;
+  box-shadow: 0 0 14px #ff6b2c;
+}
+
+@keyframes scan {
+  from {
+    top: -70px;
+  }
+  to {
+    top: 100%;
+  }
+}
+
+.photo-frame {
+  position: relative;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: #15171c;
+}
+
+.photo-frame canvas {
+  width: 100%;
+  display: block;
+}
+
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+}
+
+.metric-row + .metric-row,
+.metric-detail + .metric-row {
+  border-top: 1px solid var(--line);
+}
+
+.metric-bar {
+  height: 6px;
+  border-radius: 6px;
+  background: var(--surface-3);
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.metric-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+}
+
+.metric-detail {
+  padding: 0 16px 14px;
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.reveal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  animation: fade-in 0.3s ease;
+}
+
+.confetti {
+  position: absolute;
+  top: -12px;
+  width: 9px;
+  height: 14px;
+  border-radius: 3px;
+  animation: confetti-fall linear forwards;
+}
+
+@keyframes confetti-fall {
+  to {
+    transform: translateY(110vh) rotate(720deg);
+  }
+}
+
+.muscle-col {
+  flex: 1;
+  border-radius: 16px;
+  padding: 14px;
+  background: var(--surface-2);
+}
+
+.muscle-col h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.muscle-col li {
+  font-size: 13.5px;
+  color: var(--text-2);
+  margin: 4px 0;
+}
+
+.muscle-col ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
 }

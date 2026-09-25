@@ -163,6 +163,8 @@ export interface RoutineInput {
   now?: number;
   /** 프로그램 주차(1~4): 초반엔 늘리기, 후반엔 깨우기·통합 비중 증가 */
   week?: number;
+  /** 위험 신호가 있을 때: 호흡·가벼운 스트레칭·가동성만 */
+  gentle?: boolean;
 }
 
 const POSITION_RANK: Record<Position, number> = {
@@ -190,7 +192,7 @@ export function relevance(e: Exercise, issues: Issues): number {
   return s;
 }
 
-export function eligible(e: Exercise, input: Pick<RoutineInput, 'level' | 'equipment' | 'avoid' | 'mode' | 'hidden' | 'focusRegions'>): boolean {
+export function eligible(e: Exercise, input: Pick<RoutineInput, 'level' | 'equipment' | 'avoid' | 'mode' | 'hidden' | 'focusRegions' | 'gentle'>): boolean {
   if (e.level > input.level) return false;
   if (input.hidden?.includes(e.id)) return false;
   if (e.avoid?.some((a) => input.avoid.has(a))) return false;
@@ -198,6 +200,7 @@ export function eligible(e: Exercise, input: Pick<RoutineInput, 'level' | 'equip
   if (e.equipment.some((q) => !have.has(q))) return false;
   if (input.mode === 'desk' && !e.desk) return false;
   if (input.focusRegions?.length && !e.regions.some((r) => input.focusRegions!.includes(r))) return false;
+  if (input.gentle && (e.phase === 'activate' || e.phase === 'integrate' || e.level > 1)) return false;
   return true;
 }
 

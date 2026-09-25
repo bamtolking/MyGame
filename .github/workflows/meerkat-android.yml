@@ -1,0 +1,63 @@
+# 미어캣 안드로이드 APK 자동 빌드
+# meerkat/ 폴더가 바뀌어 푸시될 때마다 테스트 → 웹 빌드 → 안드로이드 디버그 APK 를 만듭니다.
+# 결과물: GitHub 저장소 > Actions > 해당 실행 > Artifacts > meerkat-debug-apk
+name: Meerkat Android APK
+
+on:
+  push:
+    paths:
+      - 'meerkat/**'
+      - '.github/workflows/meerkat-android.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: meerkat-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: meerkat
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: meerkat/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Web build
+        run: npm run build
+
+      - name: Sync native project
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: meerkat/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk meerkat-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meerkat-debug-apk
+          path: meerkat/meerkat-debug.apk
+          retention-days: 30

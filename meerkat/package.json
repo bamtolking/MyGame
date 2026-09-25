@@ -9,8 +9,11 @@
     "build": "node scripts/prepare-assets.mjs && tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview --host",
     "test": "vitest run",
-    "e2e": "node scripts/e2e.mjs",
-    "cap:sync": "npm run build && npx cap sync"
+    "e2e": "node scripts/e2e.mjs --preview",
+    "icons": "node scripts/make-icons.mjs && capacitor-assets generate --android --ios --iconBackgroundColor \"#ff6b2c\" --iconBackgroundColorDark \"#ff6b2c\" --splashBackgroundColor \"#ff6b2c\" --splashBackgroundColorDark \"#0e0f12\"",
+    "cap:sync": "npm run build && cap sync",
+    "android": "npm run cap:sync && cap open android",
+    "ios": "npm run cap:sync && cap open ios"
   },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^8.0.2",
@@ -32,6 +35,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.5.2",
     "@preact/preset-vite": "^2.10.6",
     "@types/node": "^22.20.4",

@@ -4,6 +4,7 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { effect } from '@preact/signals';
 import { back, nav, route } from './router';
 import { isNative, platformName } from './platform';
+import { onNotificationTap } from './notify';
 
 /** 네이티브 앱 초기화: 뒤로가기 버튼, 상태바, 스플래시, 알림 딥링크 */
 export function initNative() {
@@ -21,5 +22,5 @@ export function initNative() {
     if (platformName() === 'android') StatusBar.setBackgroundColor({ color: dark ? '#0e0f12' : '#f3f4f6' }).catch(() => undefined);
     void route.value;
   });
-  import('./notify').then(({ onNotificationTap }) => onNotificationTap((path) => nav(path)));
+  onNotificationTap((path) => nav(path));
 }

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">미어캣</string>
+    <string name="title_activity_main">미어캣</string>
+    <string name="package_name">app.meerkat.posture</string>
+    <string name="custom_url_scheme">app.meerkat.posture</string>
+</resources>
