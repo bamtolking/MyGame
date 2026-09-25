@@ -126,7 +126,8 @@ class AudioEngine {
       this.core = buildCore(this.ctx, this.ctx.destination);
       this.core.sfx.gain.value = this.sfxVol;
       this.core.music.gain.value = this.musicVol;
-      this.sfxApi = createSfx(this.core);
+      // 효과음은 지금 들리는 화음·조를 물어 음정이 있는 소리를 곡에 맞춘다(레벨업 종이 D장조 곡 위에서 C 장조로 부딪치지 않게)
+      this.sfxApi = createSfx(this.core, () => this.musicApi?.harmony() ?? null);
       this.musicApi = createMusic(this.core, true);
       this.musicApi.setTrack(this.track);
       this.musicApi.setIntensity(this.intensity);

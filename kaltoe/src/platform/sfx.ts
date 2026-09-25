@@ -6,9 +6,13 @@
 //   센드는 공유 버스. 재생마다 변주·음높이(playbackRate)·음량이 흔들려 반복돼도 기계적으로 들리지 않는다.
 // · 믹스 위생: 우선순위별 동시 발음 상한(낮은 순위부터 버림, 큰 소리는 가장 오래된 잔소리를 끊고 들어감), 소리별 스로틀,
 //   종류별 동시 발음 수, 잦은 소리는 밀도가 높을수록 자동으로 작아짐, 큰 소리는 리버브 센드 + 음악 덕킹.
+//   리버브·딜레이 센드와 덕킹 깊이도 효과음 볼륨을 따라간다(볼륨을 줄여도 잔향만 남거나 음악이 괜히 줄지 않게).
+// · 음정 맞춤: 음정이 있는 효과음(종·화음·5음계)은 음악 엔진이 알려 주는 지금 화음이나 곡의 조로 옮겨 낸다
+//   (고정 C 장조가 D장조·F단조 곡 위에서 틀린 음으로 부딪치지 않게). 큰 소리는 음정 층만 따로 구워 잡음·충격은 그대로 둔다.
 // · onSimEvent: 시뮬레이션 이벤트 → 효과음 매핑을 이 파일이 전담한다(레벨업·상자·점심·승리·사망은 app.ts가 직접 재생).
 import type { AudioCore } from './audio';
 import type { SimEvent, World } from '../sim/types';
+import type { Harmony } from './music';
 
 export type SfxName =
   | 'shoot' | 'hit' | 'kill' | 'gem' | 'coin' | 'levelup' | 'tick' | 'jackpot' | 'hurt' | 'boss' | 'explode'
@@ -173,9 +177,24 @@ function sat(o: Float32Array, drive: number) {
 
 type Rec = (o: Float32Array, r: () => number, v: number, ch: number) => void;
 /** n 변주 수 · len 길이(초) · st 0 모노 / 1 채널마다 따로 합성(좌우 배치가 있는 소리) / 2 모노 합성 후 올패스로 좌우 비상관(값싼 스테레오 폭) */
-interface Def { n: number; len: number; st: number; rec: Rec }
+interface Def { n: number; len: number; st: number; rec: Rec; ref?: string; grp?: string }
 const DEFS: Record<string, Def> = {};
-const def = (k: string, n: number, len: number, rec: Rec, st = 0) => { DEFS[k] = { n, len, st, rec }; };
+/** x.ref(몸통): 기준 음정 층 — 이 층을 더한 정점으로 정규화한다 · x.grp(음정 층): 몸통 — 그 몸통과 같은 배율로 정규화한다
+ *  (원래 한 덩어리였던 소리를 둘로 나눠도 잡음·충격과 종소리의 균형이 그대로다) */
+const def = (k: string, n: number, len: number, rec: Rec, st = 0, x: { ref?: string; grp?: string } = {}) => { DEFS[k] = { n, len, st, rec, ...x }; };
+
+// 음정 층: 음정이 있는 부분(종·화음)을 몸통(잡음·충격·서브)과 따로 굽고, 재생할 때 음정 층만 재생 속도로 옮긴다.
+// · 화음 따름(tri): 지금 화음의 근음으로 옮기고 3음 성질별 변주(4 장3 · 3 단3 · 5 sus4 · 2 sus2)를 고른다.
+// · 조 따름: 곡의 조(스팅어와 같은 조옮김)로만 옮긴다 — 같은 조로 옮겨지는 스팅어와 함께 나는 소리.
+// 기준(C 장조·옮김 0)으로 내면 나누기 전 소리와 같다.
+const THIRDS = [4, 3, 5, 2];
+type TonRec = (o: Float32Array, th: number, r: () => number, ch: number) => void;
+function defTonal(k: string, len: number, st: number, tri: boolean, body: Rec, ton: TonRec) {
+  def(k, 1, len, body, st, { ref: k + (tri ? '~4' : '~') });
+  for (const th of tri ? THIRDS : [4]) def(k + (tri ? '~' + th : '~'), 1, len, (o, r, _v, ch) => ton(o, th, r, ch), st, { grp: k });
+}
+/** 기준음에서 s반음 위 주파수 */
+const semi = (f: number, s: number) => f * Math.pow(2, s / 12);
 
 /** 모노 → 좌우 비상관: 채널마다 다른 짧은 슈뢰더 올패스 두 단(저역은 거의 그대로, 중고역 위상만 흩어 넓게 들린다) */
 function decorrelate(src: Float32Array, dst: Float32Array, d1: number, d2: number) {
@@ -256,7 +275,7 @@ def('eliteKill', 1, 1.5, (o) => {           // 엘리트 처치: 중형 폭발 +
   bell(o, { t: 0.1, f: 2349, pt: GOLD, v: 0.26 });
   bell(o, { t: 0.17, f: 3136, pt: GOLD, v: 0.22 });
 }, 2);
-def('bossKill', 1, 2.1, (o) => {            // 보스 격파: 2단 대폭발 + 서브 드롭 + 파편 비 + C 장조 종 화음이 번진다
+defTonal('bossKill', 2.1, 2, true, (o) => {  // 보스 격파: 2단 대폭발 + 서브 드롭 + 파편 비 + (음정 층) 지금 화음의 종 화음이 번진다
   noise(o, { d: 0.008, v: 1, m: 2, f: 1100 });
   noise(o, { a: 0.002, d: 0.28, v: 1, f: 7000, to: 170, gl: 0.2 });
   noise(o, { t: 0.02, a: 0.04, d: 0.6, v: 0.5, f: 320 });
@@ -266,9 +285,10 @@ def('bossKill', 1, 2.1, (o) => {            // 보스 격파: 2단 대폭발 + �
   tone(o, { t: 0.32, f: 62, to: 28, gl: 0.2, d: 0.35, v: 0.8 });
   noise(o, { t: 0.32, a: 0.002, d: 0.16, v: 0.7, f: 4500, to: 250, gl: 0.12 });
   sat(o, 2.2);
-  [1046.5, 1318.5, 1568, 2093].forEach((f, i) => bell(o, { t: 0.12 + i * 0.07, f, pt: GOLD2, v: 0.24 }));
   noise(o, { t: 0.1, a: 0.3, ap: 2, d: 0.3, v: 0.16, m: 2, f: 7500 });
-}, 2);
+}, (o, th) => {
+  [0, th, 7, 12].forEach((s, i) => bell(o, { t: 0.12 + i * 0.07, f: semi(1046.5, s), pt: GOLD2, v: 0.24 }));
+});
 def('explodeS', 3, 0.75, (o, r) => {        // 소형 폭발(지뢰·토너·적 자폭): 딱 + 퍼엉(저역 통과 스윕) + 쿵 + 파편
   noise(o, { d: 0.004, v: 0.8, m: 2, f: 1500 });
   noise(o, { a: 0.001, d: 0.085, v: 0.9, f: 5000, to: 320, gl: 0.06 });
@@ -320,9 +340,10 @@ def('item', 1, 1.1, (o) => {                // 아이템: 상승 슈잉 + 종 �
   bell(o, { t: 0.11, f: 2637, pt: GOLD2, v: 0.36 });
   noise(o, { t: 0.03, a: 0.03, d: 0.12, v: 0.2, m: 2, f: 6500 });
 });
-def('heal', 1, 1.35, (o) => {                // 회복(커피·치킨): 따뜻하게 쌓이는 화음 + 반짝
-  [523.25, 659.26, 783.99, 1046.5].forEach((f, i) => { tone(o, { t: i * 0.05, f, a: 0.02, d: 0.3, v: 0.4, fm: 1, fi: 0.8, fd: 0.2, vib: 5, vd: 0.004 }); });
+defTonal('heal', 1.35, 0, true, (o) => {     // 회복(커피·치킨): 반짝 + (음정 층) 지금 화음으로 따뜻하게 쌓이는 화음
   noise(o, { t: 0.05, a: 0.15, ap: 2, d: 0.2, v: 0.15, m: 2, f: 7000 });
+}, (o, th) => {
+  [0, th, 7, 12].forEach((s, i) => { tone(o, { t: i * 0.05, f: semi(523.25, s), a: 0.02, d: 0.3, v: 0.4, fm: 1, fi: 0.8, fd: 0.2, vib: 5, vd: 0.004 }); });
   bell(o, { t: 0.2, f: 2093, pt: GOLD, v: 0.25 });
 });
 def('magnet', 1, 1.25, (o) => {              // 자석(결재 도장 싹쓸이): 떨리며 올라가는 부웅 + 빨아들이는 바람 + 딩
@@ -366,17 +387,19 @@ def('chime', 1, 2.2, (o) => {               // 정각 딩-동(E5→C5, 따뜻한
     tone(o, { t, f: f * 3.01, d: 0.1, v: 0.08 });
   }
 });
-def('maxed', 1, 1.0, (o) => {               // 최대 레벨: 5음계로 치솟는 반짝 + 금속 쨍
-  [1046.5, 1318.5, 1568, 2093, 2637].forEach((f, i) => fmBell(o, i * 0.045, f, 0.12, 0.5));
-  bell(o, { t: 0.23, f: 3136, pt: TING, v: 0.35 });
+defTonal('maxed', 1.0, 0, true, (o) => {     // 최대 레벨: 반짝 + (음정 층) 지금 화음으로 치솟는 종 + 금속 쨍
   noise(o, { a: 0.2, ap: 2, d: 0.2, v: 0.12, m: 2, f: 7500 });
+}, (o, th) => {
+  [0, th, 7, 12, 12 + th].forEach((s, i) => fmBell(o, i * 0.045, semi(1046.5, s), 0.12, 0.5));
+  bell(o, { t: 0.23, f: 3136, pt: TING, v: 0.35 });
 });
-def('levelup', 1, 1.3, (o) => {             // 레벨업: 상승 스윕 + C 장조 아르페지오 종 + 반짝 꼬리 + 붐
+defTonal('levelup', 1.3, 0, true, (o) => {   // 레벨업: 상승 스윕 + 붐 + 반짝 꼬리 + (음정 층) 지금 화음의 아르페지오 종(레벨업 스팅어와 같은 화음)
   noise(o, { a: 0.25, ap: 2, d: 0.08, v: 0.4, m: 1, f: 500, to: 7000, gl: 0.2, q: 1.2 });
   tone(o, { f: 130, to: 65, gl: 0.05, d: 0.1, v: 0.5 });
-  [1046.5, 1318.5, 1568, 2093].forEach((f, i) => fmBell(o, 0.02 + i * 0.06, f, 0.2, 0.55, 2, 0.9));
-  bell(o, { t: 0.26, f: 4186, pt: GLASS, v: 0.25 });
   noise(o, { t: 0.2, a: 0.02, d: 0.35, v: 0.14, m: 2, f: 8000 });
+}, (o, th) => {
+  [0, th, 7, 12].forEach((s, i) => fmBell(o, 0.02 + i * 0.06, semi(1046.5, s), 0.2, 0.55, 2, 0.9));
+  bell(o, { t: 0.26, f: 4186, pt: GLASS, v: 0.25 });
 });
 def('lunch', 1, 2.0, (o) => {               // 점심 종: 손종 두 번(D6→G6)
   bell(o, { f: 1174.7, pt: HAND, v: 0.6 });
@@ -448,19 +471,23 @@ def('u:clone', 1, 1.2, (o) => {             // 분신: 겹쳐 오르는 두 줄 
   noise(o, { t: 0.08, a: 0.12, ap: 2, d: 0.15, v: 0.4, m: 1, f: 900, to: 6000, gl: 0.2, q: 2 });
   fmBell(o, 0.2, 1568, 0.3, 0.3); fmBell(o, 0.22, 1575, 0.3, 0.3);
 });
-def('evolve', 1, 2.0, (o) => {              // 진화: 즉시 충격(크랙+서브) + 금속 쨍 + 5음계 글리산도 + 길게 남는 수정 화음
+// 진화·대박·칼퇴: 같은 조로 옮겨지는 스팅어(evolve·victory)·상자 연출과 함께 나므로 음정 층을 곡의 조로 옮긴다
+defTonal('evolve', 2.0, 0, false, (o) => {   // 진화: 즉시 충격(크랙+서브) + 금속 쨍 + (음정 층) 5음계 글리산도 + 길게 남는 수정 화음
   noise(o, { d: 0.006, v: 0.9, m: 2, f: 1400 });
   tone(o, { f: 90, to: 32, gl: 0.15, d: 0.3, v: 1.1 });
   noise(o, { a: 0.002, d: 0.15, v: 0.6, f: 5000, to: 300, gl: 0.1 });
   sat(o, 1.8);
   bell(o, { f: 2600, pt: TING, v: 0.4 });
+  noise(o, { t: 0.3, a: 0.3, ap: 2, d: 0.35, v: 0.12, m: 2, f: 8000 });
+}, (o) => {
   [1046.5, 1174.7, 1318.5, 1568, 1760, 2093, 2349, 2637, 3136, 3520].forEach((f, i) => fmBell(o, 0.05 + i * 0.035, f, 0.09, 0.28));
   [1046.5, 1568, 2093, 2637].forEach((f, i) => bell(o, { t: 0.4 + i * 0.03, f, pt: GOLD2, v: 0.2 }));
-  noise(o, { t: 0.3, a: 0.3, ap: 2, d: 0.35, v: 0.12, m: 2, f: 8000 });
 });
-def('jackpot', 1, 1.7, (o, r, v, ch) => {   // 대박: 흩어지는 동전 폭포(좌우로 퍼짐) + 밝은 화음 + 붐
+defTonal('jackpot', 1.7, 1, false, (o) => {  // 대박: 붐 + 반짝 + (음정 층) 흩어지는 동전 폭포(좌우로 퍼짐) + 밝은 화음
   tone(o, { f: 120, to: 55, gl: 0.05, d: 0.12, v: 0.7 });
   noise(o, { d: 0.005, v: 0.5, m: 2, f: 2000 });
+  noise(o, { t: 0.1, a: 0.3, ap: 2, d: 0.3, v: 0.14, m: 2, f: 7500 });
+}, (o, _th, r, ch) => {
   const P = [1568, 1760, 2093, 2349, 2637, 3136, 3520];
   for (let i = 0; i < 16; i++) {
     const t = i * 0.05 + r() * 0.03, f = P[Math.floor(r() * P.length)] * (r() < 0.3 ? 2 : 1), pn = r() * 2 - 1;
@@ -468,9 +495,8 @@ def('jackpot', 1, 1.7, (o, r, v, ch) => {   // 대박: 흩어지는 동전 폭�
     bell(o, { t, f, pt: COIN, v: 0.35 * gch });
   }
   [1046.5, 1318.5, 1568, 2093].forEach((f, i) => bell(o, { t: 0.08 + i * 0.02, f, pt: GOLD2, v: 0.22 }));
-  noise(o, { t: 0.1, a: 0.3, ap: 2, d: 0.3, v: 0.14, m: 2, f: 7500 });
-}, 1);
-def('clear', 1, 1.8, (o, r, v, ch) => {     // 칼퇴 성공: 폭죽 두 발(좌·우) + 색종이 바스락 + 휘익 + 밝은 종 화음
+});
+defTonal('clear', 1.8, 1, false, (o, r, _v, ch) => {   // 칼퇴 성공: 폭죽 두 발(좌·우) + 색종이 바스락 + 휘익 + (음정 층) 밝은 종 화음
   for (const [t, side] of [[0, 0], [0.13, 1]]) {
     const g = side === ch ? 1 : 0.45;
     noise(o, { t, d: 0.004, v: 0.8 * g, m: 2, f: 1800 });
@@ -479,8 +505,9 @@ def('clear', 1, 1.8, (o, r, v, ch) => {     // 칼퇴 성공: 폭죽 두 발(좌
     crackle(o, { t: t + 0.02, dur: 0.8, r0: 1500, r1: 100, v: 0.45 * g, f: 3500 + r() * 1000, q: 1.2 });
   }
   tone(o, { t: 0.15, f: 1000, to: 2200, gl: 0.12, a: 0.02, d: 0.12, v: 0.2, vib: 7, vd: 0.01 });
+}, (o) => {
   [1046.5, 1318.5, 1568, 2093, 2637].forEach((f, i) => bell(o, { t: 0.25 + i * 0.05, f, pt: GOLD2, v: 0.22 }));
-}, 1);
+});
 def('death', 1, 2.0, (o) => {               // 퇴사 위기: 쿵 + 전원이 꺼지며 내려가는 톱니(필터 닫힘) + CRT 틱
   tone(o, { f: 60, to: 28, gl: 0.3, d: 0.45, v: 1 });
   noise(o, { a: 0.002, d: 0.22, v: 0.7, f: 2500, to: 150, gl: 0.2 });
@@ -490,12 +517,13 @@ def('death', 1, 2.0, (o) => {               // 퇴사 위기: 쿵 + 전원이 �
   noise(o, { t: 1.05, d: 0.004, v: 0.35, m: 2, f: 3000 });
   tone(o, { t: 1.05, f: 7800, d: 0.05, v: 0.05 });
 });
-def('revive', 1, 2.1, (o) => {              // 보험 처리: 흰 충격 + 천상의 화음이 차오른다
+defTonal('revive', 2.1, 0, true, (o) => {    // 보험 처리: 흰 충격 + (음정 층) 지금 화음으로 천상의 화음이 차오른다
   noise(o, { d: 0.006, v: 0.8, m: 2, f: 1500 });
   tone(o, { f: 100, to: 40, gl: 0.1, d: 0.25, v: 0.9 });
   sat(o, 1.6);
-  for (const f of [261.6, 329.6, 392, 523.3, 659.3]) tone(o, { t: 0.05, f, w: 2, a: 0.35, ap: 2, h: 0.4, d: 0.4, v: 0.14, lp: 300, le: 1500, vib: 5, vd: 0.004 });
   noise(o, { t: 0.05, a: 0.5, ap: 2, d: 0.4, v: 0.14, m: 2, f: 7000 });
+}, (o, th) => {
+  for (const s of [0, th, 7, 12, 12 + th]) tone(o, { t: 0.05, f: semi(261.6, s), w: 2, a: 0.35, ap: 2, h: 0.4, d: 0.4, v: 0.14, lp: 300, le: 1500, vib: 5, vd: 0.004 });
   bell(o, { t: 0.55, f: 2093, pt: GOLD, v: 0.3 });
 });
 
@@ -683,10 +711,12 @@ const WPN: Record<string, [string, number, number, number, number]> = {
 };
 const ULT_KINDS = ['blast', 'vacuum', 'rain', 'freeze', 'shield', 'clone'];
 
-/** 실시간이면 켜진 직후 유휴 시간에 미리 구울 소리(자주·먼저 쓰이는 순). 무기 소리와 궁극기 종류별 강조는 처음 쓸 때 굽는다(짧고 가볍다) */
+/** 실시간이면 켜진 직후 유휴 시간에 미리 구울 소리(자주·먼저 쓰이는 순). 무기 소리와 궁극기 종류별 강조는 처음 쓸 때 굽는다(짧고 가볍다).
+ *  음정 층은 몸통 뒤에 장3·단3 변주까지(sus 변주는 처음 쓸 때 — 종 몇 개라 가볍다) */
 const WARM_ORDER = ['click', 'tick', 'hit', 'kill', 'gem0', 'gem1', 'gem2', 'gem3', 'gem4', 'gem5', 'gem6', 'gem7', 'gem8', 'gem9', 'gem10',
-  'coin', 'crit', 'burn', 'zap', 'soft', 'hurt', 'explodeS', 'buy', 'enemyShot', 'item', 'toast', 'levelup', 'explodeL', 'chime', 'maxed',
-  'heal', 'magnet', 'timestop', 'elite', 'eliteKill', 'lunch', 'boss', 'ult', 'bossKill', 'evolve', 'jackpot', 'clear', 'death', 'revive', 'yageun'];
+  'coin', 'crit', 'burn', 'zap', 'soft', 'hurt', 'explodeS', 'buy', 'enemyShot', 'item', 'toast', 'levelup', 'levelup~4', 'levelup~3', 'explodeL', 'chime',
+  'maxed', 'maxed~4', 'maxed~3', 'heal', 'heal~4', 'heal~3', 'magnet', 'timestop', 'elite', 'eliteKill', 'lunch', 'boss', 'ult',
+  'bossKill', 'bossKill~4', 'bossKill~3', 'evolve', 'evolve~', 'jackpot', 'jackpot~', 'clear', 'clear~', 'death', 'revive', 'revive~4', 'revive~3', 'yageun'];
 
 // 우선순위(높을수록 먼저 살림)와 종류(동시 발음 수 제한)
 const P_LOW = 0, P_MID = 1, P_HIGH = 2, P_TOP = 3;
@@ -697,7 +727,8 @@ const CAT_CAP = [4, 5, 4, 4, 3, 4, 6, 8];
  *  (오프라인 점검도 실제 게임과 같은 음량으로 재게 된다) */
 const SETTLE_T = 0.25;
 
-export function createSfx(core: AudioCore): SfxAPI {
+/** harmony: 지금 들리는 화음·곡의 조(음악 엔진이 알려 준다). 없거나 null이면 기준(C 장조) 그대로 낸다 */
+export function createSfx(core: AudioCore, harmony: () => Harmony | null = () => null): SfxAPI {
   const ctx = core.ctx;
   const bank = new Map<string, AudioBuffer[]>();
   const last = new Map<string, number>();
@@ -713,12 +744,28 @@ export function createSfx(core: AudioCore): SfxAPI {
     const p = ctx.createStereoPanner(); p.pan.value = -0.7 + (1.4 * i) / (n - 1); p.connect(dst); return p as AudioNode;
   });
   const panBus = mkPans(9, out), panBusy = mkPans(5, busyHp);
-  const sends = [0.07, 0.17, 0.34].map(v => { const g = ctx.createGain(); g.gain.value = v; g.connect(core.reverb); return g; });
-  const dly = ctx.createGain(); dly.gain.value = 0.2; dly.connect(core.delay);
+  // 리버브·딜레이 센드는 코어 버스를 공유해 core.sfx(볼륨)를 거치지 않는다 → wet 단이 효과음 볼륨을 따라가게 한다
+  // (기본 볼륨 0.8에서 1 = 설계한 믹스 그대로. 볼륨을 줄였을 때 잔향·에코만 남아 뿌옇게 들리지 않게)
+  const VOL0 = 0.8;
+  const wetR = ctx.createGain(), wetD = ctx.createGain();
+  let wetV = core.sfx.gain.value / VOL0;
+  wetR.gain.value = wetV; wetD.gain.value = wetV;
+  wetR.connect(core.reverb); wetD.connect(core.delay);
+  const sends = [0.07, 0.17, 0.34].map(v => { const g = ctx.createGain(); g.gain.value = v; g.connect(wetR); return g; });
+  const dly = ctx.createGain(); dly.gain.value = 0.2; dly.connect(wetD);
+  /** 효과음 볼륨(설정 슬라이더)이 바뀌었으면 wet 단을 맞춘다(소리를 낼 때마다 확인 — 값싼 비교 한 번) */
+  const syncWet = (now: number) => {
+    const v = core.sfx.gain.value / VOL0;
+    if (Math.abs(v - wetV) < 0.002) return;
+    wetV = v;
+    wetR.gain.setTargetAtTime(v, now, 0.015); wetD.gain.setTargetAtTime(v, now, 0.015);
+  };
 
   // ── 합성(변주 하나씩 굽는다: 미리 굽기가 한 번에 오래 막지 않게) ──
-  const synthOne = (key: string, arr: AudioBuffer[]) => {
-    const d = DEFS[key], v = arr.length;
+  const arrOf = (key: string) => { let a = bank.get(key); if (!a) { a = []; bank.set(key, a); } return a; };
+  /** 레시피 → 채널 배열(정규화 전). 유한값 확인(NaN·무한대는 0 — 마스터 컴프레서 오염 방지) + 직류 제거(25Hz 1차 고역) → (비상관 스테레오) */
+  const raw = (key: string, v: number): Float32Array[] => {
+    const d = DEFS[key];
     SR = ctx.sampleRate;
     const len = Math.ceil(d.len * SR), hk = hashStr(key);
     const chs: Float32Array[] = [];
@@ -728,14 +775,30 @@ export function createSfx(core: AudioCore): SfxAPI {
       d.rec(o, prng(hk + v * 7919), v, ch);
       chs.push(o);
     }
-    // 마무리: 유한값 확인(NaN·무한대는 0 — 마스터 컴프레서 오염 방지) + 직류 제거(25Hz 1차 고역) → (비상관 스테레오)
-    // → 두 채널 함께 정점 1로 정규화 → -56dB 아래로 떨어진 꼬리는 잘라 내고 끝을 코사인 페이드(잘린 느낌·딸깍 없이)
     const R = 1 - TAU * 25 / SR;
     for (const o of chs) { let x1 = 0, y1 = 0; for (let i = 0; i < len; i++) { const x = o[i] - o[i] === 0 ? o[i] : 0; const y = x - x1 + R * y1; x1 = x; y1 = y; o[i] = y; } }
     if (d.st === 2) { const m = chs[0], l = new Float32Array(len), r = new Float32Array(len); decorrelate(m, l, 0.0019, 0.0043); decorrelate(m, r, 0.0029, 0.0033); chs[0] = l; chs.push(r); }
-    let pk = 0;
-    for (const o of chs) pk = Math.max(pk, peakOf(o));
-    const g = pk > 0 ? 1 / pk : 0;
+    return chs;
+  };
+  const ngain = new Map<string, number>();     // 몸통 key → 정규화 배율(그 음정 층들이 같은 배율을 쓴다)
+  const synthOne = (key: string, arr: AudioBuffer[]) => {
+    const d = DEFS[key], v = arr.length;
+    const chs = raw(key, v), len = chs[0].length;
+    // 두 채널 함께 정점 1로 정규화. 몸통은 기준 음정 층을 더한 정점(나누기 전 한 덩어리 소리) 기준, 음정 층은 그 몸통의 배율 그대로
+    // → -56dB 아래로 떨어진 꼬리는 잘라 내고 끝을 코사인 페이드(잘린 느낌·딸깍 없이)
+    let g: number;
+    if (d.grp) {
+      if (!ngain.has(d.grp)) synthOne(d.grp, arrOf(d.grp));
+      g = ngain.get(d.grp) ?? 1;
+    } else {
+      let pk = 0;
+      if (d.ref) {
+        const rf = raw(d.ref, 0);
+        chs.forEach((o, c) => { const q = rf[Math.min(c, rf.length - 1)]; for (let i = 0; i < len; i++) { const x = Math.abs(o[i] + q[i]); if (x > pk) pk = x; } });
+      } else for (const o of chs) pk = Math.max(pk, peakOf(o));
+      g = pk > 0 ? 1 / pk : 0;
+      if (d.ref) ngain.set(key, g);
+    }
     let end = 0;
     for (const o of chs) for (let i = 0; i < len; i++) { o[i] *= g; if (o[i] > 0.0016 || o[i] < -0.0016) end = i; }
     end = Math.min(len, end + 1 + Math.round(0.004 * SR));
@@ -861,6 +924,7 @@ export function createSfx(core: AudioCore): SfxAPI {
       g.connect(panBusy[Math.round((pan + 0.7) / 0.35)]);
       if (now - hpT > 0.1) { hpT = now; busyHp.frequency.setTargetAtTime(30 + Math.min(150, (densNow(C_HIT, now) + densNow(C_KILL, now) + densNow(C_GEM, now) * 0.5) * 8), now, 0.2); }
     } else g.connect(panBus[Math.round((pan + 0.7) / 0.175)]);
+    if ((e.send !== undefined && e.send >= 0) || e.dl) syncWet(now);
     if (e.send !== undefined && e.send >= 0) g.connect(sends[Math.min(2, e.send)]);
     if (e.dl) g.connect(dly);
     s.onended = () => { s.disconnect(); g.disconnect(); };
@@ -869,10 +933,28 @@ export function createSfx(core: AudioCore): SfxAPI {
     return true;
   }
 
-  // 음악 덕킹: 더 센 덕킹이 진행 중이면 약한 요청은 무시(덮어써서 일찍 풀리지 않게)
+  // ── 음정 맞춤 ──
+  /** 곡의 조옮김 → 재생 속도 배율(짧은 음정 효과음은 통째로 옮긴다 — 딸깍·탁 같은 잡음은 짧아 티가 나지 않는다) */
+  const keyRate = () => { const h = harmony(); return h && h.key ? Math.pow(2, h.key / 12) : 1; };
+  /** 몸통 + 음정 층. 음정 층만 지금 화음(tri: 근음으로 옮기고 3음 성질 변주)이나 곡의 조로 옮긴다.
+   *  몸통이 대체음으로 났으면(첫 등장·전투 중 아직 안 구워짐) 음정 층은 이번엔 생략 */
+  function emitT(key: string, gain: number, e: Em, tri: boolean): boolean {
+    if (!emit(key, gain, e)) return false;
+    if (!ready(key)) return true;
+    const h = harmony();
+    let sub = key + '~', sh = 0;
+    if (tri) { sub += h ? thirdOf(h) : 4; sh = h ? (((h.root + 6) % 12) + 12) % 12 - 6 : 0; }
+    else sh = h ? h.key : 0;
+    emit(sub, gain, { ...e, rate: (e.rate ?? 1) * Math.pow(2, sh / 12) });
+    return true;
+  }
+
+  // 음악 덕킹: 더 센 덕킹이 진행 중이면 약한 요청은 무시(덮어써서 일찍 풀리지 않게).
+  // 깊이는 효과음 볼륨을 따라간다(기본 0.8에서 그대로 — 효과음을 줄였는데 궁극기·보스 격파 때 음악만 크게 줄지 않게)
   let duckEnd = 0, duckAmt = 0;
-  const duck = (amt: number, dur: number) => {
-    const now = core.now();
+  const duck = (amt0: number, dur: number) => {
+    const now = core.now(), amt = amt0 * Math.min(1, core.sfx.gain.value / VOL0);
+    if (amt < 0.02) return;
     if (now < duckEnd - dur * 0.5 && amt <= duckAmt) return;
     core.duck(amt, dur); duckEnd = now + dur; duckAmt = amt;
   };
@@ -910,7 +992,7 @@ export function createSfx(core: AudioCore): SfxAPI {
     gemCombo = Math.min(gemCombo + 1, 40);
     const top = GEM_F.length - 1;
     const i = gemCombo <= top ? gemCombo - 1 : top - 1 + (gemCombo & 1);   // 5음계로 올라가다 꼭대기에서 반짝임 유지
-    emit('gem' + i, 0.16 * vol * density(C_GEM, now, 0.08) * (0.9 + Math.random() * 0.2), { rate: semis(0.08), pan: (Math.random() - 0.5) * 0.3, p: P_MID, c: C_GEM });
+    emit('gem' + i, 0.16 * vol * density(C_GEM, now, 0.08) * (0.9 + Math.random() * 0.2), { rate: semis(0.08) * keyRate(), pan: (Math.random() - 0.5) * 0.3, p: P_MID, c: C_GEM });   // 곡의 조의 5음계로
   }
 
   function explode(r: number, big: boolean, pan: number, vol: number) {
@@ -947,25 +1029,26 @@ export function createSfx(core: AudioCore): SfxAPI {
       case 'zap': hit(HK_ZAP, 0, false, pan, vol); break;
       case 'kill': kill(pan, vol); break;
       case 'gem': gem(vol); break;
-      case 'coin': if (throttle('coin', 0.05)) emit('coin', 0.2 * vol * density(C_COIN, core.now(), 0.35) * r1(), { rate: semis(0.4), pan: pan + (Math.random() - 0.5) * 0.3, p: P_MID, c: C_COIN }); break;
+      case 'coin': if (throttle('coin', 0.05)) emit('coin', 0.2 * vol * density(C_COIN, core.now(), 0.35) * r1(), { rate: semis(0.4) * keyRate(), pan: pan + (Math.random() - 0.5) * 0.3, p: P_MID, c: C_COIN }); break;
       case 'tick': emit('tick', 0.18 * vol, { rate: Math.pow(2, MAJOR[Math.abs(Math.round(arg)) % 8] / 12), pan, p: P_HIGH, c: C_UI }); break;
       case 'click': if (throttle('click', 0.03)) emit('click', 0.16 * vol * r1(), { rate: semis(0.5), pan, p: P_HIGH, c: C_UI }); break;
       case 'enemyShot': if (throttle('enemyShot', 0.14)) emit('enemyShot', 0.15 * vol * r1(), { rate: semis(1.5), pan, p: P_LOW, c: C_SHOOT }); break;
       case 'hurt': if (throttle('hurt', 0.12)) { emit('hurt', 0.5 * vol * r1(), { rate: semis(0.8), pan, p: P_TOP, c: C_BIG }); duck(0.18, 0.25); } break;
       case 'explode': explode(arg > 0 ? arg : 120, true, pan, vol); break;
-      case 'item': if (throttle('item', 0.06)) emit('item', 0.4 * vol * r1(), { rate: semis(0.3), pan, p: P_HIGH, c: C_UI }); break;
-      case 'heal': if (throttle('heal', 0.1)) emit('heal', 0.4 * vol, { pan, send: 1, p: P_HIGH, c: C_UI }); break;
+      case 'item': if (throttle('item', 0.06)) emit('item', 0.4 * vol * r1(), { rate: semis(0.3) * keyRate(), pan, p: P_HIGH, c: C_UI }); break;
+      case 'heal': if (throttle('heal', 0.1)) emitT('heal', 0.4 * vol, { pan, send: 1, p: P_HIGH, c: C_UI }, true); break;
       case 'magnet': if (throttle('magnet', 0.1)) emit('magnet', 0.4 * vol, { pan, send: 1, p: P_HIGH, c: C_UI }); break;
       case 'timestop': if (throttle('timestop', 0.1)) { emit('timestop', 0.42 * vol, { pan, send: 2, p: P_TOP, c: C_BIG }); duck(0.3, 0.8); } break;
-      case 'buy': emit('buy', 0.4 * vol, { rate: semis(0.2), pan, send: 0, p: P_TOP, c: C_UI }); break;
-      case 'toast': if (throttle('toast', 0.25)) emit('toast', 0.33 * vol, { pan, send: 0, p: P_HIGH, c: C_UI }); break;
-      case 'chime': emit('chime', 0.42 * vol, { pan, send: 1, p: P_TOP, c: C_BIG }); break;
-      case 'maxed': emit('maxed', 0.36 * vol, { pan, send: 1, dl: true, p: P_TOP, c: C_UI }); break;
-      case 'levelup': if (throttle('levelup', 0.15)) emit('levelup', 0.48 * vol, { pan, send: 1, dl: true, p: P_TOP, c: C_BIG }); break;
-      case 'lunch': if (throttle('lunch', 0.3)) emit('lunch', 0.6 * vol, { pan, send: 1, p: P_TOP, c: C_BIG }); break;
+      case 'buy': emit('buy', 0.4 * vol, { rate: semis(0.2) * keyRate(), pan, send: 0, p: P_TOP, c: C_UI }); break;
+      case 'toast': if (throttle('toast', 0.25)) emit('toast', 0.33 * vol, { rate: keyRate(), pan, send: 0, p: P_HIGH, c: C_UI }); break;
+      case 'chime': emit('chime', 0.42 * vol, { rate: keyRate(), pan, send: 1, p: P_TOP, c: C_BIG }); break;
+      case 'maxed': emitT('maxed', 0.36 * vol, { pan, send: 1, dl: true, p: P_TOP, c: C_UI }, true); break;
+      case 'levelup': if (throttle('levelup', 0.15)) emitT('levelup', 0.48 * vol, { pan, send: 1, dl: true, p: P_TOP, c: C_BIG }, true); break;
+      // 점심 종은 같은 조로 옮겨지는 점심 스팅어(약 3초)와 함께 난다 — 그 사이 다시 울리면 겹쳐 뭉개지므로 3초 스로틀
+      case 'lunch': if (throttle('lunch', 3)) emit('lunch', 0.6 * vol, { rate: keyRate(), pan, send: 1, p: P_TOP, c: C_BIG }); break;
       case 'elite': emit('elite', 0.5 * vol, { pan, send: 1, p: P_TOP, c: C_BIG }); duck(0.2, 0.5); break;
       case 'eliteKill': emit('eliteKill', 0.52 * vol, { rate: semis(0.5), pan, send: 1, p: P_TOP, c: C_BIG }); duck(0.25, 0.5); break;
-      case 'bossKill': emit('bossKill', 0.85 * vol, { pan, send: 2, p: P_TOP, c: C_BIG }); duck(0.55, 1.6); break;
+      case 'bossKill': emitT('bossKill', 0.85 * vol, { pan, send: 2, p: P_TOP, c: C_BIG }, true); duck(0.55, 1.6); break;
       case 'boss': if (throttle('boss', 0.5)) { emit('boss', 0.9 * vol, { pan, send: 2, p: P_TOP, c: C_BIG }); duck(0.25, 0.9); } break;
       case 'yageun': emit('yageun', 0.7 * vol, { pan, send: 2, p: P_TOP, c: C_BIG }); duck(0.3, 1.2); break;
       case 'ult': {
@@ -975,10 +1058,17 @@ export function createSfx(core: AudioCore): SfxAPI {
         duck(0.65, 1.5);
         break;
       }
-      case 'revive': lockBig = core.now() + 0.25; emit('revive', 0.75 * vol, { pan, send: 2, p: P_TOP, c: C_BIG }); duck(0.5, 1.4); break;
-      case 'evolve': emit('evolve', 0.75 * vol, { pan, send: 2, dl: true, p: P_TOP, c: C_BIG }); duck(0.2, 0.8); break;
-      case 'jackpot': if (throttle('jackpot', 0.3)) { emit('jackpot', 0.6 * vol, { pan, send: 1, dl: true, p: P_TOP, c: C_BIG }); duck(0.3, 1); } break;
-      case 'clear': emit('clear', 0.6 * vol, { pan, send: 1, p: P_TOP, c: C_BIG }); break;
+      case 'revive': lockBig = core.now() + 0.25; emitT('revive', 0.75 * vol, { pan, send: 2, p: P_TOP, c: C_BIG }, true); duck(0.5, 1.4); break;
+      case 'evolve': {
+        // 상자에서 진화가 연달아 드러나면(0.4~0.5초 간격) 두 번째부터는 작게, 덕킹도 다시 걸지 않는다(큰 충격이 겹쳐 두 배로 커지지 않게)
+        const now = core.now(), again = now - (last.get('evolve') ?? -99) < 1.5;
+        last.set('evolve', now);
+        emitT('evolve', (again ? 0.5 : 0.75) * vol, { pan, send: 2, dl: true, p: P_TOP, c: C_BIG }, false);
+        if (!again) duck(0.2, 0.8);
+        break;
+      }
+      case 'jackpot': if (throttle('jackpot', 0.3)) { emitT('jackpot', 0.6 * vol, { pan, send: 1, dl: true, p: P_TOP, c: C_BIG }, false); duck(0.3, 1); } break;
+      case 'clear': emitT('clear', 0.6 * vol, { pan, send: 1, p: P_TOP, c: C_BIG }, false); break;
       case 'death': emit('death', 0.8 * vol, { pan, send: 2, p: P_TOP, c: C_BIG }); break;
     }
   }
@@ -1010,7 +1100,7 @@ export function createSfx(core: AudioCore): SfxAPI {
         if (ev.kind === 'coffee' || ev.kind === 'chicken') play('heal', { vol: ev.kind === 'chicken' ? 1.15 : 1 });
         else if (ev.kind === 'magnet') play('magnet');
         else if (ev.kind === 'clock') play('timestop');
-        else if (ev.kind !== 'bomb') play('item');           // 폭탄은 폭발음이 대신한다
+        else if (ev.kind !== 'bomb' && ev.kind !== 'chest') play('item');   // 폭탄은 폭발음이 대신한다. 상자는 상자 창이 열릴 때 app.ts가 낸다(두 번 울리지 않게)
         break;
       case 'toast': if (ev.kind === 'warn' || ev.kind === 'boss') play('toast'); break;
       case 'bossSpawn': play('boss'); break;
@@ -1035,6 +1125,11 @@ const panOf = (x: number, px: number) => Math.max(-1, Math.min(1, (x - px) / 200
 const nearOf = (x: number, y: number, px: number, py: number) => Math.max(0.5, Math.min(1, 1.25 - Math.hypot(x - px, y - py) / 480));
 const jit = (a: number) => 1 - a + Math.random() * 2 * a;
 const MAJOR = [0, 2, 4, 5, 7, 9, 11, 12];
+/** 화음의 3음 성질(음정 층 변주): 4 장3 · 3 단3 · 5 sus4 · 2 sus2 — 셋 다 없으면 장3 */
+function thirdOf(h: Harmony): number {
+  for (const th of THIRDS) if ((h.mask >> ((h.root + th) % 12)) & 1) return th;
+  return 4;
+}
 
 // 타격 계열: 퍽(투사체·궤도·부메랑 등) · 둔탁(광역·궁극기 — 폭발음이 따로 울림) · 치익(커피 오라·레이저) · 지직(번개)
 const HK_IMPACT = 0, HK_SOFT = 1, HK_BURN = 2, HK_ZAP = 3;

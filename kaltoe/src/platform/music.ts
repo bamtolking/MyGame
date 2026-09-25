@@ -19,7 +19,12 @@ export interface MusicAPI {
   stinger(s: StingerId): void;
   /** [from, to) 초 구간의 음을 예약(오프라인 렌더용으로도 쓴다) */
   scheduleRange(from: number, to: number): void;
+  /** 지금 들리는 화음·곡의 조(음정이 있는 효과음을 곡에 맞추는 데 쓴다). 음악이 멈췄으면 null */
+  harmony(): Harmony | null;
 }
+
+/** 지금 들리는 화음: root 근음 피치클래스(C=0) · mask 구성음 12비트(비트 k = 피치클래스 k) · key 곡의 조옮김(-6..5반음, 스팅어와 같은 값) */
+export interface Harmony { root: number; mask: number; key: number }
 
 // ───────────── 음악 이론 도우미 ─────────────
 const PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -1453,7 +1458,7 @@ export function createMusic(core: AudioCore, live: boolean): MusicAPI {
   }
 
   // ───────────── 스팅어 ─────────────
-  let lvT = -10, lvN = 0, duckEnd = -1, duckAmt = 1;
+  let lvT = -10, lvN = 0, evT = -10, duckEnd = -1, duckAmt = 1;
   function duckBed(t: number, amt: number, dur: number) {
     if (t < duckEnd && amt > duckAmt) return;          // 더 깊은 덕킹이 진행 중이면 유지
     duckEnd = t + dur; duckAmt = amt;
@@ -1527,7 +1532,9 @@ export function createMusic(core: AudioCore, live: boolean): MusicAPI {
         break;
       }
       case 'evolve': {
-        // 라이저 → ♭VI – ♭VII – I (영웅 종지)
+        // 라이저 → ♭VI – ♭VII – I (영웅 종지). 상자 하나에서 진화가 여럿 나와도 팡파르는 한 번만(겹치면 두세 배로 커진다)
+        if (t - evT < 2.5) return;
+        evT = t;
         const k0 = 60 + tr;
         sweep(2, sDry, t, 1.1, 400, 7000, 0.14); hit(2, sDry, 'rev', t, 0.3, 1, t + 1.1);
         for (let i = 0; i < 16; i++) { const at = t + 1.1 * (1 - Math.pow(1 - i / 16, 1.3)); hit(2, sDry, 's.funk', at, 0.12 + 0.5 * (i / 16)); }
@@ -1603,5 +1610,9 @@ export function createMusic(core: AudioCore, live: boolean): MusicAPI {
     },
     stinger,
     scheduleRange,
+    harmony() {
+      const ch = chordNow();
+      return ch && cur ? { root: ch.r, mask: ch.mask, key: mod12(cur.def.maj + 6) - 6 } : null;
+    },
   };
 }
