@@ -391,7 +391,16 @@ export class Screens {
       toggle('📳 화면 흔들림', () => s.shake, v => (s.shake = v)),
       toggle('📳 진동', () => s.vibrate, v => (s.vibrate = v), '지원하는 기기에서만'),
       toggle('💯 피해 숫자 표시', () => s.dmgNums, v => (s.dmgNums = v)),
-      toggle('🐢 저사양 모드', () => s.low, v => (s.low = v), '그림자·해상도·파티클을 줄여 프레임 확보'),
+      (() => {
+        const opts: [Profile['settings']['quality'], string][] = [['auto', '자동'], ['high', '높음'], ['medium', '보통'], ['low', '낮음']];
+        const row = h('div', { class: 'seg' });
+        const render = () => {
+          clear(row);
+          for (const [v, label] of opts) row.appendChild(btn(label, () => { s.quality = v; s.low = v === 'low'; render(); this.host.applySettings(); this.host.save(); }, `btn small${s.quality === v ? ' on' : ' ghost'}`));
+        };
+        render();
+        return h('div', { class: 'set-row' }, h('div', null, '🎨 그래픽 품질', h('div', { class: 'small' }, '자동: 기기 성능에 맞춰 효과·해상도를 조절')), row);
+      })(),
       toggle('🕹 고정 조이스틱', () => s.joystick === 'fixed', v => (s.joystick = v ? 'fixed' : 'float'), '끄면 누른 자리에 조이스틱이 생깁니다'),
       inGame ? null : h('div', { class: 'col gap', style: 'margin-top:16px' },
         btn('📤 저장 데이터 내보내기', () => { promptBox(this.host.root, '저장 코드 (복사해서 보관)', exportProfile(p), true); }, 'btn ghost'),

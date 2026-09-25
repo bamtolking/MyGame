@@ -269,6 +269,8 @@ button { font-family: inherit; }
 .recipe .nm { font-size: 13px; font-weight: 800; margin-left: 6px; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 4px; border-bottom: 1px solid rgba(255,255,255,.07); font-weight: 800; }
 .set-row input[type=range] { width: 50%; accent-color: var(--yellow); }
+.seg { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.seg .btn.on { background: var(--yellow); box-shadow: 0 3px 0 var(--yellow2); }
 .toggle { width: 54px; height: 32px; border-radius: 99px; background: rgba(255,255,255,.15); position: relative; border: 0; cursor: pointer; flex: none; }
 .toggle::after { content: ''; position: absolute; left: 4px; top: 4px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: left .15s; }
 .toggle.on { background: var(--mint); }

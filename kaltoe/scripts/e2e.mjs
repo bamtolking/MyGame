@@ -8,7 +8,7 @@ mkdirSync('e2e-out', { recursive: true });
 const url = 'file://' + resolve('play/index.html');
 const report = [];
 const log = m => { console.log(m); report.push(m); };
-const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--use-gl=swiftshader', '--autoplay-policy=no-user-gesture-required'] });
+const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--use-gl=swiftshader', '--autoplay-policy=no-user-gesture-required', '--ignore-certificate-errors'] });
 let failures = 0;
 const check = (name, cond, extra = '') => { log(`${cond ? '  ✔' : '  ✘'} ${name}${extra ? ' — ' + extra : ''}`); if (!cond) failures++; };
 

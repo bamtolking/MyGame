@@ -6,6 +6,8 @@ export interface StageBest { bestTime: number; clears: number; bestHeat: number;
 
 export interface Settings {
   sfx: number; bgm: number; shake: boolean; vibrate: boolean; low: boolean; dmgNums: boolean; joystick: 'float' | 'fixed';
+  /** 그래픽 품질. auto = 프레임 시간을 보고 자동 조절 */
+  quality: 'auto' | 'high' | 'medium' | 'low';
 }
 
 export interface LastRun {
@@ -52,7 +54,7 @@ export function newProfile(): Profile {
     bests: {},
     heatCleared: {},
     discovered: { weapons: [], enemies: [], lunches: [] },
-    settings: { sfx: 0.8, bgm: 0.5, shake: true, vibrate: true, low: false, dmgNums: true, joystick: 'float' },
+    settings: { sfx: 0.8, bgm: 0.5, shake: true, vibrate: true, low: false, dmgNums: true, joystick: 'float', quality: 'auto' },
     sel: { char: 'kim', stage: 'office', heat: 0 },
     daily: { date: '', played: false, cleared: false, streak: 0, lastClear: '' },
     dailyPick: null,
@@ -115,6 +117,7 @@ export function normalize(raw: unknown): Profile | null {
   st.bgm = Math.min(1, Math.max(0, num(st.bgm, d.settings.bgm)));
   for (const k of ['shake', 'vibrate', 'low', 'dmgNums'] as const) if (typeof st[k] !== 'boolean') st[k] = d.settings[k];
   if (st.joystick !== 'fixed' && st.joystick !== 'float') st.joystick = 'float';
+  if (!['auto', 'high', 'medium', 'low'].includes(st.quality)) st.quality = st.low ? 'low' : 'auto';
   if (typeof p.sel.char !== 'string') p.sel.char = d.sel.char;
   if (typeof p.sel.stage !== 'string') p.sel.stage = d.sel.stage;
   p.sel.heat = Math.max(0, Math.floor(num(p.sel.heat, 0)));

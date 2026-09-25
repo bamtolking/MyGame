@@ -8,9 +8,12 @@ import { activateUlt } from '../sim/ultimate';
 import type { World } from '../sim/types';
 import { autoChoose, autoMove } from '../sim/autopilot';
 import { Renderer } from '../render/renderer';
-import { Fx } from '../render/fx';
+import { Fx, type Quality } from '../render/fx';
+import { clearSpriteCache } from '../render/sprites';
+import { loadFonts, onFontsReady } from './fonts';
 import { loadProfile, saveProfile, SAVE_KEY, type Profile } from '../platform/save';
-import { audio, vibrate } from '../platform/audio';
+import { audio, type TrackId } from '../platform/audio';
+import { juiceEvent, juiceDeath } from '../render/juice';
 import { buildRunConfig, checkAttendance, dailyInfo, dailyModifiersFor, evaluateAchievements, settleRun } from '../meta/progress';
 import { Input } from './input';
 import { Hud } from './hud';
@@ -19,6 +22,11 @@ import { Screens } from './screens';
 import { h, Toasts, setClickSound, confirmBox } from './dom';
 
 const pickStr = (arr: readonly string[], f: string) => (arr.length ? arr[Math.floor(Math.random() * arr.length)] : f);
+
+/** 자동 품질 사다리: 위에서부터 [효과 품질, 해상도(dpr) 상한]. 느려지면 한 칸씩 내려간다. */
+const QUALITY_LADDER: { q: Quality; dpr: number }[] = [
+  { q: 'high', dpr: 3 }, { q: 'high', dpr: 2 }, { q: 'medium', dpr: 2 }, { q: 'medium', dpr: 1.5 }, { q: 'low', dpr: 1.25 }, { q: 'low', dpr: 1 },
+];
 
 export class App {
   root: HTMLElement;
@@ -43,7 +51,9 @@ export class App {
   private slowSec = 0;
   private fastSec = 0;
   private fpsHist: number[] = [];
-  private upCeil = 2;
+  lastWork = 0;            // 최근 1초 평균 프레임 작업 시간(ms)
+  private qLevel = 0;      // QUALITY_LADDER 단계(0 = 최고)
+  private qCeil = 0;       // 자동 조절이 올라갈 수 있는 최고 단계
   private sinceUp = 99;
   private workAcc = 0;
   private frameN = 0;
@@ -92,7 +102,7 @@ export class App {
       settings: () => {
         const el = self.screens.settings(() => { el.remove(); }, true);
       },
-      overtime: () => { if (self.world) { continueOvertime(self.world); self.modals.close(); audio.play('boss'); } },
+      overtime: () => { if (self.world) { continueOvertime(self.world); self.modals.close(); audio.play('boss'); audio.setTrack('overtime'); audio.setIntensity(3); } },
       goHome: () => self.finishRun(),
     });
     this.screens = new Screens({
@@ -109,6 +119,8 @@ export class App {
       },
     });
     this.applySettings();
+    loadFonts();
+    onFontsReady(() => { clearSpriteCache(); this.fx.invalidateText(); });
 
     window.addEventListener('resize', () => this.onResize());
     window.addEventListener('orientationchange', () => setTimeout(() => this.onResize(), 200));
@@ -212,8 +224,18 @@ export class App {
     audio.setVolumes(s.sfx, s.bgm);
     this.fx.shakeOn = s.shake;
     this.fx.showNums = s.dmgNums;
-    if (this.renderer.low !== s.low) this.renderer.setLow(s.low);
+    const fixed = s.quality === 'high' ? 0 : s.quality === 'medium' ? 2 : s.quality === 'low' ? 4 : -1;
+    if (fixed >= 0) this.setQualityLevel(fixed);
+    else if (this.qLevel !== Math.max(this.qLevel, this.qCeil)) this.setQualityLevel(this.qCeil);
     this.input.fixed = s.joystick === 'fixed';
+  }
+
+  /** 품질 사다리 단계 적용(렌더 품질 + 해상도 상한) */
+  private setQualityLevel(i: number) {
+    const lv = QUALITY_LADDER[Math.max(0, Math.min(QUALITY_LADDER.length - 1, i))];
+    this.qLevel = Math.max(0, Math.min(QUALITY_LADDER.length - 1, i));
+    this.renderer.dprCap = lv.dpr;
+    this.renderer.setQuality(lv.q);
   }
 
   private onResize() {
@@ -252,7 +274,7 @@ export class App {
     this.renderer.camX = 0; this.renderer.camY = 0;
     this.fx.reset();
     this.overtimeMin = 0;
-    audio.unlock(); audio.startMusic(); audio.setIntensity(1);
+    audio.unlock(); audio.setTrack(this.stageTrack(w)); audio.setIntensity(1); audio.startMusic();
     this.toasts.show(`${w.cfg.stage.icon} ${w.cfg.stage.name} — 09:00 출근!`, 'info', 2200);
     if (o.daily) this.toasts.show(`📅 오늘의 업무: ${w.cfg.modifiers.filter(m => !m.id.startsWith('heat')).map(m => m.name).join(', ')}`, 'warn', 3500);
     if (!p.tutorialDone) {
@@ -278,7 +300,7 @@ export class App {
     this.tutorial?.remove(); this.tutorial = null;
     this.input.onFirstMove = null;
     this.input.release();
-    audio.setIntensity(0);
+    audio.setTrack('title'); audio.setIntensity(0);
     this.screens.results(w, st, () => { if (this.lastRunOpts) this.startRun(this.lastRunOpts); });
     if (st.grants.length) audio.play('jackpot');
     if (st.total > 0) setTimeout(() => this.hint('meta'), 1200);
@@ -324,10 +346,10 @@ export class App {
   private openPhaseModal() {
     const w = this.world!;
     switch (w.phase) {
-      case 'levelup': this.modals.levelUp(w); audio.play('levelup'); break;
+      case 'levelup': this.modals.levelUp(w); audio.play('levelup'); audio.stinger('levelup'); break;
       case 'chest': this.modals.chest(w); audio.play('item'); break;
-      case 'lunch': this.modals.lunch(w); audio.play('lunch'); break;
-      case 'victory': this.modals.victory(w); audio.play('clear'); this.confetti(); break;
+      case 'lunch': this.modals.lunch(w); audio.play('lunch'); audio.stinger('lunch'); break;
+      case 'victory': this.modals.victory(w); audio.play('clear'); audio.stinger('victory'); this.confetti(); break;
     }
   }
 
@@ -359,11 +381,12 @@ export class App {
   // ───────────── 이벤트 → 연출 ─────────────
 
   private handleEvents(w: World) {
-    const fx = this.fx;
     const set = this.profile.settings;
     for (const ev of w.events) {
+      juiceEvent(this.fx, ev, w, { vibrate: set.vibrate });   // 시각 연출(render/juice.ts)
+      audio.event(ev, w);                                      // 효과음(platform/sfx.ts)
+      // 아래는 UI(토스트·배너·힌트·콤보·음악 전환)
       switch (ev.t) {
-        case 'hit': fx.dmg(ev.x, ev.y, ev.dmg, ev.crit, ev.uid); audio.play('hit'); break;
         case 'kill': {
           this.combo++; this.comboT = 1.3;
           if (this.combo > this.comboBest) this.comboBest = this.combo;
@@ -373,62 +396,43 @@ export class App {
             audio.play('levelup');
           }
           this.hint('autoAttack');
-          const def = ENEMY.get(ev.id);
-          const col = def?.tint ?? '#ffffff';
-          if (ev.boss) {
-            fx.burst(ev.x, ev.y, '#ffd84d', 60, 420, 5, 2, 200); fx.burst(ev.x, ev.y, col, 40, 300, 4, 0);
-            fx.addShake(0.9); fx.addFlash(0.6); audio.play('ult'); vibrate(set.vibrate, [60, 40, 120]);
-            fx.text(ev.x, ev.y - 30, '격파!', '#ffd84d', 26, 1.6);
-          } else if (ev.elite) {
-            fx.burst(ev.x, ev.y, '#ffd84d', 26, 300, 4, 2, 200); fx.addShake(0.35); audio.play('explode');
-          } else {
-            fx.burst(ev.x, ev.y, col, 5, 140, 3, 2, 260);
-            audio.play('kill');
-          }
           break;
         }
-        case 'hurt': fx.addShake(0.22); fx.addFlash(0.22, '#ff2244'); audio.play('hurt'); vibrate(set.vibrate, 25); break;
-        case 'explode': fx.boom(ev.x, ev.y, ev.r, ev.color, ev.big); if (ev.big) { fx.addShake(0.3); audio.play('explode'); } break;
-        case 'gem': audio.play('gem'); break;
-        case 'coin': audio.play('coin'); break;
-        case 'item': {
-          audio.play('item');
-          const p = w.player;
-          const label: Record<string, string> = { coffee: '☕ 커피 수혈! +30', chicken: '🍗 치킨! 체력 완전 회복', magnet: '🧲 결재 도장 싹쓸이!', bomb: '💣 부서 대청소!', clock: '⏰ 시간 정지!', chest: '📦 택배 수령!' };
-          if (label[ev.kind]) fx.text(p.x, p.y - 30, label[ev.kind], '#fff', 13, 1.3);
-          if (ev.kind === 'bomb') { fx.addFlash(0.5, '#ffae00'); fx.addShake(0.5); }
+        case 'toast': this.toasts.show(ev.text, ev.kind ?? 'info'); break;
+        case 'bossSpawn': this.banner(`⚠ ${ev.name} 등장 ⚠`, 'boss', ENEMY.get(ev.id)?.intro ?? ''); audio.setTrack('boss'); audio.setIntensity(3); audio.stinger('bossIntro'); break;
+        case 'bossDead': {
+          this.toasts.show(`🎉 ${ev.name} 격파!`, 'good', 3000);
+          if (!w.bossAlive || w.bossAlive.dead) { audio.setTrack(w.overtime ? 'overtime' : this.stageTrack(w)); audio.setIntensity(w.t > 400 ? 2 : 1); }
           break;
         }
-        case 'levelup': fx.text(w.player.x, w.player.y - 34, 'LEVEL UP!', '#7dffb3', 16, 1); fx.burst(w.player.x, w.player.y, '#7dffb3', 18, 200, 3, 1); break;
-        case 'toast': this.toasts.show(ev.text, ev.kind ?? 'info'); if (ev.kind === 'warn' || ev.kind === 'boss') audio.play('toast'); break;
-        case 'bossSpawn': this.banner(`⚠ ${ev.name} 등장 ⚠`, 'boss', ENEMY.get(ev.id)?.intro ?? ''); audio.play('boss'); audio.setIntensity(3); vibrate(set.vibrate, [100, 60, 100]); break;
-        case 'bossDead': this.toasts.show(`🎉 ${ev.name} 격파!`, 'good', 3000); audio.setIntensity(w.t > 400 ? 2 : 1); break;
-        case 'elite': this.hint('elite'); audio.play('elite'); this.toasts.show(`⚠ 엘리트 ${ev.name} 출현 — 처치하면 택배 상자!`, 'warn'); break;
-        case 'ult': this.banner(ev.shout, 'ult'); fx.addFlash(0.7, '#ffffff'); fx.addShake(0.8); audio.play('ult'); vibrate(set.vibrate, [50, 30, 90]); break;
+        case 'elite': this.hint('elite'); this.toasts.show(`⚠ 엘리트 ${ev.name} 출현 — 처치하면 택배 상자!`, 'warn'); break;
+        case 'ult': this.banner(ev.shout, 'ult'); break;
         case 'evolve': {
           const to = WEAPON.get(ev.to);
           this.toasts.show(`⭐ 진화! ${WEAPON.get(ev.from)?.name} → ${to?.name}`, 'ach', 3500);
           this.banner(`⭐ 진화! ${to?.icon ?? ''} ${to?.name ?? ''}`, 'ult', to?.desc ?? '');
-          fx.addFlash(0.5, '#e4b8ff');
-          fx.burst(w.player.x, w.player.y, '#e4b8ff', 40, 300, 4, 1);
+          audio.stinger('evolve');
           break;
         }
         case 'hour': {
           const msg = HOUR_MESSAGES[ev.hour];
           if (msg) this.toasts.show(msg, 'info');
-          audio.play('chime');
-          if (ev.hour === 15) audio.setIntensity(2);
+          if (ev.hour === 15 && !(w.bossAlive && !w.bossAlive.dead)) audio.setIntensity(2);
           break;
         }
-        case 'revive': fx.addFlash(0.8); this.banner('보험 처리!', 'lv', '다시 일어났다'); break;
-        case 'chain': fx.bolt(ev.pts, ev.color); break;
-        case 'yageun': this.hint('yageun'); this.banner('야근 확정', 'yageun', pickStr(YAGEUN_CONFIRMED, '보스를 잡아야 퇴근할 수 있습니다')); audio.play('boss'); break;
-        case 'shoot': audio.play('shoot'); break;
+        case 'revive': this.banner('보험 처리!', 'lv', '다시 일어났다'); break;
+        case 'yageun': this.hint('yageun'); this.banner('야근 확정', 'yageun', pickStr(YAGEUN_CONFIRMED, '보스를 잡아야 퇴근할 수 있습니다')); break;
         case 'maxed': this.hint('evolveReady'); break;
         default: break;
       }
     }
     w.events.length = 0;
+  }
+
+  /** 근무지 → 배경음 곡 */
+  private stageTrack(w: World): TrackId {
+    const id = w.cfg.stage.id;
+    return id === 'office' || id === 'crunch' || id === 'dinner' || id === 'holiday' ? id : 'office';
   }
 
   // ───────────── 메인 루프 ─────────────
@@ -443,6 +447,7 @@ export class App {
     if (this.fpsAcc >= 1) {
       this.fps = this.fpsN / this.fpsAcc;
       const work = this.workAcc / Math.max(1, this.fpsN);   // 프레임당 실제 작업 시간(ms)
+      this.lastWork = work;
       this.fpsAcc = 0; this.fpsN = 0; this.workAcc = 0;
       // 동적 해상도: fps(GPU 병목)와 프레임당 JS 작업 시간(CPU 병목)을 함께 본다.
       // 저전력 모드처럼 30fps로 '고정'된 기기(최근 3초가 모두 29~31fps)는 느린 기기로 오판하지 않는다.
@@ -454,14 +459,14 @@ export class App {
         else if (work < 6 && this.fps > 56) { this.fastSec++; this.slowSec = 0; }
         else { this.slowSec = 0; this.fastSec = 0; }
         this.sinceUp++;
-        if (this.slowSec >= 2 && this.renderer.dprCap > 1) {
-          // 올린 직후 금방 느려졌다면 그 단계는 이번 세션에서 다시 올리지 않는다(왕복 방지)
-          if (this.sinceUp <= 8) this.upCeil = this.renderer.dprCap - 0.5;
-          this.renderer.dprCap = Math.max(1, this.renderer.dprCap - 0.5); this.renderer.resize(); this.slowSec = 0;
-        }
-        const nextCap = this.renderer.dprCap + 0.5;
-        if (this.fastSec >= 8 && nextCap <= this.upCeil && Math.min(nextCap, window.devicePixelRatio || 1) > this.renderer.dpr) {
-          this.renderer.dprCap = nextCap; this.renderer.resize(); this.fastSec = 0; this.sinceUp = 0;
+        if (this.profile.settings.quality === 'auto') {
+          // 품질 사다리: 효과를 먼저 줄이고, 해상도는 나중에 줄인다
+          if (this.slowSec >= 2 && this.qLevel < QUALITY_LADDER.length - 1) {
+            // 올린 직후 금방 느려졌다면 그 단계는 이번 세션에서 다시 올리지 않는다(왕복 방지)
+            if (this.sinceUp <= 8) this.qCeil = this.qLevel + 1;
+            this.setQualityLevel(this.qLevel + 1); this.slowSec = 0;
+          }
+          if (this.fastSec >= 8 && this.qLevel > this.qCeil) { this.setQualityLevel(this.qLevel - 1); this.fastSec = 0; this.sinceUp = 0; }
         }
       }
     }
@@ -501,7 +506,7 @@ export class App {
       if (!this.modals.kind && !this.paused) {
         if (w.phase === 'dead') {
           this.deathT += dt;
-          if (!this.deathShown) { this.deathShown = true; audio.play('death'); this.fx.addFlash(0.6, '#000000'); this.banner('퇴사 위기…', 'yageun'); }
+          if (!this.deathShown) { this.deathShown = true; audio.play('death'); audio.stinger('defeat'); juiceDeath(this.fx); this.banner('퇴사 위기…', 'yageun'); }
           if (this.deathT > 1.4) this.finishRun();
         } else if (w.phase !== 'play') {
           // 레벨업/상자 창은 아주 짧게 뜸을 들여 폭발·글자가 보이게 한다
@@ -545,7 +550,7 @@ export class App {
 
   debugState() {
     const w = this.world;
-    return w ? { phase: w.phase, t: w.t, level: w.player.level, hp: w.player.hp, kills: w.stats_.kills, enemies: w.enemies.length, fps: this.fps, weapons: w.weapons.map(x => `${x.def.id}:${x.level}`) } : null;
+    return w ? { phase: w.phase, t: w.t, level: w.player.level, hp: w.player.hp, kills: w.stats_.kills, enemies: w.enemies.length, fps: this.fps, work: this.lastWork, quality: this.renderer.quality, dpr: this.renderer.dpr, weapons: w.weapons.map(x => `${x.def.id}:${x.level}`) } : null;
   }
 }
 

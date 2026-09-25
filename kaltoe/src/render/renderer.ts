@@ -7,7 +7,7 @@ import {
   angry, bubble, coin, decor as decorSprite, drawSprite, drawSpriteRot, emoji, gem, gemTier, glow, person, setSpriteScale, shadow, spriteScale,
   whiteOf, worker, type Sprite,
 } from './sprites';
-import { Fx } from './fx';
+import { Fx, type View, type Quality } from './fx';
 
 export const VIEW_SHORT = 420;   // 화면 짧은 변에 보이는 월드 단위
 
@@ -38,7 +38,7 @@ export class Renderer {
   resize() {
     const r = this.canvas.getBoundingClientRect();
     this.W = Math.max(1, r.width); this.H = Math.max(1, r.height);
-    this.dpr = Math.min(this.low ? 1 : this.dprCap, window.devicePixelRatio || 1);
+    this.dpr = Math.min(this.dprCap, window.devicePixelRatio || 1);
     this.canvas.width = Math.round(this.W * this.dpr);
     this.canvas.height = Math.round(this.H * this.dpr);
     this.zoom = Math.min(this.W, this.H) / VIEW_SHORT;
@@ -50,6 +50,16 @@ export class Renderer {
   viewSize(): [number, number] { return [this.W / this.zoom, this.H / this.zoom]; }
 
   setLow(low: boolean) { this.low = low; this.fx.setLow(low); this.resize(); }
+
+  /** 그래픽 품질: 'auto'는 앱이 프레임 시간으로 high/medium/low를 오가며 정한다 */
+  quality: Quality = 'high';
+  setQuality(q: Quality) {
+    this.quality = q;
+    this.fx.quality = q;
+    this.low = q === 'low';
+    this.fx.setLow(this.low);
+    this.resize();
+  }
 
   private floorPattern(pal: StagePalette): CanvasPattern | null {
     const S = spriteScale();
@@ -92,7 +102,7 @@ export class Renderer {
     this.camY += (py - this.camY) * ck;
     if (Math.abs(px - this.camX) > 300 || Math.abs(py - this.camY) > 300) { this.camX = px; this.camY = py; }
     const [sx, sy] = fx.shakeOffset();
-    const S = this.zoom * this.dpr;
+    const S = this.zoom * this.dpr * fx.zoomPunch();
     const cx = this.camX + sx / this.zoom, cy = this.camY + sy / this.zoom;
     const [vw, vh] = this.viewSize();
     const x0 = cx - vw / 2, y0 = cy - vh / 2, x1 = cx + vw / 2, y1 = cy + vh / 2;
@@ -108,6 +118,7 @@ export class Renderer {
     const pat = this.floorPattern(pal);
     if (pat) { g.fillStyle = pat; g.fillRect(x0 - 2, y0 - 2, vw + 4, vh + 4); }
     this.drawDecor(w, x0, y0, x1, y1);
+    fx.drawGround(g, { x0, y0, x1, y1, S: this.bS, bx: this.bx, by: this.by, W: this.W, H: this.H, dpr: this.dpr, time: this.time, quality: this.quality });
 
     const vis = (x: number, y: number, m = 60) => x > x0 - m && x < x1 + m && y > y0 - m && y < y1 + m;
 
@@ -288,7 +299,10 @@ export class Renderer {
       g.beginPath(); g.arc(b.x, b.y, b.r * 0.55, 0, Math.PI * 2); g.fill();
     }
 
-    fx.drawWorld(g, this.bS, this.bx, this.by);
+    const view: View = { x0, y0, x1, y1, S: this.bS, bx: this.bx, by: this.by, W: this.W, H: this.H, dpr: this.dpr, time: this.time, quality: this.quality };
+    fx.drawWorld(g, view);
+    fx.drawGlow(g, view);   // (블룸 버퍼 도입 전 임시: 같은 캔버스에 그림)
+    fx.drawLights(g, view);
 
     // 말풍선(최상단)
     for (const e of w.enemies) {
@@ -311,7 +325,7 @@ export class Renderer {
       g.globalAlpha = 1;
     } else g.drawImage(this.vig!, 0, 0, this.W, this.H);
     if (p.clockT > 0) { g.fillStyle = 'rgba(120,200,255,.12)'; g.fillRect(0, 0, this.W, this.H); }
-    if (fx.flash > 0) { g.globalAlpha = fx.flash; g.fillStyle = fx.flashColor; g.fillRect(0, 0, this.W, this.H); g.globalAlpha = 1; }
+    fx.drawScreen(g, { x0, y0, x1, y1, S: this.bS, bx: this.bx, by: this.by, W: this.W, H: this.H, dpr: this.dpr, time: this.time, quality: this.quality });
     if (joy && joy.active) {
       g.globalAlpha = 0.28; g.fillStyle = '#fff';
       g.beginPath(); g.arc(joy.bx, joy.by, 52, 0, Math.PI * 2); g.fill();

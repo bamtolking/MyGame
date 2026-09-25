@@ -4,7 +4,12 @@ import type { Look } from '../content/types';
 export interface Sprite { c: HTMLCanvasElement; w: number; h: number; ax: number; ay: number } // w,h: 월드 단위, ax/ay: 앵커(월드 단위)
 
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color",sans-serif';
-export const UI_FONT = '"Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic","WenQuanYi Zen Hei",system-ui,sans-serif';
+import { BODY_FONT } from '../ui/fonts';
+export const UI_FONT = BODY_FONT;
+export { DISPLAY_FONT } from '../ui/fonts';
+
+/** 글꼴이 늦게 도착했을 때 글자가 들어간 캐시를 비운다 */
+export function clearSpriteCache() { cache.clear(); white.clear(); }
 
 let S = 2;                       // 월드 1u → 픽셀
 const cache = new Map<string, Sprite>();

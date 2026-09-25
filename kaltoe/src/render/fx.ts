@@ -1,5 +1,26 @@
 // 시각 효과: 파티클, 병합 피해 숫자, 폭발 고리, 번개, 화면 흔들림/번쩍임 (렌더 전용, 판정 무관)
+//
+// ── 렌더러와의 계약(레이어 훅) ──
+// 렌더러는 매 프레임 이 순서로 부른다:
+//   바닥 → fx.drawGround(g, v)  [월드 변환, 적 아래: 잉크 자국·그을음·바닥 충격파]
+//   적/플레이어/투사체 → fx.drawWorld(g, v)  [월드 변환, 적 위: 파티클·불꽃·번개·피해 숫자]
+//   블룸 버퍼(저해상도, 가산 합성) → fx.drawGlow(g, v)  [월드 변환: 빛나야 할 것만 밝게]
+//   조명 레이어 → fx.drawLights(g, v)  [월드 변환: 폭발 섬광 같은 동적 광원]
+//   화면 공간 → fx.drawScreen(g, v)  [CSS px 좌표: 번쩍임·집중선·레터박스 등]
+// 카메라: 렌더러가 fx.shakeOffset()(CSS px)과 fx.zoomPunch()(배율, 1 = 없음)를 적용한다.
 import { UI_FONT } from './sprites';
+
+export type Quality = 'high' | 'medium' | 'low';
+
+/** 레이어 훅에 넘기는 화면 정보. 월드 변환 = setTransform(S,0,0,S,bx,by). x0..y1은 보이는 월드 범위. */
+export interface View {
+  x0: number; y0: number; x1: number; y1: number;
+  S: number; bx: number; by: number;
+  W: number; H: number;   // CSS px 화면 크기
+  dpr: number;
+  time: number;
+  quality: Quality;
+}
 
 interface Particle {
   x: number; y: number; vx: number; vy: number; life: number; max: number;
@@ -24,6 +45,7 @@ export class Fx {
   maxParts = 700;
   showNums = true;
   shakeOn = true;
+  quality: Quality = 'high';
   private numByUid = new Map<number, DmgNum>();
   private seed = 1;
 
@@ -79,6 +101,9 @@ export class Fx {
     this.parts.length = 0; this.nums.length = 0; this.booms.length = 0; this.bolts.length = 0; this.texts.length = 0;
     this.numByUid.clear(); this.shake = 0; this.flash = 0;
   }
+
+  /** 글꼴이 바뀌면 글자 캐시(숫자 아틀라스 등)를 다시 만든다 */
+  invalidateText() { this.atlas = null; }
 
   setLow(low: boolean) { this.maxParts = low ? 220 : 700; }
 
@@ -146,6 +171,23 @@ export class Fx {
     this.texts = this.texts.filter(t => t.life > 0);
   }
 
+  /** 화면 확대 펀치(1 = 없음). 궁극기·보스 처치 등에서 잠깐 확대 */
+  zoomPunch(): number { return 1; }
+
+  /** 바닥 레이어(적 아래) */
+  drawGround(_g: CanvasRenderingContext2D, _v: View) { /* 기본판: 없음 */ }
+
+  /** 블룸 버퍼용: 빛나는 것만 밝은 색으로(가산 합성, 저해상도 버퍼에 그려짐) */
+  drawGlow(_g: CanvasRenderingContext2D, _v: View) { /* 기본판: 없음 */ }
+
+  /** 조명 레이어: 동적 광원 */
+  drawLights(_g: CanvasRenderingContext2D, _v: View) { /* 기본판: 없음 */ }
+
+  /** 화면 공간 오버레이(CSS px 좌표계, dpr 변환 적용 상태) */
+  drawScreen(g: CanvasRenderingContext2D, v: View) {
+    if (this.flash > 0) { g.globalAlpha = this.flash; g.fillStyle = this.flashColor; g.fillRect(0, 0, v.W, v.H); g.globalAlpha = 1; }
+  }
+
   shakeOffset(): [number, number] {
     if (this.shake <= 0) return [0, 0];
     const m = 14 * this.shake * this.shake;
@@ -153,7 +195,8 @@ export class Fx {
   }
 
   /** 월드 좌표계(카메라 변환 적용된 상태)에서 호출 */
-  drawWorld(g: CanvasRenderingContext2D, bS = 1, bx = 0, by = 0) {
+  drawWorld(g: CanvasRenderingContext2D, v: View) {
+    const bS = v.S, bx = v.bx, by = v.by;
     // 폭발 고리
     for (const b of this.booms) {
       const k = 1 - b.life / b.max;
