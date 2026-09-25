@@ -43,6 +43,8 @@ export class App {
   private slowSec = 0;
   private fastSec = 0;
   private fpsHist: number[] = [];
+  private upCeil = 2;
+  private sinceUp = 99;
   private workAcc = 0;
   private frameN = 0;
   private stepsThisFrame = 0;
@@ -118,7 +120,13 @@ export class App {
     window.addEventListener('storage', e => {
       if (e.key !== SAVE_KEY || this.world) return;
       const lp = loadProfile();
-      if (lp.status === 'ok') { this.profile = lp.profile; this.screens.syncSel(); if (this.screens.curName === 'title') this.screens.title(); }
+      if (lp.status !== 'ok') return;
+      this.profile = lp.profile;
+      // 옛 프로필을 붙잡고 있는 확인창·메뉴 화면은 닫고 타이틀로
+      this.ui.querySelectorAll('.confirm-wrap').forEach(n => n.remove());
+      this.applySettings();
+      this.screens.syncSel();
+      if (this.screens.cur) this.screens.title();
     });
     const unlock = () => { audio.unlock(); audio.startMusic(); };
     window.addEventListener('pointerdown', unlock, { once: false, passive: true });
@@ -147,6 +155,7 @@ export class App {
     if (!att) return;
     this.save();
     setTimeout(() => {
+      if (this.world) { audio.play('coin'); this.toasts.show(`📅 출석 체크 ${att.day}일차 — 출근 수당 ₩${att.coins} 지급`, 'good', 3200); return; }
       confirmBox(this.ui, `📅 출석 체크 ${att.day}일차`, `오늘도 출근해 주셨군요!\n출근 수당 ₩${att.coins} 지급 완료.\n(7일 주기, 7일차 보너스 두둑)`, '감사합니다', '닫기');
       audio.play('coin');
       if (this.screens.curName === 'title') this.screens.title();
@@ -442,10 +451,18 @@ export class App {
       if (this.world && this.world.phase === 'play' && !this.paused) {
         const slow = work > 13 || (this.fps < 45 && !capped30);
         if (slow) { this.slowSec++; this.fastSec = 0; }
-        else if (work < 6 && (this.fps > 56 || capped30)) { this.fastSec++; this.slowSec = 0; }
+        else if (work < 6 && this.fps > 56) { this.fastSec++; this.slowSec = 0; }
         else { this.slowSec = 0; this.fastSec = 0; }
-        if (this.slowSec >= 2 && this.renderer.dprCap > 1) { this.renderer.dprCap = Math.max(1, this.renderer.dprCap - 0.5); this.renderer.resize(); this.slowSec = 0; }
-        if (this.fastSec >= 8 && this.renderer.dprCap < 2) { this.renderer.dprCap = Math.min(2, this.renderer.dprCap + 0.5); this.renderer.resize(); this.fastSec = 0; }
+        this.sinceUp++;
+        if (this.slowSec >= 2 && this.renderer.dprCap > 1) {
+          // 올린 직후 금방 느려졌다면 그 단계는 이번 세션에서 다시 올리지 않는다(왕복 방지)
+          if (this.sinceUp <= 8) this.upCeil = this.renderer.dprCap - 0.5;
+          this.renderer.dprCap = Math.max(1, this.renderer.dprCap - 0.5); this.renderer.resize(); this.slowSec = 0;
+        }
+        const nextCap = this.renderer.dprCap + 0.5;
+        if (this.fastSec >= 8 && nextCap <= this.upCeil && Math.min(nextCap, window.devicePixelRatio || 1) > this.renderer.dpr) {
+          this.renderer.dprCap = nextCap; this.renderer.resize(); this.fastSec = 0; this.sinceUp = 0;
+        }
       }
     }
     const t0 = performance.now();
@@ -508,7 +525,7 @@ export class App {
         this.fx.update(dt);
         // 모달·일시정지 중에는 월드가 멈춰 있으니 3프레임에 한 번만 그린다
         this.frameN++;
-        if (live || this.frameN % 3 === 0 || this.phaseDelay >= 0) {
+        if (live || w.phase === 'dead' || this.phaseDelay >= 0 || this.fx.flash > 0 || this.frameN % 3 === 0) {
           this.renderer.live = live;
           this.renderer.render(w, dt, this.input.joy, this.stepsThisFrame);
         }

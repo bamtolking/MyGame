@@ -79,7 +79,8 @@ export class Modals {
     const list = h('div', { class: 'choices-grid' });
     w.choices.forEach((c, i) => {
       const inf = choiceInfo(w, c);
-      const card = h('button', { class: `choice${this.banishMode ? ' banish-mode' : ''}`, type: 'button', style: `animation-delay:${i * 60}ms` },
+      const canBan = c.kind === 'newWeapon' || c.kind === 'newPassive';
+      const card = h('button', { class: `choice${this.banishMode ? (canBan ? ' banish-mode' : ' ban-off') : ''}`, type: 'button', style: `animation-delay:${i * 60}ms` },
         h('div', { class: 'ic' }, inf.icon),
         h('div', { class: 'grow' },
           h('div', { class: 'nm' }, inf.name),
@@ -91,7 +92,10 @@ export class Modals {
       card.addEventListener('click', () => {
         if (performance.now() < lockUntil || performance.now() < toolLock) return;
         toolLock = performance.now() + 350;
-        if (this.banishMode) { this.banishMode = false; this.host.banish(i); return; }
+        if (this.banishMode) {
+          if (c.kind !== 'newWeapon' && c.kind !== 'newPassive') { toolLock = 0; return; }   // 새 항목만 제외할 수 있다
+          this.banishMode = false; this.host.banish(i); return;
+        }
         this.host.pick(i);
       });
       list.appendChild(card);
@@ -103,7 +107,7 @@ export class Modals {
     if (p.banishes > 0) tools.appendChild(btn(this.banishMode ? '취소' : `🚫 제외 ${p.banishes}`, guard(() => { this.banishMode = !this.banishMode; this.levelUp(w); }), 'btn small danger'));
     this.open('levelup',
       h('div', { class: 'modal-title' }, `🎉 레벨 ${p.level - w.levelQueue + 1}!`),
-      h('div', { class: 'modal-sub' }, this.banishMode ? '제외할 항목을 고르세요 (이번 판에서 다시 안 나옴)' : pickStr(LEVELUP_SHOUTS, '승진각!')),
+      h('div', { class: 'modal-sub' }, this.banishMode ? '제외할 새 항목을 고르세요 (이번 판에서 다시 안 나옴)' : pickStr(LEVELUP_SHOUTS, '승진각!')),
       list,
       tools.children.length ? tools : null,
     );

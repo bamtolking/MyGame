@@ -210,6 +210,7 @@ button { font-family: inherit; }
 .choice .tag.evo { background: var(--purple); }
 .choice .hint { font-size: 11px; color: #8a4fff; font-weight: 800; margin-top: 3px; }
 .choice.banish-mode { outline: 3px dashed var(--coral); }
+.choice.ban-off { opacity: .4; }
 .lvl-tools { display: flex; gap: 8px; margin-top: 4px; }
 .lvl-tools .btn { flex: 1; }
 .chest-stage { height: 150px; display: grid; place-items: center; position: relative; }

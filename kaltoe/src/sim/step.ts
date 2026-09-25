@@ -65,6 +65,8 @@ export function stepWorld(w: World) {
       }
       w.clearT = Math.max(0, w.clearT - DT);
       for (const k of w.pickups) if (!k.dead) k.pull = true;
+      // 정리 시간이 끝나도 아직 날아오는 상자는 바로 받은 것으로 처리(멀리 남은 상자로 퇴근이 늘어지지 않게)
+      if (w.clearT <= 0) for (const k of w.pickups) if (!k.dead && k.kind === 'chest') { k.dead = true; w.chestQueue.push({ boss: !!k.bossChest }); }
       // 상자·레벨업이 남아 있으면 그것부터 처리한 뒤 퇴근
       if (w.clearT <= 0 && w.chestQueue.length === 0 && w.levelQueue === 0 && !w.pickups.some(k => !k.dead && k.kind === 'chest')) {
         w.cleared = true;

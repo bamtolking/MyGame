@@ -8,7 +8,8 @@
 
 ## 바로 플레이
 
-- **가장 쉬운 방법:** `play/index.html` 파일 하나가 게임 전체입니다. 휴대폰이나 PC 브라우저(Chrome/Safari)로 열면 바로 실행됩니다.
+- **바로 플레이(비공개 링크, 소유자 계정):** https://claude.ai/artifact/88JQi3SmCshi8ZkSEqvTQn — 다른 사람에게 보여 주려면 페이지의 공유 메뉴에서 공유하세요.
+- **파일 하나로:** `play/index.html` 파일 하나가 게임 전체입니다. 휴대폰이나 PC 브라우저(Chrome/Safari)로 열면 바로 실행됩니다.
 - **개발 서버:** Node.js 22 설치 후
   ```bash
   cd kaltoe

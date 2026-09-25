@@ -280,7 +280,8 @@ export function updateEnemies(w: World) {
         e.stT -= DT;
         if (e.stT <= 0) { e.st = 2; e.stT = e.chargeDur; }
       } else if (e.st === 2 && abil) {
-        const k = spd / Math.max(1, e.speed);
+        // 느려지는 효과만 반영(격노·버프로 예고선보다 멀리 돌진하지 않게)
+        const k = (e.slowAmt > 0 ? 1 - Math.min(0.8, e.slowAmt) : 1) * (frozenAll ? 0.5 : 1) * (e.spawnT > 0 ? 0.3 : 1);
         mvx = e.dx * e.chargeSpeed * k; mvy = e.dy * e.chargeSpeed * k;
         e.stT -= DT;
         if (e.stT <= 0) e.st = 0;

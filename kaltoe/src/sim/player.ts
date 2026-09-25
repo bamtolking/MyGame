@@ -10,6 +10,7 @@ export function hurtPlayer(w: World, raw: number, source: string) {
   const p = w.player;
   if (w.phase !== 'play') return;
   if (p.invulnT > 0) return;
+  if (w.wrapUp) return;   // 18:00 퇴근 정리 중에는 피해 없음
   if (w.ultimate.kind === 'shield' && p.ultActiveT > 0) return;
   const dmg = Math.max(1, raw - w.d.armor);
   p.hp -= dmg;

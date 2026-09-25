@@ -28,16 +28,18 @@ export class Fx {
   private seed = 1;
 
   numScale = 2;
-  private atlas: { c: HTMLCanvasElement; x: Record<string, number>; w: number; h: number; scale: number } | null = null;
+  private atlas: { c: HTMLCanvasElement; x: Record<string, number>; w: number; cw: number; h: number; scale: number } | null = null;
   private static GLYPHS = '0123456789.k';
 
   /** 숫자 글리프 아틀라스(일반 흰색 / 치명타 노랑 두 줄) — 피해 숫자는 글자 조각을 이어 붙여 그린다 */
   private getAtlas() {
     if (this.atlas && this.atlas.scale === this.numScale) return this.atlas;
     const S = this.numScale, size = 15, cw = size * 0.72, h = size + 8;
+    // 셀 간격 = 글자 폭 + 외곽선 여유(획이 옆 칸으로 번지거나 잘리지 않게), 픽셀 경계에 맞춤
+    const pitch = Math.ceil((cw + 6) * S) / S;
     const G = Fx.GLYPHS;
     const c = document.createElement('canvas');
-    c.width = Math.ceil(cw * G.length * S); c.height = Math.ceil(h * 2 * S);
+    c.width = Math.ceil(pitch * G.length * S); c.height = Math.ceil(h * 2 * S);
     const g = c.getContext('2d')!;
     g.scale(S, S);
     g.font = `900 ${size}px ${UI_FONT}`;
@@ -47,25 +49,25 @@ export class Fx {
     for (let row = 0; row < 2; row++) {
       g.fillStyle = row ? '#ffd43b' : '#ffffff';
       for (let i = 0; i < G.length; i++) {
-        const cx = cw * i + cw / 2, cy = h * row + h / 2;
+        const cx = pitch * i + pitch / 2, cy = h * row + h / 2;
         g.strokeText(G[i], cx, cy);
         g.fillText(G[i], cx, cy);
-        x[G[i]] = cw * i;
+        x[G[i]] = pitch * i;
       }
     }
-    this.atlas = { c, x, w: cw, h, scale: S };
+    this.atlas = { c, x, w: pitch, cw, h, scale: S };
     return this.atlas;
   }
 
   private drawNumber(g: CanvasRenderingContext2D, txt: string, x: number, y: number, size: number, crit: boolean) {
     const a = this.getAtlas();
     const k = size / 15;
-    const adv = a.w * 0.78 * k;
+    const adv = a.cw * 0.78 * k;
     let cx = x - (adv * txt.length) / 2;
     const S = a.scale;
     for (const ch of txt) {
       const sx = a.x[ch];
-      if (sx !== undefined) g.drawImage(a.c, sx * S, (crit ? a.h : 0) * S, a.w * S, a.h * S, cx - (a.w * k - adv) / 2, y - (a.h * k) / 2, a.w * k, a.h * k);
+      if (sx !== undefined) g.drawImage(a.c, sx * S, (crit ? a.h : 0) * S, a.w * S, a.h * S, cx + adv / 2 - (a.w * k) / 2, y - (a.h * k) / 2, a.w * k, a.h * k);
       cx += adv;
     }
   }
