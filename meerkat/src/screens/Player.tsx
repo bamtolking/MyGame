@@ -3,7 +3,7 @@ import { Camera, CameraOff, ListChecks, Pause, Play, SkipBack, SkipForward, Volu
 import { CoachCam } from '../coach/CoachCam';
 import type { CoachState } from '../coach/tracker';
 import { Animal } from '../components/animals';
-import { Sheet, toast } from '../components/ui';
+import { ask, Sheet, toast } from '../components/ui';
 import { estimateSeconds, PHASE_LABEL, type Dose } from '../content/exercises';
 import { Figure } from '../figure/Figure';
 import { cycleLength } from '../figure/render';
@@ -207,10 +207,13 @@ export function Player() {
     }
   };
 
-  const exit = () => {
-    if (phase !== 'done' && doneItems.current.size === 0 && !confirm(tr('운동을 그만할까요?', 'Stop this workout?'))) return;
-    if (phase !== 'done' && doneItems.current.size > 0) {
-      if (!confirm(tr('여기까지 기록하고 그만할까요?', 'Save progress so far and stop?'))) return;
+  const exit = async () => {
+    if (phase !== 'done' && doneItems.current.size === 0) {
+      setPaused(true);
+      if (!(await ask(tr('운동을 그만할까요?', 'Stop this workout?'), { ok: tr('그만하기', 'Stop') }))) return setPaused(false);
+    } else if (phase !== 'done') {
+      setPaused(true);
+      if (!(await ask(tr('여기까지 기록하고 그만할까요?', 'Save progress so far and stop?'), { ok: tr('기록하고 그만하기', 'Save & stop') }))) return setPaused(false);
       finish(null, null);
       return;
     }

@@ -3,7 +3,7 @@ import { BarChart3, Dumbbell, Home as HomeIcon, ScanLine, UserRound } from 'luci
 import { tr } from './i18n';
 import { nav, navDir, replace, route } from './lib/router';
 import { profile } from './state/store';
-import { ToastHost } from './components/ui';
+import { ConfirmHost, ToastHost } from './components/ui';
 import { Home } from './screens/Home';
 import { Library } from './screens/Library';
 import { ExerciseDetail } from './screens/ExerciseDetail';
@@ -113,6 +113,7 @@ export function App() {
       <Screen />
       {showTabs && <TabBar path={path} />}
       <ToastHost />
+      <ConfirmHost />
     </div>
   );
 }

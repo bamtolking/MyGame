@@ -6,7 +6,7 @@ import { Meerkat } from '../components/animals';
 import { Notice, Steps, toast, TopBar } from '../components/ui';
 import { tr } from '../i18n';
 import { haptic } from '../lib/haptics';
-import { back, replace } from '../lib/router';
+import { back, nav, replace } from '../lib/router';
 import { sfx } from '../lib/sound';
 import { speak, stopSpeaking } from '../lib/voice';
 import { CameraError, fileToCanvas, snapshot, startCamera, stopCamera, type Facing } from '../pose/camera';
@@ -85,6 +85,9 @@ function Setup({ onCamera, onUpload }: { onCamera: () => void; onUpload: () => v
         </button>
         <button class="btn secondary block" onClick={onUpload}>
           <Images size={20} /> {tr('앨범에서 사진 불러오기', 'Choose photos')}
+        </button>
+        <button class="btn ghost block" onClick={() => nav('/scan/result/demo')}>
+          {tr('결과가 어떻게 나오는지 먼저 보기', 'Preview a sample report')}
         </button>
       </div>
     </div>
@@ -381,6 +384,7 @@ interface Slot {
 
 function Upload({ onDone }: { onDone: (s: { front?: Shot; side?: Shot }) => void }) {
   const [slots, setSlots] = useState<{ front?: Slot; side?: Slot }>({});
+  const [engineError, setEngineError] = useState(false);
   const pickRef = useRef<HTMLInputElement>(null);
   const target = useRef<'front' | 'side' | 'auto'>('auto');
 
@@ -391,7 +395,11 @@ function Upload({ onDone }: { onDone: (s: { front?: Shot; side?: Shot }) => void
       const url = canvas.toDataURL('image/jpeg', 0.7);
       const provisional: 'front' | 'side' = target.current === 'auto' ? (slots.front ? 'side' : 'front') : target.current;
       setSlots((s) => ({ ...s, [provisional]: { url, shot: null, state: 'busy' } }));
-      const frame = await detectOnCanvas(canvas).catch(() => null);
+      const frame = await detectOnCanvas(canvas).catch((e) => {
+        console.warn('[scan] pose engine unavailable', e);
+        setEngineError(true);
+        return null;
+      });
       const v = viewOf(frame);
       let slot: 'front' | 'side' = provisional;
       if (target.current === 'auto' && (v === 'front' || v === 'side')) slot = v;
@@ -455,9 +463,18 @@ function Upload({ onDone }: { onDone: (s: { front?: Shot; side?: Shot }) => void
           );
         })}
       </div>
-      <Notice kind="info" style={{ marginTop: 16 }}>
-        {tr('셀카(좌우 반전) 사진은 왼쪽·오른쪽이 바뀌어 보일 수 있어요. 가능하면 다른 사람이 찍어 준 사진을 써 주세요.', 'Mirrored selfies can swap left and right. Photos taken by someone else work best.')}
-      </Notice>
+      {engineError ? (
+        <Notice kind="warn" style={{ marginTop: 16 }}>
+          {tr('이 브라우저 환경에서는 AI 분석 엔진을 실행할 수 없어요. 앱으로 설치하거나 다른 브라우저(크롬·사파리)에서 열어 주세요.', 'The AI engine can’t run in this browser environment. Install the app or open it in Chrome or Safari.')}
+          <button class="btn sm primary" style={{ marginTop: 10 }} onClick={() => nav('/scan/result/demo')}>
+            {tr('예시 리포트 보기', 'See a sample report')}
+          </button>
+        </Notice>
+      ) : (
+        <Notice kind="info" style={{ marginTop: 16 }}>
+          {tr('셀카(좌우 반전) 사진은 왼쪽·오른쪽이 바뀌어 보일 수 있어요. 가능하면 다른 사람이 찍어 준 사진을 써 주세요.', 'Mirrored selfies can swap left and right. Photos taken by someone else work best.')}
+        </Notice>
+      )}
       <input ref={pickRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handle((e.target as HTMLInputElement).files)} />
       <div class="bottom-cta">
         <button class="btn primary block" disabled={!ready.length} onClick={() => onDone({ front: slots.front?.state === 'ok' ? slots.front.shot! : undefined, side: slots.side?.state === 'ok' ? slots.side.shot! : undefined })}>

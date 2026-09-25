@@ -25,6 +25,11 @@ export function ScanHub() {
         <button class="btn primary block" style={{ marginTop: 18 }} onClick={() => nav('/scan/capture')}>
           <ScanLine size={20} /> {list.length ? tr('다시 스캔하기', 'Scan again') : tr('스캔 시작', 'Start scan')}
         </button>
+        {!list.length && (
+          <button class="btn ghost block" style={{ marginTop: 6 }} onClick={() => nav('/scan/result/demo')}>
+            {tr('예시 리포트 먼저 보기', 'See a sample report first')}
+          </button>
+        )}
       </div>
 
       {list.length > 0 && (

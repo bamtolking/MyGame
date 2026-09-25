@@ -7,6 +7,9 @@ type Mode = 'IMAGE' | 'VIDEO';
 type Fileset = Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>;
 let filesetPromise: Promise<Fileset> | null = null;
 
+/** 모델 파일 확장자. 웹 미리보기(아티팩트) 빌드는 .task 를 서빙하지 않아 바꿔 올립니다 (scripts/artifact.mjs) */
+const MODEL_EXT: string = import.meta.env.VITE_MODEL_EXT || 'task';
+
 function assetUrl(path: string): string {
   return new URL(`${import.meta.env.BASE_URL}${path}`, document.baseURI).href;
 }
@@ -37,7 +40,7 @@ export function setPreferredDelegate(d: 'GPU' | 'CPU') {
 async function create(kind: ModelKind, mode: Mode, mask: boolean): Promise<Slot> {
   const fileset = await getFileset();
   const base = {
-    modelAssetPath: assetUrl(`models/pose_landmarker_${kind}.task`),
+    modelAssetPath: assetUrl(`models/pose_landmarker_${kind}.${MODEL_EXT}`),
   };
   const opts = {
     runningMode: mode,

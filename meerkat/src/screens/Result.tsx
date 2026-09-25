@@ -3,7 +3,8 @@ import { ChevronDown, ChevronUp, EyeOff, Eye, Play, Share2, Trash2, Info } from 
 import type { MetricResult } from '../analysis/analyze';
 import { NORMS, type MetricId } from '../analysis/norms';
 import { Animal } from '../components/animals';
-import { LevelBadge, LEVEL_COLORS, Notice, Ring, scoreColor, toast, TopBar } from '../components/ui';
+import { ask, LevelBadge, LEVEL_COLORS, Notice, Ring, scoreColor, toast, TopBar } from '../components/ui';
+import { DEMO_SCAN } from '../content/demo';
 import { ScanPhoto } from '../components/ScanPhoto';
 import { describeMetric, METRIC_INFO, metricValue } from '../content/metrics';
 import { ANIMALS, typeTitle, typeName } from '../content/types';
@@ -171,7 +172,8 @@ function MetricList({ metrics, ids }: { metrics: Partial<Record<MetricId, Metric
 }
 
 export function Result({ id }: { id: string }) {
-  const scan = scans.value.find((s) => s.id === id);
+  const isDemo = id === 'demo';
+  const scan = isDemo ? DEMO_SCAN : scans.value.find((s) => s.id === id);
   const [reveal, setReveal] = useState(route.value.query.reveal === '1');
   const [view, setView] = useState<'front' | 'side'>(scan?.side ? 'side' : 'front');
   const [hide, setHide] = useState(false);
@@ -185,7 +187,7 @@ export function Result({ id }: { id: string }) {
   }
   const r = scan.report;
   const a = ANIMALS[r.type.primary];
-  const prev = scans.value.filter((s) => s.at < scan.at).slice(-1)[0];
+  const prev = isDemo ? undefined : scans.value.filter((s) => s.at < scan.at).slice(-1)[0];
   const delta = prev ? r.score - prev.report.score : null;
   const tops = topIssues(r.issues, 3);
 
@@ -199,7 +201,7 @@ export function Result({ id }: { id: string }) {
     nav('/routine/today');
   };
   const remove = async () => {
-    if (!confirm(tr('이 스캔 기록과 사진을 삭제할까요?', 'Delete this scan and its photos?'))) return;
+    if (!(await ask(tr('이 스캔 기록과 사진을 삭제할까요?', 'Delete this scan and its photos?'), { ok: tr('삭제', 'Delete'), danger: true }))) return;
     await deletePhotos(scan.id);
     removeScan(scan.id);
     toast(tr('삭제했어요', 'Deleted'));
@@ -213,11 +215,21 @@ export function Result({ id }: { id: string }) {
         title={tr('체형 분석 리포트', 'Posture report')}
         fallback="/scan"
         right={
-          <button class="icon-btn" aria-label={tr('공유', 'Share')} onClick={() => nav(`/scan/share/${scan.id}`)}>
-            <Share2 size={22} />
-          </button>
+          isDemo ? undefined : (
+            <button class="icon-btn" aria-label={tr('공유', 'Share')} onClick={() => nav(`/scan/share/${scan.id}`)}>
+              <Share2 size={22} />
+            </button>
+          )
         }
       />
+      {isDemo && (
+        <Notice kind="info" style={{ marginBottom: 12 }}>
+          <div>{tr('예시 리포트예요. 실제 결과는 내 사진으로 스캔하면 볼 수 있어요.', 'This is a sample report. Scan yourself to see your own results.')}</div>
+          <button class="btn sm primary" style={{ marginTop: 10 }} onClick={() => nav('/scan/capture')}>
+            {tr('내 자세 스캔하기', 'Scan my posture')}
+          </button>
+        </Notice>
+      )}
       <div class="card" style={{ background: a.soft, boxShadow: 'none', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div class="caption" style={{ color: '#6b5a48' }}>
           {new Date(scan.at).toLocaleString(tr('ko-KR', 'en-US'), { dateStyle: 'medium', timeStyle: 'short' })}
@@ -263,9 +275,11 @@ export function Result({ id }: { id: string }) {
             {delta >= 0 ? tr(`지난 스캔보다 ${delta}점 올랐어요 📈`, `Up ${delta} pts since last scan 📈`) : tr(`지난 스캔보다 ${-delta}점 내려갔어요`, `Down ${-delta} pts since last scan`)}
           </div>
         )}
-        <button class="btn primary block" style={{ marginTop: 18 }} onClick={() => nav(`/scan/share/${scan.id}`)}>
-          <Share2 size={18} /> {tr('결과 카드 공유하기', 'Share my result card')}
-        </button>
+        {!isDemo && (
+          <button class="btn primary block" style={{ marginTop: 18 }} onClick={() => nav(`/scan/share/${scan.id}`)}>
+            <Share2 size={18} /> {tr('결과 카드 공유하기', 'Share my result card')}
+          </button>
+        )}
       </div>
 
       <div class="section-title">
@@ -284,7 +298,7 @@ export function Result({ id }: { id: string }) {
           </button>
         </div>
       )}
-      <ScanPhoto scan={scan} view={view} hidePhoto={hide} />
+      <ScanPhoto scan={scan} view={view} hidePhoto={hide || isDemo} />
       <div style={{ marginTop: 12 }}>
         {view === 'side' ? (
           <MetricList metrics={r.metrics} ids={['headForward', 'shoulderForward', 'kyphosis', 'lordosis', 'pelvisForward', 'kneeExtension']} />
@@ -397,9 +411,11 @@ export function Result({ id }: { id: string }) {
           'These are AI estimates from photos, not a medical diagnosis. Angle, clothing and lighting affect results, so compare scans taken under the same conditions. See a professional if pain persists.',
         )}
       </Notice>
-      <button class="btn ghost block" style={{ marginTop: 12, color: 'var(--severe)' }} onClick={remove}>
-        <Trash2 size={18} /> {tr('이 스캔 삭제', 'Delete this scan')}
-      </button>
+      {!isDemo && (
+        <button class="btn ghost block" style={{ marginTop: 12, color: 'var(--severe)' }} onClick={remove}>
+          <Trash2 size={18} /> {tr('이 스캔 삭제', 'Delete this scan')}
+        </button>
+      )}
     </div>
   );
 }

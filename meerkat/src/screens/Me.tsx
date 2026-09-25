@@ -1,7 +1,7 @@
 import { useRef, useState } from 'preact/hooks';
 import { ChevronRight, Download, Info, Shield, Trash2, Upload } from 'lucide-preact';
 import { Meerkat } from '../components/animals';
-import { Chip, Seg, Sheet, Toggle, toast, TopBar } from '../components/ui';
+import { ask, Chip, Seg, Sheet, Toggle, toast, TopBar } from '../components/ui';
 import { EQUIPMENT_LABEL } from '../content/exercises';
 import { L, lang, setLang, tr } from '../i18n';
 import { idb } from '../lib/idb';
@@ -63,7 +63,7 @@ export function Me() {
     try {
       const json = JSON.parse(await f.text());
       if (json.app !== 'meerkat' || !json.data) throw new Error('bad file');
-      if (!confirm(tr('현재 기록을 백업 파일로 바꿀까요?', 'Replace current data with this backup?'))) return;
+      if (!(await ask(tr('현재 기록을 백업 파일로 바꿀까요?', 'Replace current data with this backup?'), { ok: tr('불러오기', 'Restore') }))) return;
       for (const [k, v] of Object.entries(json.data)) if (k.startsWith('mk.')) localStorage.setItem(k, JSON.stringify(v));
       location.reload();
     } catch {
@@ -71,7 +71,7 @@ export function Me() {
     }
   };
   const wipe = async () => {
-    if (!confirm(tr('모든 기록(스캔·사진·운동)을 삭제할까요? 되돌릴 수 없어요.', 'Delete all data (scans, photos, workouts)? This can’t be undone.'))) return;
+    if (!(await ask(tr('모든 기록(스캔·사진·운동)을 삭제할까요? 되돌릴 수 없어요.', 'Delete all data (scans, photos, workouts)? This can’t be undone.'), { ok: tr('모두 삭제', 'Delete all'), danger: true }))) return;
     for (const k of allKeys()) localStorage.removeItem(k);
     await idb.clear().catch(() => undefined);
     location.hash = '#/';

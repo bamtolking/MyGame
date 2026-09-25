@@ -68,6 +68,51 @@ export function ToastHost() {
   ) : null;
 }
 
+// ── 확인 대화상자 (window.confirm 대신) ─────────────
+
+interface ConfirmReq {
+  message: string;
+  ok: string;
+  danger: boolean;
+  resolve: (v: boolean) => void;
+}
+const confirmReq = signal<ConfirmReq | null>(null);
+
+/** 앱 안에서 뜨는 확인 창. 네이티브·임베드 환경에서도 동작 */
+export function ask(message: string, opts: { ok?: string; danger?: boolean } = {}): Promise<boolean> {
+  return new Promise((resolve) => {
+    confirmReq.value?.resolve(false);
+    confirmReq.value = { message, ok: opts.ok ?? tr('확인', 'OK'), danger: !!opts.danger, resolve };
+  });
+}
+
+export function ConfirmHost() {
+  const r = confirmReq.value;
+  const close = (v: boolean) => {
+    r?.resolve(v);
+    confirmReq.value = null;
+  };
+  return (
+    <Sheet open={!!r} onClose={() => close(false)} label={tr('확인', 'Confirm')}>
+      {r && (
+        <>
+          <p class="h3" style={{ margin: '4px 2px 18px', lineHeight: 1.5 }}>
+            {r.message}
+          </p>
+          <div class="row" style={{ gap: 10 }}>
+            <button class="btn secondary grow" onClick={() => close(false)}>
+              {tr('취소', 'Cancel')}
+            </button>
+            <button class="btn primary grow" style={r.danger ? { background: 'var(--severe)' } : undefined} onClick={() => close(true)}>
+              {r.ok}
+            </button>
+          </div>
+        </>
+      )}
+    </Sheet>
+  );
+}
+
 // ── 입력 컨트롤 ─────────────────────────────
 
 export function Toggle(props: { on: boolean; onChange: (v: boolean) => void; label?: string }) {

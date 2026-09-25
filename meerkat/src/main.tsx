@@ -36,7 +36,7 @@ render(<App />, document.getElementById('app')!);
 initNative();
 
 // 오프라인 지원 (웹 배포용, 네이티브 앱에서는 불필요)
-if (import.meta.env.PROD && !isNative() && 'serviceWorker' in navigator && location.protocol === 'https:') {
+if (import.meta.env.PROD && !import.meta.env.VITE_NO_SW && !isNative() && 'serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('[sw]', e));
   });
