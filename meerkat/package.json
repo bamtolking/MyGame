@@ -13,7 +13,8 @@
     "icons": "node scripts/make-icons.mjs && capacitor-assets generate --android --ios --iconBackgroundColor \"#ff6b2c\" --iconBackgroundColorDark \"#ff6b2c\" --splashBackgroundColor \"#ff6b2c\" --splashBackgroundColorDark \"#0e0f12\"",
     "cap:sync": "npm run build && cap sync",
     "android": "npm run cap:sync && cap open android",
-    "ios": "npm run cap:sync && cap open ios"
+    "ios": "npm run cap:sync && cap open ios",
+    "preview:web": "node scripts/artifact.mjs"
   },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^8.0.2",

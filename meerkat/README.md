@@ -72,6 +72,7 @@ npm run e2e        # 빌드본을 헤드리스 크롬(휴대폰 크기)으로 �
 npm run icons      # 앱 아이콘·스플래시 다시 생성
 npm run android    # 빌드 → 안드로이드 스튜디오 열기
 npm run ios        # 빌드 → Xcode 열기
+npm run preview:web  # 웹 미리보기용 번들 → dist-artifact/ (서비스 워커 없음, 사진 불러오기·예시 리포트용)
 ```
 
 ## 기술
