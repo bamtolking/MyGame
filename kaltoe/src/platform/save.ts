@@ -33,6 +33,7 @@ export interface Profile {
   daily: { date: string; played: boolean; cleared: boolean; streak: number; lastClear: string };
   attendance: { last: string; day: number; total: number };
   tutorialDone: boolean;
+  hints: string[];                     // 한 번 본 온보딩 힌트
   last: LastRun | null;
 }
 
@@ -55,6 +56,7 @@ export function newProfile(): Profile {
     daily: { date: '', played: false, cleared: false, streak: 0, lastClear: '' },
     attendance: { last: '', day: 0, total: 0 },
     tutorialDone: false,
+    hints: [],
     last: null,
   };
 }
@@ -88,6 +90,7 @@ export function normalize(raw: unknown): Profile | null {
     daily: obj(r.daily, d.daily),
     attendance: obj(r.attendance, d.attendance),
     tutorialDone: !!r.tutorialDone,
+    hints: arr(r.hints),
     last: r.last && typeof r.last === 'object' ? (r.last as LastRun) : null,
   };
   for (const k of Object.keys(p.lifetime) as (keyof Profile['lifetime'])[]) p.lifetime[k] = num(p.lifetime[k], 0);

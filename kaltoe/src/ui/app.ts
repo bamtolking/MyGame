@@ -1,6 +1,6 @@
 // 앱: 화면 전환, 메인 루프(고정 스텝), 시뮬레이션 이벤트 → 효과/사운드/토스트, 판 시작/종료
 import { BALANCE, ENEMY, WEAPON, WEAPONS } from '../content';
-import { HOUR_MESSAGES, OVERTIME_MESSAGES, YAGEUN_CONFIRMED } from '../content/strings';
+import { HOUR_MESSAGES, OVERTIME_MESSAGES, YAGEUN_CONFIRMED, ONBOARDING_HINTS } from '../content/strings';
 import { createWorld } from '../sim/state';
 import { stepWorld, continueOvertime, endRun, DT } from '../sim/step';
 import { applyChoice, applyLunch, banish, closeChest, reroll, skipLevel } from '../sim/levelup';
@@ -41,6 +41,11 @@ export class App {
   private hudT = 0;
   fps = 60;
   private slowSec = 0;
+  private combo = 0;
+  private comboT = 0;
+  private comboBest = 0;
+  private phaseDelay = -1;
+  private ultHinted = false;
   private fpsAcc = 0; private fpsN = 0;
   private lastRunOpts: { char: string; stage: string; heat: number; daily: boolean } | null = null;
   private deathT = 0;
@@ -209,6 +214,7 @@ export class App {
     this.acc = 0;
     this.deathT = 0;
     this.deathShown = false;
+    this.combo = 0; this.comboT = 0; this.comboBest = 0; this.phaseDelay = -1; this.ultHinted = false;
     this.renderer.camX = 0; this.renderer.camY = 0;
     this.fx.parts.length = 0; this.fx.nums.length = 0;
     audio.unlock(); audio.startMusic(); audio.setIntensity(1);
@@ -221,6 +227,8 @@ export class App {
         this.tutorial?.remove(); this.tutorial = null;
         p.tutorialDone = true; this.save();
       };
+    } else {
+      this.hint('move');
     }
   }
 
@@ -235,7 +243,8 @@ export class App {
     this.tutorial?.remove(); this.tutorial = null;
     audio.setIntensity(0);
     this.screens.results(w, st, () => { if (this.lastRunOpts) this.startRun(this.lastRunOpts); });
-    for (const g of st.grants) audio.play('jackpot');
+    if (st.grants.length) audio.play('jackpot');
+    if (st.total > 0) setTimeout(() => this.hint('meta'), 1200);
     this.idleWorld = this.makeIdleWorld();
     this.world = null;
   }
@@ -291,6 +300,15 @@ export class App {
     setTimeout(() => c.remove(), 4500);
   }
 
+  /** 온보딩 힌트: 프로필당 한 번만 */
+  private hint(key: string) {
+    const p = this.profile;
+    const text = ONBOARDING_HINTS[key];
+    if (!text || p.hints.includes(key)) return;
+    p.hints.push(key);
+    this.toasts.show(`💡 ${text}`, 'good', 3200);
+  }
+
   private banner(text: string, cls: string, sub = '') {
     const b = h('div', { class: `banner ${cls}` }, text, sub ? h('small', null, sub) : null);
     this.ui.appendChild(b);
@@ -306,6 +324,14 @@ export class App {
       switch (ev.t) {
         case 'hit': fx.dmg(ev.x, ev.y, ev.dmg, ev.crit, ev.uid); audio.play('hit'); break;
         case 'kill': {
+          this.combo++; this.comboT = 1.3;
+          if (this.combo > this.comboBest) this.comboBest = this.combo;
+          if (this.combo === 100 || this.combo === 300 || this.combo === 700 || this.combo === 1500) {
+            const shout = this.combo >= 1500 ? '전설의 일잘러!' : this.combo >= 700 ? '야근 각성!' : this.combo >= 300 ? '업무 폭주!' : '일 좀 하는데?';
+            this.banner(`🔥 ${this.combo} 연속 처리`, 'lv', shout);
+            audio.play('levelup');
+          }
+          this.hint('autoAttack');
           const def = ENEMY.get(ev.id);
           const col = def?.tint ?? '#ffffff';
           if (ev.boss) {
@@ -336,11 +362,13 @@ export class App {
         case 'toast': this.toasts.show(ev.text, ev.kind ?? 'info'); if (ev.kind === 'warn' || ev.kind === 'boss') audio.play('toast'); break;
         case 'bossSpawn': this.banner(`⚠ ${ev.name} 등장 ⚠`, 'boss', ENEMY.get(ev.id)?.intro ?? ''); audio.play('boss'); audio.setIntensity(3); vibrate(set.vibrate, [100, 60, 100]); break;
         case 'bossDead': this.toasts.show(`🎉 ${ev.name} 격파!`, 'good', 3000); audio.setIntensity(w.t > 400 ? 2 : 1); break;
-        case 'elite': audio.play('elite'); this.toasts.show(`⚠ 엘리트 ${ev.name} 출현 — 처치하면 택배 상자!`, 'warn'); break;
+        case 'elite': this.hint('elite'); audio.play('elite'); this.toasts.show(`⚠ 엘리트 ${ev.name} 출현 — 처치하면 택배 상자!`, 'warn'); break;
         case 'ult': this.banner(ev.shout, 'ult'); fx.addFlash(0.7, '#ffffff'); fx.addShake(0.8); audio.play('ult'); vibrate(set.vibrate, [50, 30, 90]); break;
         case 'evolve': {
           const to = WEAPON.get(ev.to);
           this.toasts.show(`⭐ 진화! ${WEAPON.get(ev.from)?.name} → ${to?.name}`, 'ach', 3500);
+          this.banner(`⭐ 진화! ${to?.icon ?? ''} ${to?.name ?? ''}`, 'ult', to?.desc ?? '');
+          fx.addFlash(0.5, '#e4b8ff');
           fx.burst(w.player.x, w.player.y, '#e4b8ff', 40, 300, 4, 1);
           break;
         }
@@ -353,7 +381,7 @@ export class App {
         }
         case 'revive': fx.addFlash(0.8); this.banner('보험 처리!', 'lv', '다시 일어났다'); break;
         case 'chain': fx.bolt(ev.pts, ev.color); break;
-        case 'yageun': this.banner('야근 확정', 'yageun', pickStr(YAGEUN_CONFIRMED, '보스를 잡아야 퇴근할 수 있습니다')); audio.play('boss'); break;
+        case 'yageun': this.hint('yageun'); this.banner('야근 확정', 'yageun', pickStr(YAGEUN_CONFIRMED, '보스를 잡아야 퇴근할 수 있습니다')); audio.play('boss'); break;
         case 'shoot': audio.play('shoot'); break;
         default: break;
       }
@@ -415,8 +443,23 @@ export class App {
           this.deathT += dt;
           if (!this.deathShown) { this.deathShown = true; audio.play('death'); this.fx.addFlash(0.6, '#000000'); this.banner('퇴사 위기…', 'yageun'); }
           if (this.deathT > 1.4) this.finishRun();
-        } else if (w.phase !== 'play') this.openPhaseModal();
+        } else if (w.phase !== 'play') {
+          // 레벨업/상자 창은 아주 짧게 뜸을 들여 폭발·글자가 보이게 한다
+          if (this.phaseDelay < 0) this.phaseDelay = w.phase === 'levelup' ? 0.18 : w.phase === 'chest' ? 0.3 : 0.05;
+          this.phaseDelay -= dt;
+          if (this.phaseDelay <= 0) {
+            this.phaseDelay = -1;
+            if (w.phase === 'levelup') this.hint('levelup');
+            if (w.phase === 'lunch') this.hint('lunch');
+            this.openPhaseModal();
+          }
+        }
       }
+      // 콤보 감쇠
+      if (this.comboT > 0 && !this.paused && w.phase === 'play') { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
+      if (this.hud) this.hud.setCombo(this.combo);
+      // 궁극기 첫 충전 힌트
+      if (!this.ultHinted && w.player.ult >= w.player.ultMax) { this.ultHinted = true; this.hint('ult'); }
       if (this.world) {
         this.fx.update(dt);
         this.renderer.render(w, dt, this.input.joy);

@@ -31,7 +31,7 @@ export function activateUlt(w: World): boolean {
       for (const e of w.enemies) {
         if (e.dead) continue;
         const d2 = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
-        if (d2 < (r + e.r) ** 2) damageEnemy(w, e, dmg, SLOT_ULT, { knock: 80, kx: e.x - p.x, ky: e.y - p.y, noCrit: true });
+        if (d2 < (r + e.r) ** 2) damageEnemy(w, e, dmg, SLOT_ULT, { knock: P.knockback ?? 80, kx: e.x - p.x, ky: e.y - p.y, noCrit: true });
       }
       w.events.push({ t: 'explode', x: p.x, y: p.y, r, color: '#ffffff', big: true });
       w.hitStop = Math.max(w.hitStop, 0.12);

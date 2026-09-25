@@ -284,7 +284,8 @@ export interface World {
   lastHour: number;
   lunchOffered: boolean;
   gemCount: number;
-  refillAcc: number;               // 최소 생존 보충 누적                // 바닥의 경험치 보석 수(병합 판단)
+  refillAcc: number;
+  lsBudget: number;                // 흡혈 회복 예산(초당 충전)               // 최소 생존 보충 누적                // 바닥의 경험치 보석 수(병합 판단)
   damageMulT: number; damageMulAmt: number;  // 궁극기 vacuum 버프
   fireMulT: number; fireMul: number;         // 궁극기 clone 버프
 }

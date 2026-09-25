@@ -14,6 +14,7 @@ import type { World } from '../sim/types';
 import { h, btn, clear, confirmBox, promptBox, statLabel, fmtTime } from './dom';
 import { worker } from '../render/sprites';
 import { audio } from '../platform/audio';
+import { shareCard } from './sharecard';
 
 export interface ScreenHost {
   root: HTMLElement;
@@ -428,11 +429,9 @@ export class Screens {
     };
     const share = btn('📣 자랑하기', async () => {
       const text = shareText();
-      try {
-        const nav = navigator as Navigator & { share?: (d: { text: string; title?: string }) => Promise<void> };
-        if (nav.share) { await nav.share({ title: '칼퇴 서바이버', text }); return; }
-      } catch { /* 취소 */ }
-      await promptBox(this.host.root, '복사해서 자랑하세요', text, true);
+      const r = await shareCard(w, st.total, text);
+      if (r === 'downloaded') { await promptBox(this.host.root, '결과 이미지를 저장했어요! 문구도 복사해 가세요', text, true); return; }
+      if (r === 'failed') await promptBox(this.host.root, '복사해서 자랑하세요', text, true);
     }, 'btn ghost');
     const killed = rs.killedBy;
     this.mount(h('div', { class: 'screen' },

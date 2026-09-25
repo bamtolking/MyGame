@@ -53,7 +53,9 @@ export function damageEnemy(w: World, e: Enemy, raw: number, slot: number, o: Hi
     }
     if (fx.freezeChance && !e.boss && rand(w.rng) < fx.freezeChance) e.freezeT = Math.max(e.freezeT, e.elite ? 0.5 : 1.2);
     if (fx.lifesteal && fx.lifesteal > 0 && !w.flags.has('noHeal')) {
-      w.player.hp = Math.min(w.d.maxHp, w.player.hp + dealt * fx.lifesteal);
+      // 다단히트 무기의 흡혈 폭주 방지: 초당 최대 체력의 4%까지
+      const heal = Math.min(dealt * fx.lifesteal, w.lsBudget);
+      if (heal > 0) { w.lsBudget -= heal; w.player.hp = Math.min(w.d.maxHp, w.player.hp + heal); }
     }
     if (fx.execute && !e.boss && !e.elite && e.hp > 0 && e.hp / e.maxHp <= fx.execute) e.hp = 0;
   }

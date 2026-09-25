@@ -23,6 +23,7 @@ export class Hud {
   private ultRing: SVGCircleElement;
   private ultLbl: HTMLElement;
   pauseBtn: HTMLButtonElement;
+  private comboEl: HTMLElement;
   private cache = new Map<string, string>();
   private slotKey = '';
 
@@ -63,7 +64,9 @@ export class Hud {
     this.pauseBtn = h('button', { class: 'btn icon ghost pausebtn', type: 'button', 'aria-label': '일시정지' }, '⏸') as HTMLButtonElement;
     this.pauseBtn.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); onPause(); });
 
+    this.comboEl = h('div', { class: 'combo hidden' });
     this.root = h('div', { class: 'hud' },
+      this.comboEl,
       h('div', { class: 'xpbar' }, this.xp),
       h('div', { class: 'hud-top' },
         h('div', { class: 'clock' }, this.clock, h('div', { class: 'dayline' }, this.dayFill, ...marks)),
@@ -82,6 +85,14 @@ export class Hud {
     if (this.cache.get(key) === text) return;
     this.cache.set(key, text);
     el.textContent = text;
+  }
+
+  setCombo(n: number) {
+    if (n < 15) { if (!this.comboEl.classList.contains('hidden')) this.comboEl.classList.add('hidden'); return; }
+    this.comboEl.classList.remove('hidden');
+    this.set(this.comboEl, 'combo', `🔥 ${n} 연속`);
+    const lvl = n >= 700 ? 3 : n >= 300 ? 2 : n >= 100 ? 1 : 0;
+    this.comboEl.dataset.lv = String(lvl);
   }
 
   setUltIcon(icon: string, name: string) {
