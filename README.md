@@ -1,3 +1,8 @@
+> **🆕 로블록스 게임 「슬라임 하이스트!」** — 행진하는 슬라임을 사고, 기지에서 돈을 벌고, 남의 슬라임을 훔치는 로블록스 게임이
+> [`roblox/`](roblox/) 폴더에 있습니다. Studio로 바로 여는 파일: [`roblox/build/SlimeHeist.rbxlx`](roblox/build/SlimeHeist.rbxlx) · 설명서: [`roblox/README.md`](roblox/README.md)
+>
+> 아래는 기존 웹(HTML5) 게임 「대박수비대」 설명입니다.
+
 # 대박수비대: 합성 대폭주 (첫 베타)
 
 랜덤 소환 · 합성 · 배치 타워 디펜스. 도깨비 야시장의 보물 창고를 40웨이브 동안 지킵니다.

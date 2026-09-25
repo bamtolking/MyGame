@@ -1,0 +1,187 @@
+--!strict
+-- 화면 문구(영어/한국어). {이름} 자리는 Format.fill로 채워집니다.
+-- 서버 알림 인자 중 slime/mut/rarity/weather/quest 는 클라이언트에서 이름으로 바뀝니다.
+
+export type Entry = { en: string, ko: string }
+
+local T: { [string]: Entry } = {
+	-- 공통
+	claim = { en = "CLAIM", ko = "받기" },
+	claimed = { en = "Already claimed!", ko = "이미 받았어요!" },
+	buy = { en = "BUY", ko = "구매" },
+	owned = { en = "OWNED ✓", ko = "보유 중 ✓" },
+	maxed = { en = "MAX", ko = "최대" },
+	levelOf = { en = "Lv {a}/{b}", ko = "Lv {a}/{b}" },
+	error = { en = "Something went wrong. Try again!", ko = "문제가 생겼어요. 다시 시도해 주세요!" },
+	notReady = { en = "Not ready yet!", ko = "아직 준비되지 않았어요!" },
+	tooFast = { en = "Slow down!", ko = "너무 빨라요!" },
+	badRequest = { en = "Can't do that.", ko = "할 수 없어요." },
+	youGot = { en = "You got {what}!", ko = "{what} 획득!" },
+	adminResult = { en = "[Admin] {text}", ko = "[관리자] {text}" },
+
+	-- 메뉴
+	menuShop = { en = "Shop", ko = "상점" },
+	menuIndex = { en = "Index", ko = "도감" },
+	menuRebirth = { en = "Rebirth", ko = "환생" },
+	menuQuests = { en = "Quests", ko = "퀘스트" },
+	menuGifts = { en = "Gifts", ko = "선물" },
+	menuStore = { en = "Store", ko = "스토어" },
+	menuSettings = { en = "Settings", ko = "설정" },
+	lockButton = { en = "LOCK", ko = "잠금" },
+
+	-- HUD
+	vaultChip = { en = "🏦 {cash} at base!", ko = "🏦 기지에 {cash}!" },
+	frenzyIn = { en = "⚡ Frenzy in {t}", ko = "⚡ 대폭주까지 {t}" },
+	frenzyNow = { en = "⚡ SLIME FRENZY {t}", ko = "⚡ 슬라임 대폭주 {t}" },
+	luckChip = { en = "Luck {x}", ko = "행운 {x}" },
+
+	-- 행진·구매
+	buyFor = { en = "Buy {cash}", ko = "{cash}에 구매" },
+	gone = { en = "Too late, it's gone!", ko = "앗, 이미 사라졌어요!" },
+	tooFar = { en = "Get closer!", ko = "더 가까이 가세요!" },
+	baseFull = { en = "Your base is full! Sell or merge slimes.", ko = "기지가 꽉 찼어요! 팔거나 합성하세요." },
+	noCash = { en = "Not enough cash!", ko = "돈이 부족해요!" },
+	noPlot = { en = "You don't have a base yet.", ko = "아직 기지가 없어요." },
+	luckyTouch = { en = "🍀 Lucky Touch! It became {mut}!", ko = "🍀 행운의 손길! {mut} 변이!" },
+	rareSpawn = { en = "✨ A {rarity} {slime} is on the parade!", ko = "✨ {rarity} {slime} 등장! 행진으로 달려가세요!" },
+	newIndex = { en = "📖 New in Index: {mut} {slime}! (+income)", ko = "📖 도감 등록: {mut} {slime}! (수입 증가)" },
+
+	-- 기지 슬라임 관리
+	manage = { en = "Manage", ko = "관리" },
+	manageTitle = { en = "My Slime", ko = "내 슬라임" },
+	merge = { en = "MERGE", ko = "합성" },
+	mergeInfo = { en = "Merge 3 same slimes ({n}/3): income {a} → {b}", ko = "같은 슬라임 3마리 합성({n}/3): 수입 {a} → {b}" },
+	maxStar = { en = "Max stars reached!", ko = "최대 ★ 달성!" },
+	cantMerge = { en = "You need 3 of the same slime with the same stars.", ko = "같은 슬라임·같은 ★ 3마리가 필요해요." },
+	sellFor = { en = "SELL {cash}", ko = "판매 {cash}" },
+	soldFor = { en = "Sold for {cash}", ko = "{cash}에 판매했어요" },
+	favOn = { en = "Favorite (protected)", ko = "즐겨찾기 (보호 중)" },
+	favOff = { en = "Make Favorite", ko = "즐겨찾기 지정" },
+	favHelp = { en = "Your favorite can't be stolen and stays after Rebirth. (Only 1)", ko = "즐겨찾기 1마리는 도둑맞지 않고 환생해도 남아요." },
+	favLocked = { en = "Can't sell your favorite.", ko = "즐겨찾기 슬라임은 팔 수 없어요." },
+	notFound = { en = "That slime isn't there anymore.", ko = "그 슬라임이 없어요." },
+	slimeIncome = { en = "{a}/s  (with bonuses {b}/s)", ko = "초당 {a} (보너스 포함 {b})" },
+	slimeMutated = { en = "🌈 Your {slime} became {mut}!", ko = "🌈 {slime}이(가) {mut}(으)로 변했어요!" },
+	giftToCash = { en = "Base full, gift {slime} turned into cash!", ko = "기지가 꽉 차서 선물 {slime}을(를) 현금으로 바꿨어요!" },
+
+	-- 훔치기·뿅망치·잠금
+	steal = { en = "STEAL", ko = "훔치기" },
+	protectedFav = { en = "Protected", ko = "보호됨" },
+	thief = { en = "THIEF!", ko = "도둑!" },
+	alreadyCarrying = { en = "You're already carrying a slime!", ko = "이미 슬라임을 들고 있어요!" },
+	favProtected = { en = "That's their favorite, it's protected!", ko = "상대의 즐겨찾기 슬라임은 훔칠 수 없어요!" },
+	rookieProtected = { en = "New players are protected for 10 minutes.", ko = "신규 플레이어는 10분간 보호받아요." },
+	baseProtected = { en = "This base is protected right now!", ko = "지금은 보호 중인 기지예요!" },
+	carryHint = { en = "Run back to YOUR base! Don't get bonked!", ko = "내 기지로 달려가세요! 뿅망치 조심!" },
+	stealAlert = { en = "🚨 {name} is stealing your {slime}! BONK them!", ko = "🚨 {name}이(가) {slime}을(를) 훔쳐 가요! 뿅망치로 때리세요!" },
+	stealSuccess = { en = "🥷 Stolen! {slime} is yours now!", ko = "🥷 성공! 이제 {slime}은(는) 내 거예요!" },
+	gotStolen = { en = "😭 {name} stole your {slime}! Base shielded for 30s.", ko = "😭 {name}이(가) {slime}을(를) 훔쳐 갔어요! 30초간 보호막." },
+	stealAnnounce = { en = "🥷 {thief} stole {victim}'s {slime}!", ko = "🥷 {thief}이(가) {victim}의 {slime}을(를) 훔쳤다!" },
+	slimeSaved = { en = "🛡 You saved your {slime}!", ko = "🛡 {slime}을(를) 지켜냈어요!" },
+	thiefStopped = { en = "🔨 Thief stopped! {slime} returned.", ko = "🔨 도둑 저지! {slime}이(가) 돌아갔어요." },
+	stealFailed_ = { en = "Steal failed.", ko = "훔치기 실패." },
+	stealFailed_bonked = { en = "💥 BONKED! You dropped the slime.", ko = "💥 뿅! 슬라임을 떨어뜨렸어요." },
+	stealFailed_died = { en = "You dropped the slime.", ko = "슬라임을 떨어뜨렸어요." },
+	stealFailed_timeout = { en = "Too slow! The slime ran home.", ko = "너무 느려요! 슬라임이 집으로 도망갔어요." },
+	stealFailed_left = { en = "Steal cancelled.", ko = "훔치기가 취소됐어요." },
+	stealFailed_gone = { en = "The slime vanished.", ko = "슬라임이 사라졌어요." },
+	stealFailed_baseFull = { en = "Your base is full! The slime ran home.", ko = "기지가 꽉 차서 슬라임이 돌아갔어요." },
+	stealFailed_victimLeft = { en = "The owner left, the slime went with them.", ko = "주인이 나가서 슬라임도 떠났어요." },
+	stealFailed_reset = { en = "Steal cancelled.", ko = "훔치기가 취소됐어요." },
+	stealFailed_tooFast = { en = "Hmm, that was suspiciously fast. The slime went home.", ko = "너무 빨라서 의심스러워요. 슬라임이 집으로 돌아갔어요." },
+	stealFailed_locked = { en = "🔒 The owner locked the base! You dropped the slime.", ko = "🔒 주인이 기지를 잠갔어요! 슬라임을 놓쳤어요." },
+	revengeTitle = { en = "REVENGE!", ko = "복수의 시간!" },
+	revengeSub = { en = "Chase the red thief and BONK them!", ko = "빨간 도둑을 쫓아가 뿅망치로 때리세요!" },
+	baseLocked = { en = "🔒 That base is locked!", ko = "🔒 잠긴 기지예요!" },
+	alreadyLocked = { en = "Already locked ({s}s left)", ko = "이미 잠겨 있어요 ({s}초 남음)" },
+	lockCooldown = { en = "Lock recharging ({s}s)", ko = "잠금 충전 중 ({s}초)" },
+	goHomeToLock = { en = "Go to your base to lock it!", ko = "기지 안에서 잠글 수 있어요!" },
+	lockedFor = { en = "🔒 Base locked for {s}s!", ko = "🔒 {s}초 동안 기지 잠금!" },
+
+	-- 날씨·대폭주·행운
+	weatherStart = { en = "{weather} started!", ko = "{weather} 시작!" },
+	weatherEnd = { en = "{weather} ended.", ko = "{weather}이(가) 끝났어요." },
+	weatherDesc_golden = { en = "Slimes may turn GOLD (x2)!", ko = "슬라임이 황금(×2)으로 변할 수 있어요!" },
+	weatherDesc_crystal = { en = "Slimes may turn DIAMOND (x3)!", ko = "슬라임이 다이아(×3)로 변할 수 있어요!" },
+	weatherDesc_sugar = { en = "Slimes may turn CANDY (x4)!", ko = "슬라임이 사탕(×4)으로 변할 수 있어요!" },
+	weatherDesc_volcano = { en = "Slimes may turn LAVA (x5)!", ko = "슬라임이 용암(×5)으로 변할 수 있어요!" },
+	weatherDesc_rainbow = { en = "Slimes may turn RAINBOW (x7)!", ko = "슬라임이 무지개(×7)로 변할 수 있어요!" },
+	weatherDesc_meteor = { en = "Slimes may turn GALAXY (x10)!", ko = "슬라임이 은하(×10)로 변할 수 있어요!" },
+	frenzyStart = { en = "⚡ SLIME FRENZY! x5 luck, x2 income for 3 minutes!", ko = "⚡ 슬라임 대폭주! 3분간 행운 ×5, 수입 ×2!" },
+	frenzyEnd = { en = "Frenzy is over. See you next hour!", ko = "대폭주 끝! 다음 정각에 또 만나요!" },
+	serverLuck = { en = "🍀 {name} gave everyone x2 luck for {minutes} min!", ko = "🍀 {name}님이 모두에게 {minutes}분간 행운 ×2 선물!" },
+	stormBought = { en = "🌈 {name} summoned a Rainbow Storm!", ko = "🌈 {name}님이 무지개 폭풍을 불렀어요!" },
+
+	-- 성장
+	shopTitle = { en = "Upgrades", ko = "업그레이드" },
+	rebirthTitle = { en = "Rebirth", ko = "환생" },
+	rebirthHeader = { en = "Rebirth {a} → {b}", ko = "환생 {a} → {b}" },
+	rebirthBonus = { en = "Income bonus {a} → {b}", ko = "수입 보너스 {a} → {b}" },
+	rebirthCash = { en = "Cash {a} / {b}", ko = "현금 {a} / {b}" },
+	rebirthRarity = { en = "Own a {rarity}+ slime", ko = "{rarity} 이상 슬라임 보유" },
+	rebirthInfo = {
+		en = "Resets cash & slimes. Keeps upgrades, Index and your ⭐ favorite slime.",
+		ko = "현금과 슬라임은 초기화, 업그레이드·도감·⭐즐겨찾기 슬라임은 유지돼요.",
+	},
+	rebirthButton = { en = "REBIRTH!", ko = "환생하기!" },
+	rebirthNeedCash = { en = "Not enough cash to rebirth!", ko = "환생할 현금이 부족해요!" },
+	rebirthNeedRarity = { en = "You need a rarer slime to rebirth!", ko = "환생하려면 더 희귀한 슬라임이 필요해요!" },
+	rebirthAnnounce = { en = "♻️ {name} reached Rebirth {n}!", ko = "♻️ {name}님이 {n}번째 환생!" },
+	boostEnded = { en = "Your x2 cash boost ended.", ko = "수입 2배 부스트가 끝났어요." },
+	friendJoined = { en = "👋 Your friend {name} joined! +10% income", ko = "👋 친구 {name}님 입장! 수입 +10%" },
+
+	-- 도감
+	indexTitle = { en = "Slime Index", ko = "슬라임 도감" },
+	indexSummary = { en = "Found {a}/{b}  ·  +{p}% income", ko = "발견 {a}/{b}  ·  수입 +{p}%" },
+
+	-- 퀘스트·출석·선물
+	questsTitle = { en = "Quests", ko = "퀘스트" },
+	dailyTitle = { en = "Daily Login", ko = "매일 출석" },
+	dayN = { en = "Day {n}", ko = "{n}일차" },
+	claimDaily = { en = "CLAIM TODAY", ko = "오늘 보상 받기" },
+	comeBackTomorrow = { en = "Come back tomorrow!", ko = "내일 또 오세요!" },
+	todayQuests = { en = "Today's Quests", ko = "오늘의 퀘스트" },
+	questBonus = { en = "All 3 done: {reward}", ko = "3개 모두 완료: {reward}" },
+	newQuestsIn = { en = "New quests in {t}", ko = "새 퀘스트까지 {t}" },
+	questDone = { en = "✅ Quest complete! Claim your reward.", ko = "✅ 퀘스트 완료! 보상을 받으세요." },
+	questAllDone = { en = "🏆 All quests done! Bonus slime!", ko = "🏆 퀘스트 전부 완료! 보너스 슬라임!" },
+	newQuests = { en = "📜 New daily quests!", ko = "📜 새 일일 퀘스트!" },
+	rewardCash = { en = "{m} min of cash", ko = "수입 {m}분치" },
+	rewardSlime = { en = "{rarity}+ slime", ko = "{rarity}+ 슬라임" },
+	rewardServerLuck = { en = "Server luck {t}", ko = "서버 행운 {t}" },
+	giftsTitle = { en = "Free Gifts", ko = "무료 선물" },
+
+	-- 스토어
+	storeTitle = { en = "Store", ko = "스토어" },
+	storePasses = { en = "Game Passes", ko = "게임패스" },
+	storeProducts = { en = "Boosts", ko = "부스트" },
+	storeSoon = { en = "Store coming soon!", ko = "스토어 준비 중이에요!" },
+	thanksPurchase = { en = "💖 Thank you for your support!", ko = "💖 구매해 주셔서 감사해요!" },
+
+	-- 오프라인
+	offlineTitle = { en = "Welcome back!", ko = "돌아온 걸 환영해요!" },
+	offlineText = {
+		en = "While you were away ({t}), your slimes made {cash}!",
+		ko = "자리를 비운 동안({t}) 슬라임들이 {cash}을(를) 벌었어요!",
+	},
+	collectIt = { en = "COLLECT", ko = "받기" },
+
+	-- 설정·튜토리얼
+	settingsTitle = { en = "Settings", ko = "설정" },
+	sfx = { en = "Sound", ko = "효과음" },
+	skipTutorial = { en = "Skip tutorial", ko = "튜토리얼 건너뛰기" },
+	howToPlay = {
+		en = "HOW TO PLAY\n1. Buy slimes from the Slime Parade in the middle.\n2. Slimes make cash at your base. Step on the GREEN plate to collect.\n3. Merge 3 same slimes into a bigger ★ slime.\n4. Steal slimes from other bases (hold E) and run home!\n5. BONK thieves with F. Step on the RED plate to lock your base.\n6. Weather turns slimes Gold, Diamond, Rainbow... Every hour: SLIME FRENZY!",
+		ko = "게임 방법\n1. 가운데 슬라임 행진에서 슬라임을 사세요.\n2. 슬라임이 기지에서 돈을 벌어요. 초록 발판을 밟아 수금!\n3. 같은 슬라임 3마리를 합치면 더 큰 ★ 슬라임!\n4. 남의 기지 슬라임을 훔쳐서(E 길게) 집으로 달려요!\n5. 도둑은 F로 뿅! 빨간 발판을 밟으면 기지 잠금.\n6. 날씨가 슬라임을 황금·다이아·무지개로! 매시 정각은 슬라임 대폭주!",
+	},
+	tut0 = { en = "👉 Walk to the Slime Parade and buy a slime (E)!", ko = "👉 슬라임 행진으로 가서 슬라임을 사세요 (E)!" },
+	tut1wait = { en = "💰 Your slime is making cash at your base...", ko = "💰 기지의 슬라임이 돈을 벌고 있어요..." },
+	tut1 = { en = "👉 Step on the GREEN plate at your base to collect!", ko = "👉 기지의 초록 발판을 밟아 수금하세요!" },
+	tut2 = { en = "👉 Step on the RED plate to lock your base from thieves!", ko = "👉 빨간 발판을 밟아 도둑으로부터 기지를 잠그세요!" },
+	tipMerge = { en = "💡 Tip: 3 same slimes = MERGE into a ★ slime (x3.5 income)!", ko = "💡 팁: 같은 슬라임 3마리 = ★ 합성 (수입 ×3.5)!" },
+	tipBonk = { en = "💡 Tip: Press F (or 🔨) to BONK thieves and make them drop slimes!", ko = "💡 팁: F(또는 🔨)로 도둑을 때리면 슬라임을 떨어뜨려요!" },
+	tipWeather = { en = "💡 Tip: Weather events mutate slimes. Stay online!", ko = "💡 팁: 날씨 이벤트 중엔 슬라임이 변이해요. 접속해 있으세요!" },
+	tipSteal = { en = "💡 Tip: Hold E on other players' slimes to STEAL them!", ko = "💡 팁: 남의 슬라임에 E를 길게 누르면 훔칠 수 있어요!" },
+}
+
+return T
