@@ -1,4 +1,5 @@
-import { mirrorPose, solve, lerpPose, type JointName, type Pose, type Skeleton, type V3 } from './rig';
+import { DIM, mirrorPose, solve, lerpPose, type JointName, type Pose, type Skeleton, type V3 } from './rig';
+import { drawArm, drawHead, drawLeg, drawNeck, drawTorso, type Palette, type TorsoShape } from './paint';
 
 // ─────────────────────────────────────────────
 // 애니메이션 사양
@@ -183,56 +184,7 @@ export function project(v: V3, cam: Cam): Proj {
 // 그리기
 // ─────────────────────────────────────────────
 
-export interface Palette {
-  skin: string;
-  skinFar: string;
-  shirt: string;
-  shirtFar: string;
-  shorts: string;
-  shortsFar: string;
-  shoe: string;
-  hair: string;
-  eye: string;
-  floor: string;
-  mat: string;
-  wall: string;
-  wallLine: string;
-  prop: string;
-  propDark: string;
-  band: string;
-  shadow: string;
-}
-
-export const LIGHT: Palette = {
-  skin: '#f5c9a6',
-  skinFar: '#dfae88',
-  shirt: '#ff6b2c',
-  shirtFar: '#d9531a',
-  shorts: '#2f3b57',
-  shortsFar: '#232c42',
-  shoe: '#3a3d45',
-  hair: '#3b2a20',
-  eye: '#2b2118',
-  floor: '#d7dbe0',
-  mat: '#dfe8f2',
-  wall: '#eceff3',
-  wallLine: '#d3d8de',
-  prop: '#c9a37a',
-  propDark: '#9d7a55',
-  band: '#12b76a',
-  shadow: 'rgba(20,30,50,0.10)',
-};
-
-export const DARK: Palette = {
-  ...LIGHT,
-  floor: '#3a3f48',
-  mat: '#2a3340',
-  wall: '#23272e',
-  wallLine: '#343a43',
-  prop: '#8a6a48',
-  propDark: '#6b5036',
-  shadow: 'rgba(0,0,0,0.35)',
-};
+export { LIGHT, DARK, type Palette } from './paint';
 
 interface Frame {
   pts: Record<JointName, Proj>;
@@ -256,7 +208,7 @@ export function boundsOf(frames: Placed[], cam: Cam, props: PropSpec[] = []): { 
     maxY = Math.max(maxY, p.y + pad);
   };
   for (const f of frames) {
-    for (const k of Object.keys(f.sk.p) as JointName[]) addPt(f.sk.p[k], k === 'head' ? 8 : 5);
+    for (const k of Object.keys(f.sk.p) as JointName[]) addPt(f.sk.p[k], k === 'head' ? 9 : 5.5);
   }
   addPt([0, 0, 0]);
   if (props.some((p) => p.kind === 'chair')) {
@@ -275,8 +227,14 @@ export function fitViewport(b: ReturnType<typeof boundsOf>, w: number, h: number
 
 type Draw = { d: number; fn: (g: CanvasRenderingContext2D) => void };
 
+/** 카메라 쪽을 향하는 월드 방향 */
+function toCamera(cam: Cam): V3 {
+  const a = (cam.yaw * Math.PI) / 180, e = (cam.elev * Math.PI) / 180;
+  return [-Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e)];
+}
+
 export function drawScene(g: CanvasRenderingContext2D, placed: Placed, cam: Cam, vp: Viewport, spec: AnimSpec, pal: Palette, chairSk?: Skeleton) {
-  const { sk } = placed;
+  const { sk, pose } = placed;
   const P = (v: V3) => {
     const p = project(v, cam);
     return { x: vp.ox + p.x * vp.scale, y: vp.oy - p.y * vp.scale, d: p.d };
@@ -288,62 +246,57 @@ export function drawScene(g: CanvasRenderingContext2D, placed: Placed, cam: Cam,
   const frame: Frame = { pts, sk };
 
   // ── 배경 소품 ──
-  drawFloor(g, P, S, pal, props, sk);
+  drawFloor(g, P, S, pal, props, sk, cam);
   for (const pr of props) {
-    if (pr.kind === 'wall' || pr.kind === 'door') drawWall(g, P, pal, pr, sk);
+    if (pr.kind === 'wall' || pr.kind === 'door') drawWall(g, P, S, pal, pr, sk, cam);
     if (pr.kind === 'chair') drawChair(g, P, S, pal, chairSk ?? sk, cam);
   }
 
   // ── 몸 ──
   const list: Draw[] = [];
   const torsoD = (pts.pelvis.d + pts.chest.d) / 2;
-  const far = (d: number) => d < torsoD - 2.5;
-  const limb = (a: JointName, b: JointName, w: number, near: string, farC: string) => {
-    const d = (pts[a].d + pts[b].d) / 2;
-    list.push({
-      d,
-      fn: (c) => capsule(c, pts[a], pts[b], w * S, far(d) ? farC : near),
-    });
-  };
+  // 먼 쪽 팔다리(어둡게) 판정은 카메라 높이각을 뺀 수평 깊이로
+  const yaw = (cam.yaw * Math.PI) / 180;
+  const hdep = (n: JointName) => -Math.sin(yaw) * sk.p[n][0] + Math.cos(yaw) * sk.p[n][2];
+  const torsoH = (hdep('pelvis') + hdep('chest')) / 2;
+  const far = (names: JointName[]) => names.reduce((a, n) => a + hdep(n), 0) / names.length < torsoH - 2.5;
   const legSide = (s: 'L' | 'R') => {
-    const hip = `hip${s}` as JointName, kn = `kn${s}` as JointName, an = `an${s}` as JointName;
-    const heel = `heel${s}` as JointName, toe = `toe${s}` as JointName;
-    const d = (pts[hip].d + pts[kn].d + pts[an].d) / 3;
-    const isFar = far(d);
+    const hip = pts[`hip${s}`], kn = pts[`kn${s}`], an = pts[`an${s}`];
+    const d = (hip.d + kn.d + an.d) / 3;
+    const bend = (s === 'L' ? pose.knL : pose.knR) ?? 0;
+    const isFar = far([`hip${s}`, `kn${s}`, `an${s}`]);
     list.push({
-      d: d - 0.01,
-      fn: (c) => {
-        const midThigh = mix(pts[hip], pts[kn], 0.42);
-        capsule(c, pts[kn], pts[an], 7.2 * S, isFar ? pal.skinFar : pal.skin);
-        capsule(c, midThigh, pts[kn], 8.6 * S, isFar ? pal.skinFar : pal.skin);
-        capsule(c, pts[hip], midThigh, 10.2 * S, isFar ? pal.shortsFar : pal.shorts);
-        foot(c, pts[heel], pts[toe], pts[an], S, pal.shoe);
-      },
+      d: d - 0.6,
+      fn: (c) => drawLeg(c, { hip, kn, an, heel: pts[`heel${s}`], toe: pts[`toe${s}`], far: isFar, fold: bend > 62 }, S, pal),
     });
   };
+  const T = torsoShape(frame, cam, vp);
   const armSide = (s: 'L' | 'R') => {
-    const sh = `sh${s}` as JointName, el = `el${s}` as JointName, wr = `wr${s}` as JointName, ha = `ha${s}` as JointName;
-    const d = (pts[sh].d + pts[el].d + pts[wr].d) / 3;
-    const isFar = far(d);
+    const sh = pts[`sh${s}`], el = pts[`el${s}`], wr = pts[`wr${s}`], ha = pts[`ha${s}`];
+    const d = (sh.d + el.d + wr.d) / 3;
+    const bend = (s === 'L' ? pose.elL : pose.elR) ?? 0;
+    const isFar = far([`sh${s}`, `el${s}`, `wr${s}`]);
+    // 어깨가 몸통 옆선에 있을 때(정면 등)는 소매와 몸통 사이 이음선을 숨김
+    const beside = !isFar && Math.abs(hdep(`sh${s}`) - hdep('chest')) < 4 && hdep(`wr${s}`) > hdep('chest') - 3;
     list.push({
-      d,
-      fn: (c) => {
-        const midUpper = mix(pts[sh], pts[el], 0.55);
-        capsule(c, pts[el], pts[wr], 5.4 * S, isFar ? pal.skinFar : pal.skin);
-        capsule(c, midUpper, pts[el], 5.9 * S, isFar ? pal.skinFar : pal.skin);
-        capsule(c, pts[sh], midUpper, 7.2 * S, isFar ? pal.shirtFar : pal.shirt);
-        capsule(c, pts[wr], mix(pts[wr], pts[ha], 0.7), 4.6 * S, isFar ? pal.skinFar : pal.skin);
-      },
+      d: beside ? Math.max(d, torsoD + 0.05) : d,
+      fn: (c) => drawArm(c, { sh, el, wr, ha, far: isFar, fold: bend > 62, torso: beside ? T : undefined }, S, pal),
     });
   };
   legSide('L');
   legSide('R');
   armSide('L');
   armSide('R');
-  list.push({ d: torsoD, fn: (c) => drawTorso(c, frame, cam, vp, pal) });
+  list.push({
+    d: torsoD,
+    fn: (c) => {
+      drawNeck(c, pts.chest, pts.neckTop, S, pal);
+      drawTorso(c, T, S, pal);
+    },
+  });
   list.push({
     d: pts.head.d + 0.5,
-    fn: (c) => drawHead(c, frame, cam, vp, pal),
+    fn: (c) => drawHead(c, { c: sk.p.head, M: sk.axes.head, P, toCam: toCamera(cam), R: DIM.headR }, S, pal),
   });
   // 밴드·수건은 몸 앞쪽에
   for (const pr of props) {
@@ -352,12 +305,16 @@ export function drawScene(g: CanvasRenderingContext2D, placed: Placed, cam: Cam,
       list.push({
         d: Math.max(a.d, b.d) + 0.2,
         fn: (c) => {
-          c.strokeStyle = pr.kind === 'band' ? pal.band : pal.prop;
-          c.lineWidth = (pr.kind === 'band' ? 1.6 : 2.4) * S;
+          const col = pr.kind === 'band' ? pal.band : pal.seat.f;
           c.lineCap = 'round';
+          c.strokeStyle = 'rgba(0,0,0,0.18)';
+          c.lineWidth = (pr.kind === 'band' ? 2.2 : 3.2) * S;
           c.beginPath();
           c.moveTo(a.x, a.y);
           c.lineTo(b.x, b.y);
+          c.stroke();
+          c.strokeStyle = col;
+          c.lineWidth = (pr.kind === 'band' ? 1.5 : 2.5) * S;
           c.stroke();
         },
       });
@@ -376,38 +333,9 @@ export function drawScene(g: CanvasRenderingContext2D, placed: Placed, cam: Cam,
   for (const it of list) it.fn(g);
 }
 
-function mix(a: Proj, b: Proj, t: number): Proj {
-  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, d: a.d + (b.d - a.d) * t };
-}
-
-function capsule(g: CanvasRenderingContext2D, a: { x: number; y: number }, b: { x: number; y: number }, w: number, color: string) {
-  g.strokeStyle = color;
-  g.lineWidth = w;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(a.x, a.y);
-  g.lineTo(b.x + 0.01, b.y + 0.01);
-  g.stroke();
-}
-
-function foot(g: CanvasRenderingContext2D, heel: Proj, toe: Proj, ankle: Proj, S: number, color: string) {
-  g.fillStyle = color;
-  g.strokeStyle = color;
-  g.lineJoin = 'round';
-  g.lineCap = 'round';
-  g.lineWidth = 3.4 * S;
-  g.beginPath();
-  g.moveTo(heel.x, heel.y);
-  g.lineTo(toe.x, toe.y);
-  g.lineTo(mix(ankle, toe, 0.35).x, mix(ankle, toe, 0.35).y);
-  g.lineTo(ankle.x, ankle.y);
-  g.closePath();
-  g.fill();
-  g.stroke();
-}
-
-function drawTorso(g: CanvasRenderingContext2D, f: Frame, cam: Cam, vp: Viewport, pal: Palette) {
-  const { sk, pts } = f;
+/** 척추 단면을 이어 몸통 윤곽 만들기 */
+function torsoShape(f: Frame, cam: Cam, vp: Viewport): TorsoShape {
+  const { sk } = f;
   const S = vp.scale;
   const lerp3 = (a: V3, b: V3, t: number): V3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
   const proj = (v: V3) => {
@@ -416,11 +344,14 @@ function drawTorso(g: CanvasRenderingContext2D, f: Frame, cam: Cam, vp: Viewport
   };
   // 척추 단면: [위치, 좌우 반폭, 앞뒤 반두께, 축 행렬]
   const sec: [V3, number, number, number[]][] = [
-    [lerp3(sk.p.pelvis, sk.p.waist, -0.35), 9.6, 6.8, sk.axes.pelvis],
-    [lerp3(sk.p.pelvis, sk.p.waist, 0.4), 9.0, 6.4, sk.axes.pelvis],
-    [sk.p.waist, 8.6, 6.3, sk.axes.waist],
-    [lerp3(sk.p.waist, sk.p.chest, 0.55), 10.4, 7.8, sk.axes.chest],
-    [lerp3(sk.p.waist, sk.p.chest, 0.94), 11.4, 5.8, sk.axes.chest],
+    [lerp3(sk.p.pelvis, sk.p.waist, -0.38), 9.5, 6.9, sk.axes.pelvis],
+    [lerp3(sk.p.pelvis, sk.p.waist, 0.1), 9.3, 6.6, sk.axes.pelvis],
+    [lerp3(sk.p.pelvis, sk.p.waist, 0.48), 8.9, 6.3, sk.axes.pelvis],
+    [sk.p.waist, 8.5, 6.2, sk.axes.waist],
+    [lerp3(sk.p.waist, sk.p.chest, 0.5), 9.9, 7.5, sk.axes.chest],
+    [lerp3(sk.p.waist, sk.p.chest, 0.82), 10.8, 6.9, sk.axes.chest],
+    [lerp3(sk.p.waist, sk.p.chest, 0.95), 10.3, 5.8, sk.axes.chest],
+    [lerp3(sk.p.waist, sk.p.chest, 1.04), 6.6, 4.4, sk.axes.chest],
   ];
   const a = (cam.yaw * Math.PI) / 180, e = (cam.elev * Math.PI) / 180;
   const r: V3 = [Math.cos(a), 0, Math.sin(a)];
@@ -446,244 +377,274 @@ function drawTorso(g: CanvasRenderingContext2D, f: Frame, cam: Cam, vp: Viewport
     left.push({ x: centers[i].x + nx * w, y: centers[i].y + ny * w });
     right.push({ x: centers[i].x - nx * w, y: centers[i].y - ny * w });
   }
-  const pathOf = (from: number, to: number) => {
-    g.beginPath();
-    g.moveTo(left[from].x, left[from].y);
-    for (let i = from + 1; i <= to; i++) {
-      const pm = { x: (left[i - 1].x + left[i].x) / 2, y: (left[i - 1].y + left[i].y) / 2 };
-      g.quadraticCurveTo(left[i - 1].x, left[i - 1].y, pm.x, pm.y);
-    }
-    g.lineTo(left[to].x, left[to].y);
-    const topC = centers[to];
-    g.quadraticCurveTo(topC.x + (topC.x - centers[to - 1].x) * 0.35, topC.y + (topC.y - centers[to - 1].y) * 0.35, right[to].x, right[to].y);
-    for (let i = to - 1; i >= from; i--) {
-      const pm = { x: (right[i + 1].x + right[i].x) / 2, y: (right[i + 1].y + right[i].y) / 2 };
-      g.quadraticCurveTo(right[i + 1].x, right[i + 1].y, pm.x, pm.y);
-    }
-    g.lineTo(right[from].x, right[from].y);
-    const botC = centers[from];
-    g.quadraticCurveTo(botC.x - (centers[from + 1].x - botC.x) * 0.45, botC.y - (centers[from + 1].y - botC.y) * 0.45, left[from].x, left[from].y);
-    g.closePath();
-  };
-  // 목
-  capsule(g, pts.chest, pts.neckTop, 5.4 * S, pal.skin);
-  // 하의 → 상의 순서(상의가 허리선을 덮음)
-  g.fillStyle = pal.shorts;
-  pathOf(0, 1);
-  g.fill();
-  g.fillStyle = pal.shirt;
-  pathOf(1, 4);
-  g.fill();
-  // 어깨 둥글게
-  for (const s of ['shL', 'shR'] as const) {
-    g.beginPath();
-    g.arc(pts[s].x, pts[s].y, 3.9 * S, 0, Math.PI * 2);
-    g.fillStyle = pts[s].d < pts.chest.d - 2.5 ? pal.shirtFar : pal.shirt;
-    g.fill();
-  }
+  return { left, right, centers, hem: 2 };
 }
 
-function drawHead(g: CanvasRenderingContext2D, f: Frame, cam: Cam, vp: Viewport, pal: Palette) {
-  const { sk, pts } = f;
-  const S = vp.scale;
-  const R = 7.2 * S;
-  const h = pts.head;
-  // 머리카락(뒤통수) + 얼굴
-  const M = sk.axes.head;
-  const fwd: V3 = [M[2], M[5], M[8]];
-  const upv: V3 = [M[1], M[4], M[7]];
-  const fp = project(fwd, cam);
-  const up = project(upv, cam);
-  g.fillStyle = pal.hair;
-  g.beginPath();
-  g.arc(h.x, h.y, R, 0, Math.PI * 2);
-  g.fill();
-  const facing = fp.d; // 카메라 쪽을 보면 +
-  const faceShift = 0.32 * R;
-  const fx = h.x + fp.x * faceShift - up.x * 0.1 * R;
-  const fy = h.y - fp.y * faceShift + up.y * 0.1 * R;
-  g.save();
-  g.beginPath();
-  g.arc(h.x, h.y, R, 0, Math.PI * 2);
-  g.clip();
-  if (facing > -0.55) {
-    g.fillStyle = pal.skin;
-    g.beginPath();
-    g.ellipse(fx, fy + up.y * 0.12 * R, R * (0.78 + 0.1 * Math.max(0, facing)), R * 0.84, 0, 0, Math.PI * 2);
-    g.fill();
-  }
-  // 머리 윗부분 머리카락 띠
-  g.fillStyle = pal.hair;
-  g.beginPath();
-  const tx = h.x + up.x * R * 0.95, ty = h.y - up.y * R * 0.95;
-  g.ellipse(tx, ty, R * 1.05, R * 0.42, Math.atan2(-up.x, -up.y) * -1, 0, Math.PI * 2);
-  g.fill();
-  g.restore();
-  // 눈 (3D 위치를 투영, 앞쪽 반구만)
-  const eyes: V3[] = [
-    [2.5, 0.6, 6.3],
-    [-2.5, 0.6, 6.3],
-  ];
-  for (const e of eyes) {
-    const w: V3 = [
-      sk.p.head[0] + M[0] * e[0] + M[1] * e[1] + M[2] * e[2],
-      sk.p.head[1] + M[3] * e[0] + M[4] * e[1] + M[5] * e[2],
-      sk.p.head[2] + M[6] * e[0] + M[7] * e[1] + M[8] * e[2],
-    ];
-    const p = project(w, cam);
-    const hp = project(sk.p.head, cam);
-    if (p.d > hp.d + 1.2) {
-      g.fillStyle = pal.eye;
-      g.beginPath();
-      g.arc(vp.ox + p.x * S, vp.oy - p.y * S, 0.95 * S, 0, Math.PI * 2);
-      g.fill();
-    }
-  }
+type ToScreen = (v: V3) => { x: number; y: number; d: number };
+
+function polyPath(g: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
+  g.moveTo(pts[0].x, pts[0].y);
+  for (const p of pts.slice(1)) g.lineTo(p.x, p.y);
+  g.closePath();
 }
 
-function drawFloor(g: CanvasRenderingContext2D, P: (v: V3) => { x: number; y: number; d: number }, S: number, pal: Palette, props: PropSpec[], sk: Skeleton) {
+function drawFloor(g: CanvasRenderingContext2D, P: ToScreen, S: number, pal: Palette, props: PropSpec[], sk: Skeleton, cam: Cam) {
   const xs = Object.values(sk.p).map((v) => v[0]);
   const zs = Object.values(sk.p).map((v) => v[2]);
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2;
-  const hasMat = props.some((p) => p.kind === 'mat');
-  if (hasMat) {
-    const hw = Math.max(18, (Math.max(...xs) - Math.min(...xs)) / 2 + 12);
-    const hd = Math.max(18, (Math.max(...zs) - Math.min(...zs)) / 2 + 12);
-    const c = [P([cx - hw, 0, cz - hd]), P([cx + hw, 0, cz - hd]), P([cx + hw, 0, cz + hd]), P([cx - hw, 0, cz + hd])];
-    g.fillStyle = pal.mat;
-    g.beginPath();
-    g.moveTo(c[0].x, c[0].y);
-    for (const p of c.slice(1)) g.lineTo(p.x, p.y);
-    g.closePath();
-    g.fill();
-    g.strokeStyle = pal.floor;
-    g.lineWidth = 1.2 * S;
-    g.stroke();
-  }
-  // 그림자
   const s0 = P([cx, 0, cz]);
-  const spanX = Math.abs(P([Math.max(...xs), 0, cz]).x - P([Math.min(...xs), 0, cz]).x);
-  const spanZ = Math.abs(P([cx, 0, Math.max(...zs)]).x - P([cx, 0, Math.min(...zs)]).x);
-  g.fillStyle = pal.shadow;
-  g.beginPath();
-  g.ellipse(s0.x, s0.y, Math.max(spanX, spanZ) * 0.55 + 6 * S, 3.2 * S, 0, 0, Math.PI * 2);
-  g.fill();
+  // 바닥면(바닥선 아래)
+  const H = g.canvas.height;
+  if (s0.y < H) {
+    g.fillStyle = pal.ground;
+    g.fillRect(-10000, s0.y, 20000, H - s0.y + 10);
+  }
   // 바닥선
   g.strokeStyle = pal.floor;
-  g.lineWidth = 1.4 * S;
+  g.lineWidth = 1.3 * S;
   g.beginPath();
   g.moveTo(-10000, s0.y);
   g.lineTo(10000, s0.y);
   g.stroke();
+  // 매트 (두께 있는 판) — 실제 요가 매트 비율, 몸의 긴 축 방향으로
+  if (props.some((p) => p.kind === 'mat')) {
+    const pts2 = Object.values(sk.p).map((v) => [v[0], v[2]] as [number, number]);
+    const mx = pts2.reduce((a, p) => a + p[0], 0) / pts2.length, mz = pts2.reduce((a, p) => a + p[1], 0) / pts2.length;
+    let sxx = 0, szz = 0, sxz = 0;
+    for (const [x, z] of pts2) {
+      sxx += (x - mx) ** 2;
+      szz += (z - mz) ** 2;
+      sxz += (x - mx) * (z - mz);
+    }
+    // 긴 축을 x/z 중 하나로 맞춤. 뚜렷한 긴 축이 없으면(앉은 자세 등) 화면에서 넓게 보이는 축으로
+    const tr = sxx + szz, det = sxx * szz - sxz * sxz;
+    const disc = Math.sqrt(Math.max(0, (tr * tr) / 4 - det));
+    const l1 = tr / 2 + disc, l2 = Math.max(1e-6, tr / 2 - disc);
+    let ang = 0.5 * Math.atan2(2 * sxz, sxx - szz);
+    ang = Math.round(ang / (Math.PI / 2)) * (Math.PI / 2);
+    if (l1 / l2 < 1.8) ang = Math.abs(Math.sin((cam.yaw * Math.PI) / 180)) > 0.5 ? Math.PI / 2 : 0;
+    const u: [number, number] = [Math.cos(ang), Math.sin(ang)], v: [number, number] = [-u[1], u[0]];
+    const along = pts2.map(([x, z]) => x * u[0] + z * u[1]), across = pts2.map(([x, z]) => x * v[0] + z * v[1]);
+    const a0 = Math.min(...along), a1 = Math.max(...along), b0 = Math.min(...across), b1 = Math.max(...across);
+    const L = Math.min(122, Math.max(70, a1 - a0 + 26)), Wd = Math.max(36, b1 - b0 + 12);
+    const ca = (a0 + a1) / 2, cb = (b0 + b1) / 2;
+    const corner = (sa: number, sb: number, y = 0): V3 => {
+      const A = ca + (sa * L) / 2, B = cb + (sb * Wd) / 2;
+      return [A * u[0] + B * v[0], y, A * u[1] + B * v[1]];
+    };
+    const T = 1.5;
+    const toCam = toCamera(cam);
+    const edges: [number, number, number, number, [number, number]][] = [
+      [1, -1, 1, 1, u],
+      [-1, 1, -1, -1, [-u[0], -u[1]]],
+      [1, 1, -1, 1, v],
+      [-1, -1, 1, -1, [-v[0], -v[1]]],
+    ];
+    g.lineJoin = 'round';
+    g.lineWidth = 1.4 * S;
+    g.strokeStyle = pal.mat.l;
+    for (const [sa1, sb1, sa2, sb2, n] of edges) {
+      if (n[0] * toCam[0] + n[1] * toCam[2] <= 0.02) continue;
+      const quad = [P(corner(sa1, sb1)), P(corner(sa2, sb2)), P(corner(sa2, sb2, -T)), P(corner(sa1, sb1, -T))];
+      g.beginPath();
+      polyPath(g, quad);
+      g.fillStyle = pal.matSide;
+      g.stroke();
+      g.fill();
+    }
+    g.beginPath();
+    polyPath(g, [P(corner(-1, -1)), P(corner(1, -1)), P(corner(1, 1)), P(corner(-1, 1))]);
+    g.stroke();
+    g.fillStyle = pal.mat.f;
+    g.fill();
+  }
+  // 부드러운 그림자
+  const spanX = Math.abs(P([Math.max(...xs), 0, cz]).x - P([Math.min(...xs), 0, cz]).x);
+  const spanZ = Math.abs(P([cx, 0, Math.max(...zs)]).x - P([cx, 0, Math.min(...zs)]).x);
+  const rx = Math.max(spanX, spanZ) * 0.55 + 7 * S, ry = 3.4 * S;
+  g.save();
+  g.translate(s0.x, s0.y);
+  g.scale(1, ry / rx);
+  const grad = g.createRadialGradient(0, 0, 0, 0, 0, rx);
+  grad.addColorStop(0, pal.shadow);
+  grad.addColorStop(0.65, pal.shadow);
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(0, 0, rx, 0, Math.PI * 2);
+  g.fill();
+  g.restore();
 }
 
-function drawWall(g: CanvasRenderingContext2D, P: (v: V3) => { x: number; y: number; d: number }, pal: Palette, pr: PropSpec, sk: Skeleton) {
+function drawWall(g: CanvasRenderingContext2D, P: ToScreen, S: number, pal: Palette, pr: PropSpec, sk: Skeleton, cam: Cam) {
   const dist = pr.dist ?? 0;
   const zs = Object.values(sk.p).map((v) => v[2]);
   const xs = Object.values(sk.p).map((v) => v[0]);
-  let quad: V3[];
-  const H = 130;
+  const H = 130, BB = 5, TH = 3;
+  // 벽면(두께 TH)을 상자로: [바닥 네 점] → 옆에서 보면 얇은 기둥처럼 보임
+  let box: V3[];
   switch (pr.wall ?? 'back') {
     case 'front': {
       const z = Math.max(...zs) + dist;
-      quad = [[-80, 0, z], [80, 0, z], [80, H, z], [-80, H, z]];
+      box = [[-80, 0, z], [80, 0, z], [80, 0, z + TH], [-80, 0, z + TH]];
       break;
     }
     case 'left': {
       const x = Math.max(...xs) + dist;
-      quad = [[x, 0, -80], [x, 0, 80], [x, H, 80], [x, H, -80]];
+      box = [[x, 0, -80], [x, 0, 80], [x + TH, 0, 80], [x + TH, 0, -80]];
       break;
     }
     case 'right': {
       const x = Math.min(...xs) - dist;
-      quad = [[x, 0, -80], [x, 0, 80], [x, H, 80], [x, H, -80]];
+      box = [[x, 0, -80], [x, 0, 80], [x - TH, 0, 80], [x - TH, 0, -80]];
       break;
     }
     default: {
       const z = Math.min(...zs) - 2 - dist;
-      quad = [[-80, 0, z], [80, 0, z], [80, H, z], [-80, H, z]];
+      box = [[-80, 0, z], [80, 0, z], [80, 0, z - TH], [-80, 0, z - TH]];
     }
   }
-  const c = quad.map(P);
-  // 옆에서 보면 선으로 보이므로 최소 두께 보장
-  g.fillStyle = pal.wall;
-  g.strokeStyle = pal.wallLine;
-  g.lineWidth = 3;
-  g.beginPath();
-  g.moveTo(c[0].x, c[0].y);
-  for (const p of c.slice(1)) g.lineTo(p.x, p.y);
-  g.closePath();
-  g.fill();
-  g.stroke();
+  // 앞면(몸 쪽 면)과 모서리 면을 모두 칠해 옆에서도 두께가 보이게
+  const up = (v: V3, h: number): V3 => [v[0], h, v[2]];
+  const faces: V3[][] = [
+    [box[0], box[1], up(box[1], H), up(box[0], H)],
+    [box[1], box[2], up(box[2], H), up(box[1], H)],
+    [box[3], box[0], up(box[0], H), up(box[3], H)],
+  ];
+  g.lineJoin = 'round';
+  for (const f of faces) {
+    const c = f.map(P);
+    g.beginPath();
+    polyPath(g, c);
+    g.fillStyle = pal.wall;
+    g.strokeStyle = pal.wallLine;
+    g.lineWidth = 1.2 * S;
+    g.fill();
+    g.stroke();
+  }
+  // 걸레받이
+  const bb = [P(box[0]), P(box[1]), P(up(box[1], BB)), P(up(box[0], BB))];
+  if (Math.abs(bb[0].x - bb[1].x) > 4 * S) {
+    g.beginPath();
+    polyPath(g, bb);
+    g.fillStyle = pal.baseboard;
+    g.fill();
+    g.stroke();
+  }
 }
 
-function drawChair(g: CanvasRenderingContext2D, P: (v: V3) => { x: number; y: number; d: number }, S: number, pal: Palette, sk: Skeleton, cam: Cam) {
+/** 축 정렬 상자: 카메라를 향한 면만 칠함 (윗면은 밝게, 옆면은 어둡게) */
+function drawBox(g: CanvasRenderingContext2D, P: ToScreen, cam: Cam, c: V3, h: V3, top: string, side: string, line: string, lw: number) {
+  const toCam = toCamera(cam);
+  const v = (sx: number, sy: number, sz: number): V3 => [c[0] + sx * h[0], c[1] + sy * h[1], c[2] + sz * h[2]];
+  const faces: { n: V3; q: V3[]; fill: string }[] = [
+    { n: [0, 1, 0], q: [v(-1, 1, -1), v(1, 1, -1), v(1, 1, 1), v(-1, 1, 1)], fill: top },
+    { n: [0, 0, 1], q: [v(-1, -1, 1), v(1, -1, 1), v(1, 1, 1), v(-1, 1, 1)], fill: side },
+    { n: [0, 0, -1], q: [v(-1, -1, -1), v(1, -1, -1), v(1, 1, -1), v(-1, 1, -1)], fill: side },
+    { n: [1, 0, 0], q: [v(1, -1, -1), v(1, -1, 1), v(1, 1, 1), v(1, 1, -1)], fill: side },
+    { n: [-1, 0, 0], q: [v(-1, -1, -1), v(-1, -1, 1), v(-1, 1, 1), v(-1, 1, -1)], fill: side },
+  ];
+  g.lineJoin = 'round';
+  // 윤곽선 먼저(바깥만 보이게) → 면 채우기
+  const vis = faces.filter((f) => f.n[0] * toCam[0] + f.n[1] * toCam[1] + f.n[2] * toCam[2] > 0.02);
+  g.beginPath();
+  for (const f of vis) polyPath(g, f.q.map(P));
+  g.lineWidth = lw * 2;
+  g.strokeStyle = line;
+  g.stroke();
+  for (const f of vis) {
+    g.beginPath();
+    polyPath(g, f.q.map(P));
+    g.fillStyle = f.fill;
+    g.fill();
+    g.lineWidth = lw * 0.9;
+    g.stroke();
+  }
+}
+
+function drawChair(g: CanvasRenderingContext2D, P: ToScreen, S: number, pal: Palette, sk: Skeleton, cam: Cam) {
   const seatY = (sk.p.sitL[1] + sk.p.sitR[1]) / 2 - 1;
   const cz = (sk.p.sitL[2] + sk.p.sitR[2]) / 2 + 3;
   const cx = (sk.p.sitL[0] + sk.p.sitR[0]) / 2;
-  const hw = 19, front = cz + 14, back = cz - 22;
-  const poly = (pts: V3[], fill: string) => {
-    const c = pts.map(P);
-    g.fillStyle = fill;
+  const hw = 19, front = cz + 14, back = cz - 22, TH = 3.2;
+  const lw = pal.line * S;
+  const toCam = toCamera(cam);
+  const leg = (x: number, z: number, y0: number, y1: number, zTop = z) => {
+    const a = P([x, y1, zTop]), b = P([x, y0, z]);
+    g.lineCap = 'round';
+    g.strokeStyle = pal.frame;
+    g.lineWidth = 2.3 * S;
     g.beginPath();
-    g.moveTo(c[0].x, c[0].y);
-    for (const p of c.slice(1)) g.lineTo(p.x, p.y);
-    g.closePath();
-    g.fill();
+    g.moveTo(a.x, a.y);
+    g.lineTo(b.x, b.y);
+    g.stroke();
   };
-  const leg = (x: number, z: number) => {
-    const a = P([x, seatY, z]), b = P([x, 0, z]);
-    capsule(g, a, b, 2.6 * S, pal.propDark);
+  // 카메라에서 먼 다리부터
+  const legs: [number, number][] = [
+    [cx - hw + 2.5, back + 2.5],
+    [cx + hw - 2.5, back + 2.5],
+    [cx - hw + 2.5, front - 2.5],
+    [cx + hw - 2.5, front - 2.5],
+  ];
+  const depth = (l: [number, number]) => l[0] * toCam[0] + l[1] * toCam[2];
+  legs.sort((a, b) => depth(a) - depth(b));
+  const backTop = seatY + 40;
+  const backFirst = toCam[2] > 0; // 카메라가 의자 앞쪽 → 등받이가 뒤에
+  const drawBack = () => {
+    for (const x of [cx - hw + 3, cx + hw - 3]) leg(x, back + 0.5, seatY, backTop - 6, back - 1.5);
+    drawBox(g, P, cam, [cx, backTop - 7, back - 1.6], [hw, 7, 1.3], pal.seat.f, pal.seatSide, pal.seat.l, lw);
   };
-  leg(cx - hw + 2, back + 2);
-  leg(cx + hw - 2, back + 2);
-  leg(cx - hw + 2, front - 2);
-  leg(cx + hw - 2, front - 2);
-  // 등받이
-  poly([[cx - hw, seatY, back], [cx + hw, seatY, back], [cx + hw, seatY + 40, back - 3], [cx - hw, seatY + 40, back - 3]], pal.propDark);
-  const bt = P([cx - hw, seatY + 40, back - 3]), bt2 = P([cx + hw, seatY + 40, back - 3]);
-  if (Math.abs(bt.x - bt2.x) < 3 * S) capsule(g, P([cx, seatY, back]), P([cx, seatY + 40, back - 3]), 3.2 * S, pal.propDark);
-  // 좌판 (윗면 + 앞면 두께)
-  poly([[cx - hw, seatY, back], [cx + hw, seatY, back], [cx + hw, seatY, front], [cx - hw, seatY, front]], pal.prop);
-  const fr = [P([cx - hw, seatY, front]), P([cx + hw, seatY, front]), P([cx + hw, seatY - 3.5, front]), P([cx - hw, seatY - 3.5, front])];
-  const sideView = Math.abs(Math.sin((cam.yaw * Math.PI) / 180)) > 0.7;
-  if (sideView) capsule(g, P([cx, seatY - 1.6, back]), P([cx, seatY - 1.6, front]), 3.6 * S, pal.prop);
-  else {
-    g.fillStyle = pal.propDark;
-    g.beginPath();
-    g.moveTo(fr[0].x, fr[0].y);
-    for (const p of fr.slice(1)) g.lineTo(p.x, p.y);
-    g.closePath();
-    g.fill();
-  }
+  leg(...legs[0], 0, seatY - TH);
+  leg(...legs[1], 0, seatY - TH);
+  if (backFirst) drawBack();
+  drawBox(g, P, cam, [cx, seatY - TH / 2, (front + back) / 2], [hw, TH / 2, (front - back) / 2], pal.seat.f, pal.seatSide, pal.seat.l, lw);
+  leg(...legs[2], 0, seatY - TH);
+  leg(...legs[3], 0, seatY - TH);
+  if (!backFirst) drawBack();
 }
 
 function drawBall(g: CanvasRenderingContext2D, c: { x: number; y: number }, S: number, pal: Palette) {
-  g.fillStyle = pal.band;
   g.beginPath();
   g.arc(c.x, c.y, 3.4 * S, 0, Math.PI * 2);
+  g.lineWidth = pal.line * 2 * S;
+  g.strokeStyle = pal.ball.l;
+  g.stroke();
+  g.fillStyle = pal.ball.f;
   g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.35)';
+  g.fillStyle = 'rgba(255,255,255,0.4)';
   g.beginPath();
   g.arc(c.x - 1.1 * S, c.y - 1.1 * S, 1.1 * S, 0, Math.PI * 2);
   g.fill();
 }
 
-function drawRoller(g: CanvasRenderingContext2D, P: (v: V3) => { x: number; y: number; d: number }, c: V3, S: number, pal: Palette, cam: Cam) {
+function drawRoller(g: CanvasRenderingContext2D, P: ToScreen, c: V3, S: number, pal: Palette, cam: Cam) {
   const r = 7;
   const a = P([c[0] - 22, c[1], c[2]]), b = P([c[0] + 22, c[1], c[2]]);
   const sideView = Math.abs(Math.sin((cam.yaw * Math.PI) / 180)) > 0.8;
+  g.lineWidth = pal.line * 2 * S;
+  g.strokeStyle = pal.roller.l;
   if (sideView) {
     const m = P(c);
-    g.fillStyle = '#6aa9e8';
     g.beginPath();
     g.arc(m.x, m.y, r * S, 0, Math.PI * 2);
+    g.stroke();
+    g.fillStyle = pal.roller.f;
     g.fill();
-    g.fillStyle = '#9cc8f2';
+    g.fillStyle = 'rgba(255,255,255,0.35)';
     g.beginPath();
     g.arc(m.x, m.y, r * 0.45 * S, 0, Math.PI * 2);
     g.fill();
-  } else capsule(g, a, b, r * 2 * S, '#6aa9e8');
+  } else {
+    g.lineCap = 'round';
+    g.lineWidth = (r * 2 + pal.line * 2) * S;
+    g.beginPath();
+    g.moveTo(a.x, a.y);
+    g.lineTo(b.x, b.y);
+    g.stroke();
+    g.strokeStyle = pal.roller.f;
+    g.lineWidth = r * 2 * S;
+    g.stroke();
+  }
 }
 
 // ─────────────────────────────────────────────

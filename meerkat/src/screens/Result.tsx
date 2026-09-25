@@ -3,13 +3,15 @@ import { ChevronDown, ChevronUp, EyeOff, Eye, Play, Share2, Trash2, Info } from 
 import type { MetricResult } from '../analysis/analyze';
 import { NORMS, type MetricId } from '../analysis/norms';
 import { Animal } from '../components/animals';
-import { ask, LevelBadge, LEVEL_COLORS, Notice, Ring, scoreColor, toast, TopBar } from '../components/ui';
+import { ask, LevelBadge, LEVEL_COLORS, levelLabel, Notice, Ring, scoreColor, toast, TopBar } from '../components/ui';
 import { DEMO_SCAN } from '../content/demo';
 import { ScanPhoto } from '../components/ScanPhoto';
 import { describeMetric, METRIC_INFO, metricValue } from '../content/metrics';
 import { ANIMALS, typeTitle, typeName } from '../content/types';
+import type { AnimalId } from '../analysis/report';
 import { L, num, tr } from '../i18n';
 import { nav, replace, route } from '../lib/router';
+import { haptic } from '../lib/haptics';
 import { sfx } from '../lib/sound';
 import { speak } from '../lib/voice';
 import { ISSUE_THEME, topIssues } from '../routine/generator';
@@ -53,68 +55,126 @@ function CountUp({ to, ms = 1200 }: { to: number; ms?: number }) {
   return <>{v}</>;
 }
 
+const SLOT: AnimalId[] = ['turtle', 'shrimp', 'duck', 'flamingo', 'meerkat'];
+
+function scoreWord(score: number): string {
+  if (score >= 85) return tr('아주 좋아요', 'Excellent');
+  if (score >= 70) return tr('양호해요', 'Good');
+  if (score >= 55) return tr('관리가 필요해요', 'Needs care');
+  if (score >= 40) return tr('교정이 필요해요', 'Needs work');
+  return tr('집중 관리 필요', 'Needs focus');
+}
+
+/** 결과 공개: 동물 실루엣 슬롯 → 내 유형 등장, 점수·자세 나이·주요 소견 */
 function Reveal({ scan, onClose }: { scan: ScanRecord; onClose: () => void }) {
   const [phase, setPhase] = useState(0);
+  const [slot, setSlot] = useState(0);
   const r = scan.report;
   const a = ANIMALS[r.type.primary];
+  const good = r.score >= 75;
+  const findings = (Object.values(r.metrics) as MetricResult[])
+    .filter((m) => m && m.level > 0)
+    .sort((x, y) => y.badness - x.badness)
+    .slice(0, 3);
   useEffect(() => {
+    let k = 0;
+    const iv = setInterval(() => {
+      k += 1;
+      setSlot(k % SLOT.length);
+    }, 110);
     const t1 = setTimeout(() => {
+      clearInterval(iv);
       setPhase(1);
       sfx.done();
+      haptic.success();
       speak(tr(`당신의 체형은 ${L(typeName(r.type.primary, r.type.secondary))}입니다`, `Your posture type is ${L(typeName(r.type.primary, r.type.secondary))}`));
-    }, 1300);
-    return () => clearTimeout(t1);
+    }, 1600);
+    return () => {
+      clearInterval(iv);
+      clearTimeout(t1);
+    };
   }, []);
+  const short = (id: MetricId) => L(METRIC_INFO[id].name).replace(/\s*\(.*\)\s*$/, '');
+  const delta = r.ageDelta ?? 0;
   return (
-    <div class="reveal" style={{ background: phase ? a.soft : 'var(--bg)' }} onClick={() => phase && onClose()}>
-      {phase === 0 ? (
-        <div class="fade-up">
-          <div class="spin" style={{ width: 46, height: 46, border: '5px solid var(--surface-3)', borderTopColor: 'var(--brand)', borderRadius: '50%', margin: '0 auto' }} />
-          <h1 class="h1" style={{ marginTop: 22 }}>
-            {tr('당신의 체형은…', 'Your posture type is…')}
-          </h1>
-        </div>
-      ) : (
-        <>
-          <Confetti />
-          <div class="caption" style={{ color: '#6b5a48' }}>
-            {tr('당신의 체형은', 'Your posture type is')}
+    <div class="reveal" style={{ background: phase ? a.soft : 'var(--bg)' }}>
+      <div class="rv-inner">
+        {phase === 0 ? (
+          <div class="fade-up">
+            <div class="rv-slot" aria-hidden="true">
+              <Animal id={SLOT[slot]} size={150} />
+            </div>
+            <h1 class="h1" style={{ marginTop: 22 }}>
+              {tr('당신의 체형은…', 'Your posture type is…')}
+            </h1>
+            <p class="caption" style={{ marginTop: 6 }}>
+              {tr('12가지 지표를 종합하고 있어요', 'Combining 12 posture markers')}
+            </p>
           </div>
-          <div class="pop-in" style={{ marginTop: 8 }}>
-            <Animal id={r.type.primary} size={210} />
-          </div>
-          <h1 class="display fade-up" style={{ marginTop: 6, color: '#1f1a15', fontSize: 28 }}>
-            {L(typeName(r.type.primary, r.type.secondary))}
-          </h1>
-          <p class="body fade-up" style={{ color: '#4b3f33', marginTop: 8, animationDelay: '0.15s' }}>
-            {L(a.tagline)}
-          </p>
-          <div class="row fade-up" style={{ gap: 26, marginTop: 22, animationDelay: '0.3s', color: '#1f1a15' }}>
-            <div>
-              <div style={{ fontSize: 40, fontWeight: 900, lineHeight: 1 }} class="num">
-                <CountUp to={r.score} />
-              </div>
-              <div class="caption" style={{ color: '#6b5a48' }}>
-                {tr('자세 점수', 'Posture score')}
+        ) : (
+          <>
+            {good && <Confetti />}
+            <div class="caption" style={{ color: '#6b5a48' }}>
+              {tr('당신의 체형은', 'Your posture type is')}
+            </div>
+            <div class="rv-stage">
+              <div class="rv-rays" style={{ color: a.color }} />
+              <div class="pop-in">
+                <Animal id={r.type.primary} size={190} />
               </div>
             </div>
-            {r.postureAge !== null && (
-              <div>
-                <div style={{ fontSize: 40, fontWeight: 900, lineHeight: 1 }} class="num">
-                  <CountUp to={r.postureAge} />
-                  <span style={{ fontSize: 18 }}>{tr('세', '')}</span>
+            <h1 class="display fade-up" style={{ color: '#1f1a15', fontSize: 30 }}>
+              {L(typeName(r.type.primary, r.type.secondary))}
+            </h1>
+            <p class="body fade-up" style={{ color: '#4b3f33', marginTop: 6, animationDelay: '0.1s' }}>
+              {L(a.tagline)}
+            </p>
+            <div class="rv-stats fade-up" style={{ animationDelay: '0.2s' }}>
+              <div class="rv-stat">
+                <div class="n num" style={{ color: scoreColor(r.score) }}>
+                  <CountUp to={r.score} />
                 </div>
-                <div class="caption" style={{ color: '#6b5a48' }}>
-                  {tr('자세 나이', 'Posture age')}
+                <div class="l">{tr('자세 점수 / 100', 'Posture score / 100')}</div>
+                <span class="rv-delta" style={{ background: 'rgba(0,0,0,0.05)', color: scoreColor(r.score) }}>
+                  {scoreWord(r.score)}
+                </span>
+              </div>
+              {r.postureAge !== null && (
+                <div class="rv-stat">
+                  <div class="n num">
+                    <CountUp to={r.postureAge} />
+                    <small>{tr('세', '')}</small>
+                  </div>
+                  <div class="l">{tr('자세 나이', 'Posture age')}</div>
+                  {delta !== 0 && (
+                    <span class="rv-delta" style={{ background: delta > 0 ? 'var(--severe-soft)' : 'var(--good-soft)', color: delta > 0 ? 'var(--severe)' : 'var(--good)' }}>
+                      {tr(`실제보다 ${delta > 0 ? '+' : ''}${delta}세`, `${delta > 0 ? '+' : ''}${delta} yrs vs real`)}
+                    </span>
+                  )}
                 </div>
+              )}
+            </div>
+            {findings.length > 0 && (
+              <div class="rv-chips fade-up" style={{ animationDelay: '0.3s' }}>
+                {findings.map((m) => (
+                  <span key={m.id} class="rv-chip">
+                    <i style={{ background: LEVEL_COLORS[m.level] }} />
+                    {short(m.id)} · {levelLabel(m.level)}
+                  </span>
+                ))}
               </div>
             )}
-          </div>
-          <button class="btn dark" style={{ marginTop: 30, background: '#1f1a15', color: '#fff' }} onClick={onClose}>
-            {tr('자세한 리포트 보기', 'See full report')}
-          </button>
-        </>
-      )}
+            <div class="rv-actions fade-up" style={{ animationDelay: '0.4s' }}>
+              <button class="btn block" style={{ background: '#1f1a15', color: '#fff' }} onClick={onClose}>
+                {tr('자세한 리포트 보기', 'See full report')}
+              </button>
+              <button class="btn block rv-share" onClick={() => nav(`/scan/share/${scan.id}`)}>
+                <Share2 size={18} /> {tr('결과 카드 공유하기', 'Share result card')}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -345,7 +405,10 @@ export function Result({ id }: { id: string }) {
         {a.tight.length > 0 && (
           <div class="row" style={{ gap: 10, alignItems: 'stretch' }}>
             <div class="muscle-col">
-              <h4 style={{ color: 'var(--severe)' }}>{tr('🔴 짧아지고 뭉친 근육', '🔴 Tight & short')}</h4>
+              <h4 style={{ color: 'var(--severe)' }}>
+                <i class="dot" style={{ background: 'var(--severe)' }} />
+                {tr('짧아지고 뭉친 근육', 'Tight & short')}
+              </h4>
               <ul>
                 {a.tight.map((c, i) => (
                   <li key={i}>{L(c)}</li>
@@ -353,7 +416,10 @@ export function Result({ id }: { id: string }) {
               </ul>
             </div>
             <div class="muscle-col">
-              <h4 style={{ color: 'var(--info)' }}>{tr('🔵 약해진 근육', '🔵 Weak & long')}</h4>
+              <h4 style={{ color: 'var(--info)' }}>
+                <i class="dot" style={{ background: 'var(--info)' }} />
+                {tr('약해진 근육', 'Weak & long')}
+              </h4>
               <ul>
                 {a.weak.map((c, i) => (
                   <li key={i}>{L(c)}</li>

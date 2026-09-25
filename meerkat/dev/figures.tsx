@@ -21,13 +21,15 @@ const tests: [string, AnimSpec][] = [
   ['side bend', { view: 0, keys: [{ lumbar: { side: -12 }, thorax: { side: -14 }, shL: { abd: 170 }, elL: 10 }] }],
 ];
 function G() {
-  const only = q.get('only');
+  const only = q.get('only')?.split(',');
+  const h = +(q.get('h') ?? 220);
+  const cols = +(q.get('cols') ?? 4);
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: 8 }}>
-      {tests.filter(([n]) => !only || n === only).map(([name, spec]) => (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, padding: 8 }}>
+      {tests.filter(([n]) => !only || only.includes(n)).map(([name, spec]) => (
         <div key={name} style={{ border: '1px solid #eee', borderRadius: 12 }}>
           <div style={{ font: '12px sans-serif', padding: 4 }}>{name}</div>
-          <Figure spec={spec} playing={false} time={0} height={220} />
+          <Figure spec={spec} playing={false} time={0} height={h} />
         </div>
       ))}
     </div>

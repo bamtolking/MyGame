@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { Smartphone } from 'lucide-preact';
 import type { CoachSpec } from '../content/exercise-types';
 import { L, tr } from '../i18n';
 import { startCamera, stopCamera } from '../pose/camera';
@@ -94,7 +95,8 @@ export function CoachCam({ spec, resetKey, running, onState }: Props) {
       )}
       {status === 'ready' && (
         <div style={{ position: 'absolute', left: 10, right: 10, bottom: 10, fontSize: 12.5, color: '#fff', background: 'rgba(0,0,0,0.45)', borderRadius: 10, padding: '6px 10px' }}>
-          📱 {L(spec.hint)}
+          <Smartphone size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />
+          {L(spec.hint)}
         </div>
       )}
     </div>

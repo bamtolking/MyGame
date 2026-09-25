@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { AlertTriangle, ShieldCheck } from 'lucide-preact';
+import { AlertTriangle, HeartPulse, ShieldCheck } from 'lucide-preact';
 import { Notice, Option, TopBar } from '../components/ui';
 import { L, tr } from '../i18n';
 import { nav, replace, route } from '../lib/router';
@@ -114,7 +114,9 @@ export function Safety() {
         ))}
       </div>
       <button class="card tap row" style={{ width: '100%', marginTop: 16, textAlign: 'left', gap: 12 }} onClick={() => nav('/pain')}>
-        <span style={{ fontSize: 24 }}>🩹</span>
+        <span class="thumb" style={{ background: 'var(--severe-soft)', color: 'var(--severe)', width: 44, height: 44 }}>
+          <HeartPulse size={22} />
+        </span>
         <div class="grow">
           <div class="h3">{tr('아픈 곳이 있다면 통증 체크도 해 주세요', 'In pain? Add it to your pain check')}</div>
           <div class="caption">{tr('부위·강도에 맞춰 무리한 동작을 빼 드려요', 'We’ll leave out moves that could aggravate it')}</div>

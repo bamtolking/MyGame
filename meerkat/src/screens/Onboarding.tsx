@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { Camera, LineChart, Lock, Stethoscope } from 'lucide-preact';
+import { BookOpen, Briefcase, Camera, Dumbbell, HeartPulse, Laptop, LineChart, Lock, PersonStanding, Smile, Stethoscope } from 'lucide-preact';
 import { Duck, Flamingo, Meerkat, Shrimp, Turtle } from '../components/animals';
 import { Chip, Option, Steps } from '../components/ui';
 import { tr } from '../i18n';
@@ -10,8 +10,10 @@ import { BRAND } from '../config';
 function Hero() {
   return (
     <div style={{ position: 'relative', height: 250, margin: '8px 0 4px' }} aria-hidden="true">
-      <div style={{ position: 'absolute', left: '50%', top: 20, transform: 'translateX(-50%)' }} class="pop-in">
-        <Meerkat size={190} />
+      <div style={{ position: 'absolute', left: '50%', top: 20, transform: 'translateX(-50%)' }}>
+        <div class="pop-in">
+          <Meerkat size={190} />
+        </div>
       </div>
       <div class="bob" style={{ position: 'absolute', left: '4%', top: 10, animationDelay: '0.2s' }}>
         <Turtle size={78} />
@@ -158,19 +160,19 @@ export function Onboarding() {
   }
 
   if (step === 2) {
-    const jobs: [Profile['job'], string, string][] = [
-      ['desk', '💻', tr('사무직 · 재택', 'Desk / remote work')],
-      ['student', '📚', tr('학생 · 수험생', 'Student')],
-      ['standing', '🧍', tr('서서 일해요', 'On my feet all day')],
-      ['active', '🏃', tr('몸을 많이 써요', 'Physically active job')],
-      ['other', '🙂', tr('기타', 'Other')],
+    const jobs: [Profile['job'], typeof Laptop, string][] = [
+      ['desk', Laptop, tr('사무직 · 재택', 'Desk / remote work')],
+      ['student', BookOpen, tr('학생 · 수험생', 'Student')],
+      ['standing', PersonStanding, tr('서서 일해요', 'On my feet all day')],
+      ['active', Dumbbell, tr('몸을 많이 써요', 'Physically active job')],
+      ['other', Smile, tr('기타', 'Other')],
     ];
     return (
       <div class="screen">
         {header(tr('하루를 어떻게 보내세요?', 'What does your day look like?'))}
         <div class="stack sm">
-          {jobs.map(([id, emoji, label]) => (
-            <Option key={id} emoji={emoji} on={p.job === id} onClick={() => set({ job: id })}>
+          {jobs.map(([id, Icon, label]) => (
+            <Option key={id} icon={<Icon size={21} />} on={p.job === id} onClick={() => set({ job: id })}>
               {label}
             </Option>
           ))}
@@ -227,20 +229,20 @@ export function Onboarding() {
   }
 
   if (step === 3) {
-    const goals: [Goal, string, string, string][] = [
-      ['neck', '🐢', tr('거북목·일자목 교정', 'Fix tech neck'), tr('뒷목 뻐근함, 두통', 'Stiff neck, headaches')],
-      ['shoulder', '🦐', tr('라운드숄더·굽은 등', 'Rounded shoulders & back'), tr('어깨 말림, 등 통증', 'Rolled shoulders, back ache')],
-      ['pelvis', '🦆', tr('골반·허리 정렬', 'Pelvis & low-back alignment'), tr('오리궁둥이, 짝다리', 'Arched back, leaning hips')],
-      ['pain', '🩹', tr('통증 줄이기', 'Reduce pain'), tr('목·어깨·허리·무릎', 'Neck, shoulder, back, knee')],
-      ['desk', '💼', tr('사무실 1분 스트레칭', 'One-minute desk breaks'), tr('일하면서 틈틈이', 'Little resets through the day')],
-      ['overall', '✨', tr('전체적인 체형 관리', 'Overall posture'), tr('예쁘고 곧은 자세', 'Tall, confident posture')],
+    const goals: [Goal, preact.ComponentChildren, string, string][] = [
+      ['neck', <Turtle size={34} />, tr('거북목·일자목 교정', 'Fix tech neck'), tr('뒷목 뻐근함, 두통', 'Stiff neck, headaches')],
+      ['shoulder', <Shrimp size={32} />, tr('라운드숄더·굽은 등', 'Rounded shoulders & back'), tr('어깨 말림, 등 통증', 'Rolled shoulders, back ache')],
+      ['pelvis', <Duck size={32} />, tr('골반·허리 정렬', 'Pelvis & low-back alignment'), tr('오리궁둥이, 짝다리', 'Arched back, leaning hips')],
+      ['pain', <HeartPulse size={21} />, tr('통증 줄이기', 'Reduce pain'), tr('목·어깨·허리·무릎', 'Neck, shoulder, back, knee')],
+      ['desk', <Briefcase size={21} />, tr('사무실 1분 스트레칭', 'One-minute desk breaks'), tr('일하면서 틈틈이', 'Little resets through the day')],
+      ['overall', <Meerkat size={34} />, tr('전체적인 체형 관리', 'Overall posture'), tr('예쁘고 곧은 자세', 'Tall, confident posture')],
     ];
     return (
       <div class="screen">
         {header(tr('무엇을 바꾸고 싶나요?', 'What do you want to change?'), tr('여러 개 골라도 돼요', 'Pick as many as you like'))}
         <div class="stack sm">
-          {goals.map(([id, emoji, label, sub]) => (
-            <Option key={id} emoji={emoji} on={p.goals.includes(id)} onClick={() => toggleGoal(id)} sub={sub}>
+          {goals.map(([id, icon, label, sub]) => (
+            <Option key={id} icon={icon} on={p.goals.includes(id)} onClick={() => toggleGoal(id)} sub={sub}>
               {label}
             </Option>
           ))}

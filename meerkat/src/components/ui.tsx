@@ -147,9 +147,10 @@ export function Chip(props: { on?: boolean; onClick?: () => void; children: Comp
   );
 }
 
-export function Option(props: { on?: boolean; onClick?: () => void; emoji?: string; children: ComponentChildren; sub?: ComponentChildren }) {
+export function Option(props: { on?: boolean; onClick?: () => void; emoji?: string; icon?: ComponentChildren; children: ComponentChildren; sub?: ComponentChildren }) {
   return (
     <button class={`option${props.on ? ' on' : ''}`} aria-pressed={props.on} onClick={props.onClick}>
+      {props.icon && <span class="opt-ic">{props.icon}</span>}
       {props.emoji && <span class="emoji">{props.emoji}</span>}
       <span class="grow">
         <span style={{ display: 'block' }}>{props.children}</span>

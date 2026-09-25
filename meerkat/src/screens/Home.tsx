@@ -1,4 +1,4 @@
-import { ChevronRight, Flame, Lightbulb, Play, RefreshCw, ScanLine } from 'lucide-preact';
+import { ChevronRight, Flame, HeartPulse, Lightbulb, Play, RefreshCw, ScanLine } from 'lucide-preact';
 import { Animal, Meerkat } from '../components/animals';
 import { Ring, scoreColor } from '../components/ui';
 import { ExerciseThumb } from '../components/ExerciseThumb';
@@ -191,8 +191,8 @@ export function Home() {
             {greeting()}
           </h1>
         </div>
-        <button class="badge brand" style={{ height: 34, padding: '0 12px', fontSize: 14, borderRadius: 12 }} onClick={() => nav('/progress')} aria-label={tr('연속 운동 일수', 'Streak')}>
-          <Flame size={16} fill="currentColor" /> <span class="num">{num(streak.value)}</span>
+        <button class={`badge${streak.value ? ' brand' : ''}`} style={{ height: 34, padding: '0 12px', fontSize: 14, borderRadius: 12 }} onClick={() => nav('/progress')} aria-label={tr('연속 운동 일수', 'Streak')}>
+          <Flame size={16} fill={streak.value ? 'currentColor' : 'none'} /> <span class="num">{num(streak.value)}</span>
           {tr('일', 'd')}
         </button>
       </header>
@@ -237,7 +237,9 @@ export function Home() {
         <h2 class="h2">{tr('통증 체크', 'Pain check')}</h2>
       </div>
       <button class="card tap row" style={{ width: '100%', textAlign: 'left', gap: 14 }} onClick={() => nav('/pain')}>
-        <span class="thumb" style={{ background: 'var(--severe-soft)', fontSize: 22 }}>🩹</span>
+        <span class="thumb" style={{ background: 'var(--severe-soft)', color: 'var(--severe)' }}>
+          <HeartPulse size={24} />
+        </span>
         <div class="grow">
           <div class="h3">{Object.keys(profile.value.pain).length ? tr('오늘 통증은 어떤가요?', 'How’s your pain today?') : tr('불편한 곳이 있나요?', 'Anything hurting?')}</div>
           <div class="caption">{tr('부위와 강도를 기록하면 루틴이 알아서 조절돼요', 'Log it and your routine adapts automatically')}</div>

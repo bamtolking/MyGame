@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
-import { Camera, Check, Images, Lock, RefreshCcw, SwitchCamera, X } from 'lucide-preact';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { Camera, Check, Images, Lock, PersonStanding, RefreshCcw, ScanFace, Shirt, Smartphone, SwitchCamera, X } from 'lucide-preact';
 import { checkFrame, medianFrame, motionBetween, type FrameProblem } from '../analysis/analyze';
 import type { View } from '../analysis/norms';
 import { Meerkat } from '../components/animals';
@@ -10,7 +10,7 @@ import { back, nav, replace } from '../lib/router';
 import { sfx } from '../lib/sound';
 import { speak, stopSpeaking } from '../lib/voice';
 import { CameraError, fileToCanvas, snapshot, startCamera, stopCamera, type Facing } from '../pose/camera';
-import { BODY_CONNECTIONS, type PoseFrame } from '../pose/landmarks';
+import { BODY_CONNECTIONS, LM, type PoseFrame } from '../pose/landmarks';
 import { detectOnCanvas, finalizeScan, viewOf, type Shot } from '../scan/pipeline';
 import { profile } from '../state/store';
 
@@ -36,11 +36,11 @@ function Setup({ onCamera, onUpload }: { onCamera: () => void; onUpload: () => v
     const n = +v;
     if (n >= 120 && n <= 220) profile.value = { ...profile.value, heightCm: n };
   };
-  const tips = [
-    ['👕', tr('몸에 붙는 옷', 'Fitted clothes'), tr('레깅스·반팔이면 더 정확해요', 'Leggings & a tee work best')],
-    ['📱', tr('허리 높이에 세우기', 'Phone at waist height'), tr('벽·책장에 기대 세우고 2~3m 뒤로', 'Lean it on a wall or shelf, step back 2–3 m')],
-    ['💇', tr('머리는 묶기', 'Tie your hair'), tr('목·등 라인이 보여야 해요', 'So your neck and back line are visible')],
-    ['🧍', tr('평소처럼 편하게 서기', 'Stand naturally'), tr('일부러 곧게 서면 결과가 달라져요', 'Don’t “pose” — stand as you usually do')],
+  const tips: [typeof Shirt, string, string][] = [
+    [Shirt, tr('몸에 붙는 옷', 'Fitted clothes'), tr('레깅스·반팔이면 더 정확해요', 'Leggings & a tee work best')],
+    [Smartphone, tr('허리 높이에 세우기', 'Phone at waist height'), tr('벽·책장에 기대 세우고 2~3m 뒤로', 'Lean it on a wall or shelf, step back 2–3 m')],
+    [ScanFace, tr('머리는 묶기', 'Tie your hair'), tr('목·등 라인이 보여야 해요', 'So your neck and back line are visible')],
+    [PersonStanding, tr('평소처럼 편하게 서기', 'Stand naturally'), tr('일부러 곧게 서면 결과가 달라져요', 'Don’t “pose” — stand as you usually do')],
   ];
   return (
     <div class="screen">
@@ -58,9 +58,11 @@ function Setup({ onCamera, onUpload }: { onCamera: () => void; onUpload: () => v
       </div>
       <div class="card" style={{ marginTop: 20 }}>
         <div class="stack">
-          {tips.map(([e, t, s]) => (
+          {tips.map(([Icon, t, s]) => (
             <div class="row" key={t} style={{ gap: 12 }}>
-              <span style={{ fontSize: 24, width: 32, textAlign: 'center' }}>{e}</span>
+              <span class="tip-ic">
+                <Icon size={20} />
+              </span>
               <div class="grow">
                 <div class="h3">{t}</div>
                 <div class="caption">{s}</div>
@@ -492,30 +494,89 @@ function Upload({ onDone }: { onDone: (s: { front?: Shot; side?: Shot }) => void
 // 분석 중 연출
 // ─────────────────────────────────────────────
 
-function Analyzing({ shots }: { shots: { front?: Shot; side?: Shot } }) {
-  const [i, setI] = useState(0);
-  const lines = [
-    tr('관절 33개를 찾고 있어요', 'Finding 33 body landmarks'),
-    tr('귀·어깨·골반 정렬을 재는 중', 'Measuring ear–shoulder–hip alignment'),
-    tr('등·허리 곡선을 그리는 중', 'Tracing your back curve'),
-    tr('나의 체형 동물을 찾는 중', 'Finding your posture animal'),
-  ];
-  useEffect(() => {
-    const t = setInterval(() => setI((x) => Math.min(lines.length - 1, x + 1)), 750);
-    return () => clearInterval(t);
-  }, []);
-  const img = shots.side?.canvas ?? shots.front?.canvas;
+/** 분석 중: 사진 위에 관절·뼈대가 차례로 나타나고, 옆모습은 기준선과 귀-어깨 선까지 */
+function PoseOverlay({ frame, side }: { frame: PoseFrame; side: boolean }) {
+  const { w, h, pts } = frame;
+  const ok = (i: number) => (pts[i]?.v ?? 0) > 0.45;
+  const bones = BODY_CONNECTIONS.filter(([a, b]) => ok(a) && ok(b));
+  const joints = [...new Set(bones.flat())].sort((a, b) => pts[a].y - pts[b].y);
+  const r = h * 0.0095, sw = h * 0.0062;
+  let plumb: { x: number; top: number; bottom: number; ear: { x: number; y: number }; sh: { x: number; y: number } } | null = null;
+  if (side) {
+    const L = [LM.leftEar, LM.leftShoulder, LM.leftHip, LM.leftKnee, LM.leftAnkle];
+    const R = [LM.rightEar, LM.rightShoulder, LM.rightHip, LM.rightKnee, LM.rightAnkle];
+    const vis = (ids: number[]) => ids.reduce((a, i) => a + (pts[i]?.v ?? 0), 0);
+    const ids = vis(L) >= vis(R) ? L : R;
+    if (ids.every((i) => pts[i])) {
+      const [ear, sh, , , an] = ids.map((i) => pts[i]);
+      plumb = { x: an.x, top: Math.max(0, ear.y - h * 0.08), bottom: an.y, ear, sh };
+    }
+  }
+  const seg = (x1: number, y1: number, x2: number, y2: number) => `M${x1} ${y1}L${x2} ${y2}`;
+  const boneDelay = 0.2 + joints.length * 0.02;
   return (
-    <div class="screen" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-      <div style={{ position: 'relative', width: 200, height: 280, borderRadius: 28, overflow: 'hidden', background: '#111', boxShadow: 'var(--shadow-2)' }}>
-        {img && <img src={img.toDataURL('image/jpeg', 0.6)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85 }} />}
+    <svg class="an-overlay" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      {plumb && (
+        <path class="an-line an-plumb" pathLength={1} d={seg(plumb.x, plumb.bottom, plumb.x, plumb.top)} stroke-width={sw * 0.9} style={{ animationDelay: `${boneDelay}s` }} />
+      )}
+      {bones.map(([a, b], i) => (
+        <path key={`b${i}`} class="an-line an-bone" pathLength={1} d={seg(pts[a].x, pts[a].y, pts[b].x, pts[b].y)} stroke-width={sw} style={{ animationDelay: `${boneDelay + i * 0.02}s` }} />
+      ))}
+      {plumb && (
+        <path class="an-line an-ear" pathLength={1} d={seg(plumb.sh.x, plumb.sh.y, plumb.ear.x, plumb.ear.y)} stroke-width={sw * 1.3} style={{ animationDelay: `${boneDelay + 0.35}s` }} />
+      )}
+      {joints.map((j, i) => (
+        <circle key={`j${j}`} class="an-joint" cx={pts[j].x} cy={pts[j].y} r={r} stroke-width={r * 0.55} style={{ animationDelay: `${0.05 + i * 0.02}s` }} />
+      ))}
+    </svg>
+  );
+}
+
+function Analyzing({ shots }: { shots: { front?: Shot; side?: Shot } }) {
+  const steps = [
+    tr('관절 33개 찾기', 'Finding 33 body landmarks'),
+    tr('귀·어깨·골반 정렬 재기', 'Measuring ear–shoulder–hip alignment'),
+    tr('등·허리 곡선 그리기', 'Tracing your back curve'),
+    tr('나의 체형 동물 찾기', 'Finding your posture animal'),
+  ];
+  const list = [shots.front, shots.side].filter((x): x is Shot => !!x);
+  const [step, setStep] = useState(0);
+  const [idx, setIdx] = useState(0);
+  const urls = useMemo(() => list.map((s) => s.canvas.toDataURL('image/jpeg', 0.7)), []);
+  useEffect(() => {
+    const ts = [750, 1500, 2250].map((ms, i) =>
+      setTimeout(() => {
+        setStep(i + 1);
+        haptic.light();
+      }, ms),
+    );
+    if (list.length > 1) ts.push(setTimeout(() => setIdx(1), 1300));
+    return () => ts.forEach(clearTimeout);
+  }, []);
+  const shot = list[idx];
+  return (
+    <div class="screen analyzing">
+      <div class="an-photo" key={idx}>
+        {shot && <img src={urls[idx]} alt="" />}
+        {shot && <PoseOverlay frame={shot.frame} side={shot === shots.side} />}
         <div class="scanline" />
+        {list.length > 1 && (
+          <div class="an-tag">{shot === shots.side ? tr('옆모습', 'Side') : tr('정면', 'Front')}</div>
+        )}
       </div>
-      <h1 class="h2" style={{ marginTop: 28 }} aria-live="polite">
-        {lines[i]}
+      <h1 class="h2" style={{ marginTop: 26 }} aria-live="polite">
+        {steps[step]}…
       </h1>
-      <p class="caption" style={{ marginTop: 8 }}>
-        {tr('사진은 기기 안에서만 분석돼요', 'Analysed on your device only')}
+      <ol class="an-steps">
+        {steps.map((t, i) => (
+          <li key={i} class={i < step ? 'done' : i === step ? 'now' : ''}>
+            <span class="ic">{i < step && <Check size={14} strokeWidth={3} />}</span>
+            {t}
+          </li>
+        ))}
+      </ol>
+      <p class="caption row" style={{ gap: 6, marginTop: 20, justifyContent: 'center' }}>
+        <Lock size={13} /> {tr('사진은 기기 안에서만 분석돼요', 'Analysed on your device only')}
       </p>
     </div>
   );

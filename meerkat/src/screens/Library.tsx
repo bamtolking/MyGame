@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'preact/hooks';
-import { Camera, Heart, Search } from 'lucide-preact';
+import { Briefcase, Camera, Heart, Search } from 'lucide-preact';
 import { ExerciseThumb } from '../components/ExerciseThumb';
 import { Chip, TopBar } from '../components/ui';
 import { doseText } from '../content/format';
@@ -44,7 +44,7 @@ export function Library() {
           <Heart size={14} /> {tr('즐겨찾기', 'Saved')}
         </Chip>
         <Chip on={region === 'desk'} onClick={() => setRegion('desk')}>
-          💼 {tr('사무실', 'Desk')}
+          <Briefcase size={14} /> {tr('사무실', 'Desk')}
         </Chip>
         <Chip on={region === 'ai'} onClick={() => setRegion('ai')}>
           <Camera size={14} /> {tr('AI 코칭', 'AI coached')}
@@ -81,7 +81,11 @@ export function Library() {
               </div>
               <div class="row" style={{ gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                 <span class="badge">Lv.{e.level}</span>
-                {e.desk && <span class="badge">💼</span>}
+                {e.desk && (
+                  <span class="badge" aria-label={tr('사무실 가능', 'Desk-friendly')}>
+                    <Briefcase size={11} />
+                  </span>
+                )}
                 {e.coach && (
                   <span class="badge brand">
                     <Camera size={11} /> AI

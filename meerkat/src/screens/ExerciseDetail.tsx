@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { Camera, EyeOff, Heart, Play, Repeat } from 'lucide-preact';
+import { Briefcase, Camera, CircleCheck, EyeOff, Heart, Package, Play, Repeat, TriangleAlert } from 'lucide-preact';
 import { Notice, toast, TopBar } from '../components/ui';
 import { doseText } from '../content/format';
 import { EQUIPMENT_LABEL, exercise, PHASE_LABEL, REGION_LABEL } from '../content/exercises';
@@ -69,10 +69,14 @@ export function ExerciseDetail({ id }: { id: string }) {
         ))}
         {ex.equipment.map((q) => (
           <span key={q} class="badge">
-            🧰 {L(EQUIPMENT_LABEL[q])}
+            <Package size={12} /> {L(EQUIPMENT_LABEL[q])}
           </span>
         ))}
-        {ex.desk && <span class="badge">💼 {tr('사무실 가능', 'Desk-friendly')}</span>}
+        {ex.desk && (
+          <span class="badge">
+            <Briefcase size={12} /> {tr('사무실 가능', 'Desk-friendly')}
+          </span>
+        )}
         {ex.coach && (
           <span class="badge brand">
             <Camera size={12} /> {tr('AI 코칭', 'AI coached')}
@@ -100,8 +104,8 @@ export function ExerciseDetail({ id }: { id: string }) {
       </div>
       <div class="grid-2" style={{ marginTop: 12 }}>
         <div class="card tight">
-          <div class="h3" style={{ color: 'var(--good)' }}>
-            ✅ {tr('코칭 포인트', 'Cues')}
+          <div class="h3 row" style={{ color: 'var(--good)', gap: 6 }}>
+            <CircleCheck size={17} /> {tr('코칭 포인트', 'Cues')}
           </div>
           <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 14, color: 'var(--text-2)' }}>
             {LA(ex.cues).map((s, i) => (
@@ -110,8 +114,8 @@ export function ExerciseDetail({ id }: { id: string }) {
           </ul>
         </div>
         <div class="card tight">
-          <div class="h3" style={{ color: 'var(--severe)' }}>
-            ⚠️ {tr('흔한 실수', 'Common mistakes')}
+          <div class="h3 row" style={{ color: 'var(--severe)', gap: 6 }}>
+            <TriangleAlert size={17} /> {tr('흔한 실수', 'Common mistakes')}
           </div>
           <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 14, color: 'var(--text-2)' }}>
             {LA(ex.mistakes).map((s, i) => (

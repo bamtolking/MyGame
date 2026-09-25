@@ -87,12 +87,15 @@ try {
     await page.waitForFunction(() => (document.body.innerText.match(/인식 완료|Detected/g) ?? []).length >= 2, null, { timeout: 90000 }).catch(() => undefined);
     await shot('scan-upload');
     await click(lang === 'ko-KR' ? '분석하기' : 'Analyse');
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(250);
     await shot('scan-analyzing');
+    await page.waitForTimeout(950);
+    await shot('scan-analyzing-side');
     await page.waitForURL(/#\/scan\/result\//, { timeout: 30000 });
-    await page.waitForTimeout(1700);
+    await page.waitForTimeout(250);
+    await shot('result-drumroll');
+    await page.waitForTimeout(2600);
     await shot('result-reveal');
-    await page.waitForTimeout(1500);
     await click(lang === 'ko-KR' ? '자세한 리포트 보기' : 'See full report');
     await shot('result-top');
     await page.evaluate(() => window.scrollTo(0, 700));

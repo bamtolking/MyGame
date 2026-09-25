@@ -1077,6 +1077,7 @@ input[type='range'].slider {
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
 }
@@ -1215,4 +1216,335 @@ input[type='range'].slider {
   display: flex;
   gap: 6px;
   margin-bottom: 12px;
+}
+
+/* ── 분석 중 ───────────────────────────── */
+.analyzing {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.an-photo {
+  position: relative;
+  width: min(62vw, 240px);
+  aspect-ratio: 5 / 7;
+  border-radius: 28px;
+  overflow: hidden;
+  background: #111;
+  box-shadow: var(--shadow-2);
+  animation: fade-in 0.35s ease;
+}
+
+.an-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.8) brightness(0.82);
+}
+
+.an-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.an-joint {
+  fill: #fff;
+  stroke: var(--brand);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: an-pop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+.an-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: an-draw 0.45s ease-out forwards;
+}
+
+.an-bone {
+  stroke: rgba(255, 255, 255, 0.92);
+}
+
+.an-plumb {
+  stroke: #ffd24a;
+  animation-duration: 0.7s;
+}
+
+.an-ear {
+  stroke: var(--brand);
+}
+
+.an-tag {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@keyframes an-pop {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes an-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.an-steps {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 11px;
+  text-align: left;
+  width: min(100%, 290px);
+}
+
+.an-steps li {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 15px;
+  color: var(--text-3);
+  transition: color 0.3s;
+}
+
+.an-steps li.now {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.an-steps li.done {
+  color: var(--text-2);
+}
+
+.an-steps .ic {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: var(--surface-3);
+  color: #fff;
+}
+
+.an-steps li.done .ic {
+  background: var(--good);
+  animation: pop-in 0.35s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+.an-steps li.now .ic {
+  background: none;
+  border: 3px solid var(--surface-3);
+  border-top-color: var(--brand);
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── 결과 공개 ───────────────────────────── */
+/* 뒤의 리포트가 비치지 않게 배경은 즉시 불투명, 내용만 서서히 */
+.reveal {
+  animation: none;
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding: calc(20px + var(--safe-top)) 20px calc(20px + var(--safe-bottom));
+}
+
+.rv-inner {
+  animation: fade-in 0.3s ease;
+  margin-block: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 420px;
+}
+
+.rv-slot {
+  width: 190px;
+  height: 190px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+}
+
+.rv-slot > * {
+  filter: brightness(0);
+  opacity: 0.2;
+}
+
+:root[data-theme='dark'] .rv-slot > * {
+  filter: brightness(0) invert(1);
+}
+
+.rv-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 250px;
+  height: 214px;
+  margin-top: 4px;
+}
+
+.rv-rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 420px;
+  height: 420px;
+  margin: -210px 0 0 -210px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, currentColor 0deg 8deg, transparent 8deg 22.5deg);
+  opacity: 0.17;
+  -webkit-mask: radial-gradient(circle, #000 22%, transparent 68%);
+  mask: radial-gradient(circle, #000 22%, transparent 68%);
+  animation: spin 24s linear infinite;
+  pointer-events: none;
+}
+
+.rv-stats {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  justify-content: center;
+}
+
+.rv-stat {
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 18px;
+  padding: 12px 16px 12px;
+  min-width: 128px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.rv-stat .n {
+  font-size: 38px;
+  font-weight: 900;
+  line-height: 1;
+  color: #1f1a15;
+}
+
+.rv-stat .n small {
+  font-size: 17px;
+  margin-left: 1px;
+}
+
+.rv-stat .l {
+  font-size: 12.5px;
+  color: #6b5a48;
+  margin-top: 5px;
+}
+
+.rv-delta {
+  margin-top: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.rv-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.rv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #3a2f25;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rv-chip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.rv-actions {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 320px);
+  margin-top: 22px;
+}
+
+.rv-share {
+  background: rgba(255, 255, 255, 0.6);
+  color: #3a2f25;
+}
+
+/* ── 아이콘 칸 ───────────────────────────── */
+.option .opt-ic {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: var(--surface-3);
+  color: var(--text-2);
+  transition: background 0.2s, color 0.2s;
+}
+
+.option.on .opt-ic {
+  background: var(--surface);
+  color: var(--brand);
+}
+
+.tip-ic {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.muscle-col h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.muscle-col h4 .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
 }
