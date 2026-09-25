@@ -97,12 +97,33 @@ export function buildRunConfig(p: Profile, opts: { char: string; stage: string; 
 
 export interface DailyInfo { date: string; seed: number; char: string; stage: string; heat: number; modifiers: ModifierDef[] }
 
+const RISKY_FLAGS = ['noHeal', 'oneHp', 'glassCannon'];
+
 export function dailyInfo(p: Profile, date = todayKey()): DailyInfo {
   const seed = hashStr('kaltoe-daily-' + date);
   const r = makeRng(seed);
   const stages = STAGES.filter(s => stageUnlocked(p, s.id));
-  const mods = shuffle(r, DAILY_MODIFIERS.slice()).slice(0, 2);
-  return { date, seed, char: pick(r, CHARACTERS).id, stage: pick(r, stages.length ? stages : STAGES).id, heat: 1, modifiers: mods };
+  const officeCleared = (p.bests.office?.clears ?? 0) > 0;
+  // 첫 칼퇴 전에는 극단적 규칙(체력 1·유리 대포)을 빼고, 체력 위험 규칙은 하루에 하나만
+  const pool = shuffle(r, DAILY_MODIFIERS.filter(m => officeCleared || (m.id !== 'd_audit' && m.id !== 'd_resign')));
+  const risky = (m: ModifierDef) => (m.flags ?? []).some(f => RISKY_FLAGS.includes(f));
+  const mods: ModifierDef[] = [];
+  for (const m of pool) {
+    if (mods.length >= 2) break;
+    if (risky(m) && mods.some(risky)) continue;
+    mods.push(m);
+  }
+  // 숨겨진 캐릭터는 해금 전까지 오늘의 업무에 나오지 않는다(잠긴 캐릭터는 '체험 근무')
+  const chars = CHARACTERS.filter(c => characterUnlocked(p, c.id) || !(c.unlockedBy && ACHIEVEMENT_HIDDEN(c.unlockedBy)));
+  return { date, seed, char: pick(r, chars).id, stage: pick(r, stages.length ? stages : STAGES).id, heat: featureUnlocked(p, 'heat') ? 1 : 0, modifiers: mods };
+}
+
+function ACHIEVEMENT_HIDDEN(id: string) { return !!ACHIEVEMENTS.find(a => a.id === id)?.hidden; }
+
+/** 오늘의 업무 재도전은 규칙은 같지만 월급 배율(coinMul)을 빼고 진행 */
+export function dailyModifiersFor(p: Profile, info: DailyInfo): ModifierDef[] {
+  const rerun = p.daily.date === info.date && p.daily.played;
+  return rerun ? info.modifiers.map(m => ({ ...m, coinMul: undefined })) : info.modifiers;
 }
 
 // ───────────── 출석 ─────────────

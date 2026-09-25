@@ -62,7 +62,7 @@ export function updatePlayer(w: World) {
   if (p.clockT > 0) p.clockT -= DT;
   p.noHitT += DT;
   if (w.d.recovery > 0 && p.hp < w.d.maxHp) p.hp = Math.min(w.d.maxHp, p.hp + w.d.recovery * DT);
-  w.lsBudget = Math.min(w.d.maxHp * 0.04, w.lsBudget + w.d.maxHp * 0.04 * DT);
+  w.lsBudget = Math.min(3, w.lsBudget + 3 * DT);
 }
 
 export function gainXp(w: World, v: number) {

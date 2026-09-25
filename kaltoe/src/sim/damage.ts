@@ -53,7 +53,7 @@ export function damageEnemy(w: World, e: Enemy, raw: number, slot: number, o: Hi
     }
     if (fx.freezeChance && !e.boss && rand(w.rng) < fx.freezeChance) e.freezeT = Math.max(e.freezeT, e.elite ? 0.5 : 1.2);
     if (fx.lifesteal && fx.lifesteal > 0 && !w.flags.has('noHeal')) {
-      // 다단히트 무기의 흡혈 폭주 방지: 초당 최대 체력의 4%까지
+      // 다단히트 무기의 흡혈 폭주 방지: 초당 3까지
       const heal = Math.min(dealt * fx.lifesteal, w.lsBudget);
       if (heal > 0) { w.lsBudget -= heal; w.player.hp = Math.min(w.d.maxHp, w.player.hp + heal); }
     }
@@ -76,10 +76,15 @@ export function addPickup(w: World, kind: PickupKind, x: number, y: number, valu
   // 보석이 너무 많으면 기존 보석에 합친다(성능)
   if (kind === 'xp') {
     if (w.gemCount > 380) {
-      for (let tries = 0; tries < 6; tries++) {
-        const p = w.pickups[Math.floor(rand(w.fxRng) * w.pickups.length)];
-        if (p && p.kind === 'xp' && !p.dead) { p.value += value; return p; }
+      // 플레이어에게 가장 가까운 보석에 합친다(멀리 쌓인 보석 더미 → 자석 한 번에 레벨 폭발 방지)
+      let best: Pickup | null = null, bd = Infinity;
+      const px = w.player.x, py = w.player.y;
+      for (const p of w.pickups) {
+        if (p.kind !== 'xp' || p.dead) continue;
+        const d = (p.x - px) ** 2 + (p.y - py) ** 2;
+        if (d < bd) { bd = d; best = p; }
       }
+      if (best) { best.value += value; return best; }
     }
   }
   const p: Pickup = { kind, x, y, value, vx: 0, vy: 0, pull: false, t: 0, dead: false, bossChest, pt: 0 };

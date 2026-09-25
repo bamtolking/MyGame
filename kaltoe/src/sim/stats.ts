@@ -6,7 +6,7 @@ import { clamp } from '../core/math';
 
 export const BASE_HP = 100;
 export const BASE_SPEED = 130;
-export const BASE_MAGNET = 45;
+export const BASE_MAGNET = 65;
 
 export function zeroStats(): Stats {
   return {
@@ -48,7 +48,7 @@ export function recalcStats(w: World) {
   const d: Derived = {
     mightMul: Math.max(0.1, 1 + s.might) * (glass ? 2 : 1),
     areaMul: Math.max(0.3, 1 + s.area),
-    cdMul: 1 - clamp(s.cooldown, -0.5, 0.6),
+    cdMul: 1 - clamp(s.cooldown, -0.5, 0.5),
     amountAdd: Math.floor(s.amount + 1e-6),
     durMul: Math.max(0.3, 1 + s.duration),
     projSpeedMul: Math.max(0.3, 1 + s.projSpeed),

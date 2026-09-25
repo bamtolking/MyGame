@@ -11,7 +11,7 @@ import { Renderer } from '../render/renderer';
 import { Fx } from '../render/fx';
 import { loadProfile, saveProfile, type Profile } from '../platform/save';
 import { audio, vibrate } from '../platform/audio';
-import { buildRunConfig, checkAttendance, dailyInfo, evaluateAchievements, settleRun } from '../meta/progress';
+import { buildRunConfig, checkAttendance, dailyInfo, dailyModifiersFor, evaluateAchievements, settleRun } from '../meta/progress';
 import { Input } from './input';
 import { Hud } from './hud';
 import { Modals } from './modals';
@@ -199,7 +199,7 @@ export class App {
     const p = this.profile;
     const di = o.daily ? dailyInfo(p) : null;
     const seed = di ? di.seed : (Math.random() * 2 ** 32) >>> 0;
-    const cfg = buildRunConfig(p, { char: o.char, stage: o.stage, heat: o.heat, seed, modifiers: di?.modifiers, daily: o.daily });
+    const cfg = buildRunConfig(p, { char: o.char, stage: o.stage, heat: di ? di.heat : o.heat, seed, modifiers: di ? dailyModifiersFor(p, di) : undefined, daily: o.daily });
     const w = createWorld(cfg);
     const [vw, vh] = this.renderer.viewSize();
     w.viewW = vw; w.viewH = vh;
@@ -383,6 +383,7 @@ export class App {
         case 'chain': fx.bolt(ev.pts, ev.color); break;
         case 'yageun': this.hint('yageun'); this.banner('야근 확정', 'yageun', pickStr(YAGEUN_CONFIRMED, '보스를 잡아야 퇴근할 수 있습니다')); audio.play('boss'); break;
         case 'shoot': audio.play('shoot'); break;
+        case 'maxed': this.hint('evolveReady'); break;
         default: break;
       }
     }

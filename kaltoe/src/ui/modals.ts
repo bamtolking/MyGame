@@ -3,7 +3,7 @@ import { PASSIVE, WEAPON } from '../content';
 import type { World, LevelChoice } from '../sim/types';
 import { maxLevelOf } from '../sim/stats';
 import { clockText } from '../sim/director';
-import { LEVELUP_SHOUTS, LUNCH_TITLES, PAUSE_TITLES } from '../content/strings';
+import { LEVELUP_SHOUTS, LUNCH_TITLES, PAUSE_TITLES, TIPS } from '../content/strings';
 import { h, btn, statLabel, fmtTime } from './dom';
 import { audio } from '../platform/audio';
 
@@ -211,6 +211,7 @@ export class Modals {
       h('div', { class: 'modal-sub' }, `${clockText(w)} · ${fmtTime(w.t)} 경과 · ${w.cfg.stage.name}${w.cfg.heat ? ` · 야근 강도 ${w.cfg.heat}` : ''}`),
       build, pas, stats,
       w.lunch ? h('div', { class: 'small', style: 'margin-bottom:8px' }, `점심: ${w.lunch.icon} ${w.lunch.name}`) : null,
+      h('div', { class: 'small', style: 'margin-bottom:10px;color:#cfd3ff' }, `💡 ${pickStr(TIPS, '')}`),
       h('div', { class: 'col gap' },
         btn('▶ 계속 일하기', () => this.host.resume(), 'btn primary big'),
         h('div', { class: 'row gap' },

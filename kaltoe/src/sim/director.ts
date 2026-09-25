@@ -134,9 +134,9 @@ export function updateDirector(w: World) {
     spawnFromPool(w, pool);
     alive++;
   }
-  // 최소 생존 수 보충: 화면을 싹 쓸어도 적이 비지 않게 하되, 초당 보충량은 기본 소환의 2배(최소 8)로 제한
+  // 최소 생존 수 보충: 화면을 싹 쓸어도 적이 비지 않게 하되, 초당 보충량은 기본 소환량(최소 4, 15:00 이후 8)으로 제한
   if (alive < minAlive) {
-    w.refillAcc = Math.min(6, w.refillAcc + Math.max(8, rate * 2) * DT);
+    w.refillAcc = Math.min(6, w.refillAcc + Math.max(w.t >= 400 ? 8 : 4, rate) * DT);
     while (w.refillAcc >= 1 && alive < minAlive && alive < MAX_ENEMIES) { w.refillAcc -= 1; spawnFromPool(w, pool); alive++; }
   } else w.refillAcc = 0;
 

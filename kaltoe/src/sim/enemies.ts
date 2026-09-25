@@ -37,7 +37,10 @@ export function segmentHpMul(w: World, t = w.t): number {
 /** 적에게 적용할 전체 체력 배율 */
 export function hpScale(w: World, boss: boolean, segMul?: number): number {
   const seg = boss ? 1 : (segMul ?? segmentHpMul(w));
-  return seg * (w.cfg.stage.hpMul ?? 1) * w.enemyHpMul * (1 + w.d.curse);
+  // 스테이지 추가 체력은 처음 4분에 걸쳐 들어온다(35% → 100%): 어느 근무지든 초반 빌드를 갖출 시간을 준다
+  const S = w.cfg.stage.hpMul ?? 1;
+  const stageMul = boss ? S : 1 + (S - 1) * Math.min(1, 0.35 + 0.65 * w.t / 240);
+  return seg * stageMul * w.enemyHpMul * (boss ? 1 : 1 + w.d.curse);
 }
 
 export function spawnEnemy(w: World, def: EnemyDef, x: number, y: number, scale: number): Enemy {
@@ -53,12 +56,12 @@ export function spawnEnemy(w: World, def: EnemyDef, x: number, y: number, scale:
     hitCd: new Float32Array(8), t: rand(w.rng) * 2, st: 0, stT: 0, dx: 0, dy: 0, seed: rand(w.fxRng) * TAU,
     abil: (def.abilities ?? []).map(a => a.cooldown * (0.5 + rand(w.rng) * 0.5)),
     enraged: false, spdMul: 1, cdMul: 1, shout: '', shoutT: 0, face: 1, spawnT: 0.25, lastHitSlot: -1,
-    chargeSpeed: 320, chargeDur: 0.8, straight: false,
+    chargeSpeed: 320, chargeDur: 0.8, straight: false, abLock: 0, pendAb: -1, pendT: 0,
   };
   w.enemies.push(e);
   if (!w.seenEnemies.has(def.id)) {
     w.seenEnemies.add(def.id);
-    if (def.intro) w.events.push({ t: 'toast', text: def.intro, kind: boss ? 'boss' : elite ? 'warn' : 'info' });
+    if (def.intro && !boss) w.events.push({ t: 'toast', text: def.intro, kind: elite ? 'warn' : 'info' });
   }
   if (boss) {
     if (!w.bossAlive) w.bossAlive = e;
@@ -101,7 +104,7 @@ export function aliveCount(w: World): number {
 }
 
 function fireEnemyBullet(w: World, x: number, y: number, ang: number, speed: number, dmg: number, sprite = '•') {
-  w.ebullets.push({ x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, r: 6, dmg: dmg * w.enemyDmgMul, life: 6, sprite, dead: false });
+  w.ebullets.push({ x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, r: 5, dmg: dmg * w.enemyDmgMul, life: 3.2, sprite, dead: false });
 }
 
 function say(w: World, e: Enemy, text: string | undefined) {
@@ -110,7 +113,7 @@ function say(w: World, e: Enemy, text: string | undefined) {
   w.events.push({ t: 'shout', text, x: e.x, y: e.y - e.r });
 }
 
-function useAbility(w: World, e: Enemy, a: BossAbility) {
+function useAbility(w: World, e: Enemy, a: BossAbility, quiet = false) {
   const p = w.player;
   const P = a.params;
   const toP = Math.atan2(p.y - e.y, p.x - e.x);
@@ -190,7 +193,7 @@ function useAbility(w: World, e: Enemy, a: BossAbility) {
       break;
     }
   }
-  say(w, e, a.shout);
+  if (!quiet) say(w, e, a.shout);
 }
 
 export function updateEnemies(w: World) {
@@ -237,16 +240,25 @@ export function updateEnemies(w: World) {
       e.t += DT;
       // 보스 능력
       const abil = e.def.abilities;
-      if (abil && e.st === 0) {
+      if (abil && e.pendAb >= 0) {
+        // 탄막 예고가 끝나면 발사
+        e.pendT -= DT;
+        if (e.pendT <= 0) { const a = abil[e.pendAb]; e.pendAb = -1; if (a) useAbility(w, e, a, true); }
+      } else if (abil && e.st === 0) {
+        if (e.abLock > 0) e.abLock -= DT;
         for (let k = 0; k < abil.length; k++) {
           const a = abil[k];
           if (a.hpBelow !== undefined && e.hp / e.maxHp > a.hpBelow) continue;
           if (a.kind === 'enrage') { if (!e.enraged) useAbility(w, e, a); continue; }
-          e.abil[k] -= DT;
-          if (e.abil[k] <= 0) {
+          if (e.abil[k] > 0) e.abil[k] -= DT;
+          if (e.abil[k] <= 0 && e.abLock <= 0) {
             e.abil[k] = a.cooldown * e.cdMul;
-            useAbility(w, e, a);
-            if (e.st !== 0) break;
+            e.abLock = 0.8;
+            if (a.kind === 'ring' || a.kind === 'aimed') {
+              e.pendAb = k; e.pendT = 0.35; e.abLock += 0.35;
+              say(w, e, a.shout);
+            } else useAbility(w, e, a);
+            break;
           }
         }
       }
@@ -288,8 +300,11 @@ export function updateEnemies(w: World) {
             if (dist > keep + 20) { mvx = ux * spd; mvy = uy * spd; }
             else if (dist < keep - 20) { mvx = -ux * spd * 0.7; mvy = -uy * spd * 0.7; }
             else { mvx = -uy * spd * 0.5; mvy = ux * spd * 0.5; }
-            if (e.t >= num(P, 'shotCd', 2.5) && dist < 520) {
+            // 화면 안에 보이는 적만, 가까이에서, 전체 초당 5발 예산 안에서 쏜다(보이지 않는 저격·탄막 폭주 방지)
+            if (e.t >= num(P, 'shotCd', 2.5) && dist < 380 && Math.abs(dxp) < w.viewW / 2 && Math.abs(dyp) < w.viewH / 2) {
               e.t = 0;
+              if (w.shotBudget < 1) { e.t = num(P, 'shotCd', 2.5) * 0.6; break; }
+              w.shotBudget -= 1;
               fireEnemyBullet(w, e.x, e.y, Math.atan2(dyp, dxp), num(P, 'shotSpeed', 150), num(P, 'shotDamage', 6), String(P?.shotSprite ?? '•'));
             }
             break;
@@ -403,12 +418,13 @@ export function separateEnemies(w: World) {
 
 export function updateEnemyBullets(w: World) {
   const p = w.player;
+  w.shotBudget = Math.min(5, w.shotBudget + 5 * DT);
   for (const b of w.ebullets) {
     if (b.dead) continue;
     b.x += b.vx * DT; b.y += b.vy * DT;
     b.life -= DT;
     if (b.life <= 0) { b.dead = true; continue; }
-    const rr = b.r + p.r - 3;
+    const rr = b.r + p.r * 0.7;
     if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < rr * rr) {
       b.dead = true;
       hurtPlayer(w, b.dmg, '탄막');

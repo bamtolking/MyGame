@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// 업적 = 해금 연쇄(중독 루프의 척추). 65개 = 해금 33 + 코인 32.
+// 업적 = 해금 연쇄(중독 루프의 척추). 66개 = 해금 33 + 코인 33.
 //
 // ■ 지표 해석(엔진 진행도 추적과 맞출 것). '누적' = 모든 판 합계, '최고' = 한 판 최고 기록.
 //   totalKills 누적 처치 · runKills 한 판 최고 처치 · surviveSec 한 판 최고 생존 초(w.t)
@@ -13,25 +13,27 @@
 //   weaponKills(무기) 그 무기 누적 처치(진화 후 처치는 진화 무기 id로 집계됨) · metaRanks 복지 누적 구매 단계
 //   lowHpClear 체력 10% 이하로 칼퇴한 누적 횟수 · runCoins 한 판 최고 월급 · pickupItem(아이템) 누적 획득
 //
-// ■ 해금 연쇄 설계 (김신입, 첫 판 2~4분 사망 기준 예상 시점)
-//   1판차   : 오늘의 업무(첫 판 종료) · 레이저 포인터(누적 300) · 사내 인맥(첫 상자) · 참치김밥(12:00 생존)
+// ■ 해금 연쇄 설계 (김신입, 첫 판 2~4분 사망 기준 예상 시점) — 2차 개정
+//   1판차   : 첫 출근(+100) · 레이저 포인터(누적 300) · 사내 인맥(첫 상자) · 참치김밥(12:00 생존)
 //             + 코인 업적 2~4개(첫 궁극기·1,000 처치 등) → 첫 판 끝나자마자 복지 2~3개 구매 가능
-//   2~4판   : 토너 폭탄(팀장님) · 자기계발서(Lv20) · 이개발(단축키 번개 1,000) · 종이비행기(Lv30)
-//   3~6판   : 포스트잇(첫 진화) · 첫 칼퇴 → 분기 마감 + 야근 모드 · 야근 강도(보스 5회) · 실손 보험(5판)
-//             열정 페이(한 판 2,500) · 법인카드(한 판 월급 300)
-//   6~12판  : 주식 앱 · 키보드(누적 1만) · 최디자 · 정인턴(출석 3일) · 도시락/버거/초밥 · 반려 도장 · 팩트 폭격 · 사직서 상비
-//   10~20판 : 사내 드론(야근 2분) · 부서 회식(분기 마감 칼퇴) · 윤팀장(팀장님 10회) · 퇴근 알람(강도 1 칼퇴)
+//   2~4판   : 오늘의 업무(3판) · 토너 폭탄(팀장님) · 자기계발서(Lv20) · 이개발(단축키 번개 1,000) · 종이비행기(Lv30)
+//   3~6판   : 포스트잇(첫 진화) · 첫 칼퇴 → 분기 마감 · 실손 보험(5판) · 열정 페이(한 판 5,000) · 법인카드(한 판 월급 300)
+//   6~12판  : 야근 모드(부장님 2회 — 해금 직후 칼퇴에서 바로 쓴다) · 야근 강도(보스 누적 10) · 주식 앱 · 키보드(누적 2.5만)
+//             · 최디자 · 정인턴(출석 3일) · 도시락/버거/초밥 · 반려 도장 · 팩트 폭격 · 사직서 상비
+//   10~20판 : 사내 드론(야근 2분) · 부서 회식(분기 마감 칼퇴) · 윤팀장(보스 누적 20) · 퇴근 알람(강도 1 칼퇴)
 //   20~30판 : 한과장(누적 월급 1만) · 인턴 채용(복지 30단계) · 명절 친척집(회식 칼퇴)
-//   30판+   : ??? 낙하산(숨김: 강도 5 칼퇴) · 강도 10 · 복지 만렙 · 누적 10만 처치
+//   30판+   : ??? 낙하산(숨김: 강도 5 칼퇴) · 강도 10 · 복지 만렙 · 누적 25만 처치
+// ■ 처치 수 기준: 칼퇴하는 판은 실측 9~14k 처치(엔진의 최소 생존 수 보충 때문에 브리프 목표 3,800의 약 3배).
+//   엔진 보충식이 max(4, rate)로 바뀌어 한 판 ≈ 6k가 되면 되돌릴 값: 키보드 1만 · 6만→3만 · 25만→10만 · 열정 2,500 · 일당만→5,000
 // ─────────────────────────────────────────────────────────────────────────────
 import type { AchievementDef } from './types';
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   // ═══════════════════════════ 1판차: 첫 출근 ═══════════════════════════
   {
-    id: 'u_feature_daily', name: '첫 출근', icon: '👔',
-    desc: '첫 근무(한 판)를 마친다. 내일부터 오늘의 업무가 배달됩니다',
-    metric: 'runsPlayed', target: 1, reward: { kind: 'feature', id: 'daily' },
+    id: 'a_first_run', name: '첫 출근', icon: '👔',
+    desc: '첫 근무(한 판)를 마친다. 조퇴해도 월급은 나온다',
+    metric: 'runsPlayed', target: 1, reward: { kind: 'coins', amount: 100 },
   },
   {
     id: 'u_weapon_laser', name: '일 좀 해볼까', icon: '🔴',
@@ -70,6 +72,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
 
   // ═══════════════════════════ 2~4판: 적응기 ═══════════════════════════
+  {
+    id: 'u_feature_daily', name: '수습 3일차', icon: '📋',
+    desc: '누적 3판 플레이. 오늘의 업무가 도착했습니다! 매일 바뀌는 특별 근무에 도전하세요',
+    metric: 'runsPlayed', target: 3, reward: { kind: 'feature', id: 'daily' },
+  },
   {
     id: 'u_weapon_toner', name: '팀장님 결재 통과', icon: '🖨️',
     desc: '팀장님을 처음으로 퇴치한다',
@@ -114,13 +121,13 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: 'u_feature_overtime', name: '부장님 퇴근시키기', icon: '😤',
-    desc: '부장님을 처음으로 퇴치한다. 이제 칼퇴 후 야근 모드를 고를 수 있다',
-    metric: 'bossKill', param: 'bujang', target: 1, reward: { kind: 'feature', id: 'overtime' },
+    desc: '부장님을 2번 퇴근시킨다. 이제 칼퇴 후 야근 모드를 고를 수 있다',
+    metric: 'bossKill', param: 'bujang', target: 2, reward: { kind: 'feature', id: 'overtime' },
   },
   {
-    id: 'u_feature_heat', name: '보스 전담 상담사', icon: '🥊',
-    desc: '보스 누적 5회 퇴치. 야근 강도(난이도) 선택이 열린다',
-    metric: 'totalBossKills', target: 5, reward: { kind: 'feature', id: 'heat' },
+    id: 'u_feature_heat', name: '상사 응대의 달인', icon: '🥊',
+    desc: '상사(보스) 누적 10회 퇴치. 야근 강도(난이도) 선택이 열린다',
+    metric: 'totalBossKills', target: 10, reward: { kind: 'feature', id: 'heat' },
   },
   {
     id: 'u_meta_insurance', name: '수습 기간 종료', icon: '☂️',
@@ -129,12 +136,12 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: 'u_passive_passion', name: '열정 과다', icon: '🔥',
-    desc: '한 판에서 2,500 처치',
-    metric: 'runKills', target: 2500, reward: { kind: 'passive', id: 'passion' },
+    desc: '한 판에서 5,000 처치',
+    metric: 'runKills', target: 5000, reward: { kind: 'passive', id: 'passion' },
   },
   {
     id: 'u_weapon_card', name: '법카 발급', icon: '💳',
-    desc: '한 판에서 월급 300 코인을 번다',
+    desc: '한 판에서 업무 중 월급 300 코인을 줍는다 (칼퇴·오늘의 업무 보너스 제외)',
     metric: 'runCoins', target: 300, reward: { kind: 'weapon', id: 'card' },
   },
   {
@@ -155,9 +162,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     metric: 'totalCoins', target: 2000, reward: { kind: 'passive', id: 'stocks' },
   },
   {
-    id: 'u_weapon_keyboard', name: '엔터 1만 번', icon: '⌨️',
-    desc: '누적 10,000 처치',
-    metric: 'totalKills', target: 10000, reward: { kind: 'weapon', id: 'keyboard' },
+    id: 'u_weapon_keyboard', name: '엔터 2만 5천 번', icon: '⌨️',
+    desc: '누적 25,000 처치',
+    metric: 'totalKills', target: 25000, reward: { kind: 'weapon', id: 'keyboard' },
   },
   {
     id: 'u_character_choi', name: '레이저 포인터 장인', icon: '🎨',
@@ -166,7 +173,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: 'u_character_jung', name: '인턴 면접 합격', icon: '🌱',
-    desc: '출석 체크 누적 3일. 열정 가득 인턴이 첫 출근한다',
+    desc: '출석 체크 누적 3일(매일 첫 접속 시 자동). 열정 가득 인턴이 첫 출근한다',
     metric: 'attendanceDays', target: 3, reward: { kind: 'character', id: 'jung' },
   },
   {
@@ -205,9 +212,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     metric: 'bossKill', param: 'pm', target: 1, reward: { kind: 'coins', amount: 200 },
   },
   {
-    id: 'a_kills_30k', name: '업무 처리 3만 건', icon: '🗃️',
-    desc: '누적 30,000 처치',
-    metric: 'totalKills', target: 30000, reward: { kind: 'coins', amount: 500 },
+    id: 'a_kills_30k', name: '업무 처리 6만 건', icon: '🗃️',
+    desc: '누적 60,000 처치',
+    metric: 'totalKills', target: 60000, reward: { kind: 'coins', amount: 500 },
   },
   {
     id: 'a_level_40', name: '고인물 사원', icon: '⭐',
@@ -253,8 +260,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: 'u_character_yoon', name: '팀장 승진 심사', icon: '🎖️',
-    desc: '팀장님을 누적 10회 퇴치한다. 이기면 된다, 팀장이.',
-    metric: 'bossKill', param: 'team_lead', target: 10, reward: { kind: 'character', id: 'yoon' },
+    desc: '상사(보스)를 누적 20회 퇴치한다. 이길 수 없다면… 팀장이 되어라.',
+    metric: 'totalBossKills', target: 20, reward: { kind: 'character', id: 'yoon' },
   },
   {
     id: 'u_weapon_alarm', name: '칼퇴는 권리', icon: '⏰',
@@ -283,7 +290,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: 'a_run_coins_800', name: '월급 루팡', icon: '🤑',
-    desc: '한 판에서 월급 800 코인을 번다',
+    desc: '한 판에서 업무 중 월급 800 코인을 줍는다 (보너스 제외)',
     metric: 'runCoins', target: 800, reward: { kind: 'coins', amount: 400 },
   },
   {
@@ -324,9 +331,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     metric: 'charLevel', param: 'lee', target: 50, reward: { kind: 'coins', amount: 300 },
   },
   {
-    id: 'a_run_kills_5k', name: '일당백', icon: '💯',
-    desc: '한 판에서 5,000 처치',
-    metric: 'runKills', target: 5000, reward: { kind: 'coins', amount: 500 },
+    id: 'a_run_kills_5k', name: '일당만', icon: '💯',
+    desc: '한 판에서 10,000 처치',
+    metric: 'runKills', target: 10000, reward: { kind: 'coins', amount: 500 },
   },
   {
     id: 'a_runs_30', name: '한 달 근속', icon: '📅',
@@ -342,7 +349,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: 'a_boss_big_aunt', name: '잔소리 완전 정복', icon: '🧓',
-    desc: '큰이모를 퇴치한다. "취업은? 결혼은?"에 드디어 답했다',
+    desc: '큰이모의 잔소리 폭격을 끝까지 이겨낸다. "취업은? 결혼은?"에 드디어 답했다',
     metric: 'bossKill', param: 'big_aunt', target: 1, reward: { kind: 'coins', amount: 1000 },
   },
   {
@@ -357,8 +364,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: 'a_kills_100k', name: '업무의 신', icon: '🏆',
-    desc: '누적 100,000 처치',
-    metric: 'totalKills', target: 100000, reward: { kind: 'coins', amount: 1000 },
+    desc: '누적 250,000 처치',
+    metric: 'totalKills', target: 250000, reward: { kind: 'coins', amount: 1000 },
   },
   {
     // META_UPGRADES maxRank 합계(82)와 맞출 것

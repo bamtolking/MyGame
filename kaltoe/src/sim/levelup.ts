@@ -1,5 +1,5 @@
 // 레벨업 선택지·상자·진화·점심 메뉴
-import { BALANCE, LUNCHES, PASSIVES, WEAPON, WEAPONS } from '../content';
+import { BALANCE, LUNCHES, PASSIVE, PASSIVES, WEAPON, WEAPONS } from '../content';
 import type { LunchDef, PassiveDef, WeaponDef } from '../content/types';
 import { chance, rand, shuffle } from '../core/rng';
 import type { ChestResult, LevelChoice, WeaponInst, World } from './types';
@@ -35,7 +35,10 @@ function levelUpWeapon(w: World, wi: WeaponInst) {
     if (!w.stats_.maxed.includes(wi.def.id)) w.stats_.maxed.push(wi.def.id);
     if (wi.def.evolvesTo && wi.def.evolveWith) {
       const has = w.passives.some(p => p.def.id === wi.def.evolveWith);
-      w.events.push({ t: 'toast', text: has ? `${wi.def.name} 최대 레벨! 엘리트 상자에서 진화 가능` : `${wi.def.name} 최대 레벨! 짝 패시브가 있으면 진화합니다`, kind: 'good' });
+      const pair = PASSIVE.get(wi.def.evolveWith);
+      const pn = pair ? `${pair.icon} ${pair.name}` : '짝 패시브';
+      w.events.push({ t: 'toast', text: has ? `${wi.def.name} 최대 레벨! ${pn} 보유 — 엘리트 상자를 열면 진화` : `${wi.def.name} 최대 레벨! ${pn}을(를) 얻고 상자를 열면 진화`, kind: 'good' });
+      w.events.push({ t: 'maxed', id: wi.def.id });
     }
   }
 }
@@ -52,13 +55,13 @@ export function buildChoices(w: World): LevelChoice[] {
   const opts: { c: LevelChoice; wt: number }[] = [];
   for (const wi of w.weapons) {
     if (wi.level < maxLevelOf(wi.def)) {
-      opts.push({ c: { kind: 'weapon', id: wi.def.id, level: wi.level + 1, desc: wi.def.levels[wi.level - 1]?.desc ?? '강화' }, wt: 1.35 });
+      opts.push({ c: { kind: 'weapon', id: wi.def.id, level: wi.level + 1, desc: wi.def.levels[wi.level - 1]?.desc ?? '강화' }, wt: 2.2 });
     }
   }
   if (w.weapons.length < BALANCE.maxWeapons) {
     for (const def of WEAPONS) {
       if (def.evolved || !weaponUnlocked(w, def) || ownsWeaponLine(w, def) || w.banished.has(def.id)) continue;
-      opts.push({ c: { kind: 'newWeapon', id: def.id, level: 1, desc: def.desc }, wt: 1.0 });
+      opts.push({ c: { kind: 'newWeapon', id: def.id, level: 1, desc: def.desc }, wt: w.weapons.length < 3 ? 1.5 : 1.0 });
     }
   }
   for (const pi of w.passives) {
@@ -70,7 +73,7 @@ export function buildChoices(w: World): LevelChoice[] {
     for (const def of PASSIVES) {
       if (def.unlockedBy && !w.cfg.unlockedPassives.has(def.id)) continue;
       if (w.passives.some(p => p.def.id === def.id) || w.banished.has(def.id)) continue;
-      opts.push({ c: { kind: 'newPassive', id: def.id, level: 1, desc: def.desc }, wt: 0.85 });
+      opts.push({ c: { kind: 'newPassive', id: def.id, level: 1, desc: def.desc }, wt: w.passives.length >= 3 ? 0.6 : 0.85 });
     }
   }
   let n = BALANCE.choices;
@@ -249,6 +252,11 @@ export function applyLunch(w: World, id: string) {
   if (!l) return;
   w.lunch = l;
   w.stats_.lunch = l.id;
+  const p = w.player;
+  p.rerolls += Math.floor(l.stats.reroll ?? 0);
+  p.skips += Math.floor(l.stats.skip ?? 0);
+  p.banishes += Math.floor(l.stats.banish ?? 0);
+  p.revivals += Math.floor(l.stats.revival ?? 0);
   recalcBase(w);
   if (l.heal) healPlayer(w, w.d.maxHp * l.heal);
   w.lunchChoices = [];

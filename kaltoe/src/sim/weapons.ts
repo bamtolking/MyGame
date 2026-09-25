@@ -64,7 +64,16 @@ export function randomEnemy(w: World, maxR: number, exclude?: Set<number>): Enem
 function pickTarget(w: World, wi: WeaponInst, maxR: number): Enemy | null {
   const p = w.player;
   switch (wi.def.targeting) {
-    case 'nearest': return nearestEnemy(w, p.x, p.y, maxR);
+    case 'nearest': {
+      // 160u 안의 보스·엘리트를 잡몹보다 우선(잡몹 뒤에 숨은 보스 조준)
+      let vip: Enemy | null = null, vd = Infinity;
+      w.grid.query(p.x, p.y, 160, en => {
+        if (en.dead || !(en.boss || en.elite)) return;
+        const d = (en.x - p.x) ** 2 + (en.y - p.y) ** 2;
+        if (d < vd) { vd = d; vip = en; }
+      });
+      return vip ?? nearestEnemy(w, p.x, p.y, maxR);
+    }
     case 'random': return randomEnemy(w, maxR);
     case 'strongest': case 'lowest': {
       let best: Enemy | null = null, bv = wi.def.targeting === 'strongest' ? -Infinity : Infinity;
@@ -143,13 +152,15 @@ function fireVolley(w: World, wi: WeaponInst, e: Eff) {
       return;
     }
     case 'chain': {
-      const struck = new Set<number>();
+      const used = new Set<number>();
       for (let i = 0; i < e.amount; i++) {
-        let tgt = randomEnemy(w, e.range, struck);
+        // 서로 다른 대상을 우선하되, 대상이 모자라면 같은 적을 다시 친다(보스전)
+        let tgt = randomEnemy(w, e.range, used) ?? randomEnemy(w, e.range);
         if (!tgt) break;
+        used.add(tgt.uid);
+        const struck = new Set<number>([tgt.uid]);   // 연쇄 안에서만 중복 제외
         const pts: number[] = [p.x, p.y - 20, tgt.x, tgt.y];
         let dmg = e.dmg;
-        struck.add(tgt.uid);
         damageEnemy(w, tgt, dmg, wi.slot, { fx: wi.st, knock: e.knock });
         const chains = wi.st.chains ?? 2, cr = (wi.st.chainRange ?? 90) * Math.sqrt(w.d.areaMul), fall = wi.st.chainFalloff ?? 0.8;
         for (let c = 0; c < chains; c++) {
@@ -170,7 +181,7 @@ function fireVolley(w: World, wi: WeaponInst, e: Eff) {
     case 'strike': {
       const used = new Set<number>();
       for (let i = 0; i < e.amount; i++) {
-        const tgt = randomEnemy(w, 520, used);
+        const tgt = randomEnemy(w, 520, used) ?? randomEnemy(w, 520);
         let x: number, y: number;
         if (tgt) { used.add(tgt.uid); x = tgt.x; y = tgt.y; }
         else { x = p.x + randRange(w.rng, -w.viewW / 2, w.viewW / 2); y = p.y + randRange(w.rng, -w.viewH / 2, w.viewH / 2); }
@@ -182,7 +193,7 @@ function fireVolley(w: World, wi: WeaponInst, e: Eff) {
     case 'lob': {
       const used = new Set<number>();
       for (let i = 0; i < e.amount; i++) {
-        const tgt = randomEnemy(w, e.range, used);
+        const tgt = randomEnemy(w, e.range, used) ?? randomEnemy(w, e.range);
         let x: number, y: number;
         if (tgt) { used.add(tgt.uid); x = tgt.x + tgt.vx * 0.1; y = tgt.y; }
         else { const a = rand(w.rng) * TAU, d = randRange(w.rng, 60, e.range); x = p.x + Math.cos(a) * d; y = p.y + Math.sin(a) * d; }

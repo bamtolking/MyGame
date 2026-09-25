@@ -9,6 +9,10 @@
 //   eliteRush   : 엘리트 이벤트마다 2마리(상자도 2개)
 // 설계: 어려운 규칙일수록 월급 배율↑, '보상 있는 고통' 1개 + '버프' 1개 조합이 기본.
 // 칼퇴 성공 시 DAILY_CLEAR_REWARD(meta.ts)가 별도로 지급된다.
+// 2차 개정:
+//  - 오늘의 업무는 재도전이 가능하고 판마다 coinMul이 붙으므로 배율 상한을 ×1.5로 낮췄다(최악 조합 ≈ ×2.3, 강도 1 포함).
+//    1차의 월급날 ×2 + 감사 시즌 ×1.8 조합(×4.1)은 '같은 일일 도전 반복'이 최고의 파밍이 되는 문제가 있었다.
+//  - 숫자만 바꾸는 규칙(워크숍·계단·커피 머신)을 빌드를 바꾸는 규칙(조직 개편·대청소·복주머니·스프린트)으로 교체.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { ModifierDef } from './types';
 
@@ -30,8 +34,8 @@ export const DAILY_MODIFIERS: ModifierDef[] = [
   },
   {
     id: 'd_payday', name: '월급날', icon: '💵',
-    desc: '통장을 스쳐 지나가기 전에 챙기자. 월급 ×2 · 대신 적 체력 +25%',
-    enemyHpMul: 1.25, coinMul: 2,
+    desc: '통장을 스쳐 지나가기 전에 챙기자. 월급 +40% · 대신 적 체력 +25%',
+    enemyHpMul: 1.25, coinMul: 1.4,
   },
   {
     id: 'd_resign', name: '사직서 품은 날', icon: '🔥',
@@ -40,8 +44,8 @@ export const DAILY_MODIFIERS: ModifierDef[] = [
   },
   {
     id: 'd_audit', name: '감사 시즌', icon: '🔍',
-    desc: '실수 한 번이면 끝이다. 최대 체력 1 · 부활 +1 · 경험치 +20% · 월급 ×1.8',
-    flags: ['oneHp'], stats: { revival: 1 }, xpMul: 1.2, coinMul: 1.8,
+    desc: '실수 한 번이면 끝이다. 최대 체력 1 · 부활 +1 · 경험치 +20% · 월급 +50%',
+    flags: ['oneHp'], stats: { revival: 1 }, xpMul: 1.2, coinMul: 1.5,
   },
   {
     id: 'd_zoom', name: '화상 회의', icon: '📹',
@@ -50,8 +54,8 @@ export const DAILY_MODIFIERS: ModifierDef[] = [
   },
   {
     id: 'd_pantry', name: '탕비실 공사 중', icon: '🚧',
-    desc: '커피도 치킨도 없다. 회복 불가(회복 아이템은 코인으로) · 받는 피해 -1 · 월급 +40%',
-    flags: ['noHeal'], stats: { armor: 1 }, coinMul: 1.4,
+    desc: '커피도 치킨도 없다. 회복 불가(회복 아이템은 코인으로) · 받는 피해 -1 · 월급 +25%',
+    flags: ['noHeal'], stats: { armor: 1 }, coinMul: 1.25,
   },
   {
     id: 'd_deadline', name: '마감 D-Day', icon: '⏱️',
@@ -59,14 +63,14 @@ export const DAILY_MODIFIERS: ModifierDef[] = [
     spawnMul: 1.4, enemyHpMul: 0.85, xpMul: 1.2, coinMul: 1.3,
   },
   {
-    id: 'd_stairs', name: '엘리베이터 점검일', icon: '🏃',
-    desc: '20층까지 계단 출근. 다리가 풀려서 오히려 빨라졌다. 이동속도 +25% · 적 속도 +20% · 월급 +20%',
-    stats: { moveSpeed: 0.25 }, enemySpeedMul: 1.2, coinMul: 1.2,
+    id: 'd_reorg', name: '조직 개편', icon: '🔀',
+    desc: '원하는 팀만 꾸려라! 레벨업 새로고침 +5 · 레벨업 제외 +3 · 월급 +10%',
+    stats: { reroll: 5, banish: 3 }, coinMul: 1.1,
   },
   {
-    id: 'd_caffeine', name: '커피 머신 입고', icon: '☕',
-    desc: '탕비실에 새 커피 머신! 모두가 각성했다. 쿨타임 -15% · 궁극기 충전 +30% · 적 속도 +15% · 적 공격력 +10%',
-    stats: { cooldown: 0.15, ultCharge: 0.3 }, enemySpeedMul: 1.15, enemyDamageMul: 1.1, coinMul: 1.2,
+    id: 'd_cleanup', name: '대청소의 날', icon: '🧹',
+    desc: '떨어진 건 전부 내 것. 획득 반경 +300% · 대신 적 체력 +15% · 월급 +20%',
+    stats: { magnet: 3 }, enemyHpMul: 1.15, coinMul: 1.2,
   },
   {
     id: 'd_intern', name: '인턴 첫 출근', icon: '🐥',
@@ -74,9 +78,14 @@ export const DAILY_MODIFIERS: ModifierDef[] = [
     stats: { amount: 1, might: -0.3 }, coinMul: 1.2,
   },
   {
-    id: 'd_workshop', name: '1박 2일 워크숍', icon: '⛺',
-    desc: '단체 레크리에이션 강제 참가. 적 소환 +30% · 적 공격력 -20% · 경험치 +15% · 월급 +20%',
-    spawnMul: 1.3, enemyDamageMul: 0.8, xpMul: 1.15, coinMul: 1.2,
+    id: 'd_newyear', name: '시무식 복주머니', icon: '🧧',
+    desc: '새해 복 많이 받으세요! 행운 +100%(4번째 선택지·상자 대박 확률↑) · 대신 적 체력 +30% · 월급 +20%',
+    stats: { luck: 1.0 }, enemyHpMul: 1.3, coinMul: 1.2,
+  },
+  {
+    id: 'd_sprint', name: '스프린트 주간', icon: '🏃',
+    desc: '2주 치 일을 1주에! 경험치 +60%(레벨업 폭주) · 대신 적 공격력 +30% · 월급 +20%',
+    xpMul: 1.6, enemyDamageMul: 1.3, coinMul: 1.2,
   },
   {
     id: 'd_bonus', name: '성과급 시즌', icon: '🎰',

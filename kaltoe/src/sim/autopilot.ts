@@ -3,17 +3,17 @@ import { WEAPONS, PASSIVE } from '../content';
 import type { World } from './types';
 
 /** 적·탄·위험 지대를 피하고 보석/상자로 향하는 이동 벡터 */
-export function autoMove(w: World): [number, number] {
+export function autoMove(w: World, o: { radius?: number; bullets?: boolean } = {}): [number, number] {
   const p = w.player;
   let ax = 0, ay = 0;
-  w.grid.query(p.x, p.y, 170, e => {
+  w.grid.query(p.x, p.y, o.radius ?? 170, e => {
     if (e.dead) return;
     const dx = p.x - e.x, dy = p.y - e.y;
     const d2 = Math.max(60, dx * dx + dy * dy);
     const k = (e.boss ? 4 : e.elite ? 2 : 1) * 900 / d2;
     ax += dx * k / Math.sqrt(d2); ay += dy * k / Math.sqrt(d2);
   });
-  for (const b of w.ebullets) {
+  if (o.bullets !== false) for (const b of w.ebullets) {
     const dx = p.x - b.x, dy = p.y - b.y, d2 = dx * dx + dy * dy;
     if (d2 < 120 * 120) { ax += dx / Math.max(20, d2) * 60; ay += dy / Math.max(20, d2) * 60; }
   }

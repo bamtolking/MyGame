@@ -63,6 +63,8 @@ export interface Enemy {
   lastHitSlot: number;             // 마지막으로 때린 무기 슬롯(처치 기여)
   chargeSpeed: number; chargeDur: number;  // 보스 돌진 파라미터
   straight: boolean;               // 무리 이벤트: 직진 강제
+  abLock: number;                  // 보스 능력 사이 전역 잠금
+  pendAb: number; pendT: number;   // 예고 중인 능력(탄막 발사 전 0.35초)
 }
 
 export type BulletKind = 'shot' | 'homing' | 'bounce' | 'boomerang' | 'drone';
@@ -195,7 +197,8 @@ export type SimEvent =
   | { t: 'chain'; pts: number[]; color: string }
   | { t: 'yageun' }
   | { t: 'clear' }
-  | { t: 'enemyShot' };
+  | { t: 'enemyShot' }
+  | { t: 'maxed'; id: string };
 
 export interface RunConfig {
   stage: StageDef;
@@ -285,7 +288,8 @@ export interface World {
   lunchOffered: boolean;
   gemCount: number;
   refillAcc: number;
-  lsBudget: number;                // 흡혈 회복 예산(초당 충전)               // 최소 생존 보충 누적                // 바닥의 경험치 보석 수(병합 판단)
+  lsBudget: number;
+  shotBudget: number;              // 일반 원거리 적 초당 발사 예산                // 흡혈 회복 예산(초당 충전)               // 최소 생존 보충 누적                // 바닥의 경험치 보석 수(병합 판단)
   damageMulT: number; damageMulAmt: number;  // 궁극기 vacuum 버프
   fireMulT: number; fireMul: number;         // 궁극기 clone 버프
 }

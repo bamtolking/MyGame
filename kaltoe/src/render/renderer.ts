@@ -377,6 +377,13 @@ export class Renderer {
       g.beginPath(); g.arc(e.x, e.y, Number(e.def.params?.blastRadius ?? 60), 0, Math.PI * 2); g.fill();
       g.globalAlpha = 1;
     }
+    if (e.pendAb >= 0) {
+      g.globalAlpha = 0.35 + Math.abs(Math.sin(this.time * 24)) * 0.4;
+      g.strokeStyle = '#ff2e2e'; g.lineWidth = 3;
+      g.beginPath(); g.arc(e.x, e.y, e.r * 1.35, 0, Math.PI * 2); g.stroke();
+      g.globalAlpha = 1;
+      drawSprite(g, emoji('❗', 18), e.x, e.y - e.r * 1.5);
+    }
     if (e.st === 1 && e.boss) {
       g.globalAlpha = 0.35;
       g.strokeStyle = '#ff2e2e'; g.lineWidth = e.r * 1.2; g.lineCap = 'round';

@@ -2,7 +2,7 @@
 import {
   ACHIEVEMENTS, ACHIEVEMENT, BALANCE, CHARACTERS, ENEMIES, LUNCHES, META_UPGRADES, PASSIVES, STAGES, ULTIMATE, WEAPON, WEAPONS,
 } from '../content';
-import { TITLE_TAGLINES, CLEAR_QUOTES, GAMEOVER_QUOTES, SHARE_TEMPLATES } from '../content/strings';
+import { TITLE_TAGLINES, CLEAR_QUOTES, GAMEOVER_QUOTES, SHARE_TEMPLATES, TIPS } from '../content/strings';
 import type { AchievementDef, CharacterDef } from '../content/types';
 import type { Profile } from '../platform/save';
 import { exportProfile, importProfile, newProfile } from '../platform/save';
@@ -28,11 +28,22 @@ export interface ScreenHost {
 
 const pickStr = (arr: readonly string[], f: string) => (arr.length ? arr[Math.floor(Math.random() * arr.length)] : f);
 
-function unlockHint(id: string | undefined): string {
+function unlockHint(id: string | undefined, p?: Profile): string {
   if (!id) return '';
   const a = ACHIEVEMENT.get(id);
   if (!a) return '업적으로 해금';
-  return a.hidden ? '??? (숨겨진 조건)' : `🔒 ${a.desc}`;
+  if (a.hidden) return '??? (숨겨진 조건)';
+  if (!p) return `🔒 ${a.desc}`;
+  const v = Math.min(achievementProgress(p, a).value, a.target);
+  return `🔒 ${a.desc} (${fmtNum(v)}/${fmtNum(a.target)})`;
+}
+
+/** 달성률이 높은 순으로 아직 못 한(숨김 아닌) 업적 n개 */
+function nextGoals(p: Profile, n: number): { a: AchievementDef; k: number; v: number }[] {
+  return ACHIEVEMENTS.filter(a => !p.achievements[a.id] && !a.hidden)
+    .map(a => { const v = achievementProgress(p, a).value; return { a, v, k: Math.min(0.999, v / a.target) }; })
+    .sort((x, y) => y.k - x.k || (x.a.reward.kind === 'coins' ? 1 : 0) - (y.a.reward.kind === 'coins' ? 1 : 0))
+    .slice(0, n);
 }
 
 function portrait(c: CharacterDef, w = 72, hgt = 80): HTMLCanvasElement {
@@ -87,7 +98,7 @@ export class Screens {
       h('div', { class: 'title-main' },
         di ? h('div', { class: `daily-card${unclaimedDaily ? ' badge-dot' : ''}`, onclick: () => { audio.play('click'); this.host.startRun({ char: di.char, stage: di.stage, heat: di.heat, daily: true }); } },
           h('div', null, '📅 ', h('b', null, '오늘의 업무'), p.daily.cleared ? ' ✅ 완료' : p.daily.played ? ' (재도전 가능)' : ' — 보너스 월급!'),
-          h('div', { class: 'sub' }, `${CHARACTERS.find(c => c.id === di.char)?.name} · ${STAGES.find(s => s.id === di.stage)?.name} · ${di.modifiers.map(m => `${m.icon}${m.name}`).join(' · ')}`),
+          h('div', { class: 'sub' }, `${CHARACTERS.find(c => c.id === di.char)?.name}${characterUnlocked(p, di.char) ? '' : '(체험 근무)'} · ${STAGES.find(s => s.id === di.stage)?.name} · ${di.modifiers.map(m => `${m.icon}${m.name}`).join(' · ')}`),
           p.daily.streak > 1 ? h('div', { class: 'sub' }, `🔥 연속 ${p.daily.streak}일 달성 중`) : null,
         ) : null,
         btn(h('span', null, '🏢 출근하기'), () => this.charSelect(), 'btn primary big'),
@@ -134,7 +145,7 @@ export class Screens {
               ult ? h('span', { class: 'pill c' }, `${ult.icon} ${ult.name}`) : null,
               ...Object.entries(c.stats).map(([k, v]) => h('span', { class: 'pill m' }, statLabel(k, v as number))),
             ),
-            !unlocked ? h('div', { class: 'small', style: 'margin-top:6px' }, unlockHint(c.unlockedBy)) : null,
+            !unlocked ? h('div', { class: 'small', style: 'margin-top:6px' }, unlockHint(c.unlockedBy, p)) : null,
             unlocked && !owned && c.price ? btn(`고용하기 ₩${c.price.toLocaleString('ko-KR')}`, () => {
               if (hireCharacter(p, c.id)) { audio.play('buy'); this.host.save(); this.selChar = c.id; render(); } else audio.play('hurt');
             }, 'btn small primary', { style: 'margin-top:8px' }) : null,
@@ -186,7 +197,7 @@ export class Screens {
           h('div', { class: 'bgemoji' }, s.icon),
           h('h3', { style: 'text-shadow:0 2px 6px rgba(0,0,0,.6)' }, `${s.icon} ${s.name}`),
           h('div', { class: 'small', style: 'color:#fff;text-shadow:0 1px 4px #000;font-weight:800' }, s.subtitle),
-          un ? h('div', { class: 'small', style: 'color:#fff;margin-top:6px;text-shadow:0 1px 4px #000;max-width:80%' }, s.desc) : h('div', { class: 'small', style: 'color:#fff;margin-top:6px' }, unlockHint(s.unlockedBy)),
+          un ? h('div', { class: 'small', style: 'color:#fff;margin-top:6px;text-shadow:0 1px 4px #000;max-width:80%' }, s.desc) : h('div', { class: 'small', style: 'color:#fff;margin-top:6px' }, unlockHint(s.unlockedBy, p)),
           b ? h('div', { class: 'row gap', style: 'margin-top:8px;flex-wrap:wrap' },
             b.clears ? h('span', { class: 'pill y' }, `칼퇴 ${b.clears}회`) : h('span', { class: 'pill' }, `최고 ${fmtTime(b.bestTime)} 생존`),
             h('span', { class: 'pill' }, `최다 처치 ${b.bestKills.toLocaleString('ko-KR')}`),
@@ -227,7 +238,7 @@ export class Screens {
           h('div', { class: 'ic' }, m.icon),
           h('div', { class: 'grow' },
             h('div', { class: 'nm' }, m.name, ' ', h('span', { class: 'small' }, `${r}/${m.maxRank}`)),
-            h('div', { class: 'small' }, un ? m.desc : unlockHint(m.unlockedBy)),
+            h('div', { class: 'small' }, un ? m.desc : unlockHint(m.unlockedBy, p)),
             m.maxRank <= 12 ? pips : h('div', { class: 'bar', style: 'margin-top:6px' }, h('i', { style: `width:${(r / m.maxRank) * 100}%` })),
           ),
           un ? (max ? h('span', { class: 'pill y' }, 'MAX') : btn(`₩${cost.toLocaleString('ko-KR')}`, () => {
@@ -434,11 +445,12 @@ export class Screens {
       if (r === 'failed') await promptBox(this.host.root, '복사해서 자랑하세요', text, true);
     }, 'btn ghost');
     const killed = rs.killedBy;
+    const goals = nextGoals(p, 3);
     this.mount(h('div', { class: 'screen' },
       h('div', { class: 'scroll' },
         h('div', { class: 'result-head' },
           h('div', { class: 'big' }, win ? '🎉' : '😵'),
-          h('h2', { class: win ? 'win' : 'lose' }, win ? (rs.overtimeSec > 0 ? `야근 ${fmtTime(rs.overtimeSec)} 후 퇴근` : '칼퇴 성공!') : '과로로 쓰러짐…'),
+          h('h2', { class: win ? 'win' : 'lose' }, win ? (rs.overtimeSec > 0 ? `야근 ${fmtTime(rs.overtimeSec)} 후 퇴근` : '칼퇴 성공!') : killed ? '과로로 쓰러짐…' : '조퇴 처리…'),
           h('div', { class: 'quote' }, win ? pickStr(CLEAR_QUOTES, '오늘도 무사히 퇴근!') : pickStr(GAMEOVER_QUOTES, '내일은 칼퇴할 수 있을 거야…')),
           !win && killed ? h('div', { class: 'small muted', style: 'margin-top:4px' }, `결정타: ${killed}`) : null,
           st.newBest ? h('div', { style: 'margin-top:8px' }, h('span', { class: 'newbest' }, '🏅 신기록!')) : null,
@@ -452,6 +464,14 @@ export class Screens {
         h('div', { class: 'small', style: 'margin-bottom:6px' },
           `기본 ₩${st.runCoins}` + (st.clearBonus ? ` + 칼퇴 보너스 ₩${st.clearBonus}` : '') + (st.overtimeBonus ? ` + 야근수당 ₩${st.overtimeBonus}` : '') + (st.dailyBonus ? ` + 오늘의 업무 ₩${st.dailyBonus}` : '') + ` · 보유 ₩${p.coins.toLocaleString('ko-KR')}`),
         grants,
+        goals.length ? h('div', { class: 'modal-title', style: 'font-size:17px;text-align:left;margin-top:8px' }, '🎯 다음 목표') : null,
+        ...goals.map(g => h('div', { class: 'card', style: 'padding:10px 12px;margin-bottom:6px' },
+          h('div', { class: 'row gap' }, h('span', { style: 'font-size:22px' }, g.a.icon), h('div', { class: 'grow' },
+            h('b', null, g.a.name), h('div', { class: 'small' }, `${g.a.desc} · 보상: ${rewardLabel(g.a)}`),
+            h('div', { class: 'bar', style: 'margin-top:5px' }, h('i', { style: `width:${g.k * 100}%` })),
+          )),
+        )),
+        h('div', { class: 'small', style: 'margin:8px 0;color:#cfd3ff' }, `💡 ${pickStr(TIPS, '')}`),
         h('div', { class: 'modal-title', style: 'font-size:17px;text-align:left;margin-top:8px' }, '🗡 무기별 피해'),
         build,
         h('div', { class: 'row gap', style: 'flex-wrap:wrap;margin-bottom:8px' },

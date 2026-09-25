@@ -4,6 +4,8 @@
 //   multitask→볼펜, grit→명함, speedread→서류철, energy→종이비행기, nunchi→사내 드론,
 //   clover→단축키 번개, selfhelp→퇴근 알람, stocks→법인카드, passion→토너 폭탄.
 // (vitamin은 진화 짝이 없는 순수 생존 패시브)
+// 2차 개정: 적 피해는 판 내내 거의 고정(일반 4~8)이라 방어는 소수점 단위로(철벽 멘탈 최대 -3).
+//          속독은 경험치도 조금 줘서 '안 집는 카드'에서 벗어나게, 열정 페이는 설명대로 실제 보상(경험치·월급)을 준다.
 import type { PassiveDef } from './types';
 
 export const PASSIVES: PassiveDef[] = [
@@ -18,10 +20,10 @@ export const PASSIVES: PassiveDef[] = [
   {
     id: 'mental',
     name: '철벽 멘탈',
-    desc: '받는 피해 -1 / 레벨 · 부장님 잔소리도 튕겨낸다.',
+    desc: '받는 피해 -0.6 / 레벨(최대 -3) · 부장님 잔소리도 튕겨낸다.',
     icon: '🛡️',
     maxLevel: 5,
-    perLevel: { armor: 1 },
+    perLevel: { armor: 0.6 },
   },
   {
     id: 'vitamin',
@@ -74,10 +76,10 @@ export const PASSIVES: PassiveDef[] = [
   {
     id: 'speedread',
     name: '속독 스킬',
-    desc: '투사체 속도 +10% / 레벨 · 결재 서류를 3초 만에 훑는다.',
+    desc: '투사체 속도 +10%, 경험치 +3% / 레벨 · 빨리 읽으니 빨리 배운다.',
     icon: '📖',
     maxLevel: 5,
-    perLevel: { projSpeed: 0.1 },
+    perLevel: { projSpeed: 0.1, growth: 0.03 },
   },
   {
     id: 'energy',
@@ -125,10 +127,10 @@ export const PASSIVES: PassiveDef[] = [
   {
     id: 'passion',
     name: '열정 페이',
-    desc: '저주 +10%, 피해 +3% / 레벨 · 일은 두 배, 보상도 (조금) 두 배.',
+    desc: '저주 +8%(적 체력·수·속도↑), 피해 +5%, 경험치 +5%, 월급 +10% / 레벨 · 일은 두 배, 보상도 조금 더.',
     icon: '🔥',
     maxLevel: 5,
-    perLevel: { curse: 0.1, might: 0.03 },
+    perLevel: { curse: 0.08, might: 0.05, growth: 0.05, greed: 0.1 },
     unlockedBy: 'u_passive_passion',
   },
 ];

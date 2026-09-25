@@ -46,7 +46,7 @@ export function createWorld(cfg: RunConfig): World {
     events: [], viewW: 440, viewH: 800, hitStop: 0,
     stats_: emptyRunStats(),
     enemyHpMul, enemySpeedMul, enemyDmgMul, spawnMul, xpMul, coinMul, flags,
-    lastHour: 9, lunchOffered: false, gemCount: 0, refillAcc: 0, lsBudget: 0, damageMulT: 0, damageMulAmt: 0, fireMulT: 0, fireMul: 1,
+    lastHour: 9, lunchOffered: false, gemCount: 0, refillAcc: 0, lsBudget: 0, shotBudget: 5, damageMulT: 0, damageMulAmt: 0, fireMulT: 0, fireMul: 1,
   };
   recalcBase(w);
   w.player.hp = w.d.maxHp;

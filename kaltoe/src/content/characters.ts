@@ -1,7 +1,14 @@
 // 캐릭터 8명 + 궁극기 8종.
 // 궁극기 게이지: 처치 1 = 1, 엘리트 20, 피격 피해 1당 0.5.
 // 처치 속도 목표(BRIEF): 0~100초 ≈ 3/s, 200~400초 ≈ 6.75/s, 400~600초 ≈ 8/s → 중반 충전 속도 ≈ 7~7.5/s(엘리트·피격 포함).
-// 따라서 charge 420~650 → 중반 기준 약 56~90초마다 1회, 첫 발동은 대략 120~170초 무렵.
+// 따라서 charge 360~650 → 중반 기준 약 50~90초마다 1회, 첫 발동은 대략 110~170초 무렵.
+// 궁극기 피해는 엔진이 '구간 체력 배율 × 스테이지 배율'을 곱해 시간과 함께 강해진다(540초 office ≈ ×9.5).
+// 보스 상대 기준: 한 번 발동으로 최종 보스 체력의 약 15~25%(사직서 ≈ 17%, rm -rf ≈ 24%, 커피 셔틀 ≈ 16~20%).
+//
+// 캐릭터 설계: 숫자 차이만이 아니라 '규칙을 살짝 비트는' 특징 하나씩.
+//   김신입 성장형 · 박대리 커피 수혈(회복) · 이개발 단축키 · 최디자 새로고침 · 정인턴 기동·성장 · 한과장 돈복
+//   윤팀장 결재 반려(레벨업 제외) · 낙하산 뒷배.
+//   복제 궁극기(법카/아빠 찬스)와 빙결 궁극기(최종_최종/긴급 회의)는 '짧고 잦은' 쪽과 '길고 드문' 쪽으로 나눴다.
 import type { CharacterDef, UltimateDef } from './types';
 
 export const ULTIMATES: UltimateDef[] = [
@@ -32,17 +39,17 @@ export const ULTIMATES: UltimateDef[] = [
     icon: '🗑️',
     kind: 'rain',
     charge: 560, // 중반 ≈ 76초
-    params: { dur: 5, rate: 12, radius: 60, damage: 240 },
+    params: { dur: 5, rate: 12, radius: 60, damage: 150 },
     shout: '다 지우고 퇴근합니다. sudo rm -rf /',
   },
   {
     id: 'final_final',
     name: '최종_최종_진짜최종',
-    desc: '모든 적을 6초간 얼린다. 그 사이 진짜 최종본을 저장한다.',
+    desc: '모든 적을 7초간 얼린다. 길고 드물다. 그 사이 진짜 최종본을 저장한다.',
     icon: '💾',
     kind: 'freeze',
-    charge: 520, // 중반 ≈ 70초
-    params: { dur: 6 },
+    charge: 580, // 중반 ≈ 78초
+    params: { dur: 7 },
     shout: '최종_최종_진짜최종.psd 저장!',
   },
   {
@@ -52,7 +59,7 @@ export const ULTIMATES: UltimateDef[] = [
     icon: '🏃',
     kind: 'shield',
     charge: 450, // 중반 ≈ 61초
-    params: { dur: 7, speed: 0.5, damage: 180 },
+    params: { dur: 7, speed: 0.5, damage: 35 },
     shout: '아아 열두 잔 나갑니다!! 비켜주세요!!',
   },
   {
@@ -68,11 +75,11 @@ export const ULTIMATES: UltimateDef[] = [
   {
     id: 'emergency_meeting',
     name: '긴급 회의 소집',
-    desc: '전원 회의실로! 모든 적이 4초간 얼어붙는다. 짧지만 자주 부른다.',
+    desc: '전원 회의실로! 모든 적이 3.5초간 얼어붙는다. 짧지만 자주 부른다.',
     icon: '📣',
     kind: 'freeze',
-    charge: 420, // 중반 ≈ 57초
-    params: { dur: 4 },
+    charge: 360, // 중반 ≈ 49초
+    params: { dur: 3.5 },
     shout: '다들 하던 거 멈추고 회의실로!',
   },
   {
@@ -103,22 +110,22 @@ export const CHARACTERS: CharacterDef[] = [
     id: 'park',
     name: '박대리',
     title: '커피 없인 못 사는 대리',
-    desc: '카페인이 곧 혈액. 손은 빠르지만 체력은 저질. (쿨타임 -8%, 이동 +10%, 최대 체력 -10)',
+    desc: '카페인이 곧 혈액. 손이 빠르고 커피로 버틴다. (쿨타임 -8%, 이동 +10%, 초당 회복 +0.2, 10레벨마다 쿨타임 -1%)',
     look: { skin: '#efc9a4', hair: '#6b4226', hairStyle: 'bob', suit: '#8a8f99', tie: '#b5793b', accessory: '☕' },
     startWeapon: 'coffee',
-    stats: { cooldown: 0.08, moveSpeed: 0.1, maxHp: -10 },
-    growth: { every: 10, stats: { cooldown: 0.02 } },
+    stats: { cooldown: 0.08, moveSpeed: 0.1, recovery: 0.2 },
+    growth: { every: 10, stats: { cooldown: 0.01 } },
     ultimate: 'coffee_break',
   },
   {
     id: 'lee',
     name: '이개발',
     title: '야근이 일상인 백엔드 개발자',
-    desc: '자리에서 안 일어나서 느리지만, 단축키로 모든 걸 해결한다. (쿨타임 -10%, 치명타 +5%, 이동 -10%, 25레벨마다 투사체 +1)',
+    desc: '자리에서 안 일어나서 느리지만, 단축키로 모든 걸 해결한다. (피해 +10%, 쿨타임 -10%, 치명타 +5%, 이동 -10%, 30레벨마다 투사체 +1)',
     look: { skin: '#f1cfae', hair: '#111111', hairStyle: 'spiky', suit: '#33363d', tie: '#35d07f', accessory: '💻', glasses: true },
     startWeapon: 'ctrlz',
-    stats: { cooldown: 0.1, crit: 0.05, moveSpeed: -0.1 },
-    growth: { every: 25, stats: { amount: 1 } },
+    stats: { might: 0.1, cooldown: 0.1, crit: 0.05, moveSpeed: -0.1 },
+    growth: { every: 30, stats: { amount: 1 } },
     ultimate: 'rmrf',
     unlockedBy: 'u_character_lee',
   },
@@ -126,10 +133,10 @@ export const CHARACTERS: CharacterDef[] = [
     id: 'choi',
     name: '최디자',
     title: '최종_진짜최종.psd의 디자이너',
-    desc: '"로고 좀 더 크게요" 소리에 단련되어 모든 게 크다. 밤샘 탓에 체력은 약함. (범위 +15%, 지속 +10%, 최대 체력 -10)',
+    desc: '"로고 좀 더 크게요" 소리에 단련되어 모든 게 크다. "수정 요청: 한 번만 더요" (범위 +15%, 지속 +10%, 새로고침 +2, 최대 체력 -10)',
     look: { skin: '#f8dcc4', hair: '#8e5cf7', hairStyle: 'long', suit: '#1f1f24', tie: '#ff6fae', accessory: '🎨', glasses: true },
     startWeapon: 'laser',
-    stats: { area: 0.15, duration: 0.1, maxHp: -10 },
+    stats: { area: 0.15, duration: 0.1, reroll: 2, maxHp: -10 },
     growth: { every: 10, stats: { area: 0.04 } },
     ultimate: 'final_final',
     unlockedBy: 'u_character_choi',
@@ -162,10 +169,10 @@ export const CHARACTERS: CharacterDef[] = [
     id: 'yoon',
     name: '윤팀장',
     title: '회의를 사랑하는 팀장',
-    desc: '회의로 다져진 맷집. 느리지만 쉽게 쓰러지지 않는다. (최대 체력 +30, 방어 +2, 범위 +10%, 이동 -10%, 10레벨마다 최대 체력 +10)',
+    desc: '회의로 다져진 맷집에 결재 반려 권한까지. 느리지만 쉽게 쓰러지지 않는다. (최대 체력 +30, 방어 +2, 범위 +10%, 레벨업 제외 +2, 이동 -10%, 10레벨마다 최대 체력 +10)',
     look: { skin: '#e6bf9a', hair: '#555555', hairStyle: 'bald', suit: '#2b2b2b', tie: '#8b1e2d', accessory: '📢', glasses: true },
     startWeapon: 'folder',
-    stats: { maxHp: 30, armor: 2, area: 0.1, moveSpeed: -0.1 },
+    stats: { maxHp: 30, armor: 2, area: 0.1, banish: 2, moveSpeed: -0.1 },
     growth: { every: 10, stats: { maxHp: 10 } },
     ultimate: 'emergency_meeting',
     unlockedBy: 'u_character_yoon',

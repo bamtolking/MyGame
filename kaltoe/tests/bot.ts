@@ -12,6 +12,7 @@ export interface BotOpts {
   stage?: string; char?: string; seed?: number; heat?: number; meta?: StatBlock; modifiers?: ModifierDef[];
   maxSeconds?: number; overtime?: boolean; strategy?: 'greedy' | 'evolve' | 'random'; allUnlocked?: boolean;
   idle?: boolean;  // 이동하지 않음(난이도 하한 확인)
+  human?: boolean; // 사람 흉내: 반응 0.2초, 좁은 시야, 탄 회피 안 함, 흔들림
 }
 
 export interface BotResult {
@@ -48,7 +49,14 @@ export function runBot(o: BotOpts = {}): BotResult {
   const t0 = performance.now();
   while (w.t < max) {
     if (w.phase === 'play') {
-      if (!o.idle && w.step % 3 === 0) { const [mx, my] = autoMove(w); w.player.mx = mx; w.player.my = my; }
+      if (!o.idle && !o.human && w.step % 3 === 0) { const [mx, my] = autoMove(w); w.player.mx = mx; w.player.my = my; }
+      if (o.human && w.step % 12 === 0) {
+        const [mx, my] = autoMove(w, { radius: 115, bullets: false });
+        // 판단 흔들림: 사람 손가락은 정확하지 않다
+        const j = Math.sin(w.step * 0.7919 + (o.seed ?? 1)) * 0.6;
+        const c = Math.cos(j), s = Math.sin(j);
+        w.player.mx = mx * c - my * s; w.player.my = mx * s + my * c;
+      }
       if (o.idle) { w.player.mx = 0; w.player.my = 0; }
       if (ultReady(w)) activateUlt(w);
       stepWorld(w);

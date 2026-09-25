@@ -4,16 +4,23 @@
 // - 레벨업 중 선택 필드(slow 등)를 올리는 무기는 base에 0으로 미리 넣어 둔다(undefined + n 방지).
 //
 // 단일 대상 DPS 목표(스탯 보정 전): Lv1 ≈ 18~25, Lv8 ≈ 110~160, 진화 ≈ Lv8의 2.5~3.5배 + 특수 효과.
-// 광역 무기(aura/orbit/nova/lob/mine/strike)는 '적 1마리당' DPS가 낮은 대신 여러 마리를 동시에 때린다.
-// 수치 근거(대략):
-//   shot/homing/drone/bounce : damage × amount / cooldown
-//   boomerang                : damage × amount × 2(왕복) / cooldown
-//   aura                     : damage / hitCooldown (범위 안 모든 적)
-//   orbit                    : damage × min(amount × speed / 360, 1 / hitCooldown) × min(1, duration / cooldown)
-//   beam                     : damage × (duration / hitCooldown) / cooldown
-//   chain                    : damage × amount / cooldown (+ 연쇄 피해)
-//   nova                     : damage × amount / cooldown (range 안 모든 적)
-//   lob                      : (damage + damage × puddle × duration) × amount / cooldown (착탄 지점)
+// 광역 무기(aura/orbit/nova/lob/mine/strike)는 '적 1마리당' DPS가 낮은 대신 여러 마리를 동시에 때린다
+// (70마리가 달라붙은 상황에서 Lv8 ≥ 1.5k, 다음 순위의 1.6배를 넘는 Lv8은 없게).
+//
+// 수치 근거 — 엔진(src/sim/weapons.ts) 실제 동작 기준(2차 개정: 1차 공식 5개가 엔진과 달라 카드·서류철 등이 목표를 빗나갔다):
+//   shot/homing/drone/bounce : damage × amount / cooldown                         (drone은 amount대 각각 cooldown마다 1발)
+//   boomerang                : 단일 대상은 damage / hitCooldown 이 상한 — 한 무기의 모든 부메랑이 적 1마리의 재타격 칸을
+//                              공유하므로 amount·왕복 횟수와 무관. 큰 적(보스)만 min(상한, damage × amount × 2 / cooldown)
+//   aura                     : damage / tick, tick = max(0.08, hitCooldown × 쿨타임 배율) — 쿨타임 스탯도 오라를 빠르게 한다
+//   orbit                    : 켜짐 duration → 꺼짐 cooldown 순환이라 가동률 = duration / (duration + cooldown)
+//                              (duration ≥ cooldown이면 상시). 적 1마리당 ≈ damage / hitCooldown × 가동률
+//   beam                     : damage × (duration / hitCooldown) × amount(같은 방향일 때) / cooldown
+//   chain                    : 한 번의 발사(volley)에서 이미 맞은 적은 제외된다 → 혼자 있는 적은 발사당 1번개만 맞는다.
+//                              단일 = damage / cooldown, 무리 = damage × amount × (1 + Σ falloff^k) / cooldown
+//   strike/lob               : 발사당 서로 다른 적을 노린다 → 단일 = damage / cooldown (+장판 damage × puddle / hitCooldown)
+//   nova                     : 고리 1개가 range 안 모든 적을 1번씩 → 적 1마리당 damage × amount / cooldown (재타격 간격 없음)
+//   mine                     : 발동 반경 안에 들어온 적 근처에서 폭발 → 사실상 근접 광역, 단일 ≈ damage × amount / cooldown × 적중률
+// (엔진에 '단일 대상이면 같은 적을 다시 노린다' 규칙이 들어오면 chain/strike/lob 단일 DPS가 amount배로 오른다 — 결과 보고 참고)
 import type { WeaponDef } from './types';
 
 export const WEAPONS: WeaponDef[] = [
@@ -74,7 +81,7 @@ export const WEAPONS: WeaponDef[] = [
     evolvesTo: 'caffeine_overdrive',
   },
 
-  // 명함 회오리 — 몸 둘레를 도는 방어형 궤도. Lv7에 거의 상시, 존버 정신(지속)과 만나면 완전 상시.
+  // 명함 회오리 — 몸 둘레를 도는 방어형 궤도. Lv4부터 상시(지속 4 ≥ 쿨 3). 단일 Lv1 ≈ 22 → Lv8 ≈ 113.
   {
     id: 'cards',
     name: '명함 회오리',
@@ -85,7 +92,7 @@ export const WEAPONS: WeaponDef[] = [
     archetype: 'orbit',
     targeting: 'nearest',
     base: {
-      damage: 15, cooldown: 4.5, amount: 2, area: 11, range: 62, speed: 220, duration: 3,
+      damage: 18, cooldown: 3.0, amount: 2, area: 11, range: 62, speed: 220, duration: 3,
       pierce: 999, knockback: 10, hitCooldown: 0.5, interval: 0,
     },
     levels: [
@@ -94,14 +101,15 @@ export const WEAPONS: WeaponDef[] = [
       { desc: '지속 +1초 · 회전 +20%', delta: { duration: 1, speed: 44 } },
       { desc: '명함 +1', delta: { amount: 1 } },
       { desc: '피해 +6 · 궤도 +15%', delta: { damage: 6, range: 10 } },
-      { desc: '쿨타임 -0.3초 · 재타격 간격 -0.1초', delta: { cooldown: -0.3, hitCooldown: -0.1 } },
+      { desc: '쿨타임 -0.3초 · 재타격 간격 -0.2초', delta: { cooldown: -0.3, hitCooldown: -0.2 } },
       { desc: '명함 +1 · 피해 +6', delta: { amount: 1, damage: 6 } },
     ],
     evolveWith: 'grit',
     evolvesTo: 'vip_cards',
   },
 
-  // 서류철 부메랑 — 무한 관통 왕복. 앞뒤로 두 번 때리는 라인 청소기. Lv1 20 → Lv8 146.
+  // 서류철 부메랑 — 무한 관통 왕복 라인 청소기. 가장 튼튼한 적(보스·엘리트) 쪽으로 던진다.
+  // 단일 상한 = damage / hitCooldown: 보스 상대 Lv1 ≈ 60 → Lv8 ≈ 150, 작은 적은 Lv8 ≈ 72.
   {
     id: 'folder',
     name: '서류철 부메랑',
@@ -110,10 +118,10 @@ export const WEAPONS: WeaponDef[] = [
     projectile: '📁',
     color: '#f2b544',
     archetype: 'boomerang',
-    targeting: 'nearest',
+    targeting: 'strongest',
     base: {
       damage: 16, cooldown: 1.6, amount: 1, area: 14, range: 170, speed: 320, duration: 3,
-      pierce: 999, knockback: 10, hitCooldown: 0.35, interval: 0.15,
+      pierce: 999, knockback: 10, hitCooldown: 0.2, interval: 0.15,
     },
     levels: [
       { desc: '서류철 +1', delta: { amount: 1 } },
@@ -156,7 +164,7 @@ export const WEAPONS: WeaponDef[] = [
     evolvesTo: 'clip_gatling',
   },
 
-  // 단축키 번개 — 무작위 적에게 번개, 주변으로 연쇄. 무리 정리 특화. Lv8 단일 122 + 연쇄.
+  // 단축키 번개 — 무작위 적에게 번개, 주변으로 연쇄. 무리 정리 특화(혼자 있는 보스에겐 발사당 1번개: Lv8 단일 ≈ 25).
   {
     id: 'ctrlz',
     name: '단축키 번개',
@@ -186,7 +194,7 @@ export const WEAPONS: WeaponDef[] = [
 
   // ───────────────────────────── 업적 해금 8종 ─────────────────────────────
 
-  // 레이저 포인터 — 관통 광선, 줄 선 적을 한 번에 지진다. Lv1 19 → Lv8 117.
+  // 레이저 포인터 — 관통 광선. 가장 튼튼한 적을 조준하고, 그 사이에 줄 선 적도 함께 지진다. Lv1 19 → Lv8 117.
   {
     id: 'laser',
     name: '레이저 포인터',
@@ -195,7 +203,7 @@ export const WEAPONS: WeaponDef[] = [
     projectile: '🔴',
     color: '#ff3344',
     archetype: 'beam',
-    targeting: 'nearest',
+    targeting: 'strongest',
     base: {
       damage: 8, cooldown: 2.2, amount: 1, area: 8, range: 280, speed: 0, duration: 0.8,
       pierce: 999, knockback: 0, hitCooldown: 0.15, interval: 0,
@@ -274,6 +282,7 @@ export const WEAPONS: WeaponDef[] = [
   },
 
   // 엔터키 연타 — 몸에서 퍼지는 충격파 고리 + 강한 넉백. 포위당했을 때의 탈출기.
+  // 고리는 범위 안 모든 적을 재타격 간격 없이 때리므로 1발당 피해를 낮게 잡았다: 70마리 포위 Lv1 ≈ 290 → Lv8 ≈ 2.5k(2위의 1.6배 이내), 단일 ≈ 36.
   {
     id: 'keyboard',
     name: '엔터키 연타',
@@ -284,17 +293,17 @@ export const WEAPONS: WeaponDef[] = [
     archetype: 'nova',
     targeting: 'nearest',
     base: {
-      damage: 14, cooldown: 1.8, amount: 2, area: 16, range: 130, speed: 260, duration: 0.6,
+      damage: 10, cooldown: 1.6, amount: 1, area: 16, range: 130, speed: 260, duration: 0.6,
       pierce: 999, knockback: 22, hitCooldown: 0.5, interval: 0.25,
     },
     levels: [
-      { desc: '피해 +5', delta: { damage: 5 } },
+      { desc: '피해 +4', delta: { damage: 4 } },
       { desc: '연타 +1', delta: { amount: 1 } },
       { desc: '충격파 범위 +20%', delta: { range: 26 } },
-      { desc: '피해 +5 · 넉백 +30%', delta: { damage: 5, knockback: 7 } },
+      { desc: '피해 +4 · 넉백 +30%', delta: { damage: 4, knockback: 7 } },
       { desc: '쿨타임 -0.25초', delta: { cooldown: -0.25 } },
-      { desc: '연타 +1 · 충격파 범위 +15%', delta: { amount: 1, range: 20 } },
-      { desc: '피해 +8', delta: { damage: 8 } },
+      { desc: '충격파 범위 +15%', delta: { range: 20 } },
+      { desc: '피해 +5', delta: { damage: 5 } },
     ],
     evolveWith: 'gym',
     evolvesTo: 'mech_keyboard',
@@ -436,7 +445,7 @@ export const WEAPONS: WeaponDef[] = [
     levels: [],
   },
 
-  // 아메리카노 + 엄마 도시락 → 거대 화상 오라 + 강감속 + 미량 흡혈. 적 1마리당 180 + 화상 20 ≈ 3배.
+  // 아메리카노 + 엄마 도시락 → 거대 화상 오라 + 강감속 + 미량 흡혈(포위 70마리 기준 초당 ≈ 6 회복). 적 1마리당 180 + 화상 20 ≈ 3배.
   {
     id: 'caffeine_overdrive',
     name: '카페인 오버드라이브',
@@ -450,12 +459,12 @@ export const WEAPONS: WeaponDef[] = [
     base: {
       damage: 36, cooldown: 1, amount: 1, area: 120, range: 0, speed: 0, duration: 0,
       pierce: 999, knockback: 10, hitCooldown: 0.2, interval: 0.1,
-      slow: 0.35, slowDur: 0.6, burnDps: 20, burnDur: 2, lifesteal: 0.001,
+      slow: 0.35, slowDur: 0.6, burnDps: 20, burnDur: 2, lifesteal: 0.0002,
     },
     levels: [],
   },
 
-  // 명함 + 존버 정신 → 상시 6장 황금 궤도, 빙결·치명타. 적 1마리당 200(+치명) ≈ 2.8배.
+  // 명함 + 존버 정신 → 상시 6장 황금 궤도, 빙결·치명타. 적 1마리당 ≈ 300(+치명) ≈ Lv8의 2.7배.
   {
     id: 'vip_cards',
     name: 'VIP 골드 명함',
@@ -468,13 +477,13 @@ export const WEAPONS: WeaponDef[] = [
     evolved: true,
     base: {
       damage: 60, cooldown: 1, amount: 6, area: 15, range: 85, speed: 300, duration: 99,
-      pierce: 999, knockback: 20, hitCooldown: 0.3, interval: 0,
+      pierce: 999, knockback: 20, hitCooldown: 0.2, interval: 0,
       freezeChance: 0.1, critBonus: 0.1,
     },
     levels: [],
   },
 
-  // 서류철 + 속독 스킬 → 5개 대형 부메랑 + 감속. 단일 473 ≈ 3.2배.
+  // 서류철 + 속독 스킬 → 5개 대형 부메랑 + 감속. 단일 상한 52 / 0.12 ≈ 430(실측 ≈ 390) ≈ Lv8의 2.7배.
   {
     id: 'approval_storm',
     name: '무한 결재',
@@ -483,11 +492,11 @@ export const WEAPONS: WeaponDef[] = [
     projectile: '🗂️',
     color: '#ff9f1a',
     archetype: 'boomerang',
-    targeting: 'nearest',
+    targeting: 'strongest',
     evolved: true,
     base: {
       damage: 52, cooldown: 1.1, amount: 5, area: 22, range: 240, speed: 420, duration: 3,
-      pierce: 999, knockback: 20, hitCooldown: 0.3, interval: 0.1,
+      pierce: 999, knockback: 20, hitCooldown: 0.12, interval: 0.1,
       slow: 0.35, slowDur: 1.2,
     },
     levels: [],
@@ -512,7 +521,8 @@ export const WEAPONS: WeaponDef[] = [
     levels: [],
   },
 
-  // 단축키 번개 + 사내 인맥 → 번개 7갈래, 감쇠 없는 8연쇄, 확률 빙결(먹통). 단일 379 ≈ 3.1배.
+  // 단축키 번개 + 사내 인맥 → 번개 5갈래, 감쇠 없는 7연쇄, 확률 빙결(먹통).
+  // 1발 피해를 키워 혼자 있는 적에게도 아프게(단일 70 / 0.85 ≈ 82, 엔진 재타깃 규칙이 들어오면 ≈ 410). 무리 출력은 1차와 같다.
   {
     id: 'ctrl_alt_del',
     name: 'Ctrl+Alt+Del 폭풍',
@@ -524,14 +534,14 @@ export const WEAPONS: WeaponDef[] = [
     targeting: 'random',
     evolved: true,
     base: {
-      damage: 46, cooldown: 0.85, amount: 7, area: 14, range: 340, speed: 0, duration: 0.25,
+      damage: 70, cooldown: 0.85, amount: 5, area: 14, range: 340, speed: 0, duration: 0.25,
       pierce: 0, knockback: 4, hitCooldown: 0.5, interval: 0.05,
       chains: 7, chainRange: 150, chainFalloff: 1, freezeChance: 0.15,
     },
     levels: [],
   },
 
-  // 레이저 + 넓은 오지랖 → 굵고 긴 3방향 빔 + 감속 + 화상. 단일 ≈ 326 ≈ 2.8배.
+  // 레이저 + 넓은 오지랖 → 굵고 긴 3방향 빔 + 감속 + 화상. 가장 튼튼한 적을 조준. 단일 ≈ 326 ≈ 2.8배.
   {
     id: 'presentation_beam',
     name: '프레젠테이션 빔',
@@ -540,7 +550,7 @@ export const WEAPONS: WeaponDef[] = [
     projectile: '📽️',
     color: '#fff27a',
     archetype: 'beam',
-    targeting: 'nearest',
+    targeting: 'strongest',
     evolved: true,
     base: {
       damage: 34, cooldown: 2.4, amount: 3, area: 30, range: 460, speed: 0, duration: 2.2,
@@ -550,11 +560,12 @@ export const WEAPONS: WeaponDef[] = [
     levels: [],
   },
 
-  // 토너 폭탄 + 열정 페이 → 6개의 거대 잉크 장판, 강감속. 저주로 늘어난 적을 늪에 가둔다.
+  // 토너 폭탄 + 열정 페이 → 5개의 거대 잉크 장판, 강감속. 저주로 늘어난 적을 늪에 가둔다.
+  // 장판끼리 재타격 간격을 공유하지 않아 겹칠수록 세지므로 개수·장판 비율을 억제(포위 ≈ 6.4k, 단일 ≈ 190 ≈ 토너 Lv8의 2.2배).
   {
     id: 'ink_flood',
     name: '잉크 대홍수',
-    desc: '토너 여섯 통이 동시에 터졌다. 사무실이 잉크 바다가 됐다.',
+    desc: '토너 다섯 통이 동시에 터졌다. 사무실이 잉크 바다가 됐다.',
     icon: '🌊',
     projectile: '🖨️',
     color: '#2d1b69',
@@ -562,14 +573,14 @@ export const WEAPONS: WeaponDef[] = [
     targeting: 'random',
     evolved: true,
     base: {
-      damage: 44, cooldown: 2.2, amount: 6, area: 80, range: 300, speed: 0, duration: 5,
+      damage: 44, cooldown: 2.2, amount: 5, area: 72, range: 300, speed: 0, duration: 5,
       pierce: 999, knockback: 8, hitCooldown: 0.4, interval: 0.12,
-      delay: 0.6, puddle: 1.2, slow: 0.45, slowDur: 0.8,
+      delay: 0.6, puddle: 1.0, slow: 0.45, slowDur: 0.8,
     },
     levels: [],
   },
 
-  // 종이비행기 + 에너지 드링크 → 종이학 10마리 유도 + 관통 2 + 흡혈(소원). 단일 400 ≈ 3.1배.
+  // 종이비행기 + 에너지 드링크 → 종이학 10마리 유도 + 관통 2 + 흡혈(소원, 초당 ≈ 3~6 회복). 단일 400 ≈ 3.1배.
   {
     id: 'crane_squadron',
     name: '종이학 편대',
@@ -583,12 +594,12 @@ export const WEAPONS: WeaponDef[] = [
     base: {
       damage: 40, cooldown: 1.0, amount: 10, area: 10, range: 460, speed: 380, duration: 3.5,
       pierce: 2, knockback: 6, hitCooldown: 0.5, interval: 0.06,
-      turnRate: 7, lifesteal: 0.004,
+      turnRate: 7, lifesteal: 0.002,
     },
     levels: [],
   },
 
-  // 엔터키 + 헬스장 회원권 → 5연타 대형 충격파 + 초강력 넉백 + 확률 빙결. 적 1마리당 237 ≈ 2.9배.
+  // 엔터키 + 헬스장 회원권 → 3연타 대형 충격파 + 초강력 넉백 + 확률 빙결. 단일 ≈ 120(Lv8의 3.3배), 포위 ≈ 8.4k.
   {
     id: 'mech_keyboard',
     name: '청축 기계식 키보드',
@@ -600,7 +611,7 @@ export const WEAPONS: WeaponDef[] = [
     targeting: 'nearest',
     evolved: true,
     base: {
-      damage: 64, cooldown: 1.35, amount: 5, area: 22, range: 240, speed: 340, duration: 0.7,
+      damage: 64, cooldown: 1.6, amount: 3, area: 22, range: 200, speed: 340, duration: 0.7,
       pierce: 999, knockback: 38, hitCooldown: 0.5, interval: 0.16,
       freezeChance: 0.12,
     },
@@ -626,7 +637,7 @@ export const WEAPONS: WeaponDef[] = [
     levels: [],
   },
 
-  // 법인카드 + 주식 앱 → 5장, 15회 튕김, 치명타 +30%. 단일 267(+치명 30%) ≈ 3.2배.
+  // 법인카드 + 주식 앱 → 5장, 10회 튕김, 치명타 +20%. 단일 ≈ 315(+치명) ≈ 2.9배, 포위 ≈ 3.5k.
   {
     id: 'black_card',
     name: '블랙카드',
@@ -639,13 +650,13 @@ export const WEAPONS: WeaponDef[] = [
     evolved: true,
     base: {
       damage: 64, cooldown: 1.2, amount: 5, area: 11, range: 200, speed: 520, duration: 3,
-      pierce: 15, knockback: 8, hitCooldown: 0.5, interval: 0.1,
-      critBonus: 0.3,
+      pierce: 10, knockback: 8, hitCooldown: 0.5, interval: 0.1,
+      critBonus: 0.2,
     },
     levels: [],
   },
 
-  // 포스트잇 지뢰 + 철벽 멘탈 → 10장 대형 끈끈이 지뢰밭, 강감속. 버티는 자의 무기.
+  // 포스트잇 지뢰 + 철벽 멘탈 → 7장 대형 끈끈이 지뢰밭, 강감속. 버티는 자의 무기(포위 ≈ 5.4k, 단일 ≈ 200).
   {
     id: 'postit_field',
     name: '포스트잇 지뢰밭',
@@ -657,7 +668,7 @@ export const WEAPONS: WeaponDef[] = [
     targeting: 'nearest',
     evolved: true,
     base: {
-      damage: 80, cooldown: 1.5, amount: 10, area: 76, range: 110, speed: 0, duration: 10,
+      damage: 80, cooldown: 1.5, amount: 7, area: 66, range: 110, speed: 0, duration: 10,
       pierce: 999, knockback: 16, hitCooldown: 0.5, interval: 0.08,
       trigger: 34, slow: 0.55, slowDur: 2.5,
     },
