@@ -12,7 +12,7 @@ import {
 } from '../meta/progress';
 import type { World } from '../sim/types';
 import { clockText } from '../sim/director';
-import { h, btn, clear, confirmBox, promptBox, statLabel, fmtTime } from './dom';
+import { h, btn, clear, confirmBox, promptBox, statLabel, fmtTime, watchDisplayFont } from './dom';
 import { worker } from '../render/sprites';
 import { audio } from '../platform/audio';
 import { shareCard, shareCardDataUrl } from './sharecard';
@@ -71,7 +71,7 @@ export class Screens {
   selStage = 'office';
   selHeat = 0;
   curName = '';
-  constructor(private host: ScreenHost) { this.syncSel(); }
+  constructor(private host: ScreenHost) { this.syncSel(); watchDisplayFont(); }
 
   /** 저장된 마지막 선택(캐릭터·근무지·강도)으로 맞춘다 */
   syncSel() {
@@ -107,9 +107,9 @@ export class Screens {
         h('span', { class: 'coins' }, p.coins.toLocaleString('ko-KR')),
       ),
       h('div', { class: 'logo' },
-        h('div', { class: 'alarm' }, '⏰'),
-        h('h1', null, '칼퇴', h('small', null, 'SURVIVOR')),
-        h('div', { class: 'strike' }, '오늘 목표: ', h('s', null, '야근'), ' → 18:00 퇴근'),
+        h('div', { class: 'alarm' }, h('span', null, '⏰')),
+        h('h1', null, h('span', { class: 'kt' }, '칼퇴'), h('small', null, 'SURVIVOR')),
+        h('div', { class: 'strike' }, '오늘 목표: ', h('s', null, '야근'), ' → ', h('b', null, '18:00'), ' 퇴근'),
         tag,
       ),
       h('div', { class: 'title-main' },
@@ -120,9 +120,9 @@ export class Screens {
         ) : null,
         btn(h('span', null, '🏢 출근하기'), () => this.charSelect(), 'btn primary big'),
         h('div', { class: 'title-grid' },
-          btn([h('span', { class: 'ic' }, '💝'), '복지'], () => this.shop(), 'btn ghost'),
-          btn([h('span', { class: 'ic' }, '🏆'), '업적'], () => this.achievements(), 'btn ghost'),
-          btn([h('span', { class: 'ic' }, '📖'), '도감'], () => this.codex(), 'btn ghost'),
+          btn([h('span', { class: 'ic' }, '💝'), h('span', { class: 'lb' }, '복지')], () => this.shop(), 'btn ghost'),
+          btn([h('span', { class: 'ic' }, '🏆'), h('span', { class: 'lb' }, '업적')], () => this.achievements(), 'btn ghost'),
+          btn([h('span', { class: 'ic' }, '📖'), h('span', { class: 'lb' }, '도감')], () => this.codex(), 'btn ghost'),
         ),
         h('div', { class: 'row gap' },
           btn('⚙ 설정', () => this.settings(() => this.title()), 'btn ghost small grow'),
@@ -210,11 +210,11 @@ export class Screens {
       for (const s of STAGES) {
         const un = stageUnlocked(p, s.id);
         const b = p.bests[s.id];
-        const card = h('div', { class: `card stage-card${this.selStage === s.id ? ' sel' : ''}${un ? '' : ' locked'}`, style: `background:linear-gradient(135deg, ${s.palette.floorAlt}, ${s.palette.floor})` },
+        const card = h('div', { class: `card stage-card${this.selStage === s.id ? ' sel' : ''}${un ? '' : ' locked'}`, 'data-stage': s.id },
           h('div', { class: 'bgemoji' }, s.icon),
-          h('h3', { style: 'text-shadow:0 2px 6px rgba(0,0,0,.6)' }, `${s.icon} ${s.name}`),
-          h('div', { class: 'small', style: 'color:#fff;text-shadow:0 1px 4px #000;font-weight:800' }, s.subtitle),
-          un ? h('div', { class: 'small', style: 'color:#fff;margin-top:6px;text-shadow:0 1px 4px #000;max-width:80%' }, s.desc) : h('div', { class: 'small', style: 'color:#fff;margin-top:6px' }, unlockHint(s.unlockedBy, p)),
+          h('h3', null, `${s.icon} ${s.name}`),
+          h('div', { class: 'sub' }, s.subtitle),
+          un ? h('div', { class: 'desc' }, s.desc) : h('div', { class: 'desc lock' }, unlockHint(s.unlockedBy, p)),
           b ? h('div', { class: 'row gap', style: 'margin-top:8px;flex-wrap:wrap' },
             b.clears ? h('span', { class: 'pill y' }, `칼퇴 ${b.clears}회`) : h('span', { class: 'pill' }, `최고 ${fmtTime(b.bestTime)} 생존`),
             h('span', { class: 'pill' }, `최다 처치 ${b.bestKills.toLocaleString('ko-KR')}`),
@@ -286,12 +286,12 @@ export class Screens {
       const pr = achievementProgress(p, a);
       const hide = a.hidden && !pr.done;
       const k = Math.min(1, pr.value / a.target);
-      list.appendChild(h('div', { class: `card shop-item${pr.done ? '' : ''}`, style: pr.done ? 'box-shadow: inset 0 0 0 2px rgba(255,216,77,.35)' : '' },
+      list.appendChild(h('div', { class: `card shop-item ach${pr.done ? ' done' : ''}` },
         h('div', { class: 'ic' }, pr.done ? a.icon : hide ? '❓' : a.icon),
         h('div', { class: 'grow' },
           h('div', { class: 'nm' }, hide ? '???' : a.name, pr.done ? ' ✅' : ''),
           h('div', { class: 'small' }, hide ? '숨겨진 업적' : a.desc),
-          h('div', { class: 'small', style: 'color:#e4b8ff;margin-top:2px' }, `보상: ${rewardLabel(a)}`),
+          h('div', { class: 'small reward' }, `보상: ${rewardLabel(a)}`),
           !pr.done && !hide ? h('div', { class: 'bar', style: 'margin-top:6px' }, h('i', { style: `width:${k * 100}%` })) : null,
           !pr.done && !hide ? h('div', { class: 'small muted', style: 'margin-top:2px' }, `${fmtNum(Math.min(pr.value, a.target))} / ${fmtNum(a.target)}`) : null,
         ),
@@ -334,7 +334,7 @@ export class Screens {
           ),
         ));
       }
-      body.appendChild(h('div', { class: 'modal-title', style: 'font-size:18px;margin:14px 0 8px;text-align:left' }, '패시브'));
+      body.appendChild(h('div', { class: 'sec-title' }, '패시브'));
       const grid = h('div', { class: 'codex-grid' });
       for (const ps of PASSIVES) {
         const un = passiveUnlocked(p, ps.id);
@@ -349,7 +349,7 @@ export class Screens {
         grid.appendChild(h('div', { class: `codex-cell${k ? '' : ' unk'}` },
           h('span', { class: 'e' }, k ? (e.label ? '💬' : e.sprite) : '❔'),
           k ? (e.label ? `"${e.label}"` : e.name) : '???',
-          k && (e.boss || e.elite) ? h('div', { class: 'small', style: 'color:#ff9da0' }, e.boss ? '보스' : '엘리트') : null,
+          k && (e.boss || e.elite) ? h('div', { class: `small rank ${e.boss ? 'boss' : 'elite'}` }, e.boss ? '보스' : '엘리트') : null,
         ));
       }
       body.appendChild(h('div', { class: 'small', style: 'margin-bottom:8px' }, `발견 ${p.discovered.enemies.length}/${ENEMIES.length}`));
@@ -362,7 +362,7 @@ export class Screens {
         grid.appendChild(h('div', { class: `codex-cell${un ? '' : ' unk'}` },
           h('span', { class: 'e' }, un ? l.icon : '🔒'), un ? l.name : '???',
           h('div', { class: 'small' }, un ? Object.entries(l.stats).map(([kk, v]) => statLabel(kk, v as number)).join(', ') : unlockHint(l.unlockedBy)),
-          k ? h('div', { class: 'small', style: 'color:var(--mint)' }, '먹어봄') : null,
+          k ? h('div', { class: 'small ate' }, '먹어봄') : null,
         ));
       }
       body.appendChild(grid);
@@ -480,9 +480,10 @@ export class Screens {
         catch { try { document.execCommand('copy'); done(); } catch { /* 선택된 상태로 둔다 */ } }
       }, 'btn primary');
       wrap.appendChild(h('div', { class: 'modal' },
+        h('div', { class: 'modal-kicker' }, 'SHARE'),
         h('div', { class: 'modal-title' }, '📣 결과 카드'),
         h('div', { class: 'modal-sub' }, '이미지를 길게 눌러 저장하거나 공유하세요'),
-        url ? h('img', { src: url, alt: '칼퇴 서바이버 결과 카드', style: 'width:100%;border-radius:14px;display:block;margin-bottom:10px;-webkit-touch-callout:default;user-select:auto;pointer-events:auto' }) : null,
+        url ? h('img', { class: 'share-img', src: url, alt: '칼퇴 서바이버 결과 카드' }) : null,
         ta,
         h('div', { class: 'row gap' }, btn('닫기', () => wrap.remove(), 'btn ghost grow'), copy),
       ));
@@ -492,7 +493,7 @@ export class Screens {
     const goals = nextGoals(p, 3);
     this.mount(h('div', { class: 'screen' },
       h('div', { class: 'scroll' },
-        h('div', { class: 'result-head' },
+        h('div', { class: `result-head ${win ? 'win' : 'lose'}` },
           h('div', { class: 'big' }, win ? '🎉' : '😵'),
           h('h2', { class: win ? 'win' : 'lose' }, win ? (rs.overtimeSec > 0 ? `야근 ${fmtTime(rs.overtimeSec)} 후 퇴근` : '칼퇴 성공!') : killed ? '과로로 쓰러짐…' : '조퇴 처리…'),
           h('div', { class: 'quote' }, win ? pickStr(CLEAR_QUOTES, '오늘도 무사히 퇴근!') : pickStr(GAMEOVER_QUOTES, '내일은 칼퇴할 수 있을 거야…')),
@@ -500,30 +501,30 @@ export class Screens {
           st.newBest ? h('div', { style: 'margin-top:8px' }, h('span', { class: 'newbest' }, '🏅 신기록!')) : null,
         ),
         h('div', { class: 'kpis' },
-          h('div', { class: 'kpi' }, h('div', { class: 'k' }, '생존 시간'), h('div', { class: 'v' }, fmtTime(Math.min(w.t, BALANCE.runSeconds)))),
-          h('div', { class: 'kpi' }, h('div', { class: 'k' }, '레벨'), h('div', { class: 'v' }, `Lv ${w.player.level}`)),
-          h('div', { class: 'kpi' }, h('div', { class: 'k' }, '처치'), h('div', { class: 'v' }, rs.kills.toLocaleString('ko-KR'))),
-          h('div', { class: 'kpi' }, h('div', { class: 'k' }, '받은 월급'), h('div', { class: 'v y' }, `₩${st.total.toLocaleString('ko-KR')}`)),
+          h('div', { class: 'kpi' }, h('div', { class: 'k' }, '⏱ 생존 시간'), h('div', { class: 'v' }, fmtTime(Math.min(w.t, BALANCE.runSeconds)))),
+          h('div', { class: 'kpi' }, h('div', { class: 'k' }, '⭐ 레벨'), h('div', { class: 'v' }, `Lv ${w.player.level}`)),
+          h('div', { class: 'kpi' }, h('div', { class: 'k' }, '💀 처치'), h('div', { class: 'v' }, rs.kills.toLocaleString('ko-KR'))),
+          h('div', { class: 'kpi pay' }, h('div', { class: 'k' }, '💰 받은 월급'), h('div', { class: 'v y' }, `₩${st.total.toLocaleString('ko-KR')}`)),
         ),
-        h('div', { class: 'small', style: 'margin-bottom:6px' },
+        h('div', { class: 'small paybreak' },
           `기본 ₩${st.runCoins}` + (st.clearBonus ? ` + 칼퇴 보너스 ₩${st.clearBonus}` : '') + (st.overtimeBonus ? ` + 야근수당 ₩${st.overtimeBonus}` : '') + (st.dailyBonus ? ` + 오늘의 업무 ₩${st.dailyBonus}` : '') + ` · 보유 ₩${p.coins.toLocaleString('ko-KR')}`),
         grants,
-        goals.length ? h('div', { class: 'modal-title', style: 'font-size:17px;text-align:left;margin-top:8px' }, '🎯 다음 목표') : null,
-        ...goals.map(g => h('div', { class: 'card', style: 'padding:10px 12px;margin-bottom:6px' },
-          h('div', { class: 'row gap' }, h('span', { style: 'font-size:22px' }, g.a.icon), h('div', { class: 'grow' },
+        goals.length ? h('div', { class: 'sec-title' }, '🎯 다음 목표') : null,
+        ...goals.map(g => h('div', { class: 'card goal' },
+          h('div', { class: 'row gap' }, h('span', { class: 'gi' }, g.a.icon), h('div', { class: 'grow' },
             h('b', null, g.a.name), h('div', { class: 'small' }, `${g.a.desc} · 보상: ${rewardLabel(g.a)}`),
             h('div', { class: 'bar', style: 'margin-top:5px' }, h('i', { style: `width:${g.k * 100}%` })),
           )),
         )),
-        h('div', { class: 'small', style: 'margin:8px 0;color:#cfd3ff' }, `💡 ${pickStr(TIPS, '')}`),
-        h('div', { class: 'modal-title', style: 'font-size:17px;text-align:left;margin-top:8px' }, '🗡 무기별 피해'),
+        h('div', { class: 'tip' }, `💡 ${pickStr(TIPS, '')}`),
+        h('div', { class: 'sec-title' }, '🗡 무기별 피해'),
         build,
         h('div', { class: 'row gap', style: 'flex-wrap:wrap;margin-bottom:8px' },
           ...w.passives.map(x => h('span', { class: 'pill' }, `${x.def.icon} ${x.def.name} ${x.level}`)),
           w.lunch ? h('span', { class: 'pill m' }, `${w.lunch.icon} ${w.lunch.name}`) : null,
         ),
       ),
-      h('div', { class: 'col gap', style: 'margin-top:8px' },
+      h('div', { class: 'col gap result-actions' },
         btn('🔁 다시 출근', onRetry, 'btn primary big'),
         h('div', { class: 'row gap' },
           btn('🏠 메인', () => this.title(), 'btn ghost grow'),

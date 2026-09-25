@@ -1,10 +1,18 @@
 // 인게임 HUD: 경험치바·시계(하루 진행선)·레벨·처치/월급·무기 슬롯·보스 체력·궁극기 버튼
+// 매 프레임 갱신은 값이 바뀔 때만, 그리고 transform/CSS 변수만 건드린다(레이아웃 흔들림 없음).
 import { BALANCE } from '../content';
 import type { World } from '../sim/types';
 import { clockText } from '../sim/director';
 import { evolvable } from '../sim/levelup';
 import { maxLevelOf } from '../sim/stats';
 import { h, clear } from './dom';
+
+/** 슬롯 아래 레벨 눈금(최대 레벨만큼, 현재 레벨까지 켜짐) */
+function pips(level: number, max: number): HTMLElement {
+  const el = h('span', { class: 'sp' });
+  for (let i = 0; i < max; i++) el.appendChild(h('i', i < level ? { class: 'on' } : null));
+  return el;
+}
 
 export class Hud {
   root: HTMLElement;
@@ -18,51 +26,52 @@ export class Hud {
   private pslots: HTMLElement;
   private boss: HTMLElement;
   private bossName: HTMLElement;
+  private bossPct: HTMLElement;
   private bossFill: HTMLElement;
+  private bossLag: HTMLElement;
   ultBtn: HTMLButtonElement;
-  private ultRing: SVGCircleElement;
   private ultLbl: HTMLElement;
   pauseBtn: HTMLButtonElement;
   private comboEl: HTMLElement;
   private cache = new Map<string, string>();
   private slotKey = '';
-  private lastXp = -1; private lastDay = -1; private lastBoss = -1;
+  private slotTick = 0;
+  private stage = '';
+  private lastXp = -1; private lastDay = -1; private lastBoss = -1; private lastUlt = -1;
 
   constructor(parent: HTMLElement, onUlt: () => void, onPause: () => void) {
     this.xp = h('i');
     this.clock = h('div', { class: 't' }, '09:00');
     this.dayFill = h('i');
     const marks = [
-      h('b', { style: `left:${(BALANCE.lunchAt / BALANCE.runSeconds) * 100}%;background:#3ddc97` }),
-      h('b', { style: `left:${(BALANCE.finalBossAt / BALANCE.runSeconds) * 100}%;background:#ff5a5f` }),
+      h('b', { class: 'm-lunch', style: `left:${(BALANCE.lunchAt / BALANCE.runSeconds) * 100}%` }),
+      h('b', { class: 'm-boss', style: `left:${(BALANCE.finalBossAt / BALANCE.runSeconds) * 100}%` }),
     ];
-    this.lvl = h('div', { class: 'lvl' }, 'Lv 1');
-    this.kills = h('div', { class: 'chip' }, '💀 0');
-    this.coins = h('div', { class: 'chip coin' }, '₩ 0');
-    this.wslots = h('div', { class: 'srow' });
-    this.pslots = h('div', { class: 'srow' });
-    this.bossName = h('div', { class: 'name' });
-    this.bossFill = h('i');
-    this.boss = h('div', { class: 'bossbar hidden' }, this.bossName, h('div', { class: 'b' }, this.bossFill));
-    const NS = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 84 84');
-    const bg = document.createElementNS(NS, 'circle');
-    bg.setAttribute('cx', '42'); bg.setAttribute('cy', '42'); bg.setAttribute('r', '38');
-    bg.setAttribute('fill', 'none'); bg.setAttribute('stroke', 'rgba(255,255,255,.15)'); bg.setAttribute('stroke-width', '6');
-    this.ultRing = document.createElementNS(NS, 'circle');
-    this.ultRing.setAttribute('cx', '42'); this.ultRing.setAttribute('cy', '42'); this.ultRing.setAttribute('r', '38');
-    this.ultRing.setAttribute('fill', 'none'); this.ultRing.setAttribute('stroke', '#ff7ae0'); this.ultRing.setAttribute('stroke-width', '6');
-    this.ultRing.setAttribute('stroke-linecap', 'round');
-    this.ultRing.setAttribute('stroke-dasharray', String(2 * Math.PI * 38));
-    svg.appendChild(bg); svg.appendChild(this.ultRing);
+    this.lvl = h('b', null, '1');
+    this.kills = h('b', null, '0');
+    this.coins = h('b', null, '0');
+    this.wslots = h('div', { class: 'srow w' });
+    this.pslots = h('div', { class: 'srow p' });
+    this.bossName = h('span', { class: 'nm' });
+    this.bossPct = h('span', { class: 'pct' }, '100%');
+    this.bossFill = h('i', { class: 'fill' });
+    this.bossLag = h('i', { class: 'lag' });
+    this.boss = h('div', { class: 'bossbar hidden' },
+      h('div', { class: 'skull' }, '💀'),
+      h('div', { class: 'bb' },
+        h('div', { class: 'name' }, this.bossName, h('em', null, '격노'), this.bossPct),
+        h('div', { class: 'b' }, this.bossLag, this.bossFill),
+      ),
+    );
     this.ultLbl = h('span', { class: 'lbl' });
-    this.ultBtn = h('button', { class: 'ult', type: 'button', 'aria-label': '궁극기' }) as HTMLButtonElement;
-    this.ultBtn.appendChild(svg);
-    this.ultBtn.appendChild(h('span', { class: 'ic' }, '📄'));
-    this.ultBtn.appendChild(this.ultLbl);
+    this.ultBtn = h('button', { class: 'ult', type: 'button', 'aria-label': '궁극기' },
+      h('span', { class: 'ring' }),
+      h('span', { class: 'face' }, h('span', { class: 'ic' }, '📄')),
+      h('span', { class: 'rdy' }, 'READY'),
+      this.ultLbl,
+    ) as HTMLButtonElement;
     this.ultBtn.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); onUlt(); });
-    this.pauseBtn = h('button', { class: 'btn icon ghost pausebtn', type: 'button', 'aria-label': '일시정지' }, '⏸') as HTMLButtonElement;
+    this.pauseBtn = h('button', { class: 'btn icon ghost pausebtn', type: 'button', 'aria-label': '일시정지' }, h('i'), h('i')) as HTMLButtonElement;
     this.pauseBtn.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); onPause(); });
 
     this.comboEl = h('div', { class: 'combo hidden' });
@@ -71,8 +80,11 @@ export class Hud {
       h('div', { class: 'xpbar' }, this.xp),
       h('div', { class: 'hud-top' },
         h('div', { class: 'clock' }, this.clock, h('div', { class: 'dayline' }, this.dayFill, ...marks)),
-        this.lvl,
-        h('div', { class: 'hud-right' }, h('div', { class: 'hud-stats' }, this.kills, this.coins)),
+        h('div', { class: 'lvl' }, h('small', null, 'LV'), this.lvl),
+        h('div', { class: 'hud-right' }, h('div', { class: 'hud-stats' },
+          h('div', { class: 'chip kill' }, h('span', { class: 'ci' }, '💀'), this.kills),
+          h('div', { class: 'chip coin' }, h('span', { class: 'ci' }, '₩'), this.coins),
+        )),
       ),
       h('div', { class: 'slots' }, this.wslots, this.pslots),
       this.boss,
@@ -102,8 +114,26 @@ export class Hud {
     this.ultLbl.textContent = name;
   }
 
+  private rebuildSlots(w: World, evo: Set<string>) {
+    clear(this.wslots); clear(this.pslots);
+    for (const wi of w.weapons) {
+      const mx = maxLevelOf(wi.def);
+      const max = wi.level >= mx;
+      const cls = `slot${wi.def.evolved ? ' evo' : max ? ' max' : ''}${evo.has(wi.def.id) ? ' ready' : ''}`;
+      this.wslots.appendChild(h('div', { class: cls },
+        h('span', { class: 'si' }, wi.def.icon),
+        wi.def.evolved ? h('b', null, '★') : pips(wi.level, mx),
+      ));
+    }
+    for (const pi of w.passives) {
+      const max = pi.level >= pi.def.maxLevel;
+      this.pslots.appendChild(h('div', { class: `slot${max ? ' max' : ''}` }, h('span', { class: 'si' }, pi.def.icon), pips(pi.level, pi.def.maxLevel)));
+    }
+  }
+
   update(w: World) {
     const p = w.player;
+    if (this.stage !== w.cfg.stage.id) { this.stage = w.cfg.stage.id; this.root.dataset.stage = this.stage; }
     const xk = Math.round(Math.min(1, p.xp / p.xpNext) * 200) / 200;
     if (xk !== this.lastXp) { this.lastXp = xk; this.xp.style.transform = `scaleX(${xk})`; }
     this.set(this.clock, 'clock', clockText(w));
@@ -111,37 +141,36 @@ export class Hud {
     this.clock.classList.toggle('yageun', yg);
     const dk = Math.round(Math.min(1, w.t / BALANCE.runSeconds) * 200) / 200;
     if (dk !== this.lastDay) { this.lastDay = dk; this.dayFill.style.transform = `scaleX(${dk})`; }
-    this.set(this.lvl, 'lvl', `Lv ${p.level}`);
-    this.set(this.kills, 'kills', `💀 ${w.stats_.kills.toLocaleString('ko-KR')}`);
-    this.set(this.coins, 'coins', `₩ ${Math.floor(w.stats_.coins).toLocaleString('ko-KR')}`);
-    // 슬롯
-    const evo = new Set(evolvable(w).map(x => x.def.id));
-    const key = w.weapons.map(x => `${x.def.id}:${x.level}:${evo.has(x.def.id) ? 1 : 0}`).join(',') + '|' + w.passives.map(x => `${x.def.id}:${x.level}`).join(',');
-    if (key !== this.slotKey) {
-      this.slotKey = key;
-      clear(this.wslots); clear(this.pslots);
-      for (const wi of w.weapons) {
-        const max = wi.level >= maxLevelOf(wi.def);
-        const cls = `slot${wi.def.evolved ? ' evo' : max ? ' max' : ''}${evo.has(wi.def.id) ? ' ready' : ''}`;
-        this.wslots.appendChild(h('div', { class: cls }, wi.def.icon, h('b', null, wi.def.evolved ? '★' : max ? 'M' : String(wi.level))));
-      }
-      for (const pi of w.passives) {
-        const max = pi.level >= pi.def.maxLevel;
-        this.pslots.appendChild(h('div', { class: `slot${max ? ' max' : ''}` }, pi.def.icon, h('b', null, max ? 'M' : String(pi.level))));
-      }
+    this.set(this.lvl, 'lvl', String(p.level));
+    this.set(this.kills, 'kills', w.stats_.kills.toLocaleString('ko-KR'));
+    this.set(this.coins, 'coins', Math.floor(w.stats_.coins).toLocaleString('ko-KR'));
+    // 슬롯: 무기·패시브 구성이 바뀌는 건 드문 일이라 몇 프레임에 한 번만 확인한다
+    if (this.slotTick++ % 6 === 0 || !this.slotKey) {
+      const evo = new Set(evolvable(w).map(x => x.def.id));
+      const key = w.weapons.map(x => `${x.def.id}:${x.level}:${evo.has(x.def.id) ? 1 : 0}`).join(',') + '|' + w.passives.map(x => `${x.def.id}:${x.level}`).join(',');
+      if (key !== this.slotKey) { this.slotKey = key; this.rebuildSlots(w, evo); }
     }
-    // 보스
+    // 보스: 빨간 체력은 바로, 흰 잔상 바는 CSS 전환으로 늦게 따라온다
     const b = w.bossAlive;
     if (b && !b.dead) {
-      this.boss.classList.remove('hidden');
-      this.set(this.bossName, 'bossn', `${b.def.name}${b.enraged ? ' 💢격노' : ''}`);
+      if (this.boss.classList.contains('hidden')) { this.boss.classList.remove('hidden'); this.root.classList.add('boss-on'); }
+      this.set(this.bossName, 'bossn', b.def.name);
+      this.boss.classList.toggle('enraged', !!b.enraged);
       const bk = Math.round(Math.max(0, b.hp / b.maxHp) * 300) / 300;
-      if (bk !== this.lastBoss) { this.lastBoss = bk; this.bossFill.style.transform = `scaleX(${bk})`; }
-    } else this.boss.classList.add('hidden');
-    // 궁극기
-    const k = Math.min(1, p.ult / p.ultMax);
-    const C = 2 * Math.PI * 38;
-    this.ultRing.setAttribute('stroke-dashoffset', String(C * (1 - (p.ultActiveT > 0 ? 1 : k))));
-    this.ultBtn.classList.toggle('ready', k >= 1 && p.ultActiveT <= 0);
+      if (bk !== this.lastBoss) {
+        this.lastBoss = bk;
+        const tf = `scaleX(${bk})`;
+        this.bossFill.style.transform = tf; this.bossLag.style.transform = tf;
+        this.set(this.bossPct, 'bossp', `${Math.ceil(bk * 100)}%`);
+      }
+    } else if (!this.boss.classList.contains('hidden')) {
+      this.boss.classList.add('hidden'); this.root.classList.remove('boss-on'); this.lastBoss = -1;
+    }
+    // 궁극기: 원뿔 게이지(--k)
+    const active = p.ultActiveT > 0;
+    const k = active ? 1 : Math.round(Math.min(1, p.ult / p.ultMax) * 100) / 100;
+    if (k !== this.lastUlt) { this.lastUlt = k; this.ultBtn.style.setProperty('--k', String(k)); }
+    this.ultBtn.classList.toggle('ready', k >= 1 && !active);
+    this.ultBtn.classList.toggle('active', active);
   }
 }

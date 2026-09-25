@@ -1,9 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs><radialGradient id="g" cx="50%" cy="35%" r="75%"><stop offset="0" stop-color="#2b3170"/><stop offset="1" stop-color="#141729"/></radialGradient></defs>
-  <rect width="512" height="512" rx="112" fill="url(#g)"/>
-  <circle cx="256" cy="236" r="150" fill="#fffdf4" stroke="#ffd84d" stroke-width="22"/>
-  <line x1="256" y1="236" x2="256" y2="140" stroke="#2b2a3a" stroke-width="22" stroke-linecap="round"/>
-  <line x1="256" y1="236" x2="256" y2="330" stroke="#ff5a5f" stroke-width="16" stroke-linecap="round"/>
-  <circle cx="256" cy="236" r="16" fill="#2b2a3a"/>
-  <text x="256" y="462" text-anchor="middle" font-family="sans-serif" font-weight="900" font-size="78" fill="#ffd84d">18:00</text>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="72%"><stop offset="0" stop-color="#1c2656"/><stop offset=".6" stop-color="#0c1126"/><stop offset="1" stop-color="#05070f"/></radialGradient>
+    <radialGradient id="face" cx="50%" cy="40%" r="60%"><stop offset="0" stop-color="#16204a"/><stop offset="1" stop-color="#080b1a"/></radialGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%"><stop offset=".55" stop-color="#3de0ff" stop-opacity=".35"/><stop offset="1" stop-color="#3de0ff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3b0"/><stop offset=".55" stop-color="#ffd84d"/><stop offset="1" stop-color="#ff9b2e"/></linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#7896ff" stroke-opacity=".09" stroke-width="2"/></pattern>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#grid)"/>
+  <circle cx="256" cy="226" r="196" fill="url(#halo)"/>
+  <circle cx="256" cy="226" r="140" fill="url(#face)"/>
+  <circle cx="256" cy="226" r="140" fill="none" stroke="#3de0ff" stroke-width="18" filter="url(#glow)"/>
+  <circle cx="256" cy="226" r="140" fill="none" stroke="#e6fcff" stroke-width="5"/>
+  <g stroke="#9befff" stroke-width="10" stroke-linecap="round" filter="url(#soft)">
+    <path d="M256 104v22M256 326v22M134 226h22M356 226h22M170 140l14 14M342 140l-14 14M170 312l14-14M342 312l-14-14"/>
+  </g>
+  <g stroke-linecap="round" filter="url(#soft)">
+    <line x1="256" y1="226" x2="256" y2="128" stroke="#ffffff" stroke-width="16"/>
+    <line x1="256" y1="226" x2="256" y2="300" stroke="url(#gold)" stroke-width="22"/>
+  </g>
+  <circle cx="256" cy="226" r="17" fill="#ff5cf0" filter="url(#soft)"/>
+  <circle cx="256" cy="226" r="7" fill="#fff"/>
+  <path d="M388 92l7 17 17 7-17 7-7 17-7-17-17-7 17-7z" fill="#ffd84d" filter="url(#soft)"/>
+  <path d="M120 318l5 11 11 5-11 5-5 11-5-11-11-5 11-5z" fill="#ff5cf0" filter="url(#soft)"/>
+  <text x="256" y="452" text-anchor="middle" font-family="'Black Han Sans','Arial Black',sans-serif" font-weight="900" font-size="84" letter-spacing="4" fill="#ff5cf0" filter="url(#glow)">18:00</text>
+  <text x="256" y="452" text-anchor="middle" font-family="'Black Han Sans','Arial Black',sans-serif" font-weight="900" font-size="84" letter-spacing="4" fill="#ffe6fb">18:00</text>
 </svg>

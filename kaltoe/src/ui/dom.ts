@@ -1,4 +1,5 @@
 // 작은 DOM 헬퍼 + 게임 내 확인창/토스트 (window.confirm 대신 — 임베드 환경에서도 동작)
+import { DISPLAY_FAMILY } from './fonts';
 type Child = Node | string | number | null | undefined | false | Child[];
 type Attrs = Record<string, unknown> & { class?: string; style?: string; onclick?: (e: MouseEvent) => void };
 
@@ -105,6 +106,24 @@ export class Toasts {
     setTimeout(() => t.classList.add('out'), ms);
     setTimeout(() => t.remove(), ms + 400);
   }
+}
+
+/** 디스플레이 서체(Black Han Sans, 한 굵기뿐)가 실제로 받아졌는지 */
+export function displayFontLoaded(): boolean {
+  let ok = false;
+  try { document.fonts.forEach(f => { if (f.status === 'loaded' && f.family.replace(/["']/g, '') === DISPLAY_FAMILY) ok = true; }); } catch { /* 무시 */ }
+  return ok;
+}
+
+/** 디스플레이 서체가 도착하면 <html>에 .dfont를 붙여 가짜 굵게를 끈다(style.css --dsyn).
+ *  못 받으면(오프라인) 대체 글꼴이 굵게 보이도록 합성을 그대로 둔다. */
+export function watchDisplayFont() {
+  const mark = () => { if (displayFontLoaded()) document.documentElement.classList.add('dfont'); };
+  mark();
+  try {
+    document.fonts.forEach(f => { if (f.family.replace(/["']/g, '') === DISPLAY_FAMILY) f.loaded.then(mark, () => { /* 무시 */ }); });
+    document.fonts.addEventListener('loadingdone', mark);
+  } catch { /* 무시 */ }
 }
 
 export function fmtTime(sec: number): string {
