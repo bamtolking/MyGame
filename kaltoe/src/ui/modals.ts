@@ -3,7 +3,7 @@ import { PASSIVE, WEAPON } from '../content';
 import type { World, LevelChoice } from '../sim/types';
 import { maxLevelOf } from '../sim/stats';
 import { clockText } from '../sim/director';
-import { LEVELUP_SHOUTS, LUNCH_TITLES, PAUSE_TITLES, TIPS } from '../content/strings';
+import { LEVELUP_SHOUTS, LUNCH_TITLES, PAUSE_TITLES, TIPS, ONBOARDING_HINTS } from '../content/strings';
 import { h, btn, statLabel, fmtTime } from './dom';
 import { audio } from '../platform/audio';
 
@@ -74,16 +74,37 @@ export class Modals {
   cur: HTMLElement | null = null;
   kind = '';
   private banishMode = false;
+  private hintText = '';
   constructor(private host: ModalHost) {}
 
-  close() { this.cur?.remove(); this.cur = null; this.kind = ''; this.banishMode = false; }
+  close() { this.cur?.remove(); this.cur = null; this.kind = ''; this.banishMode = false; this.hintText = ''; }
+
+  /** 첫 레벨업·첫 점심 온보딩 힌트는 app이 창을 열기 직전에 토스트로 띄운다. 토스트 층은 모달 배경 아래라 가려지고
+   *  (작은 화면에선 완전히), 창을 닫은 뒤에야 엉뚱하게 보인다 → 그 토스트를 거둬 창 안(부제 아래)에 보여 준다. */
+  private takeHint(kind: string): string {
+    const text = kind === 'levelup' || kind === 'lunch' ? ONBOARDING_HINTS[kind] : '';
+    if (!text) return '';
+    const want = `💡 ${text}`;
+    for (const t of this.host.root.querySelectorAll<HTMLElement>(':scope > .toasts > .toast')) {
+      if (t.textContent === want) { t.remove(); return want; }
+    }
+    return '';
+  }
 
   private open(kind: string, w: World, ...children: (Node | null)[]) {
-    const keepBanish = kind === 'levelup' && this.kind === 'levelup' ? this.banishMode : false;
+    const same = kind === this.kind;
+    const keepBanish = kind === 'levelup' && same ? this.banishMode : false;
+    const keepHint = same ? this.hintText : '';   // 새로고침·제외로 같은 창을 다시 그려도 힌트 유지
     this.close();
     this.banishMode = keepBanish;
     this.kind = kind;
+    this.hintText = this.takeHint(kind) || keepHint;
     const m = h('div', { class: `modal m-${kind}` }, ...children);
+    if (this.hintText) {
+      const hint = h('div', { class: 'modal-hint' }, this.hintText);
+      const sub = m.querySelector(':scope > .modal-sub');
+      if (sub) sub.after(hint); else m.prepend(hint);
+    }
     this.cur = h('div', { class: `modal-wrap no-joy mw-${kind}`, 'data-stage': w.cfg.stage.id }, m);
     this.host.root.appendChild(this.cur);
     return m;
