@@ -103,6 +103,7 @@ function newBullet(w: World, wi: WeaponInst, kind: Bullet['kind'], x: number, y:
     dmg: e.dmg, pierce: e.pierce, knock: e.knock, life: e.dur, maxLife: e.dur,
     sprite: wi.def.projectile, rot: ang, spin: kind === 'boomerang' ? 14 : 0, hits: [],
     turn: wi.st.turnRate ?? 4, range: e.range, back: false, ox: x, oy: y, hitCd: e.hitCd, dead: false, fx: wi.st, tgt: null,
+    hitAt: kind === 'boomerang' ? new Map() : null,
   };
   w.bullets.push(b);
   return b;
@@ -384,8 +385,10 @@ export function updateBullets(w: World) {
     w.grid.query(b.x, b.y, b.r, en => {
       if (en.dead) return;
       if (b.kind === 'boomerang') {
-        if (en.hitCd[b.slot] > 0) return;
-        en.hitCd[b.slot] = b.hitCd;
+        // 재타격 간격은 부메랑마다 따로(같은 무기의 부메랑끼리 서로 막지 않음)
+        const next = b.hitAt!.get(en.uid);
+        if (next !== undefined && next > w.t) return;
+        b.hitAt!.set(en.uid, w.t + b.hitCd);
         damageEnemy(w, en, b.dmg, b.slot, { fx: b.fx, knock: b.knock, kx: b.vx, ky: b.vy });
         return;
       }

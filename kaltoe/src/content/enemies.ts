@@ -166,7 +166,7 @@ const CRUNCH: EnemyDef[] = [
   {
     id: 'alert', name: '장애 알림', sprite: '🚨', tint: '#c53030',
     hp: 13, speed: 50, damage: 6, radius: 12, xp: 1,
-    behavior: 'ranged', params: { keep: 200, shotCd: 2.2, shotSpeed: 170, shotDamage: 7 },
+    behavior: 'ranged', params: { keep: 200, shotCd: 2.6, shotSpeed: 170, shotDamage: 7 },
     intro: '장애 알림 폭주! 멀리서 알림을 쏴댑니다.',
   },
   {

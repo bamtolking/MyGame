@@ -85,6 +85,7 @@ export interface Bullet {
   dead: boolean;
   fx: WeaponStats;                 // 부가 효과 참조(slow/burn/freeze/crit…)
   tgt: Enemy | null;               // homing 현재 대상
+  hitAt: Map<number, number> | null; // boomerang: 적 uid → 다시 때릴 수 있는 시각(부메랑마다 따로)
 }
 
 export interface EnemyBullet {

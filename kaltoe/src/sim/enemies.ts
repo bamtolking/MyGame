@@ -111,7 +111,9 @@ export function aliveCount(w: World): number {
 }
 
 function fireEnemyBullet(w: World, x: number, y: number, ang: number, speed: number, dmg: number, sprite = '•') {
-  w.ebullets.push({ x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, r: 5, dmg: dmg * w.enemyDmgMul, life: 3.2, sprite, dead: false });
+  // 탄 피해는 출근 직후 70%에서 5분에 걸쳐 100%로(초반 빌드 전 탄막 즉사 방지)
+  const ramp = 0.7 + 0.3 * Math.min(1, w.t / 300);
+  w.ebullets.push({ x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, r: 5, dmg: dmg * w.enemyDmgMul * ramp, life: 3.2, sprite, dead: false });
 }
 
 function say(w: World, e: Enemy, text: string | undefined) {
@@ -312,7 +314,7 @@ export function updateEnemies(w: World) {
             if (dist > keep + 20) { mvx = ux * spd; mvy = uy * spd; }
             else if (dist < keep - 20) { mvx = -ux * spd * 0.7; mvy = -uy * spd * 0.7; }
             else { mvx = -uy * spd * 0.5; mvy = ux * spd * 0.5; }
-            // 화면 안에 보이는 적만, 가까이에서, 전체 초당 5발 예산 안에서 쏜다(보이지 않는 저격·탄막 폭주 방지)
+            // 화면 안에 보이는 적만, 가까이에서, 전체 초당 4발 예산 안에서 쏜다(보이지 않는 저격·탄막 폭주 방지)
             if (e.t >= num(P, 'shotCd', 2.5) && dist < 380 && Math.abs(dxp) < w.viewW / 2 && Math.abs(dyp) < w.viewH / 2) {
               e.t = 0;
               if (w.shotBudget < 1) { e.t = num(P, 'shotCd', 2.5) * 0.6; break; }
@@ -431,7 +433,7 @@ export function separateEnemies(w: World) {
 
 export function updateEnemyBullets(w: World) {
   const p = w.player;
-  w.shotBudget = Math.min(5, w.shotBudget + 5 * DT);
+  w.shotBudget = Math.min(4, w.shotBudget + 4 * DT);
   for (const b of w.ebullets) {
     if (b.dead) continue;
     b.x += b.vx * DT; b.y += b.vy * DT;

@@ -220,7 +220,7 @@ const CRUNCH: StageDef = {
   overtimePool: pool({ bug: 3, ghost_task: 3, owl: 4, alert: 4, issue: 4, zombie: 4, report: 3, hotfix: 3, deadline: 3, server: 0.1 }),
   unlockedBy: 'u_stage_crunch',
   coinMul: 1.15,
-  hpMul: 1.35,
+  hpMul: 1.25,
 };
 
 // ───────────────────────────── 부서 회식 ─────────────────────────────
@@ -355,7 +355,7 @@ const HOLIDAY: StageDef = {
   overtimePool: pool({ nag_job: 3, nag_marry: 4, nag_salary: 4, nag_weight: 3, nag_kids: 3, cousin: 5, jeon: 4, dishes: 4, remote: 4, songpyeon: 3, gift: 0.1 }),
   unlockedBy: 'u_stage_holiday',
   coinMul: 1.5,
-  hpMul: 1.8,
+  hpMul: 1.75,
 };
 
 export const STAGES: StageDef[] = [OFFICE, CRUNCH, DINNER, HOLIDAY];

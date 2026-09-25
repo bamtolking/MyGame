@@ -56,6 +56,7 @@ function runEvent(w: World, ev: StageEvent) {
         const d = dir + randRange(w.rng, -0.08, 0.08);
         e.dx = Math.cos(d); e.dy = Math.sin(d);
         e.speed *= 1.25;
+        e.damage *= 0.5;   // 무리는 스쳐 지나가는 적: 접촉 피해 절반(피하는 연출이 목적)
       }
       if (ev.text) w.events.push({ t: 'toast', text: ev.text, kind: 'warn' });
       return;
