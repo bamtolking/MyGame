@@ -30,6 +30,26 @@ export interface ScreenHost {
 
 const pickStr = (arr: readonly string[], f: string) => (arr.length ? arr[Math.floor(Math.random() * arr.length)] : f);
 
+/** 캔버스에 구워 그리는 고정 글자(render/juice.ts의 ITEM_LABEL·fx.title, 피해 숫자, render/env.ts 간판). 바뀌면 여기도 맞춘다 — 빠져도 그 글자만 대체 글꼴로 보일 뿐 */
+const CANVAS_DISPLAY_WORDS = '격파! 진화! 부활! LEVEL UP! 커피 수혈! +30 치킨! 체력 완전 회복 결재 도장 싹쓸이! 부서 대청소! 시간 정지! 택배 수령! 삼겹살 소주 0123456789.,k%';
+
+/** 캔버스 글자 미리 받기용: 보스 명판(디스플레이 서체) / 말풍선 문구·보스 대사(본문 900) */
+function canvasGlyphText(): { display: string; body: string } {
+  let display = CANVAS_DISPLAY_WORDS, body = '';
+  for (const e of ENEMIES) {
+    if (e.boss) display += e.name;
+    if (e.label) body += e.label;
+    for (const a of e.abilities ?? []) if (a.shout) body += a.shout;
+  }
+  return { display, body };
+}
+
+/** 돈이 모자랄 때: 부드러운 '딸-깍' 두 번(내려가는 음). 피격음('hurt')은 몸통 타격 + 음악 덕킹이라 메뉴에서 맞는 소리처럼 들렸다 */
+function denySound() {
+  audio.play('tick', 2);
+  window.setTimeout(() => audio.play('tick', 0), 75);
+}
+
 function unlockHint(id: string | undefined, p?: Profile): string {
   if (!id) return '';
   const a = ACHIEVEMENT.get(id);
@@ -71,7 +91,7 @@ export class Screens {
   selStage = 'office';
   selHeat = 0;
   curName = '';
-  constructor(private host: ScreenHost) { this.syncSel(); watchDisplayFont(); }
+  constructor(private host: ScreenHost) { this.syncSel(); watchDisplayFont(canvasGlyphText()); }
 
   /** 저장된 마지막 선택(캐릭터·근무지·강도)으로 맞춘다 */
   syncSel() {
@@ -164,7 +184,7 @@ export class Screens {
             ),
             !unlocked ? h('div', { class: 'small', style: 'margin-top:6px' }, unlockHint(c.unlockedBy, p)) : null,
             unlocked && !owned && c.price ? btn(`고용하기 ₩${c.price.toLocaleString('ko-KR')}`, () => {
-              if (hireCharacter(p, c.id)) { audio.play('buy'); this.host.save(); this.selChar = c.id; render(); } else audio.play('hurt');
+              if (hireCharacter(p, c.id)) { audio.play('buy'); this.host.save(); this.selChar = c.id; render(); } else denySound();
             }, 'btn small primary', { style: 'margin-top:8px' }) : null,
           ),
         );
@@ -259,7 +279,7 @@ export class Screens {
             m.maxRank <= 12 ? pips : h('div', { class: 'bar', style: 'margin-top:6px' }, h('i', { style: `width:${(r / m.maxRank) * 100}%` })),
           ),
           un ? (max ? h('span', { class: 'pill y' }, 'MAX') : btn(`₩${cost.toLocaleString('ko-KR')}`, () => {
-            if (buyMeta(p, m.id)) { audio.play('buy'); this.host.save(); this.host.checkAchievements(); render(); } else audio.play('hurt');
+            if (buyMeta(p, m.id)) { audio.play('buy'); this.host.save(); this.host.checkAchievements(); render(); } else denySound();
           }, p.coins >= cost ? 'btn small primary' : 'btn small ghost')) : null,
         ));
       }
@@ -479,13 +499,17 @@ export class Screens {
         try { navigator.clipboard.writeText(text).then(done, () => { try { document.execCommand('copy'); done(); } catch { /* 선택된 상태로 둔다 */ } }); }
         catch { try { document.execCommand('copy'); done(); } catch { /* 선택된 상태로 둔다 */ } }
       }, 'btn primary');
-      wrap.appendChild(h('div', { class: 'modal' },
+      wrap.appendChild(h('div', { class: 'modal m-share' },
         h('div', { class: 'modal-kicker' }, 'SHARE'),
         h('div', { class: 'modal-title' }, '📣 결과 카드'),
         h('div', { class: 'modal-sub' }, '이미지를 길게 눌러 저장하거나 공유하세요'),
-        url ? h('img', { class: 'share-img', src: url, alt: '칼퇴 서바이버 결과 카드' }) : null,
-        ta,
-        h('div', { class: 'row gap' }, btn('닫기', () => wrap.remove(), 'btn ghost grow'), copy),
+        h('div', { class: 'share-body' },
+          url ? h('img', { class: 'share-img', src: url, alt: '칼퇴 서바이버 결과 카드' }) : null,
+          h('div', { class: 'share-side' },
+            ta,
+            h('div', { class: 'row gap' }, btn('닫기', () => wrap.remove(), 'btn ghost grow'), copy),
+          ),
+        ),
       ));
       this.host.root.appendChild(wrap);
     }, 'btn ghost');
