@@ -6,11 +6,11 @@ import { join } from 'node:path';
 import { newRun, stepRun } from '../src/sim/run';
 import {
   defaultProgress, normalize, applyRun, unlockState, buyCharacter, autoUnlock, stageUnlocked, totalStars, reroll, dailySeed, dailyChar, todayKey,
-  MIGRATIONS, stageStarCount, fillMissions, takeLegacyGhosts, SAVE_VERSION, type Progress,
+  MIGRATIONS, stageStarCount, fillMissions, takeLegacyGhosts, featureOpen, SAVE_VERSION, type Progress,
 } from '../src/meta/progress';
 import {
   MISSIONS, MISSION_BY_ID, drawMission, applyRunToMissions, RANK_XP, RANK_MAX, RANK_REWARD, RANK_TITLES, MISSION_REWARD, rankRewardPreview, rankXpTotal,
-  isQuick, maxLevelFor, requirementMet, longModeOpen, runTrace, missionText,
+  isQuick, maxLevelFor, requirementMet, longModeOpen, runTrace, missionText, liveMissionProgress,
 } from '../src/meta/missions';
 import {
   ACHIEVEMENTS, COSMETICS, COSMETIC_BY_ID, evaluateAchievements, achievementProgress, achievementView, buyCosmetic, equipCosmetic, unequipCosmetic,
@@ -272,6 +272,30 @@ describe('missions', () => {
     const bad = finished('endless', s => { s.stats.hits = 2; s.dist += 50; });   // no longer reproducible
     const tb = runTrace(bad);
     expect(tb.exact).toBe(false); expect(tb.noHit).toBe(0);
+    // mid-run (the HUD checks missions every 0.5 s): cheap values, no replay, nothing cached for the final booking
+    const live = newRun({ mode: 'endless', seed: 5, charId: 'hotteok', noCountdown: true });
+    for (let i = 0; i < 600; i++) stepRun(live, { jump: false, slide: false });
+    const mid = runTrace(live); expect(mid.exact).toBe(false);
+    for (let i = 0; i < 600; i++) stepRun(live, { jump: false, slide: false });
+    live.phase = 'over';
+    const end = runTrace(live); expect(end.exact).toBe(true); expect(end.noAir).toBe(Math.floor(live.dist));
+  });
+  it('live progress during a run (for the 1.5 s toast) never mutates the missions', () => {
+    const active = [{ id: 'jelly_run', level: 0, progress: 0, target: 150, runsWithout: 0 }, { id: 'coin_tot', level: 0, progress: 50, target: 60, runsWithout: 0 }, { id: 'star_tot', level: 0, progress: 0, target: 2, runsWithout: 0 }];
+    const before = clone(active);
+    const s = newRun({ mode: 'endless', seed: 3, charId: 'hotteok' }); s.stats.jellies = 149; s.stats.coins = 9;
+    let live = liveMissionProgress(active, s);
+    expect(live.map(l => l.done)).toEqual([false, false, false]);
+    s.stats.jellies = 150; s.stats.coins = 10;
+    live = liveMissionProgress(active, s);
+    expect(live.map(l => l.done)).toEqual([true, true, false]); expect(live[1].progress).toBe(60);
+    expect(active).toEqual(before);
+    expect(liveMissionProgress([{ id: 'daily_dist', level: 0, progress: 0, target: 800, runsWithout: 0 }], Object.assign(s, { dist: 900 }))[0].done).toBe(false);
+  });
+  it('backup code / home-screen hint opens after 5 runs or the first unlock', () => {
+    const p = defaultProgress(); expect(featureOpen(p, 'backup')).toBe(false);
+    p.totals.runs = 5; expect(featureOpen(p, 'backup')).toBe(true);
+    const q = defaultProgress(); q.unlocked.push('bungeo'); expect(featureOpen(q, 'backup')).toBe(true);
   });
   it('rank: XP curve, cap 30, rank rewards and the next-rank preview', () => {
     expect(rankXpTotal()).toBe(207);

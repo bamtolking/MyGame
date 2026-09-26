@@ -89,7 +89,7 @@ export const MISSIONS: MissionTemplate[] = [
   { id: 'jelly_run', scope: 'run', verb: 'candy', text: n => `한 판에 별사탕 ${fmt(n)}개 먹기`, targets: [150, 350, 600], measure: s => s.stats.jellies, quick: 3, stageLevels: 1, quickStage: 1 },
   { id: 'dist_run', scope: 'run', verb: 'run', text: n => `한 판에 ${m(n)} 달리기`, targets: [400, 900, 1600], measure: dist, requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },
   { id: 'dist_nofall', scope: 'run', verb: 'run', text: n => `구덩이에 안 빠지고 ${m(n)} 달리기`, targets: [300, 700, 1200], measure: s => runTrace(s).noFall, quick: 2, stageLevels: 1, quickStage: 1 },
-  { id: 'streak', scope: 'run', verb: 'dodge', text: n => `위험물을 ${n}번 연달아 피하기`, targets: [10, 25, 45], measure: s => s.stats.bestStreak, quick: 3, stageLevels: 1, quickStage: 1 },
+  { id: 'streak', scope: 'run', verb: 'dodge', text: n => `위험물을 ${n}번 연달아 피하기`, targets: [10, 25, 45], measure: s => s.stats.bestStreak, quick: 3, stageLevels: 1, quickStage: 0 },
   { id: 'near', scope: 'run', verb: 'dodge', text: n => `한 판에 아슬아슬 ${n}번`, targets: [3, 6, 9], measure: s => s.stats.nearMisses, requires: 'long', quick: 1, stageLevels: 0, quickStage: 0 },   // GDD→ [3, 8, 15]
   { id: 'airjump', scope: 'run', verb: 'jump', text: n => `한 판에 2단 점프 ${n}번`, targets: [15, 25, 35], measure: s => s.stats.airJumps, requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },   // GDD→ [15, 35, 60]
   { id: 'slide', scope: 'run', verb: 'slide', text: n => `한 판에 슬라이드 ${n}번`, targets: [8, 13, 18], measure: s => s.stats.slides, requires: 'long', quick: 1, stageLevels: 0, quickStage: 0 },   // GDD→ [10, 25, 45]
@@ -98,14 +98,14 @@ export const MISSIONS: MissionTemplate[] = [
   { id: 'smash_tot', scope: 'total', verb: 'power', text: n => `왕만두·불꽃 질주로 장애물 ${n}개 부수기 (누적)`, targets: [5, 15, 35], measure: s => s.stats.smashed, quick: 2, stageLevels: 1, quickStage: 0 },
   { id: 'coin_tot', scope: 'total', verb: 'coin', text: n => `엽전 ${n}개 줍기 (누적)`, targets: [60, 180, 400], measure: s => s.stats.coins, requires: 'long', quick: 1, stageLevels: 0, quickStage: 0 },
   { id: 'big_tot', scope: 'total', verb: 'candy', text: n => `왕별사탕 ${n}개 먹기 (누적)`, targets: [30, 90, 200], measure: s => s.stats.bigJellies, quick: 2, stageLevels: 3, quickStage: 1 },
-  { id: 'letters_tot', scope: 'total', verb: 'feast', text: n => `잔치 글자 ${n}개 모으기 (누적)`, targets: [10, 25, 50], measure: s => s.stats.letters, quick: 0, stageLevels: 2, quickStage: 0 },
+  { id: 'letters_tot', scope: 'total', verb: 'feast', text: n => `잔치 글자 ${n}개 모으기 (누적)`, targets: [10, 25, 50], measure: s => s.stats.letters, quick: 0, stageLevels: 1, quickStage: 0 },
   { id: 'score_run', scope: 'run', verb: 'score', text: n => `한 판에 ${fmt(n)}점`, targets: [8000, 20000, 40000], measure: s => s.score + dist(s), requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },
   { id: 'jellypct', scope: 'run', verb: 'candy', text: n => `별사탕 ${n}% 이상 먹고 500 m 넘기기`, targets: [80, 86, 90], measure: s => (s.dist >= 500 && s.stats.jelliesSeen > 0 ? Math.floor(100 * s.stats.jellies / s.stats.jelliesSeen) : 0), requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },   // GDD→ [80, 88, 94]
 
   // ---- the 25 new templates (GDD §9.3 table) ----
   { id: 'line_run', scope: 'run', verb: 'candy', text: n => `한 판에 한 줄 완성 ${n}번`, targets: [2, 5, 9], measure: s => s.stats.lines, quick: 3, stageLevels: 3, quickStage: 2 },
   { id: 'big_run', scope: 'run', verb: 'candy', text: n => `한 판에 왕별사탕 ${n}개`, targets: [15, 35, 60], measure: s => s.stats.bigJellies, quick: 3, stageLevels: 2, quickStage: 2 },
-  { id: 'power_run', scope: 'run', verb: 'power', text: n => `한 판에 파워업 ${n}개 먹기`, targets: [2, 4, 7], measure: s => s.stats.powers, quick: 3, stageLevels: 1, quickStage: 1 },
+  { id: 'power_run', scope: 'run', verb: 'power', text: n => `한 판에 파워업 ${n}개 먹기`, targets: [2, 4, 7], measure: s => s.stats.powers, quick: 3, stageLevels: 1, quickStage: 0 },
   { id: 'bonus_run', scope: 'run', verb: 'feast', text: n => `한 판에 보름달 잔치 ${n}번`, targets: [1, 2, 3], measure: s => s.stats.bonusTimes, requires: 'long', levelRequires: [null, null, 'relay'], quick: 1, stageLevels: 0, quickStage: 0 },   // 3 needs the relay partner's extra distance
   { id: 'tier_run', scope: 'run', verb: 'run', text: n => `속도 ${n}단계까지 달리기`, targets: [3, 5, 6], measure: s => s.stats.maxTier + 1, requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },
   { id: 'smash_run', scope: 'run', verb: 'power', text: n => `한 판에 장애물 ${n}개 부수기`, targets: [3, 8, 15], measure: s => s.stats.smashed, requires: 'long', quick: 3, stageLevels: 0, quickStage: 0 },
@@ -117,11 +117,11 @@ export const MISSIONS: MissionTemplate[] = [
   { id: 'no_air', scope: 'run', verb: 'avoid', quirky: true, text: n => `2단 점프 없이 ${m(n)} 달리기`, targets: [200, 400, 600], measure: s => runTrace(s).noAir, requires: 'long', quick: 0, stageLevels: 0, quickStage: 0 },   // GDD→ [200, 450, 800]
   // GDD "별사탕 하나도 안 먹고 n m [100, 200, 350]" is unreachable: candies line every path (best stretch a skipping bot found: 25 m).
   { id: 'no_jelly', scope: 'run', verb: 'avoid', quirky: true, text: n => `처음 500 m 동안 별사탕을 ${n}% 이상 남기기`, targets: [15, 25, 35], measure: s => runTrace(s).skip500, requires: 'long', quick: 0, stageLevels: 0, quickStage: 0 },
-  { id: 'nohit_dist', scope: 'run', verb: 'dodge', text: n => `한 번도 안 부딪히고 ${m(n)} 달리기`, targets: [250, 550, 900], measure: s => runTrace(s).noHit, quick: 2, stageLevels: 1, quickStage: 1 },   // GDD→ [250, 600, 1100]
+  { id: 'nohit_dist', scope: 'run', verb: 'dodge', text: n => `한 번도 안 부딪히고 ${m(n)} 달리기`, targets: [250, 550, 900], measure: s => runTrace(s).noHit, quick: 2, stageLevels: 1, quickStage: 0 },   // GDD→ [250, 600, 1100]
   { id: 'super_bonus', scope: 'total', verb: 'feast', quirky: true, text: n => `왕보름달 잔치 ${n}번 열기 (누적)`, targets: [1, 2, 3], measure: s => s.stats.superBonus, requires: 'long', levelRequires: [null, null, 'relay'], quick: 0, stageLevels: 0, quickStage: 0 },
   { id: 'fastfall_run', scope: 'run', verb: 'slide', text: n => `한 판에 빠른 낙하 ${n}번`, targets: [5, 15, 30], measure: s => s.stats.fastFalls, requires: 'world2', quick: 0, stageLevels: 0, quickStage: 0 },
   { id: 'relay_dist', scope: 'run', verb: 'run', text: n => `이어달리기 주자로 ${m(n)} 달리기`, targets: [200, 400, 550], measure: s => Math.floor(s.stats.relayDist), requires: 'relay', quick: 0, stageLevels: 0, quickStage: 0 },   // GDD→ [200, 500, 900]
-  { id: 'dist_tot', scope: 'total', verb: 'run', text: n => `모두 합쳐 ${m(n)} 달리기`, targets: [3000, 8000, 14000], measure: dist, quick: 0, stageLevels: 1, quickStage: 0 },   // GDD→ [3000, 8000, 20000]
+  { id: 'dist_tot', scope: 'total', verb: 'run', text: n => `모두 합쳐 ${m(n)} 달리기`, targets: [3000, 8000, 14000], measure: dist, quick: 0, stageLevels: 0, quickStage: 0 },   // GDD→ [3000, 8000, 20000]
   { id: 'jelly_tot', scope: 'total', verb: 'candy', text: n => `별사탕 ${fmt(n)}개 먹기 (누적)`, targets: [1000, 3000, 8000], measure: s => s.stats.jellies, quick: 1, stageLevels: 1, quickStage: 0 },
   { id: 'near_tot', scope: 'total', verb: 'dodge', text: n => `아슬아슬 ${n}번 (누적)`, targets: [20, 40, 60], measure: s => s.stats.nearMisses, requires: 'long', quick: 0, stageLevels: 0, quickStage: 0 },   // GDD→ [20, 50, 120]
   { id: 'airjump_tot', scope: 'total', verb: 'jump', text: n => `2단 점프 ${n}번 (누적)`, targets: [100, 180, 250], measure: s => s.stats.airJumps, requires: 'long', quick: 0, stageLevels: 0, quickStage: 0 },   // GDD→ [100, 300, 700]
@@ -283,31 +283,35 @@ export interface RunTrace {
   /** % of the 별사탕 that scrolled past in the first 500 m and were left uneaten (0 if the run ended before 500 m) */
   skip500: number;
 }
-const traceCache = new WeakMap<RunState, RunTrace>();
+const traceCache = new WeakMap<RunState, { steps: number; t: RunTrace }>();
 /**
  * The run's stretch measures. The sim has no "first X at" stats, so the run is re-simulated from its seed + input log
  * (the same machinery as ghosts: ~30–60 ms for a 3-minute run, only when an active mission asks). If the replay does
  * not reproduce the run exactly, falls back to whole-run values (never over-credits).
  */
 export function runTrace(s: RunState): RunTrace {
-  const hit = traceCache.get(s); if (hit) return hit;
+  // mid-run (e.g. the HUD checking missions every 0.5 s): cheap conservative values, never a replay, never cached
+  if (s.phase !== 'over' && s.phase !== 'clear') return conservativeTrace(s);
+  const hit = traceCache.get(s); if (hit && hit.steps === s.steps) return hit.t;
   let t: RunTrace | null = null;
   // if the sim ever tracks these itself (recommended: RunStats.stretchM), use them and skip the replay
   const pre = (s.stats as unknown as { stretchM?: Partial<RunTrace> }).stretchM;
   if (pre && typeof pre.noHit === 'number' && typeof pre.noPotion === 'number' && typeof pre.noAir === 'number' && typeof pre.noJelly === 'number' && typeof pre.noFall === 'number') {
     t = { exact: true, noPotion: Math.floor(pre.noPotion), noAir: Math.floor(pre.noAir), noJelly: Math.floor(pre.noJelly), noHit: Math.floor(pre.noHit), noFall: Math.floor(pre.noFall), skip500: Math.floor(pre.skip500 ?? 0) };
-    traceCache.set(s, t); return t;
+    traceCache.set(s, { steps: s.steps, t }); return t;
   }
   if (s.steps > 0 && !s.trial) for (const nc of [false, true]) { t = replayTrace(s, nc); if (t) break; }
-  if (!t) {
-    const d = dist(s); const st = s.stats;
-    t = {
-      exact: false, noPotion: st.potions + st.miniPotions === 0 ? d : 0, noAir: st.airJumps === 0 ? d : 0,
-      noJelly: st.jellies === 0 ? d : 0, noHit: st.hits + st.shieldsUsed === 0 ? d : 0, noFall: st.falls === 0 ? d : 0, skip500: 0,
-    };
-  }
-  traceCache.set(s, t);
+  if (!t) t = conservativeTrace(s);
+  traceCache.set(s, { steps: s.steps, t });
   return t;
+}
+/** Whole-run values: a stretch is only credited when the event never happened (a lower bound of the real stretch). */
+function conservativeTrace(s: RunState): RunTrace {
+  const d = dist(s); const st = s.stats;
+  return {
+    exact: false, noPotion: st.potions + st.miniPotions === 0 ? d : 0, noAir: st.airJumps === 0 ? d : 0,
+    noJelly: st.jellies === 0 ? d : 0, noHit: st.hits + st.shieldsUsed === 0 ? d : 0, noFall: st.falls === 0 ? d : 0, skip500: 0,
+  };
 }
 function replayTrace(s: RunState, noCountdown: boolean): RunTrace | null {
   let r: RunState;
@@ -338,14 +342,7 @@ function replayTrace(s: RunState, noCountdown: boolean): RunTrace | null {
 }
 
 // ---------------------------------------------------------------- live (mid-run) progress for the 1.5 s toast
-const STRETCH: Record<string, (s: RunState) => number> = {
-  // cheap lower bounds while running (the exact stretch is computed from a replay once the run is booked)
-  dist_nofall: s => (s.stats.falls === 0 ? dist(s) : 0),
-  nohit_dist: s => (s.stats.hits + s.stats.shieldsUsed === 0 ? dist(s) : 0),
-  no_potion: s => (s.stats.potions + s.stats.miniPotions === 0 ? dist(s) : 0),
-  no_air: s => (s.stats.airJumps === 0 ? dist(s) : 0),
-  no_jelly: s => (s.dist >= 500 && s.stats.jelliesSeen > 0 && s.stats.jellies === 0 ? 100 : 0),
-};
+const END_ONLY = new Set(['star_tot', 'pouch_tot', 'clear_tot']);
 /**
  * What each active mission would show if the run ended now — call it a few times a second during a run and toast
  * ("미션 완료!") when `done` flips to true. Never mutates the missions; star/pouch/clear missions only move at run end.
@@ -354,8 +351,8 @@ export function liveMissionProgress(active: ActiveMission[], s: RunState): { id:
   return active.map(a => {
     const t = MISSION_BY_ID[a.id];
     let v = 0;
-    if (t && !s.trial && s.mode !== 'tutorial' && (!t.modes || t.modes.includes(s.mode)) && !(t.id in { star_tot: 1, pouch_tot: 1, clear_tot: 1 })) {
-      try { v = STRETCH[t.id] ? STRETCH[t.id](s) : t.measure(s); } catch { v = 0; }
+    if (t && !s.trial && s.mode !== 'tutorial' && (!t.modes || t.modes.includes(s.mode)) && !END_ONLY.has(t.id)) {
+      try { v = t.measure(s); } catch { v = 0; }   // stretch measures are cheap lower bounds until the run is over
     }
     const progress = !t ? a.progress : t.scope === 'run' ? Math.max(a.progress, v) : a.progress + v;
     return { id: a.id, progress, target: a.target, done: progress >= a.target };

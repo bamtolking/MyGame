@@ -1372,4 +1372,16 @@ export const CHUNKS: ChunkDef[] = [
     .......................................ooooP?ooo
     =====................................===========
   `, { biomes: ['dawn'] }),
+
+  // ---- stage-only (골목 지도 courses reference them by id; never drawn in endless/daily) ----
+  // 2-3 fast-fall lesson: the star-candy arc drops steeply into a lantern tunnel — holding slide in the air pulls
+  // you down early AND keeps you sliding on landing. Proven crossable without the fast-fall too (it is a tool).
+  C('stage_fastfall', [2, 3], ['stageonly', 'combo', 'jump', 'slide'], `
+    .........ooo................ooo.............
+    ........o...o..............o...o............
+    .......o.....o............o.....o...........
+    ......o.......ovvvvvv....o.......ovvvvvv....
+    oooooo....^....oooooo........^....ooooooo?oo
+    ============================================
+  `, { signs: [{ col: 3, text: '공중에서 슬라이드 = 빠른 낙하' }] }),
 ];

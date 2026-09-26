@@ -5,6 +5,7 @@ import type { CompanionDef } from '../data/companions';
 import type { Progress } from '../meta/progress';
 import { estimateRuns } from '../meta/achievements';
 import { drawCharacter } from '../render/characters';
+import { drawCompanion } from '../render/companions';
 import { shapeOf } from '../render/renderer';
 import { h } from './dom';
 
@@ -129,56 +130,17 @@ function makeCanvas(size: number, cls: string): { cv: HTMLCanvasElement; g: Canv
 /** A small canvas with the character in an idle/run pose. */
 export function charPortrait(c: CharacterDef, size = 96, running = false): HTMLCanvasElement {
   const { cv, g } = makeCanvas(size, 'portrait');
-  const k = size / 110; g.translate(size / 2, size * 0.9); g.scale(k, k);
+  const k = size / 124; g.translate(size / 2, size * 0.93); g.scale(k, k);
   g.fillStyle = 'rgba(0,0,0,0.2)'; g.beginPath(); g.ellipse(0, 2, 26, 6, 0, 0, Math.PI * 2); g.fill();
   try { drawCharacter(g, shapeOf(c), c.palette, { state: running ? 'run' : 'idle', t: 0.5, runPhase: 0.25, spin: 0, squash: 1, hurt: false, alpha: 1 }); } catch { /* art in flux */ }
   return cv;
 }
 
-/** A companion (짝꿍) drawn procedurally: firefly glow, black-and-white magpie, little golden haetae. */
+/** A companion (짝꿍) — the same procedural art the run draws (src/render/companions.ts). */
 export function companionPortrait(c: CompanionDef, size = 64): HTMLCanvasElement {
   const { cv, g } = makeCanvas(size, 'portrait comp');
-  const k = size / 100; g.scale(k, k); g.translate(50, 52);
-  const eye = (x: number, y: number, r = 4.2) => {
-    g.fillStyle = '#1b1030'; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#fff'; g.beginPath(); g.arc(x + r * 0.35, y - r * 0.4, r * 0.38, 0, Math.PI * 2); g.fill();
-  };
-  const cheek = (x: number, y: number) => { g.fillStyle = 'rgba(255,120,120,0.55)'; g.beginPath(); g.ellipse(x, y, 5, 3, 0, 0, Math.PI * 2); g.fill(); };
-  const kind = c.effect.kind;
-  if (kind === 'pickPad') {            // 반딧불 반짝이: a glowing dot with little wings
-    const glow = g.createRadialGradient(0, 4, 2, 0, 4, 46);
-    glow.addColorStop(0, 'rgba(255,245,150,0.95)'); glow.addColorStop(0.35, 'rgba(255,230,90,0.45)'); glow.addColorStop(1, 'rgba(255,220,80,0)');
-    g.fillStyle = glow; g.beginPath(); g.arc(0, 4, 46, 0, Math.PI * 2); g.fill();
-    g.fillStyle = 'rgba(210,235,255,0.75)'; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 1.5;
-    for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * 15, -14, 13, 8, s * -0.6, 0, Math.PI * 2); g.fill(); g.stroke(); }
-    g.fillStyle = '#3a2b4a'; g.beginPath(); g.ellipse(0, -6, 13, 12, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = c.color; g.beginPath(); g.ellipse(0, 12, 15, 14, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = 'rgba(255,255,255,0.7)'; g.beginPath(); g.ellipse(-5, 7, 5, 4, -0.5, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = '#3a2b4a'; g.lineWidth = 2; g.lineCap = 'round';
-    for (const s of [-1, 1]) { g.beginPath(); g.moveTo(s * 4, -17); g.quadraticCurveTo(s * 9, -30, s * 13, -30); g.stroke(); }
-    eye(-5, -7, 3.4); eye(5, -7, 3.4);
-  } else if (kind === 'honeyDrop') {   // 까치 깍순이: round magpie, white belly, blue wing
-    g.fillStyle = '#1e1b2e'; g.beginPath(); g.moveTo(22, 6); g.lineTo(44, 20); g.lineTo(40, 26); g.lineTo(18, 16); g.fill();   // tail
-    g.fillStyle = '#23203a'; g.beginPath(); g.ellipse(0, 6, 28, 24, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#f4f2ff'; g.beginPath(); g.ellipse(-4, 14, 18, 14, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#3d6fd6'; g.beginPath(); g.ellipse(12, 4, 13, 9, 0.5, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#f4f2ff'; g.beginPath(); g.ellipse(10, 0, 5, 3, 0.5, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#23203a'; g.beginPath(); g.arc(-10, -14, 16, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#f2b544'; g.beginPath(); g.moveTo(-25, -14); g.lineTo(-36, -10); g.lineTo(-25, -8); g.fill();
-    eye(-15, -16, 3.6); cheek(-8, -8);
-    g.fillStyle = '#f2b544'; g.fillRect(-8, 28, 3, 7); g.fillRect(2, 28, 3, 7);
-    g.fillStyle = '#ffb627'; g.beginPath(); g.arc(-38, -2, 5, 0, Math.PI * 2); g.fill();   // the honey drop it carries
-  } else {                              // 아기 해태 해돌이: golden lion-dog pup, curly mane, little horn
-    g.fillStyle = '#e07a2c';
-    for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; g.beginPath(); g.arc(Math.cos(a) * 26, -6 + Math.sin(a) * 24, 10, 0, Math.PI * 2); g.fill(); }
-    g.fillStyle = c.color; g.beginPath(); g.ellipse(0, 20, 24, 16, 0, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.arc(0, -6, 23, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#5ab0a0'; g.beginPath(); g.moveTo(-4, -28); g.lineTo(0, -40); g.lineTo(4, -28); g.fill();
-    g.fillStyle = '#fff1c8'; g.beginPath(); g.ellipse(0, 4, 12, 8, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#6b3a16'; g.beginPath(); g.ellipse(0, 0, 4, 3, 0, 0, Math.PI * 2); g.fill();
-    eye(-9, -9, 4); eye(9, -9, 4); cheek(-15, 2); cheek(15, 2);
-    g.strokeStyle = '#6b3a16'; g.lineWidth = 2; g.lineCap = 'round'; g.beginPath(); g.arc(-3, 5, 3, 0.2, Math.PI - 0.2); g.stroke(); g.beginPath(); g.arc(3, 5, 3, 0.2, Math.PI - 0.2); g.stroke();
-    g.fillStyle = '#e07a2c'; g.beginPath(); g.arc(26, 16, 7, 0, Math.PI * 2); g.fill();
-  }
+  const k = size / 100; g.scale(k, k);
+  g.fillStyle = 'rgba(0,0,0,0.18)'; g.beginPath(); g.ellipse(50, 88, 24, 5, 0, 0, Math.PI * 2); g.fill();
+  try { drawCompanion(g, c.id, 0.4, 50, 50, 1.45); } catch { /* art in flux */ }
   return cv;
 }

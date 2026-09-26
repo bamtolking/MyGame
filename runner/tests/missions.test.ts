@@ -92,6 +92,7 @@ function play(cfg: RunConfig, seed: number, intent: Intent | null = null, maxDis
   const s = newRun(cfg);
   const ap: { next(s: RunState): RunInput } = intent ? new IntentPilot(JITTER, 2, seed, intent) : new Autopilot({ jitter: JITTER, pad: 2, seed });
   while (s.phase !== 'over' && s.phase !== 'clear' && s.t < 900 && s.dist < maxDist) { stepRun(s, ap.next(s)); s.events.length = 0; }
+  if (s.phase === 'run') s.phase = 'over';   // stopped early (NJ): the player quits here — booked like a finished run
   return s;
 }
 

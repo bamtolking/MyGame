@@ -417,6 +417,7 @@ export class App {
 
     // tutorial rewind: 40 % speed until the runner is past the hazard that stopped it
     let speed = Math.max(0.6, Math.min(1, st.gameSpeed || 1));
+    if (speed < 1 && s.phase === 'run') s.assist = true;   // a slowed run is an assisted record (marked, never punished); the sim never reads it
     if (rc.slow) {
       rc.slow.t += real;
       if ((rc.slow.t >= TUTORIAL_SLOW_MIN && s.body.x > rc.slow.untilX) || rc.slow.t >= TUTORIAL_SLOW_MAX) this.endSlow(rc);

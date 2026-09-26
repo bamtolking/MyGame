@@ -21,7 +21,7 @@ import type { RunState, SimEvent, Hazard, PowerKind } from '../sim/types';
 import { Fx, star, vrand, type Box } from './fx';
 import { drawCharacter, rr, type Pose, type Shape, type HatId } from './characters';
 import { drawCompanion } from './companions';
-import { drawSpike, drawTall, drawHang } from './hazards';
+import { drawSpike, drawTall, drawHang, setHazardOutlineScale } from './hazards';
 import { drawPickup, LETTER_COLORS } from './pickups';
 import { Backdrop } from './backdrops';
 export { POWER_NAME, POWER_DESC, POWER_COLOR, POWER_ICON } from './pickups';
@@ -44,6 +44,7 @@ const POWER_HUE: Record<PowerKind, string> = { giant: '#ff9f43', dash: '#ff5d5d'
 const POWER_GLYPH: Record<PowerKind, string> = { giant: '만', dash: '≫', magnet: '엿' };
 const FONT = 'system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif';
 const SPRITE_H = 84;                  // drawn runner height (logical px)
+const RING_H = 96;                    // skill ring height: clears the tallest tops (어묵이 steam, 꼬치 stick)
 const FROST = '190,225,255';
 
 export class Renderer {
@@ -98,6 +99,8 @@ export class Renderer {
     this.portrait = this.bandH > 0;
     this.playerX = PLAYER_SCREEN_X + this.offL;
     this.backdrop.resize(this.cssW, this.worldH, this.dpr, this.scale);
+    setHazardOutlineScale(this.portrait ? 1.5 : 1);     // portrait render assist: hazard outline ×1.5
+    const bi = BIOME_BY_ID[this.curBiome]; if (bi) this.backdrop.prepare(bi);
   }
 
   /** world → css px */
@@ -124,7 +127,10 @@ export class Renderer {
           if (e.n === 2) { this.spinT = 0; this.jumpT = 0; f.burst(b.x - 6, b.y - 4, 6, 'rgba(255,255,255,0.9)', 120, 'dot', 4, 200); }
           else { this.jumpT = 0; f.burst(b.x - 10, b.y, 5, 'rgba(230,210,180,0.9)', 90, 'dot', 4, 300); }
           break;
-        case 'land': this.landT = 0; this.landSq = 1 / (1 - 0.2 * Math.min(1, Math.max(0, this.airVy) / 1800)); f.burst(b.x - 8, b.y, 4, 'rgba(230,210,180,0.8)', 80, 'dot', 3, 300); break;
+        case 'land':
+          this.landT = 0; this.landSq = 1 / (1 - 0.2 * Math.min(1, Math.max(0, this.airVy) / 1800));
+          if (shapeOf(CHAR_BY_ID[s.charId]) === 'disc') this.landSq = Math.min(this.landSq, 1.08);   // keep 호떡이's art over its hurtbox
+          f.burst(b.x - 8, b.y, 4, 'rgba(230,210,180,0.8)', 80, 'dot', 3, 300); break;
         case 'slide': this.slideT = 0; break;
         case 'fastFall': f.burst(b.x, b.y - 60, 4, 'rgba(255,255,255,0.7)', 90, 'dot', 3, -300); break;
         case 'pickup': this.onPickup(e, s); break;
@@ -194,7 +200,7 @@ export class Renderer {
     if (s.bonusStage === 'sky') this.skyMix = 1;
 
     const biome = BIOME_BY_ID[s.biome] ?? BIOMES[0];
-    if (biome.id !== this.curBiome) { this.prevBiome = this.curBiome; this.curBiome = biome.id; this.biomeFade = this.prevBiome ? 0 : 1; }
+    if (biome.id !== this.curBiome) { this.prevBiome = this.curBiome; this.curBiome = biome.id; this.biomeFade = this.prevBiome ? 0 : 1; this.backdrop.prepare(biome); }   // all 4 layers at once: no pop-in
     this.biomeFade = Math.min(1, this.biomeFade + dt / 1.0);
 
     // ---- camera: fixed x anchor; upward-only vertical follow (critically damped, ω = 9, ≤ 160 px)
@@ -306,11 +312,10 @@ export class Renderer {
   private drawHazards(s: RunState, bi: BiomeDef, x0: number, x1: number): void {
     const c = this.c; const hc = this.opts.highContrast;
     const hz = s.level.hazards; const boxes = this.hazBoxes; boxes.length = 0;
-    // portrait render assist: outline ×1.5 — the art is stamped with a dark offset halo before the real draw
-    const halo = this.portrait ? [[-1.5, 0], [1.5, 0], [0, -1.5], [0, 1.5]] : [];
     const draw = (h: Hazard, right: number) => {
-      const col = hc ? '#ff1744' : bi.hazard[h.kind];
-      const st = (BIOME_BY_ID[h.biome] ?? bi).style;
+      const hb = BIOME_BY_ID[h.biome] ?? bi;      // a hazard keeps its own biome's skin AND colour across a crossfade
+      const col = hc ? '#ff1744' : hb.hazard[h.kind];
+      const st = hb.style;
       if (h.kind === 'spike') drawSpike(c, h, col, hc, st);
       else if (h.kind === 'tall') drawTall(c, h, col, hc, this.time, st);
       else drawHang(c, h.x0, right, h.y1, col, hc, this.time, st);
@@ -324,8 +329,6 @@ export class Renderer {
         while (j + 1 < hz.length) { const n = hz[j + 1]; if (n.kind === 'hang' && !n.broken && Math.abs(n.x0 - right) < 1 && Math.abs(n.y1 - h.y1) < 1) { right = n.x1; j++; } else break; }
       }
       boxes.push({ x0: h.x0 - 4, x1: right + 4, y0: Math.max(h.y0, -400) - 16, y1: h.y1 + 8 });
-      for (const [dx, dy] of halo) { c.save(); c.translate(dx, dy); c.globalAlpha = 0.9; draw(h, right); c.restore(); }
-      if (halo.length) c.globalAlpha = 1;
       draw(h, right);
       i = j;
     }
@@ -357,7 +360,7 @@ export class Renderer {
     if (!cp.init || Math.abs(cp.x - tx) > 400) { cp.x = tx; cp.y = ty; cp.init = true; }
     const k = 1 - Math.exp(-dt * 7);
     cp.x += (tx - cp.x) * k; cp.y += (ty - cp.y) * k;
-    try { drawCompanion(this.c, s.companionId, this.time, cp.x, cp.y + (this.opts.reduceMotion ? 0 : Math.sin(this.time * 3) * 3)); } catch { /* art not ready */ }
+    try { drawCompanion(this.c, s.companionId, this.time, cp.x, cp.y); } catch { /* art not ready */ }   // the art hovers by itself
   }
 
   private drawPlayer(s: RunState, x: number, y: number): void {
@@ -411,7 +414,7 @@ export class Renderer {
     const c = this.c; const b = s.body;
     const every = ch.skill.every || 1;
     const k = s.skillActive > 0 || (ch.skill.kind === 'shield' && s.shield > 0) ? 1 : Math.max(0, Math.min(1, 1 - s.skillT / every));
-    const cx = x, cy = y - (b.sliding ? 44 : SPRITE_H) * b.scale - 16, r = 9;
+    const cx = x, cy = y - (b.sliding ? 44 : RING_H) * b.scale - 16, r = 9;
     c.lineWidth = 4; c.strokeStyle = 'rgba(20,12,36,0.55)'; c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.stroke();
     c.strokeStyle = k >= 1 ? '#fff3a3' : '#ffd166'; c.lineWidth = 3.2;
     c.beginPath(); c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); c.stroke();
