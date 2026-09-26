@@ -20,6 +20,8 @@ export function mix(a: string, b: string, t: number): string { const A = hexRgb(
 export function rgba(a: string, al: number): string { const [r, g, b] = hexRgb(a); return `rgba(${r},${g},${b},${al})`; }
 export const lighten = (a: string, t: number): string => mix(a, '#ffffff', t);
 export const darken = (a: string, t: number): string => mix(a, '#000000', t);
+/** integer → [0, 1) hash (visual only; no allocation, for per-frame use) */
+export function hash01(n: number): number { let x = Math.imul((n | 0) ^ 0x9e3779b9, 0x85ebca6b); x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35); x ^= x >>> 16; return (x >>> 0) / 4294967296; }
 /** deterministic visual-only RNG (never the sim's) */
 export function srng(seed: number): () => number { let s = (seed >>> 0) || 1; return () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296; }
 /** an offscreen canvas `w × h` logical px at `res` device px per logical px; the context is pre-scaled */
@@ -138,10 +140,10 @@ const marketLayers: LayerSpec[] = [
       g.fillStyle = darken(col, 0.18); g.fillRect(x - 3, -h - 5, w + 6, 6);             // parapet
       windows(g, r, x + 10, -h + 14, w - 20, h * 0.42, 12, 14, 8, rgba(P.light, 0.62), rgba(darken(col, 0.3), 0.6), 0.55);
       // horizontal signboard band (generic food words, no brands)
-      const sc = mix(signs[Math.floor(r() * signs.length)], col, 0.38); const sy = -h * 0.42 - 8;
+      const sc = mix(signs[Math.floor(r() * signs.length)], col, 0.48); const sy = -h * 0.42 - 8;
       g.fillStyle = sc; g.fillRect(x + 6, sy, w - 12, 22);
       g.fillStyle = rgba('#fff4dd', 0.18); g.fillRect(x + 6, sy, w - 12, 3);
-      text(g, MARKET_WORDS[Math.floor(r() * MARKET_WORDS.length)], x + w / 2, sy + 12, 15, rgba('#fff4dd', 0.85));
+      text(g, MARKET_WORDS[Math.floor(r() * MARKET_WORDS.length)], x + w / 2, sy + 12, 15, rgba('#fff4dd', 0.7));
       // lit shop front
       const gr = g.createLinearGradient(0, -52, 0, 0); gr.addColorStop(0, rgba(P.light, 0.5)); gr.addColorStop(1, rgba(P.light, 0.1));
       g.fillStyle = gr; g.fillRect(x + 8, -52, w - 16, 52);
@@ -155,7 +157,7 @@ const marketLayers: LayerSpec[] = [
   } },
   { top: 205, k: 2, paint: (g, W, r, P) => {
     const body = P.near;
-    const aw0 = mix(P.a0, body, 0.42), aw1 = mix(P.a1, body, 0.62);
+    const aw0 = mix(P.a0, body, 0.5), aw1 = mix(P.a1, body, 0.68);
     const stalls = spread(r, W, 150, 230, 50, 130);
     // festival lantern string high over the alley (behind the stalls)
     const lc = [mix(P.a0, body, 0.15), mix('#ffb03b', body, 0.2), mix('#3e9fd1', body, 0.25)];
@@ -483,13 +485,14 @@ function burstSprite(rad: number, res: number, col: string, col2: string): HTMLC
   return cv;
 }
 function skyLanternSprite(res: number): HTMLCanvasElement {
+  // 풍등: a paper balloon, wide at the top, lit from the burner at its mouth
   const [cv, g] = makeCanvas(56, 64, res);
-  glowDot(g, 28, 30, 28, '#ffb45a', 0.5);
-  const gr = g.createLinearGradient(0, 12, 0, 52); gr.addColorStop(0, '#ffd9a0'); gr.addColorStop(0.6, '#ff9f45'); gr.addColorStop(1, '#e8672e');
-  g.fillStyle = gr; g.beginPath(); g.moveTo(17, 14); g.lineTo(39, 14); g.quadraticCurveTo(43, 34, 37, 50); g.lineTo(19, 50); g.quadraticCurveTo(13, 34, 17, 14); g.closePath(); g.fill();
-  g.strokeStyle = 'rgba(160,60,20,0.45)'; g.lineWidth = 1; g.beginPath(); g.moveTo(28, 14); g.lineTo(28, 50); g.moveTo(22, 14); g.quadraticCurveTo(19, 34, 23, 50); g.moveTo(34, 14); g.quadraticCurveTo(37, 34, 33, 50); g.stroke();
-  g.fillStyle = 'rgba(255,255,230,0.9)'; g.beginPath(); g.ellipse(28, 46, 3, 4, 0, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#b8542a'; g.fillRect(18, 49, 20, 2);
+  glowDot(g, 28, 34, 28, '#ffb45a', 0.45);
+  const gr = g.createLinearGradient(0, 10, 0, 50); gr.addColorStop(0, '#ffcf8a'); gr.addColorStop(0.55, '#ffab55'); gr.addColorStop(1, '#fff0c0');
+  g.fillStyle = gr; g.beginPath(); g.moveTo(14, 16); g.quadraticCurveTo(14, 9, 22, 9); g.lineTo(34, 9); g.quadraticCurveTo(42, 9, 42, 16); g.quadraticCurveTo(41, 34, 35, 47); g.lineTo(21, 47); g.quadraticCurveTo(15, 34, 14, 16); g.closePath(); g.fill();
+  g.strokeStyle = 'rgba(170,70,20,0.35)'; g.lineWidth = 1; g.beginPath(); g.moveTo(28, 9); g.lineTo(28, 47); g.moveTo(21, 10); g.quadraticCurveTo(19, 30, 24, 47); g.moveTo(35, 10); g.quadraticCurveTo(37, 30, 32, 47); g.stroke();
+  g.fillStyle = '#c0602a'; g.fillRect(20, 46, 16, 2.5);
+  g.fillStyle = 'rgba(255,255,235,0.95)'; g.beginPath(); g.ellipse(28, 45, 3.2, 3.8, 0, 0, Math.PI * 2); g.fill();
   return cv;
 }
 function sparkleSprite(res: number): HTMLCanvasElement {
@@ -527,7 +530,7 @@ function paintGroundTile(g: CanvasRenderingContext2D, st: GroundStyle, P: Pal): 
     const k = W / (bumps[bumps.length - 1][0] + bumps[bumps.length - 1][1] * 0.6);
     g.fillStyle = '#ffffff'; wrap(ox => { g.beginPath(); for (const [bx, rad] of bumps) { g.moveTo(ox + bx * k + rad, 10); g.arc(ox + bx * k, 10, rad, Math.PI, 0); } g.fill(); });
     // soft inner puffs
-    for (let i = 0; i < 9; i++) { const x = r() * W, y = 30 + r() * (D - 40), rad = 10 + r() * 16; const col = i % 3 === 0 ? 'rgba(255,255,255,0.55)' : i % 3 === 1 ? 'rgba(255,196,228,0.22)' : 'rgba(196,170,255,0.2)'; g.fillStyle = col; wrap(ox => { g.beginPath(); g.arc(ox + x, y, rad, 0, Math.PI * 2); g.fill(); }); }
+    for (let i = 0; i < 9; i++) { const x = r() * W, y = 30 + r() * (D - 40), rad = 10 + r() * 16; const col = i % 3 === 0 ? 'rgba(255,255,255,0.4)' : i % 3 === 1 ? 'rgba(255,196,228,0.14)' : 'rgba(196,170,255,0.13)'; g.fillStyle = col; wrap(ox => { g.beginPath(); g.arc(ox + x, y, rad, 0, Math.PI * 2); g.fill(); }); }
     g.fillStyle = 'rgba(255,190,225,0.35)'; g.fillRect(0, 22, W, 2);
     return;
   }
@@ -686,6 +689,28 @@ function paintPlatform(g: CanvasRenderingContext2D, st: GroundStyle, P: Pal, w: 
   g.strokeStyle = outline; g.lineWidth = 1.5; rr(g, -2, -4, w + 4, 8, 3); g.stroke();
 }
 
+// ---------------------------------------------------------------- pits (하수구 틈 / 물웅덩이 틈 / 끊어진 난간 / 지붕 사이)
+const PIT_H = VIEW_H + 32 - GROUND_Y;           // from 2 px above the surface to below the view
+/** a 8-px column of the pit interior (stretched across the gap): dark, darker with depth, style details */
+function paintPitColumn(g: CanvasRenderingContext2D, st: GroundStyle, P: Pal): void {
+  const gr = g.createLinearGradient(0, 0, 0, PIT_H); gr.addColorStop(0, rgba(P.pit, 0.92)); gr.addColorStop(0.22, P.pit); gr.addColorStop(1, darken(P.pit, 0.5));
+  g.fillStyle = gr; g.fillRect(0, 0, 8, PIT_H);
+  if (st === 'riverside') { g.fillStyle = mix(P.pit, '#1f4a6e', 0.55); g.fillRect(0, 72, 8, PIT_H - 72); g.fillStyle = 'rgba(160,210,255,0.25)'; g.fillRect(0, 72, 8, 1.5); }
+  else if (st === 'market') { g.fillStyle = 'rgba(255,220,180,0.06)'; for (let y = 28; y < PIT_H; y += 14) g.fillRect(0, y, 8, 1.5); g.fillStyle = 'rgba(120,200,255,0.18)'; g.fillRect(0, 90, 8, 2); }
+  else if (st === 'dawn') { g.fillStyle = 'rgba(255,220,200,0.05)'; for (let y = 32; y < PIT_H; y += 18) g.fillRect(0, y, 8, 1.5); }
+  else if (st === 'sky') { g.clearRect(0, 0, 8, PIT_H); g.fillStyle = 'rgba(120,80,200,0.25)'; g.fillRect(0, 12, 8, PIT_H - 12); }
+}
+const EDGE_W = 12, EDGE_UP = 6, EDGE_H = PIT_H + 4;
+/** the end of a ground run at a pit: dark cliff face fading into the ground + a rounded lip of the walking surface */
+function paintEdge(g: CanvasRenderingContext2D, st: GroundStyle, P: Pal, dir: 1 | -1): void {
+  const face = st === 'sky' ? '#b48ce6' : darken(P.ground, 0.55);
+  const x = dir > 0 ? 0 : EDGE_W; const y0 = EDGE_UP + 10;
+  const gr = g.createLinearGradient(x, 0, x + dir * 10, 0); gr.addColorStop(0, rgba(face, st === 'sky' ? 0.5 : 1)); gr.addColorStop(1, rgba(face, 0));
+  g.fillStyle = gr; g.fillRect(dir > 0 ? 0 : EDGE_W - 10, y0, 10, EDGE_H - y0);
+  g.fillStyle = st === 'sky' ? 'rgba(150,110,220,0.7)' : 'rgba(0,0,0,0.55)'; g.fillRect(dir > 0 ? 0 : EDGE_W - 3, EDGE_UP + 8, 3, EDGE_H);
+  g.fillStyle = st === 'sky' ? '#ffffff' : P.top; g.beginPath(); g.arc(x + dir * 6, EDGE_UP + 2, 6, 0, Math.PI * 2); g.fill();
+}
+
 // ================================================================ the Backdrop
 export class Backdrop {
   cssW = 1; cssH = 1; dpr = 1; scale = 1;
@@ -820,7 +845,7 @@ export class Backdrop {
     const slow = this.reduceMotion ? 1.8 : 1;
     for (let i = 0; i < 3; i++) {
       const P = (2.7 + i * 0.8) * slow; const tt = time + i * 1.37; const cyc = Math.floor(tt / P); const local = tt - cyc * P;
-      const h = srng(cyc * 7919 + i * 104729)(); const h2 = srng(cyc * 31 + i * 977 + 5)();
+      const h = hash01(cyc * 7919 + i * 104729), h2 = hash01(cyc * 31 + i * 977 + 5);
       const x = ((h * 0.8 + 0.1) * this.cssW - camX * 0.02 * sc) % this.cssW; const xx = x < 0 ? x + this.cssW : x;
       const y = gy - (300 + h2 * 110) * sc; const [col, col2] = cols[(cyc + i) % cols.length];
       const rise = 0.55 * slow;
@@ -861,9 +886,11 @@ export class Backdrop {
     const sp = this.sprite('sparkle', res => sparkleSprite(res));
     const n = this.lowFx ? 8 : 18;
     for (let i = 0; i < n; i++) {
-      const h = srng(i * 7717 + 3); const x = ((h() * 1.2 * W - camX * 0.04 * sc) % W + W) % W; const y = h() * (gy - 140 * sc);
-      const tw = this.reduceMotion ? 0.7 : Math.max(0, Math.sin(time * (1.5 + h() * 2) + h() * 6.3));
-      const s = (6 + h() * 8) * sc * (0.6 + 0.4 * tw); c.globalAlpha = alpha * tw; c.drawImage(sp, x - s, y - s, s * 2, s * 2);
+      const h0 = hash01(i * 4 + 1), h1 = hash01(i * 4 + 2), h2 = hash01(i * 4 + 3), h3 = hash01(i * 4 + 4);
+      const x = ((h0 * 1.2 * W - camX * 0.04 * sc) % W + W) % W; const y = h1 * (gy - 140 * sc);
+      const tw = this.reduceMotion ? 0.7 : Math.max(0, Math.sin(time * (1.5 + h2 * 2) + h3 * 6.3));
+      if (tw <= 0.02) continue;
+      const s = (6 + h2 * 8) * sc * (0.6 + 0.4 * tw); c.globalAlpha = alpha * tw; c.drawImage(sp, x - s, y - s, s * 2, s * 2);
     }
     c.globalAlpha = alpha;
     // cloud banks (two tiled layers)
@@ -896,9 +923,9 @@ export class Backdrop {
     const spr = this.sprite('skyLantern', res => skyLanternSprite(res));
     const sc = this.scale, W = this.cssW, gy = this.gy; const n = this.lowFx ? 6 : 12;
     for (let i = 0; i < n; i++) {
-      const h = srng(i * 1231 + 99); const depth = 0.35 + h() * 0.65; const s = 44 * depth * sc;
-      const x = ((h() * W * 1.3 - camX * 0.08 * depth * sc + (this.reduceMotion ? 0 : Math.sin(time * 0.7 + i) * 8 * sc)) % (W + s * 2) + W + s * 2) % (W + s * 2) - s;
-      const range = gy - 60 * sc; const y = range - ((h() * range + (this.reduceMotion ? 0 : time * 14 * depth * sc)) % (range + s * 2)) + s;
+      const depth = 0.35 + hash01(i * 3 + 101) * 0.65; const s = 44 * depth * sc;
+      const x = ((hash01(i * 3 + 102) * W * 1.3 - camX * 0.08 * depth * sc + (this.reduceMotion ? 0 : Math.sin(time * 0.7 + i) * 8 * sc)) % (W + s * 2) + W + s * 2) % (W + s * 2) - s;
+      const range = gy - 60 * sc; const y = range - ((hash01(i * 3 + 103) * range + (this.reduceMotion ? 0 : time * 14 * depth * sc)) % (range + s * 2)) + s;
       c.globalAlpha = alpha * (0.55 + 0.45 * depth) * (this.reduceMotion ? 1 : 0.85 + 0.15 * Math.sin(time * 5 + i * 2.1));
       c.drawImage(spr, x - s / 2, y - s * 0.57, s, s * 1.14);
     }
@@ -957,24 +984,16 @@ export class Backdrop {
       c.fillStyle = 'rgba(120,80,200,0.25)'; c.fillRect(L, GROUND_Y + 10, R - L, bottom - GROUND_Y);
       return;
     }
-    const gr = c.createLinearGradient(0, GROUND_Y - 2, 0, bottom);
-    gr.addColorStop(0, rgba(P.pit, 0.9)); gr.addColorStop(0.25, P.pit); gr.addColorStop(1, darken(P.pit, 0.5));
-    c.fillStyle = gr; c.fillRect(L, GROUND_Y - 2, R - L, bottom - GROUND_Y + 2);
+    const res = worldRes(c);
+    const col = this.sprites.get(`pit|${st}|${P.id}|${res}`, () => { const [cv, g] = makeCanvas(8, PIT_H, res); paintPitColumn(g, st, P); return cv; });
+    c.drawImage(col, L, GROUND_Y - 2, R - L, PIT_H);
     if (st === 'riverside') {
-      // dark water far below with ripples
-      c.fillStyle = mix(P.pit, '#1f4a6e', 0.55); c.fillRect(L, GROUND_Y + 70, R - L, bottom - GROUND_Y - 70);
+      // ripples on the dark water far below
       c.fillStyle = 'rgba(160,210,255,0.28)';
       for (let x = a + 10; x < b - 14; x += 26) { const w = 10 + ((x * 7) % 9); const yy = GROUND_Y + 72 + ((x * 13) % 22) + Math.sin(time * 2 + x) * 1.5; if (x > L - 30 && x < R) c.fillRect(x, yy, w, 2); }
     } else if (st === 'bridge') {
       // river lights far below
       c.fillStyle = 'rgba(255,210,140,0.45)'; for (let x = a + 14; x < b - 6; x += 37) if (x > L && x < R) c.fillRect(x, GROUND_Y + 80 + ((x * 11) % 18), 2, 2);
-    } else if (st === 'market') {
-      // sewer walls: faint brick courses
-      c.fillStyle = 'rgba(255,220,180,0.06)'; for (let y = GROUND_Y + 26; y < bottom; y += 14) c.fillRect(L, y, R - L, 1.5);
-      c.fillStyle = 'rgba(120,200,255,0.18)'; c.fillRect(L, GROUND_Y + 88, R - L, 2);
-    } else {
-      // gap between roofs: a lane far below, faint wall courses
-      c.fillStyle = 'rgba(255,220,200,0.05)'; for (let y = GROUND_Y + 30; y < bottom; y += 18) c.fillRect(L, y, R - L, 1.5);
     }
     if (bridged) {
       // pits are bridged while rescue / giant / dash is active: a glowing plank bridge
@@ -985,15 +1004,9 @@ export class Backdrop {
   }
 
   private drawEdge(c: CanvasRenderingContext2D, st: GroundStyle, P: Pal, x: number, dir: 1 | -1): void {
-    const bottom = VIEW_H + 30; const face = st === 'sky' ? 'rgba(170,130,230,0.5)' : darken(P.ground, 0.55);
-    // cliff face: a dark band inside the ground run
-    const gx = dir > 0 ? x : x - 10;
-    const gr = c.createLinearGradient(gx + (dir > 0 ? 0 : 10), 0, gx + (dir > 0 ? 10 : 0), 0); gr.addColorStop(0, face); gr.addColorStop(1, rgba(st === 'sky' ? '#b48ce6' : darken(P.ground, 0.55), 0));
-    c.fillStyle = gr; c.fillRect(gx, GROUND_Y + 10, 10, bottom - GROUND_Y);
-    c.fillStyle = st === 'sky' ? 'rgba(150,110,220,0.7)' : 'rgba(0,0,0,0.55)'; c.fillRect(dir > 0 ? x : x - 3, GROUND_Y + 8, 3, bottom - GROUND_Y);
-    // rounded lip of the walking surface
-    const top = st === 'sky' ? '#ffffff' : P.top;
-    c.fillStyle = top; c.beginPath(); c.arc(x + dir * 6, GROUND_Y + 2, 6, 0, Math.PI * 2); c.fill();
+    const res = worldRes(c);
+    const spr = this.sprites.get(`edge|${st}|${P.id}|${dir}|${res}`, () => { const [cv, g] = makeCanvas(EDGE_W, EDGE_H, res); paintEdge(g, st, P, dir); return cv; });
+    c.drawImage(spr, dir > 0 ? x : x - EDGE_W, GROUND_Y - EDGE_UP, EDGE_W, EDGE_H);
   }
 
   private drawFinish(c: CanvasRenderingContext2D, fx: number, P: Pal, time: number): void {

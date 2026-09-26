@@ -34,10 +34,10 @@ function outlined(g: CanvasRenderingContext2D, path: () => void, body: string, d
   path(); g.strokeStyle = OUTLINE_IN; g.lineWidth = 1.5; g.stroke();
 }
 function poly(g: CanvasRenderingContext2D, pts: number[]): void { g.beginPath(); g.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]); g.closePath(); }
-function chevronUp(g: CanvasRenderingContext2D, x: number, y: number, w: number, th: number): void {
+function chevronUp(g: CanvasPath, x: number, y: number, w: number, th: number): void {
   g.moveTo(x - w / 2, y + w * 0.45); g.lineTo(x, y); g.lineTo(x + w / 2, y + w * 0.45); g.lineTo(x + w / 2, y + w * 0.45 + th); g.lineTo(x, y + th); g.lineTo(x - w / 2, y + w * 0.45 + th); g.closePath();
 }
-function chevronDown(g: CanvasRenderingContext2D, x: number, y: number, w: number, th: number): void {
+function chevronDown(g: CanvasPath, x: number, y: number, w: number, th: number): void {
   g.moveTo(x - w / 2, y - w * 0.45); g.lineTo(x, y); g.lineTo(x + w / 2, y - w * 0.45); g.lineTo(x + w / 2, y - w * 0.45 - th); g.lineTo(x, y - th); g.lineTo(x - w / 2, y - w * 0.45 - th); g.closePath();
 }
 
@@ -165,62 +165,81 @@ export function drawTall(c: CanvasRenderingContext2D, h: Hazard, col: string, hc
 }
 
 // ---------------------------------------------------------------- hang ▼ (one merged slab x0..x1, from off-screen to `bot`)
+// Hazards never move in world space, so each slab's paths are built once (Path2D, batched per colour) and cached;
+// a frame costs ~8 fill/stroke calls and no allocations. All decoration stays inside [x0-2, x1+2] × [.., bot], so no
+// clip is needed; the teeth below `bot` are decorative (the hitbox ends at `bot`, the art covers all of it).
 const HANG_TOP = -1400;                          // far above any view (portrait shows well above y = 0)
-export function drawHang(c: CanvasRenderingContext2D, x0: number, x1: number, bot: number, col: string, hc: boolean, t: number, style?: HazardStyle): void {
-  const st = styleOf(style, null, col); void hc; void t;
+const HANG_DECO = 1150;                          // decorated height above `bot` (plain body beyond)
+interface HangArt { outline: Path2D; fills: [string, Path2D][]; strokes: [string, number, Path2D, number[] | null][] }
+const hangCache = new SpriteCache<HangArt>(24);
+
+function buildHang(st: HazardStyle, x0: number, x1: number, bot: number, col: string): HangArt {
   const L = x0 - 2, R = x1 + 2, w = R - L; const units = Math.max(1, Math.round((x1 - x0) / 40)); const uw = (x1 - x0) / units;
   const teeth = units * 2; const tw = w / teeth; const TOOTH = 8;
-  const path = () => {
-    c.beginPath(); c.moveTo(L, HANG_TOP); c.lineTo(L, bot);
-    for (let i = 0; i < teeth; i++) { c.lineTo(L + tw * (i + 0.5), bot + TOOTH); c.lineTo(L + tw * (i + 1), bot); }
-    c.lineTo(R, HANG_TOP); c.closePath();
-  };
-  const hi = lighten(col, 0.2), lo = darken(col, 0.35), cream = OUTLINE_IN;
-  const viewTop = Math.max(HANG_TOP, bot - 640);   // decoration range; the slab itself continues to HANG_TOP
-  outlined(c, path, col, () => {
-    if (st === 'market') {
-      // 청사초롱 줄: a curtain of blue-and-red silk lanterns on strings
-      c.fillStyle = darken(col, 0.3); c.fillRect(L, viewTop, w, bot - viewTop);
-      c.fillStyle = lo; for (let i = 0; i < units; i++) c.fillRect(x0 + uw * (i + 0.5) - 1, viewTop, 2, bot - viewTop);
-      const blue = new Path2D(), red = new Path2D(), caps = new Path2D(), shine = new Path2D();
-      for (let i = 0; i < units; i++) for (let y = bot - 34, k = 0; y > viewTop - 50; y -= 50, k++) {
+  const outline = new Path2D(); outline.moveTo(L, HANG_TOP); outline.lineTo(L, bot);
+  for (let i = 0; i < teeth; i++) { outline.lineTo(L + tw * (i + 0.5), bot + TOOTH); outline.lineTo(L + tw * (i + 1), bot); }
+  outline.lineTo(R, HANG_TOP); outline.closePath();
+  const fills: [string, Path2D][] = []; const strokes: HangArt['strokes'] = [];
+  const F = (fs: string) => { const p = new Path2D(); fills.push([fs, p]); return p; };
+  const hi = lighten(col, 0.2), lo = darken(col, 0.35), cream = OUTLINE_IN; const top = bot - HANG_DECO;
+  if (st === 'market') {
+    // 청사초롱 줄: a curtain of blue-and-red silk lanterns on strings
+    F(darken(col, 0.3)).rect(L, top, w, HANG_DECO);
+    const strings = F(lo), blue = F(hi), red = F(mix('#c0504a', col, 0.4)), shine = F(rgba('#ffe7b0', 0.45)), caps = F(darken(col, 0.55));
+    for (let i = 0; i < units; i++) {
+      strings.rect(x0 + uw * (i + 0.5) - 1, top, 2, HANG_DECO - 40);
+      for (let y = bot - 66, k = 0; y > top; y -= 50, k++) {
         const cx = x0 + uw * (i + 0.5) + (k % 2 ? 2 : -2);
-        // silk lantern: blue upper (청사), red lower (홍사), wooden caps, a lit seam
         blue.moveTo(cx - 8, y - 17); blue.lineTo(cx + 8, y - 17); blue.lineTo(cx + 14, y - 8); blue.lineTo(cx + 14, y + 2); blue.lineTo(cx - 14, y + 2); blue.lineTo(cx - 14, y - 8); blue.closePath();
         red.moveTo(cx - 14, y + 2); red.lineTo(cx + 14, y + 2); red.lineTo(cx + 14, y + 8); red.lineTo(cx + 8, y + 16); red.lineTo(cx - 8, y + 16); red.lineTo(cx - 14, y + 8); red.closePath();
-        caps.rect(cx - 9, y - 21, 18, 4); caps.rect(cx - 9, y + 15, 18, 4);
-        shine.rect(cx - 2, y - 15, 4, 29);
-      }
-      c.fillStyle = hi; c.fill(blue);
-      c.fillStyle = mix('#c0504a', col, 0.4); c.fill(red);
-      c.fillStyle = rgba('#ffe7b0', 0.45); c.fill(shine);
-      c.fillStyle = darken(col, 0.55); c.fill(caps);
-    } else if (st === 'riverside') {
-      // 천막 끝자락: the edge of a blue tarp awning — stripes, folds, grommets, a hem
-      c.fillStyle = hi; for (let x = L; x < R; x += 24) c.fillRect(x + 12, viewTop, 12, bot - viewTop);
-      c.fillStyle = rgba(darken(col, 0.5), 0.5); for (let y = bot - 70; y > viewTop; y -= 64) c.fillRect(L, y, w, 3);
-      c.fillStyle = lo; c.fillRect(L, bot - 16, w, 10);
-      c.fillStyle = cream; for (let x = L + 10; x < R - 4; x += 24) { c.beginPath(); c.arc(x, bot - 11, 2.2, 0, Math.PI * 2); c.fill(); }
-    } else if (st === 'bridge') {
-      // 불꽃 현수막: a festival banner with firework motifs and a stitched border
-      c.fillStyle = lo; c.fillRect(L, viewTop, 6, bot - viewTop); c.fillRect(R - 6, viewTop, 6, bot - viewTop); c.fillRect(L, bot - 14, w, 14);
-      c.strokeStyle = rgba(cream, 0.7); c.lineWidth = 1.2; c.setLineDash([4, 3]); c.beginPath(); c.moveTo(L + 8, viewTop); c.lineTo(L + 8, bot - 16); c.lineTo(R - 8, bot - 16); c.lineTo(R - 8, viewTop); c.stroke(); c.setLineDash([]);
-      c.fillStyle = hi; c.beginPath();
-      for (let i = 0; i < units; i++) for (let y = bot - 50, k = 0; y > viewTop; y -= 58, k++) { const cx = x0 + uw * (i + 0.5) + (k % 2 ? 6 : -6); for (let a = 0; a < 8; a++) { const an = (a / 8) * Math.PI * 2; c.moveTo(cx, y); c.lineTo(cx + Math.cos(an - 0.12) * 12, y + Math.sin(an - 0.12) * 12); c.lineTo(cx + Math.cos(an + 0.12) * 12, y + Math.sin(an + 0.12) * 12); c.closePath(); } }
-      c.fill();
-    } else {
-      // 빨랫줄: rows of hanging laundry (indigo cloths) pinned on lines
-      for (let y = bot, row = 0; y > viewTop; y -= 60, row++) {
-        for (let i = 0; i < units; i++) { const x = x0 + uw * i; c.fillStyle = (i + row) % 3 === 0 ? hi : (i + row) % 3 === 1 ? col : darken(col, 0.15); c.fillRect(x - 2, y - 60, uw + 4, 60); if ((i + row) % 2) { c.fillStyle = rgba(cream, 0.22); c.fillRect(x + 6, y - 50, uw - 12, 3); c.fillRect(x + 6, y - 40, uw - 12, 3); } }
-        c.fillStyle = rgba(cream, 0.75); c.fillRect(L, y - 60, w, 1.5);
-        c.fillStyle = mix('#c98a4b', col, 0.3); for (let i = 0; i <= units; i++) c.fillRect(x0 + uw * i - 2, y - 63, 4, 8);
+        caps.rect(cx - 9, y - 21, 18, 4); caps.rect(cx - 9, y + 15, 18, 4); shine.rect(cx - 2, y - 15, 4, 29);
       }
     }
-    // ▼ "duck under" marks just above the hem
-    c.fillStyle = OUTLINE_OUT; c.beginPath(); for (let i = 0; i < units; i++) chevronDown(c, x0 + uw * (i + 0.5), bot - 21.5, 22, 7); c.fill();
-    c.fillStyle = cream; c.beginPath(); for (let i = 0; i < units; i++) chevronDown(c, x0 + uw * (i + 0.5), bot - 23, 17, 4.5); c.fill();
-    c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(L, bot - 3, w, 3);
-  });
+    F(lo).rect(L, bot - 42, w, 36);
+  } else if (st === 'riverside') {
+    // 천막 끝자락: the edge of a blue tarp awning — stripes, folds, grommets, a hem
+    const stripes = F(hi); for (let x = L + 12; x < R; x += 24) stripes.rect(x, top, Math.min(12, R - x), HANG_DECO - 16);
+    const folds = F(rgba(darken(col, 0.5), 0.5)); for (let y = bot - 70; y > top; y -= 64) folds.rect(L, y, w, 3);
+    F(lo).rect(L, bot - 16, w, 10);
+    const holes = F(cream); for (let x = L + 10; x < R - 4; x += 24) { holes.moveTo(x + 2.2, bot - 11); holes.arc(x, bot - 11, 2.2, 0, Math.PI * 2); }
+  } else if (st === 'bridge') {
+    // 불꽃 현수막: a festival banner with firework motifs and a stitched border
+    const edge = F(lo); edge.rect(L, top, 6, HANG_DECO); edge.rect(R - 6, top, 6, HANG_DECO); edge.rect(L, bot - 14, w, 14);
+    const bursts = F(hi);
+    for (let i = 0; i < units; i++) for (let y = bot - 58, k = 0; y > top; y -= 58, k++) {
+      const cx = x0 + uw * (i + 0.5) + (k % 2 ? 6 : -6);
+      for (let a = 0; a < 8; a++) { const an = (a / 8) * Math.PI * 2; bursts.moveTo(cx, y); bursts.lineTo(cx + Math.cos(an - 0.12) * 12, y + Math.sin(an - 0.12) * 12); bursts.lineTo(cx + Math.cos(an + 0.12) * 12, y + Math.sin(an + 0.12) * 12); bursts.closePath(); }
+    }
+    const stitch = new Path2D(); stitch.moveTo(L + 8, top); stitch.lineTo(L + 8, bot - 16); stitch.lineTo(R - 8, bot - 16); stitch.lineTo(R - 8, top);
+    strokes.push([rgba(cream, 0.7), 1.2, stitch, [4, 3]]);
+  } else {
+    // 빨랫줄: rows of hanging laundry (indigo-dyed cloths) pinned on lines
+    const tones = [F(hi), F(col), F(darken(col, 0.15))]; const lines = F(rgba(cream, 0.22)), rope = F(rgba(cream, 0.75)), pins = F(mix('#c98a4b', col, 0.3));
+    for (let y = bot, row = 0; y > top; y -= 60, row++) {
+      for (let i = 0; i < units; i++) {
+        const x = x0 + uw * i; tones[(i + row) % 3].rect(x - (i ? 0 : 2), y - 60, uw + (i ? 0 : 2) + (i === units - 1 ? 2 : 0), 60);
+        if ((i + row) % 2) { lines.rect(x + 6, y - 50, uw - 12, 3); lines.rect(x + 6, y - 40, uw - 12, 3); }
+      }
+      rope.rect(L, y - 60, w, 1.5);
+      for (let i = 0; i <= units; i++) pins.rect(Math.min(R - 4, Math.max(L, x0 + uw * i - 2)), y - 63, 4, 8);
+    }
+  }
+  // ▼ "duck under" marks just above the hem
+  const chevO = F(OUTLINE_OUT), chevI = F(cream);
+  for (let i = 0; i < units; i++) { chevronDown(chevO, x0 + uw * (i + 0.5), bot - 21.5, 22, 7); chevronDown(chevI, x0 + uw * (i + 0.5), bot - 23, 17, 4.5); }
+  F('rgba(0,0,0,0.3)').rect(L, bot - 3, w, 3);
+  return { outline, fills, strokes };
+}
+
+export function drawHang(c: CanvasRenderingContext2D, x0: number, x1: number, bot: number, col: string, hc: boolean, t: number, style?: HazardStyle): void {
+  const st = styleOf(style, null, col); void hc; void t;
+  const art = hangCache.get(`${st}|${col}|${x0}|${x1}|${bot}`, () => buildHang(st, x0, x1, bot, col));
+  c.lineJoin = 'miter'; c.miterLimit = 3;
+  c.strokeStyle = OUTLINE_OUT; c.lineWidth = 7.5; c.stroke(art.outline);
+  c.fillStyle = col; c.fill(art.outline);
+  for (const [fs, p] of art.fills) { c.fillStyle = fs; c.fill(p); }
+  for (const [ss, lw, p, dash] of art.strokes) { c.strokeStyle = ss; c.lineWidth = lw; if (dash) c.setLineDash(dash); c.stroke(p); if (dash) c.setLineDash([]); }
+  c.strokeStyle = OUTLINE_IN; c.lineWidth = 1.5; c.stroke(art.outline);
 }
 
 if (typeof window !== 'undefined') { const w = window as unknown as { __world?: Record<string, unknown> }; Object.assign((w.__world ??= {}), { drawSpike, drawTall, drawHang }); }

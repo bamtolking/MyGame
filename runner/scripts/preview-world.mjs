@@ -74,6 +74,39 @@ const shots = await page.evaluate(() => {
   res['world-bonus'] = scene(null, { cssW: 960, cssH: 540, dpr: 2, scale: 1, camX: 5000, sky: true });
   res['world-bonus-phone'] = scene(null, { cssW: 390, cssH: 316, dpr: 2, scale: Math.min(390 / 840, 316 / 540), camX: 5000, sky: true });
   res['world-finish'] = scene(W.BIOMES[0], { cssW: 960, cssH: 540, dpr: 2, scale: 1, camX: 5000, finish: true, bridged: true });
+  // close-up sheets: every hazard skin (×2) on its own biome's sky colour, and every pickup (×3)
+  {
+    const RH = 420, K = 1.6; const cv = document.createElement('canvas'); cv.width = 1920; cv.height = RH * 4; const c = cv.getContext('2d');
+    W.BIOMES.forEach((bi, row) => {
+      const y0 = row * RH; const g = c.createLinearGradient(0, y0, 0, y0 + RH); g.addColorStop(0, bi.sky[0]); g.addColorStop(1, bi.sky[1]);
+      c.fillStyle = g; c.fillRect(0, y0, 1920, RH);
+      c.fillStyle = bi.near; c.fillRect(960, y0, 960, RH);
+      c.save(); c.beginPath(); c.rect(0, y0, 1920, RH); c.clip();
+      for (const half of [0, 1]) {
+        c.save(); c.translate(half * 960, y0); c.scale(K, K);
+        const gy = 240;
+        c.fillStyle = bi.groundTop; c.fillRect(0, gy, 480, 7);
+        W.drawSpike(c, hz('spike', 45, 75, gy - 36, gy, bi.id), bi.hazard.spike, false, bi.style);
+        W.drawTall(c, hz('tall', 133, 167, gy - 176, gy, bi.id), bi.hazard.tall, false, 1, bi.style);
+        W.drawHang(c, 230, 350, gy - 40, bi.hazard.hang, false, 1, bi.style);
+        W.drawHang(c, 400, 440, gy - 40, bi.hazard.hang, false, 1, bi.style);
+        c.restore();
+      }
+      c.restore();
+    });
+    res['world-hazards'] = cv.toDataURL('image/png');
+  }
+  {
+    const cv = document.createElement('canvas'); cv.width = 1920; cv.height = 360; const c = cv.getContext('2d');
+    const g = c.createLinearGradient(0, 0, 1920, 0); g.addColorStop(0, '#2b2d6e'); g.addColorStop(0.5, '#14284a'); g.addColorStop(1, '#473a5b');
+    c.fillStyle = g; c.fillRect(0, 0, 1920, 360);
+    c.save(); c.scale(3, 3);
+    const items = [['jelly'], ['bonusJelly'], ['big'], ['coin'], ['potion'], ['bigPotion'], ['miniPotion'], ['moonCake'], ['pouch'], ['power', { power: 'giant' }], ['power', { power: 'dash' }], ['power', { power: 'magnet' }]];
+    items.forEach(([ty, ex], i) => W.drawPickup(c, pk(ty, 30 + i * 52, 35, ex), 30 + i * 52, 35, 0.2));
+    for (let i = 0; i < 5; i++) W.drawPickup(c, pk('letter', 30 + i * 52, 88, { letter: i }), 30 + i * 52, 88, 0);
+    c.restore();
+    res['world-pickups'] = cv.toDataURL('image/png');
+  }
   return res;
 });
 for (const [name, url] of Object.entries(shots)) { writeFileSync(`${out}/${name}.png`, Buffer.from(url.split(',')[1], 'base64')); console.log('wrote', `${out}/${name}.png`); }

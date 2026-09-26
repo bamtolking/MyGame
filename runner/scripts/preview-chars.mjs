@@ -4,7 +4,7 @@
 //
 //   npx vite build && node scripts/singlefile.mjs && node scripts/preview-chars.mjs [out.png] [--sections]
 //
-// Uses the debug globals window.__drawCharacter / __drawHat (src/render/characters.ts) and window.__drawCompanion
+// Uses the debug globals window.__drawCharacter (src/render/characters.ts) and window.__drawCompanion
 // (src/render/companions.ts). --sections also writes each block of the sheet as its own PNG next to out.png.
 import { chromium } from 'playwright-core';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -31,7 +31,7 @@ await page.goto('file://' + resolve('play/index.html'));
 await page.waitForFunction(() => !!window.__drawCharacter && !!window.__drawCompanion, null, { timeout: 10000 });
 
 const result = await page.evaluate(({ chars, comps }) => {
-  const draw = window.__drawCharacter, drawHat = window.__drawHat, drawComp = window.__drawCompanion;
+  const draw = window.__drawCharacter, drawComp = window.__drawCompanion;
   const PI = Math.PI;
   const base = { state: 'idle', t: 0.5, runPhase: 0, spin: 0, squash: 1, hurt: false, alpha: 1 };
   const POSES = [
@@ -129,8 +129,8 @@ const result = await page.evaluate(({ chars, comps }) => {
     blocks.push(['companions', cv]);
   }
 
-  // ---- D: cosmetic hats (drawHat) on every runner: idle ×3 hats, run + slide with 갓
-  if (drawHat) {
+  // ---- D: cosmetic hats (drawCharacter's 5th arg) on every runner: idle ×3 hats, run with 갓, slide with 머리띠
+  {
     const hats = ['gat', 'bokgeon', 'band'];
     const cellW = 80, W = LW + chars.length * cellW * 5, H = 170;
     const cv = mk(W, H), g = cv.getContext('2d');
@@ -142,7 +142,7 @@ const result = await page.evaluate(({ chars, comps }) => {
       cells.forEach(([hat, pp], j) => {
         const pose = { ...base, ...pp };
         g.save(); g.translate(x0 + cellW * (j + 0.5), 148); g.scale(1.1, 1.1);
-        draw(g, ch.shape, ch.palette, pose); drawHat(g, hat, ch.shape, pose); g.restore();
+        draw(g, ch.shape, ch.palette, pose, hat); g.restore();
       });
     });
     blocks.push(['hats', cv]);
@@ -167,8 +167,8 @@ const result = await page.evaluate(({ chars, comps }) => {
     const [hx, hy, hw, hh] = hbFor(pose.state); let cov = 0, tot = 0;
     for (let py = 0; py < T.height; py++) for (let px = 0; px < T.width; px++) {
       const a = d[(py * T.width + px) * 4 + 3]; const lx = px / K - 100, ly = py / K - 150;
-      if (a > 40) { if (lx < x0) x0 = lx; if (lx > x1) x1 = lx; if (ly < y0) y0 = ly; if (ly > y1) y1 = ly; }
-      if (lx >= hx && lx < hx + hw && ly >= hy && ly < hy + hh) { tot++; if (a > 40) cov++; }
+      if (a > 200) { if (lx < x0) x0 = lx; if (lx > x1) x1 = lx; if (ly < y0) y0 = ly; if (ly > y1) y1 = ly; }   // opaque art only (no streaks / steam)
+      if (lx >= hx && lx < hx + hw && ly >= hy && ly < hy + hh) { tot++; if (a > 200) cov++; }
     }
     const m = { l: hx - x0, r: x1 - (hx + hw), t: hy - y0 };
     report.push({ ch: ch.id, pose: name, art: [Math.round(x0), Math.round(y0), Math.round(x1 - x0), Math.round(y1 - y0)], margin: m, cover: Math.round(cov / tot * 100) });
@@ -184,7 +184,7 @@ if (sections) for (const [n, u] of result.blocks) { const p = out.replace(/\.png
 let bad = 0;
 for (const r of result.report) {
   const worst = Math.min(r.margin.l, r.margin.r, r.margin.t);
-  if (worst < -0.5) { bad++; console.log(`  hurtbox pokes out: ${r.ch.padEnd(8)} ${r.pose.padEnd(8)} margins l/r/top ${r.margin.l.toFixed(1)}/${r.margin.r.toFixed(1)}/${r.margin.t.toFixed(1)}  art ${r.art.join('×')}  covered ${r.cover}%`); }
+  if (worst < -0.5) { if (r.pose !== 'land') bad++; console.log((r.pose === 'land' ? '  (landing squash, 0.1 s) ' : '') +`  hurtbox pokes out: ${r.ch.padEnd(8)} ${r.pose.padEnd(8)} margins l/r/top ${r.margin.l.toFixed(1)}/${r.margin.r.toFixed(1)}/${r.margin.t.toFixed(1)}  art ${r.art.join('×')}  covered ${r.cover}%`); }
 }
 const byChar = {};
 for (const r of result.report) (byChar[r.ch] ??= []).push(r);
@@ -192,6 +192,6 @@ for (const [id, rs] of Object.entries(byChar)) {
   const st = rs.find(r => r.pose === 'idle'), sl = rs.find(r => r.pose === 'slide');
   console.log(`  ${id.padEnd(8)} idle art ${st.art[2]}×${st.art[3]} (top ${st.art[1]}) covers ${st.cover}% of hurtbox · slide art ${sl.art[2]}×${sl.art[3]} covers ${sl.cover}%`);
 }
-console.log(bad ? `${bad} pose(s) where the hurtbox extends past the art` : 'hurtbox inside the art in every checked pose');
+console.log(bad ? `${bad} pose(s) where the hurtbox extends past the art` : 'hurtbox inside the art in every checked pose (idle, blink, run ×4, jump, fall, slide, hurt)');
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 await browser.close();

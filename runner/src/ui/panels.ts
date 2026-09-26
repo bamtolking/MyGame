@@ -2,9 +2,7 @@
 // star · pouch · medal chips, progress bars, number/date formatting and the coin-income estimate used by the 도감.
 import type { CharacterDef } from '../data/characters';
 import type { CompanionDef } from '../data/companions';
-import type { RunState } from '../sim/types';
-import { BONUS_WORD, HIT_DAMAGE, FALL_DAMAGE } from '../data/tuning';
-import type { Progress, RunReward } from '../meta/progress';
+import type { Progress } from '../meta/progress';
 import { RANK_REWARD, MISSION_REWARD } from '../meta/missions';
 import { drawCharacter } from '../render/characters';
 import { shapeOf } from '../render/renderer';
@@ -193,50 +191,4 @@ export function companionPortrait(c: CompanionDef, size = 64): HTMLCanvasElement
     g.fillStyle = '#e07a2c'; g.beginPath(); g.arc(26, 16, 7, 0, Math.PI * 2); g.fill();
   }
   return cv;
-}
-
-// ---------------------------------------------------------------- results-screen helpers (legacy: moving to results.ts)
-export function hitName(kind: string): string {
-  return kind === 'spike' ? '바닥 가시 (점프!)' : kind === 'tall' ? '높은 기둥 (2단 점프!)' : kind === 'hang' ? '매달린 장애물 (슬라이드!)' : kind === 'pit' ? '구덩이 (점프!)' : kind;
-}
-
-/** Legacy compact character card (kept for older imports; the 도감 builds its own richer cards). */
-export interface CardOpts {
-  unlocked: boolean; reason: string; main: boolean; partner: boolean; coins: number; best: number;
-  onMain: () => void; onPartner: () => void; onBuy: () => void; onTrial: () => void;
-}
-export function charCard(c: CharacterDef, o: CardOpts): HTMLElement {
-  return h('div', { class: 'mcard' + (o.unlocked ? '' : ' locked') },
-    h('div', { class: 'pic' }, charPortrait(c, 72)),
-    h('div', { class: 'info' }, h('b', {}, c.name), h('small', {}, c.title), o.unlocked ? null : h('small', {}, o.reason)));
-}
-
-/** Why did the run end? Always concrete, never "for no reason". */
-export function deathExplain(s: RunState): { title: string; detail: string } {
-  const hitsDmg = s.stats.hits * (s.assist ? HIT_DAMAGE / 2 : HIT_DAMAGE);
-  const fallDmg = s.stats.falls * (s.assist ? FALL_DAMAGE / 2 : FALL_DAMAGE);
-  const parts: string[] = [];
-  if (s.stats.hits) parts.push(`충돌 ${s.stats.hits}회 (-${Math.round(hitsDmg)})`);
-  if (s.stats.falls) parts.push(`낙하 ${s.stats.falls}회 (-${Math.round(fallDmg)})`);
-  parts.push(`시간에 따른 체력 감소 (-${Math.round(s.stats.drained)})`);
-  if (s.stats.hpFromPotions) parts.push(`물약 회복 (+${Math.round(s.stats.hpFromPotions)})`);
-  const cause = s.deathCause ?? 'drain';
-  let title = '체력이 다 닳았어요';
-  if (cause.startsWith('hit:')) title = `마지막 한 방: ${hitName(cause.slice(4))}`;
-  else if (cause === 'pit') title = '마지막 한 방: 구덩이';
-  else if (cause === 'cap') title = '긴 달리기 끝! (10분 제한)';
-  const worst = Object.entries(s.stats.hitsBy).sort((a, b) => b[1] - a[1])[0];
-  let tip = '';
-  if (worst && worst[1] >= 2) tip = ` · 가장 많이 부딪힌 것: ${hitName(worst[0])} ×${worst[1]}`;
-  else if (cause === 'drain' && s.stats.hits <= 1) tip = ' · 거의 안 부딪혔어요! 물약(초록 하트)을 더 챙기면 더 멀리 가요';
-  return { title, detail: parts.join(' · ') + tip };
-}
-
-/** "So close!" lines — what you almost got. */
-export function nearMissHints(s: RunState, rw: RunReward): string[] {
-  const out: string[] = [];
-  const got = s.letters.filter(Boolean).length;
-  if (got >= BONUS_WORD.length - 2 && got < BONUS_WORD.length && s.mode !== 'tutorial') out.push(`보너스 타임까지 글자 ${BONUS_WORD.length - got}개 남았었어요!`);
-  if (!rw.newBest && rw.prevBest > 0 && rw.score >= rw.prevBest * 0.85) out.push(`최고 기록까지 ${fmtNum(rw.prevBest - rw.score)}점!`);
-  return out.slice(0, 2);
 }

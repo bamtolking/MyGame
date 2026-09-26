@@ -5,11 +5,11 @@
 | chunk | tiers | cols | slack@min | slack@max | jellies reachable | tags |
 |---|---|---:|---:|---:|---:|---|
 | tut_1_jump | 0–0 | 28 | 23 | 23 | 100% | tutorial |
-| tut_2_double | 0–0 | 34 | 23 | 23 | 100% | tutorial |
+| tut_2_double | 0–0 | 30 | 23 | 23 | 100% | tutorial |
 | tut_3_slide | 0–0 | 28 | 14 | 14 | 100% | tutorial |
 | tut_4_pit | 0–0 | 28 | 23 | 23 | 100% | tutorial |
-| tut_5_platform | 0–0 | 30 | 23 | 23 | 100% | tutorial |
-| tut_6_recap | 0–0 | 44 | 14 | 14 | 100% | tutorial |
+| tut_5_platform | 0–2 | 30 | 23 | 23 | 100% | tutorial-extra platform |
+| tut_6_recap | 1–2 | 44 | 14 | 14 | 100% | tutorial-extra combo |
 | rest_meadow | 0–5 | 20 | 23 | 23 | 100% | rest |
 | rest_wave | 0–5 | 24 | 23 | 23 | 100% | rest |
 | rest_coins | 0–5 | 22 | 23 | 23 | 100% | rest bonus |
@@ -22,9 +22,9 @@
 | slide_short | 0–2 | 20 | 14 | 14 | 100% | slide |
 | slide_pair | 0–2 | 28 | 14 | 14 | 100% | slide |
 | slide_long | 0–2 | 24 | 14 | 14 | 100% | slide |
-| pit_small | 0–2 | 20 | 23 | 23 | 100% | pit |
-| pit_pair | 0–2 | 30 | 23 | 23 | 100% | pit |
-| pit_wide | 0–2 | 22 | 23 | 23 | 100% | pit |
+| pit_small | 1–3 | 20 | 23 | 23 | 100% | pit |
+| pit_pair | 1–3 | 30 | 23 | 23 | 100% | pit |
+| pit_wide | 1–3 | 22 | 23 | 23 | 100% | pit |
 | plat_low | 0–2 | 26 | 23 | 23 | 100% | platform |
 | fork_single | 0–2 | 22 | 23 | 23 | 100% | double |
 | slide_trio | 0–1 | 34 | 14 | 14 | 100% | slide rhythm |
@@ -56,7 +56,7 @@
 | hang_pit | 2–4 | 32 | 14 | 14 | 100% | slide pit combo |
 | beat_jjs | 3–5 | 38 | 14 | 14 | 100% | rhythm jump slide |
 | beat_sjs | 3–5 | 38 | 14 | 14 | 100% | rhythm slide jump |
-| tunnel_long | 3–5 | 38 | 14 | 14 | bait 1 | slide tunnel bonus |
+| tunnel_long | 3–5 | 38 | 14 | 14 | 100% | slide tunnel bonus |
 | split_route | 3–5 | 38 | 23 | 23 | 100% | choice platform |
 | pit_chain | 3–5 | 38 | 23 | 23 | 100% | pit rhythm |
 | fork_slide_fork | 3–5 | 40 | 14 | 14 | 100% | combo double slide |
@@ -74,9 +74,9 @@
 | dense_b | 4–5 | 40 | 14 | 14 | 100% | rhythm read |
 | sky_bridge | 4–5 | 40 | 23 | 23 | 100% | pit platform choice |
 | fork_pit | 4–5 | 34 | 23 | 23 | 100% | double pit combo |
-| hang_maze | 4–5 | 38 | 14 | 14 | bait 2 | read slide jump |
+| hang_maze | 4–5 | 38 | 14 | 14 | 100% | read slide jump |
 | plat_rhythm | 4–5 | 40 | 14 | 14 | 100% | platform rhythm pit |
-| three_lanes | 4–5 | 40 | 14 | 14 | bait 1 | choice platform |
+| three_lanes | 4–5 | 40 | 15 | 14 | 100% | choice platform |
 | tunnel_pit | 4–5 | 36 | 14 | 14 | 100% | slide pit tunnel combo |
 | gauntlet | 4–5 | 44 | 14 | 14 | 100% | combo |
 | step_dance | 4–5 | 38 | 23 | 23 | 100% | platform rhythm pit |
@@ -87,3 +87,57 @@
 | breather_pit | 2–5 | 24 | 23 | 23 | 100% | pit rest |
 | breather_fork | 2–5 | 28 | 23 | 23 | 100% | double rest bonus |
 | bonus_float | 1–5 | 30 | 23 | 23 | 100% | bonus platform rest |
+| spike_coin_hill | 0–2 | 22 | 23 | 23 | 100% | jump |
+| bench_row | 0–2 | 34 | 23 | 23 | 100% | platform jump |
+| slide_hill | 0–1 | 28 | 14 | 14 | 100% | slide |
+| ceiling_stroll | 0–2 | 30 | 23 | 23 | 100% | tunnel jump |
+| fork_bench | 0–2 | 28 | 23 | 23 | 100% | double platform |
+| bench_boost | 0–2 | 28 | 23 | 23 | 100% | platform double |
+| fork_spike_easy | 0–1 | 30 | 23 | 23 | 100% | combo double jump |
+| slide_fork_easy | 0–1 | 30 | 14 | 14 | 100% | combo slide double |
+| stairs_gentle | 0–2 | 32 | 23 | 23 | 100% | stairs platform jump |
+| high_shelf_B | 0–2 | 30 | 23 | 23 | 100% | platform double choice |
+| spike_cluster | 0–1 | 24 | 23 | 23 | 100% | jump |
+| shelf_spike | 0–2 | 30 | 23 | 23 | 100% | platform choice jump |
+| slide_bench | 0–2 | 30 | 14 | 14 | 100% | combo slide platform |
+| lantern_taps | 0–1 | 30 | 14 | 14 | 100% | slide rhythm |
+| spike_fork_easy | 0–1 | 30 | 23 | 23 | 100% | combo jump double |
+| twin_shelves | 0–2 | 32 | 23 | 23 | 100% | platform jump |
+| jelly_heart_spike | 0–2 | 24 | 23 | 23 | 100% | jump |
+| slide_blip | 0–1 | 28 | 14 | 14 | 100% | slide |
+| bench_pyramid | 0–2 | 30 | 23 | 23 | 100% | stairs platform jump |
+| lantern_hop | 0–1 | 32 | 14 | 14 | 100% | combo slide jump |
+| spike_double_arch | 0–2 | 24 | 23 | 23 | 100% | jump double |
+| bench_to_slide | 0–2 | 30 | 14 | 14 | 100% | combo platform slide |
+| rest_lanterns | 0–5 | 24 | 23 | 23 | 100% | rest |
+| rest_bench | 0–5 | 26 | 23 | 23 | 100% | rest platform |
+| pit_hop_row | 1–2 | 34 | 23 | 23 | 100% | pit rhythm |
+| pit_bench | 1–3 | 34 | 23 | 23 | 100% | pit platform |
+| pit_spike_easy | 1–2 | 30 | 23 | 23 | 100% | combo pit jump |
+| slide_pit_easy | 1–2 | 30 | 14 | 14 | 100% | combo slide pit |
+| pit_stone | 1–2 | 28 | 23 | 23 | 100% | pit platform |
+| tunnel_gentle | 1–2 | 28 | 14 | 14 | 100% | tunnel slide |
+| pit_tower | 1–3 | 32 | 23 | 23 | 100% | combo pit double |
+| spike_pit_rhythm | 1–3 | 34 | 23 | 23 | 100% | rhythm jump pit |
+| stairs_pit | 1–3 | 30 | 23 | 23 | 100% | stairs pit platform |
+| double_pit | 1–2 | 26 | 23 | 23 | 100% | pit |
+| stone_steps | 2–4 | 36 | 23 | 23 | 100% | pit platform rhythm |
+| slide_fork_slide | 2–4 | 38 | 14 | 14 | 100% | combo slide double |
+| ledge_leap | 4–5 | 36 | 23 | 23 | 100% | pit platform double |
+| bridge_twin_spikes | 3–5 | 38 | 23 | 23 | 100% | platform pit rhythm |
+| pit_ceiling | 3–5 | 40 | 23 | 23 | 100% | pit tunnel |
+| stairs_descent | 4–5 | 36 | 23 | 23 | 100% | stairs platform choice |
+| slide_bench_pit | 4–5 | 38 | 14 | 14 | 100% | combo slide platform pit |
+| fork_spike_fork | 4–5 | 42 | 23 | 23 | 100% | double jump rhythm |
+| danger_line_B | 3–5 | 38 | 14 | 14 | 100% | combo slide jump |
+| planned_route_B | 3–5 | 40 | 23 | 23 | 100% | choice platform pit |
+| spike_stream | 5–5 | 44 | 23 | 23 | 100% | rhythm jump double |
+| fork_pit_row | 5–5 | 40 | 23 | 23 | 100% | double pit combo |
+| ceiling_spike_mix | 4–5 | 40 | 23 | 23 | 100% | tunnel jump rhythm |
+| slide_pit_spike | 4–5 | 34 | 14 | 14 | 100% | combo slide pit jump |
+| bench_hurdles | 4–5 | 38 | 23 | 23 | 100% | platform jump rhythm |
+| twin_pits_slide | 4–5 | 40 | 14 | 14 | 100% | pit slide combo |
+| set_market_roofs | 1–5 | 44 | 23 | 23 | 100% | setpiece stairs platform |
+| set_river_benches | 1–5 | 44 | 14 | 14 | 100% | setpiece platform pit slide |
+| set_bridge_cables | 1–5 | 48 | 14 | 14 | 100% | setpiece tunnel double pit |
+| set_dawn_rooftops | 1–5 | 48 | 23 | 23 | 100% | setpiece pit platform double |

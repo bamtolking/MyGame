@@ -73,8 +73,8 @@ export function drawCharacter(c: Ctx, shape: Shape, pal: Palette, p: Pose, hat?:
   }
 
   const [ab, af] = armAngles(p, !!sp.fins);
-  limb(c, k, sp, sp.armB[0], sp.armB[1], ab);
   sp.behind?.(c, k, p);
+  limb(c, k, sp, sp.armB[0], sp.armB[1], ab);
   blitBody(c, shape, sp, pal, tint, res);
   if (!dead) sp.front?.(c, k, p);
   limb(c, k, sp, sp.armF[0], sp.armF[1], af);
@@ -86,7 +86,8 @@ export function drawCharacter(c: Ctx, shape: Shape, pal: Palette, p: Pose, hat?:
   c.restore();
 }
 
-/** Draw a cosmetic hat on a runner that was drawn with the same transform and pose (not wired in yet). */
+/** Draw a cosmetic hat on a runner drawn with the same transform and pose — equivalent to drawCharacter's 5th
+ *  argument; use it when the hat must go on another layer. */
 export function drawHat(c: Ctx, hatId: HatId, shape: Shape, p: Pose): void {
   const sp = SPECS[shape] ?? SPECS.disc;
   c.save();
@@ -104,7 +105,7 @@ export function drawHat(c: Ctx, hatId: HatId, shape: Shape, p: Pose): void {
 // ------------------------------------------------------------------ shared helpers (exported ones are used elsewhere)
 
 export function rr(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  c.beginPath(); rrSub(c, x, y, w, h, r);
+  c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
 }
 
 /** lighten (+) / darken (−) a #rrggbb colour */
@@ -237,7 +238,7 @@ function footFor(p: Pose, sp: Spec, side: number): [number, number] {
 function armAngles(p: Pose, fins: boolean): [number, number] {
   switch (p.state) {
     case 'run': { const s = Math.cos(TAU * p.runPhase) * 0.95; return [-s + 0.1, s - 0.1]; }
-    case 'jump': return [2.5, -2.55];
+    case 'jump': return fins ? [2.2, -1.45] : [2.5, -2.55];
     case 'air2': return [0.9, -1.1];
     case 'fall': {
       if (fins) { const fl = Math.sin(p.t * 20) * 0.3; return [1.75 + fl, -1.85 - fl]; }       // fins spread like wings: floaty glide
@@ -727,9 +728,9 @@ function bodyPotato(g: Ctx, pal: Palette, k: Ink): void {
 
 const SPECS: Record<Shape, Spec> = {
   disc: {
-    cy: -47, top: -73, bottom: -21, hipX: 10, hipY: -22, armB: [-33, -44], armF: [33, -42],
+    cy: -47, top: -73, bottom: -12, hipX: 10, hipY: -22, armB: [-33, -44], armF: [33, -42],
     face: { x: 5, y: -49, gap: 16, k: 1.05 }, hat: { x: 0, y: -72, w: 50, rot: 0 },
-    slide: { mode: 'squash', sx: 0.95, sy: 0.64, lean: -0.2, rot: 0, cx: 0, face: { x: 13, y: -17, gap: 15, k: 0.92 }, arm: [-8, -28], feet: [-36, -2], hat: { x: 6, y: -34, w: 40, rot: 0.12 } },
+    slide: { mode: 'squash', sx: 0.95, sy: 0.58, lean: -0.2, rot: 0, cx: 0, face: { x: 13, y: -17, gap: 15, k: 0.92 }, arm: [-8, -28], feet: [-36, -2], hat: { x: 6, y: -34, w: 40, rot: 0.12 } },
     body: bodyDisc,
   },
   fish: {
@@ -768,4 +769,3 @@ const SPECS: Record<Shape, Spec> = {
 
 // debug / tooling hook (scripts/preview-chars.mjs renders a contact sheet through it)
 if (typeof window !== 'undefined') (window as any).__drawCharacter = drawCharacter;
-if (typeof window !== 'undefined') (window as any).__drawHat = drawHat;

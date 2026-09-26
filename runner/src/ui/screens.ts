@@ -2,16 +2,15 @@
 // Every screen renders into app.root; styles live in src/menus.css (scoped under .ms / .msheet).
 // Copy rules: 해요체, buttons ≤ 6 chars, numbers via toLocaleString('ko-KR'), no timers / streak pressure / ads / payments.
 import { CHARACTERS, CHAR_BY_ID, type CharacterDef } from '../data/characters';
-import { COMPANIONS, COMPANION_BY_ID, type CompanionDef } from '../data/companions';
+import { COMPANIONS, COMPANION_BY_ID } from '../data/companions';
 import { STAGES, type StageDef } from '../data/stages';
 import { BIOME_BY_ID } from '../data/biomes';
 import { SCORE_VERSION } from '../data/tuning';
-import type { RunConfig } from '../sim/run';
 import { CONTENT_HASH } from '../sim/content';
 import * as store from '../platform/storage';
 import {
   defaultProgress, featureOpen, nextStage, stageUnlocked, stageCleared, stageStarCount, totalStars, worldStars, REMIX_GATE,
-  buyCharacter, buyCompanion, companionState, canReroll, reroll, todayKey, dailySeed, dailyChar, dailyCompanion, dailyArchive,
+  buyCharacter, buyCompanion, companionState, canReroll, reroll, todayKey, dailyChar, dailyCompanion, dailyArchive,
   DAILY_MEDALS, recordCode, type Progress, type Feature, type GhostRec, type HallRec,
 } from '../meta/progress';
 import * as progressMod from '../meta/progress';
@@ -29,7 +28,6 @@ import { VERSION, type App, type Screen } from './app';
 // ---------------------------------------------------------------- shared helpers
 const WORLD_NAMES: Record<number, string> = { 1: '야시장 골목', 2: '포장마차 강변', 3: '불꽃놀이 다리' };
 const WORLD_VERBS: Record<number, string> = { 1: '점프 · 2단 점프 · 슬라이드 · 구덩이', 2: '발판 · 빠른 낙하 · 갈림길', 3: '터널 · 빠른 전환' };
-const rnd = () => (Math.random() * 2 ** 32) >>> 0;
 
 type Dot = Feature | 'hall';
 function isOpen(p: Progress, f: Dot): boolean { return f === 'hall' ? p.hall.length > 0 : featureOpen(p, f); }
@@ -72,21 +70,8 @@ function stagesOfWorld(w: number): StageDef[] { return STAGES.filter(s => s.worl
 function worldName(w: number): string { const st = stagesOfWorld(w)[0]; return (st && BIOME_BY_ID[st.biome]?.name) || WORLD_NAMES[w] || `${w}번째 골목`; }
 function isRemix(st: StageDef): boolean { return !!st.remix || st.index === 7; }
 
-// ---------------------------------------------------------------- run configs (built here; App just starts them)
-function endlessCfg(app: App, charId?: string, trial = false): RunConfig {
-  const p = app.p; const relay = featureOpen(p, 'relay') && !trial && !charId;
-  return { mode: 'endless', seed: rnd(), charId: charId ?? p.loadout.main, partnerId: relay ? p.loadout.partner : null, companionId: p.loadout.companion, assist: app.assistOpts(), trial };
-}
-function stageCfg(app: App, st: StageDef): RunConfig {
-  const p = app.p;   // stages never use relay (GDD §8.2); companions are fine
-  return { mode: 'stage', seed: st.seed, charId: p.loadout.main, partnerId: null, companionId: p.loadout.companion, stageId: st.id, assist: app.assistOpts() };
-}
-/** Daily runs lend the day's runner + companion (even while locked). `dateKey` tells the App which day to book. */
-function dailyCfg(app: App, key: string): RunConfig & { dateKey: string } {
-  return { mode: 'daily', seed: dailySeed(key), charId: dailyChar(key), partnerId: null, companionId: dailyCompanion(key), assist: app.assistOpts(), dateKey: key };
-}
-function tutorialCfg(app: App): RunConfig { return { mode: 'tutorial', seed: 1, charId: app.p.loadout.main }; }
-function startEndless(app: App): void { markSeen(app, 'endless'); app.startRun(endlessCfg(app)); }
+// ---------------------------------------------------------------- run entry points (App builds the RunConfig)
+function startEndless(app: App): void { markSeen(app, 'endless'); app.startEndless(); }
 
 // ================================================================ 홈 (GDD §10.1)
 type Primary = { kind: 'tutorial' } | { kind: 'stage'; st: StageDef } | { kind: 'endless' };
@@ -96,8 +81,13 @@ function primaryAction(p: Progress): Primary {
   return st ? { kind: 'stage', st } : { kind: 'endless' };
 }
 
+let homeResizeHooked = false;
 export function showHome(app: App): void {
   app.nav('home'); applyUi(app);
+  if (!homeResizeHooked) {   // rotate / resize → re-layout the home (hero size depends on the viewport)
+    homeResizeHooked = true; let t = 0;
+    window.addEventListener('resize', () => { clearTimeout(t); t = window.setTimeout(() => { if (app.screen === 'home' && !document.getElementById('modal')) showHome(app); }, 250); });
+  }
   const p = app.p;
   const ch = CHAR_BY_ID[p.loadout.main] ?? CHARACTERS[0];
   const comp = p.loadout.companion ? COMPANION_BY_ID[p.loadout.companion] : null;
@@ -105,8 +95,8 @@ export function showHome(app: App): void {
   const partner = relay && p.loadout.partner ? CHAR_BY_ID[p.loadout.partner] : null;
   const prim = primaryAction(p);
   const run = () => {
-    if (prim.kind === 'tutorial') app.startRun(tutorialCfg(app));
-    else if (prim.kind === 'stage') app.startRun(stageCfg(app, prim.st));
+    if (prim.kind === 'tutorial') app.startTutorial();
+    else if (prim.kind === 'stage') app.startStage(prim.st.id);
     else startEndless(app);
   };
   const best = p.bestEndless;
@@ -131,10 +121,13 @@ export function showHome(app: App): void {
       h('button', { class: 'ms-iconbtn ghost', 'aria-label': '닫기', onclick: app.click(() => { p.seen.push('kakao-banner'); app.persist(); banner?.remove(); }) }, icon('close')));
   }
 
+  // the runner gets bigger on tall phones (fills the space instead of leaving a gap), smaller on short landscape
+  const vh = window.innerHeight || 700; const landscape = (window.innerWidth || 400) > vh;
+  const heroSize = landscape ? (vh < 420 ? 104 : 124) : vh >= 800 ? 156 : vh >= 700 ? 136 : 118;
   const hero = h('div', { class: 'home-hero' },
     h('div', { class: 'hero-pics' },
-      h('div', { class: 'hero-main' }, charPortrait(ch, 124)),
-      comp ? h('div', { class: 'hero-comp', title: comp.name }, companionPortrait(comp, 48)) : null,
+      h('div', { class: 'hero-main' }, charPortrait(ch, heroSize)),
+      comp ? h('div', { class: 'hero-comp', title: comp.name }, companionPortrait(comp, Math.round(heroSize * 0.4))) : null,
       partner ? h('div', { class: 'hero-partner', title: `이어달리기 ${partner.name}` }, charPortrait(partner, 46)) : null),
     h('div', { class: 'hero-txt' },
       h('b', {}, ch.name), h('small', {}, ch.title),
@@ -173,7 +166,7 @@ export function showHome(app: App): void {
   // a string of paper lanterns sagging across the top (catenary-ish: y = sag·(1 − x²))
   const lanterns = h('div', { class: 'lanterns', 'aria-hidden': 'true' },
     ...Array.from({ length: 9 }, (_, i) => { const x = (i - 4) / 4.6; return h('i', { style: `left:${(6 + i * 11).toFixed(1)}%;top:${(4 + 26 * (1 - x * x)).toFixed(1)}px;--d:${(i * 0.37).toFixed(2)}s` }); }));
-  const el = h('div', { class: 'screen ms ms-home' },
+  const el = h('div', { class: 'screen ms ms-home home' },
     lanterns, h('div', { class: 'skyline', 'aria-hidden': 'true' }),
     h('div', { class: 'home-head' }, banner, stats),
     h('div', { class: 'home-title' }, h('div', { class: 'moon', 'aria-hidden': 'true' }), h('h1', {}, '야식 대질주'), h('p', {}, '보름달까지 달려라!')),
@@ -299,7 +292,7 @@ export function openStageCard(app: App, id: string): void {
     !ok ? h('p', { class: 'stage-lock' }, icon('lock'), ` ${lockMsg}`) : null);
   app.modal(sheet(app, 'stagecard', `${st.id} ${st.name}`, body,
     h('div', { class: 'msheet-foot' },
-      h('button', { class: 'ms-btn primary', id: 'stage-go', disabled: !ok, onclick: app.click(() => { app.closeModal(); app.startRun(stageCfg(app, st)); }) }, icon('play'), '출발!'))));
+      h('button', { class: 'ms-btn primary', id: 'stage-go', disabled: !ok, onclick: app.click(() => { app.closeModal(); app.startStage(st.id); }) }, icon('play'), '출발!'))));
 }
 
 // ================================================================ 도감 (주자 · 짝꿍 · 꾸미기 · 업적)
@@ -361,7 +354,7 @@ function renderCharsTab(app: App, pane: HTMLElement, rerender: () => void): void
       actions.push(h('button', { class: 'ms-btn sm' + (isMain ? ' on' : ''), disabled: isMain, onclick: app.click(() => { if (p.loadout.partner === c.id) p.loadout.partner = p.loadout.main; p.loadout.main = c.id; if (p.loadout.partner === c.id) p.loadout.partner = null; app.persist(); rerender(); }) }, isMain ? '달리는 중' : '주자로'));
       if (relay && !isMain) actions.push(h('button', { class: 'ms-btn sm' + (isPartner ? ' on' : ''), onclick: app.click(() => { p.loadout.partner = isPartner ? null : c.id; app.persist(); rerender(); }) }, isPartner ? '파트너 빼기' : '파트너로'));
     } else {
-      actions.push(h('button', { class: 'ms-btn sm', 'data-trial': c.id, onclick: app.click(() => app.startRun(endlessCfg(app, c.id, true))) }, icon('play'), '시험 달리기'));
+      actions.push(h('button', { class: 'ms-btn sm', 'data-trial': c.id, onclick: app.click(() => app.startTrial(c.id)) }, icon('play'), '시험 달리기'));
       if (canBuy) {
         const cost = (c.unlock as { cost: number }).cost;
         actions.push(h('button', { class: 'ms-btn sm primary', disabled: p.coins < cost, onclick: app.click(() => {
@@ -648,7 +641,7 @@ export function showDaily(app: App): void {
       h('div', { class: 'bigstat' },
         h('b', {}, d ? `${fmtNum(d.best)}점` : '아직 안 달렸어요'),
         h('small', {}, d ? `최고 ${fmtDist(d.dist)} · ${fmtNum(d.tries)}번 달렸어요 · 몇 번이든 다시 달려도 돼요` : '몇 번이든 달릴 수 있고, 가장 좋은 기록만 남아요')),
-      h('button', { class: 'ms-btn primary huge', id: 'daily-go', onclick: app.click(() => app.startRun(dailyCfg(app, dk))) }, icon('play'), h('span', { class: 'lbl' }, '달리기', h('small', {}, '혼자 달려요 · 이어달리기 없음'))),
+      h('button', { class: 'ms-btn primary huge', id: 'daily-go', onclick: app.click(() => app.startDaily(dk)) }, icon('play'), h('span', { class: 'lbl' }, '달리기', h('small', {}, '혼자 달려요 · 이어달리기 없음'))),
       d ? h('div', { class: 'share-row' }, h('code', {}, recordCode(dk, d.best, d.dist)), h('button', { class: 'ms-btn sm', id: 'daily-share', onclick: app.click(share) }, icon('share'), '기록 공유')) : null),
     h('p', { class: 'days-played' }, icon('calendar'), ` 참여한 날 ${fmtNum(p.daysPlayed)}일`));
 
@@ -660,7 +653,7 @@ export function showDaily(app: App): void {
         c ? charPortrait(c, 36) : null,
         h('div', { class: 'htxt' }, h('b', {}, fmtDateKey(k)), h('small', {}, r ? `${fmtNum(r.best)}점 · ${fmtDist(r.dist)}` : `${c?.name ?? ''} · 아직 안 달렸어요`)),
         r ? medalBadge(r.medal, false) : null,
-        h('button', { class: 'ms-btn sm', onclick: app.click(() => app.startRun(dailyCfg(app, k))) }, icon('play'), '달리기'));
+        h('button', { class: 'ms-btn sm', onclick: app.click(() => app.startDaily(k)) }, icon('play'), '달리기'));
     }))));
 }
 
@@ -713,7 +706,7 @@ export function showSettings(app: App): void {
       toggle('showPads', '버튼 표시', '가로 화면에서도 엄지 자리 안내를 늘 보여 줘요'),
       toggle('slideToggle', '슬라이드 토글', '누르고 있지 않아도 한 번 누르면 잠깐 슬라이드해요'),
       h('p', { class: 'ms-hint small' }, '키보드: 점프 Space · ↑ · W · Z / 슬라이드 ↓ · S · X · Shift (누르고 있기) / 멈춤 Esc · P'),
-      h('div', { class: 'set' }, h('span', { class: 'txt' }, h('b', {}, '첫 달리기'), h('small', {}, '조작을 처음부터 다시 연습해요')), h('button', { class: 'ms-btn sm', id: 'set-tutorial', onclick: app.click(() => app.startRun(tutorialCfg(app))) }, icon('play'), '첫 달리기'))),
+      h('div', { class: 'set' }, h('span', { class: 'txt' }, h('b', {}, '첫 달리기'), h('small', {}, '조작을 처음부터 다시 연습해요')), h('button', { class: 'ms-btn sm', id: 'set-tutorial', onclick: app.click(() => app.startTutorial()) }, icon('play'), '첫 달리기'))),
     section('보기 · 접근성', 'eye',
       toggle('reduceMotion', '움직임 줄이기', '번쩍임, 회전, 흔들리는 연출을 줄여요'),
       range('화면 흔들림', '부딪힐 때 화면이 흔들리는 정도', () => st.shake, v => { st.shake = v; }, pct, 'shake'),
