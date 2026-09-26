@@ -24,10 +24,10 @@ export function doAction(w: World, p: Player, msg: any): ActResult {
       if (!inTown(p)) return '전직은 마을에서만 할 수 있습니다';
       if (p.down) return '쓰러진 상태에서는 전직할 수 없습니다';
       if (w.time - p.clsT < 3) return '잠시 후 다시 전직할 수 있습니다';
+      const tried = pr.tried ?? (pr.tried = [pr.cls]);
       p.clsT = w.time; pr.cls = c; p.ultT = 0; p.ultTick = 0; p.atkT = 0.6; p.invVer++; w.recompute(p);
       w.emit({ k: 'cls', p: p.id, c }, p.x, p.y);
       w.toast(p, `전직 완료: ${CLASSES[c].name}`, CLASSES[c].color);
-      const tried = pr.tried ?? (pr.tried = []);
       if (!tried.includes(c)) { tried.push(c); giveTal(w, p, CLASSES[c].startTal); }
       return null;
     }

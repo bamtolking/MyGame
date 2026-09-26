@@ -55,7 +55,7 @@ function zap(c: FxCtx, x1: number, y1: number, x2: number, y2: number, w: number
   };
   c.fx.add(1, dur, (p, k, t) => {
     if (t >= next) { build(); next = t + 0.05; }
-    const a = (k < 0.15 ? 1 : 1 - (k - 0.15) / 0.85) * (Math.random() < 0.2 ? 0.55 : 1), fat = k < 0.12 ? 1.35 : 1;
+    const a = (k < 0.15 ? 1 : 1 - (k - 0.15) / 0.85) * (Math.random() < 0.2 ? 0.55 : 1), fat = k < 0.12 ? 1.25 : 1;
     for (let i = 0; i + 3 < pts.length; i += 2) {
       p.beam(EMIT, beam, pts[i], pts[i + 1], pts[i + 2], pts[i + 3], w * 3.8 * fat, VIO, a * 0.72, 1);
       p.beam(EMIT, beam, pts[i], pts[i + 1], pts[i + 2], pts[i + 3], w * 1.3, BODY, a * 0.85, 1);
@@ -132,15 +132,15 @@ export const taoist: ClassFx = {
   uhit: (c, e) => {
     // a bolt from the sky onto (x, y): hits radius 70 → the array's mark flashes at that size, violet ring, scorch, glowing cracks
     const x = e.x, y = e.y, sx = x + rnd(-70, 70), sy = y - 440; const arr = arrayTex();
-    zap(c, sx, sy, x, y - 3, 3.4, 0.34, 3, 0, 0.16); zap(c, sx + rnd(-40, 40), sy, x + rnd(-8, 8), y - 3, 1.4, 0.24, 1, 0.03, 0);
-    c.fx.add(0, 0.55, (p, k) => { const s = (70 * 2) / arr.w * (0.7 + 0.3 * easeOut(Math.min(1, k * 3))); p.draw(EMIT, arr, x, y, s, s * SQ, 0, VIO, 0.6 * (1 - k), 1); });
+    zap(c, sx, sy, x, y - 3, 3.4, 0.34, 3, 0, 0.1); zap(c, sx + rnd(-40, 40), sy, x + rnd(-8, 8), y - 3, 1.4, 0.24, 1, 0.03, 0);
+    c.fx.add(0, 0.55, (p, k) => { const s = (70 * 2) / arr.w * (0.7 + 0.3 * easeOut(Math.min(1, k * 3))); p.draw(EMIT, arr, x, y, s, s * SQ, 0, VIO, 0.5 * (1 - k), 1); });
     c.fx.ring(x, y, 10, 80, 0.4, VIO, false, 0, 0.5);
-    c.fx.glow(x, y - 10, 30, VIO, 0.28, 0.22);
-    c.fx.decal(x, y, 'scorch', 90, 0x140a24, 2.4, 0.6); c.fx.decal(x, y, 'crack', 72, 0x3a2070, 2, 0.5); c.fx.decal(x, y, 'crack', 72, VIO, 0.7, 0.35, EMIT);
+    c.fx.glow(x, y - 10, 26, VIO, 0.26, 0.2);
+    c.fx.decal(x, y, 'scorch', 90, 0x140a24, 2.4, 0.6); c.fx.decal(x, y, 'crack', 72, 0x3a2070, 2, 0.5); c.fx.decal(x, y, 'crack', 72, VIO, 0.7, 0.3, EMIT);
     c.fx.sparks(x, y - 6, 8, LILAC, 460, -Math.PI / 2, 2.6, 11);
     c.fx.debris(x, y - 4, 3, 'shard', [0x5a4c78, 0x3a3050], 240, 5, 0.6);
     c.fx.smoke(x, y - 6, 2, 0x2e2640, 40, 24, 0.9, 0.3);
-    c.fx.light(x, y - 12, 230, VIO, 0.85, 0.35);
+    c.fx.light(x, y - 12, 230, VIO, 0.75, 0.35);
     if (c.mine) { c.fx.shake(0.07); c.fx.wave(x, y - 10, 100, 8, 0.35); }
     c.snd.play('thunder', c.mine ? 0.4 : 0.22, x, y);
   },

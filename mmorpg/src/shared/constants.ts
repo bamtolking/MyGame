@@ -1,5 +1,5 @@
 // Global tuning constants shared by server (authoritative sim) and client (prediction/render).
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2; // 2: ten classes (new class ids, cls action, uhit/cls/unlock events)
 export const TICK_HZ = 20;
 export const DT = 1 / TICK_HZ;
 export const SNAP_EVERY = 2; // snapshot every 2 ticks → 10 Hz

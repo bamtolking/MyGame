@@ -78,7 +78,7 @@ export function withUnlocks(w: World, p: Player, change: () => void): void {
   if (unlockDepth > 0 || p.bot) { change(); return; } // nested (quest reward → more xp): the outermost call announces
   const before = unlockedClasses(unlockProgress(p.prof));
   unlockDepth++; try { change(); } finally { unlockDepth--; }
-  for (const c of unlockedClasses(unlockProgress(p.prof))) if (!before.includes(c)) {
+  for (const c of unlockedClasses(unlockProgress(p.prof))) if (!before.includes(c) && c !== p.prof.cls && !p.prof.tried?.includes(c)) {
     w.emitTo(p, { k: 'unlock', c }); w.toast(p, `새 직업 해금: ${CLASSES[c].name}! 마을에서 전직할 수 있습니다`, CLASSES[c].color);
   }
 }

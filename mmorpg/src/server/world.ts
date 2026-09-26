@@ -218,7 +218,7 @@ export class World {
   /** Attack-speed multiplier from auras and buffs (musician passive/ult, assassin ult). */
   aspdMul(p: Player): number {
     let k = 1;
-    if (this.musicians.some(q => (q.x - p.x) ** 2 + (q.y - p.y) ** 2 < ATK.musicianAura ** 2)) k += ATK.musicianAspd;
+    if (this.musicians.some(q => q !== p && (q.x - p.x) ** 2 + (q.y - p.y) ** 2 < ATK.musicianAura ** 2)) k += ATK.musicianAspd;
     if (p.buffT > 0) k += p.buffAspd;
     if (p.ultT > 0 && p.prof.cls === 'assassin') k += 0.5;
     return k;

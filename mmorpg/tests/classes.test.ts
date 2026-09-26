@@ -5,11 +5,13 @@ import { WEAPON_NAMES } from '../src/shared/data/items.ts';
 import { xpNeed } from '../src/shared/data/xp.ts';
 import { doAction } from '../src/server/actions.ts';
 import { grantXp, withUnlocks } from '../src/server/progress.ts';
+import { stun } from '../src/server/combat.ts';
 import type { World } from '../src/server/world.ts';
 import type { Player, Monster } from '../src/server/entities.ts';
 import type { ClassId } from '../src/shared/types.ts';
 import type { Ev } from '../src/shared/protocol.ts';
 import { mkWorld, mkPlayer, spotIn, run, mkServer, FakeConn } from './helpers.ts';
+import { PROTOCOL_VERSION } from '../src/shared/constants.ts';
 
 const P0 = { level: 1, bosses: 0, worldBoss: 0 };
 /** Collects every event the world emits (the server clears them per snapshot; worlds in tests are stepped directly). */
@@ -44,10 +46,10 @@ describe('class roster and unlocks', () => {
   });
   it('a new character can only start as a starter class', () => {
     const { gs } = mkServer(); const c = new FakeConn(); const s = gs.connect(c);
-    gs.message(s, JSON.stringify({ t: 'hello', v: 1, token: 'tok_cls_painter_00001', name: '화공지망', cls: 'painter' }));
+    gs.message(s, JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION, token: 'tok_cls_painter_00001', name: '화공지망', cls: 'painter' }));
     expect(s.player!.prof.cls).toBe('sword');
     const c2 = new FakeConn(); const s2 = gs.connect(c2);
-    gs.message(s2, JSON.stringify({ t: 'hello', v: 1, token: 'tok_cls_archer_000001', name: '궁수', cls: 'archer' }));
+    gs.message(s2, JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION, token: 'tok_cls_archer_000001', name: '궁수', cls: 'archer' }));
     expect(s2.player!.prof.cls).toBe('archer'); expect(s2.player!.prof.tried).toEqual(['archer']);
   });
   it('levelling past a threshold announces the unlock exactly once', () => {
@@ -156,5 +158,60 @@ describe('class mechanics', () => {
     m.stunT = 1; m.tgt = p.id; m.st = 'chase'; const x0 = m.x, y0 = m.y, hp0 = p.hp; p.atkT = 99;
     for (let i = 0; i < 18; i++) { p.atkT = 99; w.step(); }
     expect(Math.hypot(m.x - x0, m.y - y0)).toBeLessThan(8); expect(p.hp).toBe(hp0);
+  });
+});
+
+describe('review fixes', () => {
+  const setup = (cls: ClassId, lv = 10): [World, Player, [number, number]] => { const w = mkWorld(); const at = spotIn(w, 1, 4); return [w, mkPlayer(w, cls, lv, at), at]; };
+  it('ultimate sub-hits stop once the caster walks into town or changes class', () => {
+    for (const how of ['town', 'cls'] as const) {
+      const [w, p, at] = setup('taoist'); const ms = ring(w, at, 6, 120, MON_IDX.clubber, 5); tank(ms); p.prof.slots = [null, null, null, null]; // no talismans
+      p.ult = 100; doAction(w, p, { t: 'ult' }); for (let i = 0; i < 6; i++) { p.atkT = 99; w.step(); } // first strike lands at 0.15 s
+      if (how === 'town') { const t = spotIn(w, 0); p.x = t[0]; p.y = t[1]; } else { p.prof.cls = 'sword'; }
+      const hp0 = ms.reduce((a, m) => a + m.hp, 0); for (let i = 0; i < 60; i++) { p.atkT = 99; w.step(); }
+      expect(ms.reduce((a, m) => a + m.hp, 0)).toBe(hp0);
+    }
+  });
+  it('a stun cancels a charge that is being wound up', () => {
+    const [w, p, at] = setup('guardian'); const m = w.spawnMonster(MON_IDX.clubber, at[0] + 150, at[1], 5)!; m.maxHp = m.hp = 1e7; w.spatial.rebuild(w.mons.values());
+    m.tgt = p.id; m.st = 'chase'; m.atkT = 0; let wound = false;
+    for (let i = 0; i < 40 && !wound; i++) { p.atkT = 99; w.step(); wound = m.st === 'wind'; }
+    expect(wound).toBe(true); expect(w.hazards.some(h => h.src === m.id)).toBe(true);
+    stun(w, m, 1.5); expect(m.st).toBe('recover'); expect(w.hazards.some(h => h.src === m.id)).toBe(false);
+    const hp0 = p.hp, x0 = m.x; for (let i = 0; i < 20; i++) { p.atkT = 99; w.step(); }
+    expect(p.hp).toBe(hp0); expect(Math.abs(m.x - x0)).toBeLessThan(8);
+  });
+  it('a gunner shot hits each monster once: target ×1, pierced ×0.85, burst ×0.4', () => {
+    const [w, p, at] = setup('gunner'); p.stats.crit = 0;
+    const tgt = w.spawnMonster(MON_IDX.clubber, at[0] + 120, at[1], 5)!, behind = w.spawnMonster(MON_IDX.clubber, at[0] + 150, at[1], 5)!, side = w.spawnMonster(MON_IDX.clubber, at[0] + 120, at[1] + 40, 5)!;
+    tank([tgt, behind, side]); w.spatial.rebuild(w.mons.values()); p.atkT = 0; w.step(); for (let i = 0; i < 10; i++) { p.atkT = 99; w.step(); }
+    const dmg = (m: Monster) => (m.maxHp - m.hp) / p.stats.atk;
+    expect(dmg(tgt)).toBeGreaterThan(0.9); expect(dmg(tgt)).toBeLessThan(1.1);
+    expect(dmg(behind)).toBeGreaterThan(0.75); expect(dmg(behind)).toBeLessThan(0.95);
+    expect(dmg(side)).toBeGreaterThan(0.3); expect(dmg(side)).toBeLessThan(0.5);
+  });
+  it('a stun does not leave a monster crippled by a stronger slow afterwards', () => {
+    const [w, , at] = setup('painter'); const m = w.spawnMonster(MON_IDX.clubber, at[0] + 100, at[1], 5)!;
+    stun(w, m, 0.8); expect(m.slowMul).toBe(1); expect(m.stunT).toBeCloseTo(0.8);
+  });
+  it('the musician aura helps allies, not the musician', () => {
+    const [w, mu, at] = setup('musician'); const ally = mkPlayer(w, 'sword', 10, [at[0] + 60, at[1]]); w.step();
+    expect(w.aspdMul(mu)).toBe(1); expect(w.aspdMul(ally)).toBeCloseTo(1 + ATK.musicianAspd);
+  });
+  it('profiles from before the class system keep their class and get no duplicate talisman', () => {
+    const { gs, store } = mkServer(); const prof = JSON.parse(JSON.stringify(mkPlayer(mkWorld(), 'shaman', 2).prof)); delete prof.tried; store.save('tok_legacy_shaman_0001', prof);
+    const c = new FakeConn(); const s = gs.connect(c); gs.message(s, JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION, token: 'tok_legacy_shaman_0001', name: 'x', cls: 'sword' }));
+    const p = s.player!; expect(p.prof.cls).toBe('shaman'); expect(p.prof.tried).toEqual(['shaman']);
+    const w = s.world!; const t = spotIn(w, 0); p.x = t[0]; p.y = t[1]; p.zone = 0;
+    expect(doAction(w, p, { t: 'cls', cls: 'sword' })).toBeNull(); w.time += 5;
+    p.priv.length = 0; grantXp(w, p, xpNeed(2) + xpNeed(3) + 5); expect(p.prof.level).toBe(4);
+    expect(p.priv.filter(e => e.k === 'unlock')).toEqual([]); // already played the shaman: no "new class" fanfare
+    expect(doAction(w, p, { t: 'cls', cls: 'shaman' })).toBeNull();
+    expect(p.prof.tals.filter(x => x.kind === 'wisp').length).toBe(1);
+  });
+  it('an outdated client is asked to reload', () => {
+    const { gs } = mkServer(); const c = new FakeConn(); const s = gs.connect(c);
+    gs.message(s, JSON.stringify({ t: 'hello', v: 1, token: 'tok_old_client_000001', name: 'x', cls: 'sword' }));
+    expect(c.closed).toBe(true); expect(c.of('err')[0].msg).toMatch(/새로고침/);
   });
 });

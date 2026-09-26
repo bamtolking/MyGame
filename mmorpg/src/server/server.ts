@@ -39,6 +39,7 @@ export class GameServer {
     s.token = m.token;
     let prof = this.opts.store.load(m.token);
     if (prof && !validProfile(prof)) prof = null;
+    if (prof) prof.tried ??= [prof.cls]; // profiles from before the class system remember their original class
     if (!prof) {
       let name = cleanName(m.name); if (!name || /^ai\b/i.test(name)) name = '퇴마사' + Math.floor(1000 + Math.random() * 9000);
       const cls: ClassId = STARTER_CLASSES.includes(m.cls) ? m.cls : 'sword';

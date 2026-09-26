@@ -52,7 +52,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   taoist: {
     id: 'taoist', name: '도사', eng: 'Taoist', role: '원거리 · 연쇄 번개',
     desc: '복숭아나무 법검과 뇌전 부적을 쓰는 도사. 번개가 맞은 요괴에서 옆의 요괴로 두 번 더 튑니다.',
-    hp: 120, hpLv: 14, atk: 16, aspd: 1.15, range: 360, move: 152, crit: 0.06, dr: 0.05, heal: 1.1, leech: 0,
+    hp: 128, hpLv: 15, atk: 16, aspd: 1.15, range: 360, move: 152, crit: 0.06, dr: 0.06, heal: 1.1, leech: 0,
     startTal: 'thunder', ultName: '천뢰진', ultDesc: '하늘에서 번개 12줄기를 요괴들에게 내리꽂아 큰 피해를 주고 잠시 묶어 둡니다.', color: '#a47bff', glyph: '雷',
     atkKind: 'chain', melee: false, unlock: { bosses: 1, lv: 10, text: '지역 보스 첫 토벌 (또는 레벨 10)' }, ultDur: 0,
   },
@@ -80,14 +80,14 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   musician: {
     id: 'musician', name: '악사', eng: 'Musician', role: '범위 · 지원',
     desc: '가야금을 타는 악사. 가락이 부채꼴로 퍼져 요괴를 치고, 곁의 동료 공격 속도를 12% 올려 줍니다(치유량 +25%).',
-    hp: 130, hpLv: 15, atk: 14, aspd: 1.3, range: 240, move: 150, crit: 0.05, dr: 0.06, heal: 1.25, leech: 0,
+    hp: 130, hpLv: 15, atk: 15, aspd: 1.3, range: 240, move: 150, crit: 0.05, dr: 0.06, heal: 1.25, leech: 0,
     startTal: 'bell', ultName: '신명풀이', ultDesc: '주변 동료를 25% 치유하고 6초간 공격 속도 +35%, 가락이 네 번 크게 퍼져 요괴를 칩니다.', color: '#ffa640', glyph: '樂',
-    atkKind: 'wave', melee: false, unlock: { wb: 1, lv: 20, text: '핏빛 달 월드 보스 참가 (또는 레벨 20)' }, ultDur: 6,
+    atkKind: 'wave', melee: false, unlock: { wb: 1, lv: 20, text: '핏빛 달 월드 보스 토벌 (또는 레벨 20)' }, ultDur: 6,
   },
   painter: {
     id: 'painter', name: '화공', eng: 'Ink Painter', role: '범위 · 장판',
     desc: '큰 붓을 든 화공. 먹물을 던져 웅덩이를 만들고, 웅덩이는 잠시 요괴를 태우며 느리게 합니다.',
-    hp: 125, hpLv: 14, atk: 15, aspd: 0.9, range: 340, move: 150, crit: 0.06, dr: 0.05, heal: 1.1, leech: 0,
+    hp: 135, hpLv: 15, atk: 15, aspd: 0.9, range: 340, move: 150, crit: 0.06, dr: 0.07, heal: 1.1, leech: 0,
     startTal: 'frost', ultName: '묵호도', ultDesc: '그림 속 먹 호랑이가 뛰쳐나와 요괴 무리를 세 번 가로지르며 크게 할퀴어 찢습니다.', color: '#efe4cf', glyph: '墨',
     atkKind: 'ink', melee: false, unlock: { lv: 24, text: '레벨 24 달성' }, ultDur: 0,
   },

@@ -6,9 +6,10 @@ import { join } from 'node:path';
 import WebSocket from 'ws';
 import { decodeSnap, PF } from '../src/shared/protocol.ts';
 import { mkServer, FakeConn, MemStore } from './helpers.ts';
+import { PROTOCOL_VERSION } from '../src/shared/constants.ts';
 
 const asciiTok = (n: string) => 'tok_' + [...n].map(c => c.charCodeAt(0).toString(36)).join('').padEnd(16, 'x').slice(0, 60);
-const hello = (name: string, cls = 'sword', token = asciiTok(name)) => JSON.stringify({ t: 'hello', v: 1, token, name, cls });
+const hello = (name: string, cls = 'sword', token = asciiTok(name)) => JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION, token, name, cls });
 
 describe('game server sessions (in-process)', () => {
   it('welcome → snapshots → both players see each other; chat is broadcast', () => {
@@ -45,7 +46,7 @@ describe('game server sessions (in-process)', () => {
   it('rejects bad hellos and survives garbage input', () => {
     const { gs } = mkServer(); const c = new FakeConn(); const s = gs.connect(c);
     gs.message(s, JSON.stringify({ t: 'hello', v: 999, token: 'tok_aaaaaaaaaaaaaaaa', name: 'x', cls: 'sword' })); expect(c.closed).toBe(true);
-    const c2 = new FakeConn(); const s2 = gs.connect(c2); gs.message(s2, JSON.stringify({ t: 'hello', v: 1, token: '../../etc', name: 'x', cls: 'sword' })); expect(c2.closed).toBe(true);
+    const c2 = new FakeConn(); const s2 = gs.connect(c2); gs.message(s2, JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION, token: '../../etc', name: 'x', cls: 'sword' })); expect(c2.closed).toBe(true);
     const c3 = new FakeConn(); const s3 = gs.connect(c3); gs.message(s3, hello('퍼징'));
     const junk = ['', '{', 'null', '[]', '{"t":1}', '{"t":"equip","uid":{"a":1}}', '{"t":"i","s":"x","x":1e99,"y":null}', '{"t":"sell","uids":"all"}', '{"t":"talslot","slot":-1,"uid":null}', '{"t":"tp","shrine":999}', '{"t":"chat","text":123}', 'x'.repeat(5000), '{"t":"__proto__"}', '{"t":"buytal","kind":"constructor"}'];
     for (const j of junk) expect(() => gs.message(s3, j)).not.toThrow();
@@ -71,7 +72,7 @@ afterAll(() => { proc?.kill('SIGTERM'); if (dataDir) rmSync(dataDir, { recursive
 function client(port: number, name: string, token: string) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`); const msgs: any[] = []; const snaps: ReturnType<typeof decodeSnap>[] = [];
   ws.on('message', (d, bin) => { if (bin) snaps.push(decodeSnap(new Uint8Array(d as Buffer))); else msgs.push(JSON.parse(String(d))); });
-  const ready = new Promise<void>(res => ws.on('open', () => { ws.send(JSON.stringify({ t: 'hello', v: 1, token, name, cls: 'archer' })); res(); }));
+  const ready = new Promise<void>(res => ws.on('open', () => { ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION, token, name, cls: 'archer' })); res(); }));
   return { ws, msgs, snaps, ready };
 }
 const until = async (f: () => boolean, ms = 5000) => { const t = Date.now(); while (!f()) { if (Date.now() - t > ms) throw new Error('timeout'); await new Promise(r => setTimeout(r, 25)); } };

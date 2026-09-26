@@ -6,6 +6,7 @@ import { CLASS_IDS } from '../src/shared/data/classes.ts';
 import { spawn } from 'node:child_process';
 import WebSocket from 'ws';
 import type { World } from '../src/server/world.ts';
+import { PROTOCOL_VERSION } from '../src/shared/constants.ts';
 
 const pct = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(s.length * p))]; };
 if (process.argv[2] === 'ws') await wsTest(Number(process.argv[3] ?? 60), Number(process.argv[4] ?? 30));
@@ -19,7 +20,7 @@ function inProcess(N: number, secs: number) {
     const tok = 'tok_load_' + String(i).padStart(10, '0'); const lv = [1, 4, 9, 13, 17, 22, 27][i % 7];
     store.save(tok, makeBotProfile('부하' + i, CLASS_IDS[i % CLASS_IDS.length], lv, i + 1));
     const s = gs.connect({ send: (d) => { bytes += d.length; }, close() {} });
-    gs.message(s, JSON.stringify({ t: 'hello', v: 1, token: tok, name: 'x', cls: 'sword' }));
+    gs.message(s, JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION, token: tok, name: 'x', cls: 'sword' }));
     const b = new BotBrain(i % 2 ? 'quester' : 'roamer', i); s.world!.brains.set(s.player!.id, b);
   }
   const times: number[] = []; const t0 = performance.now();
@@ -37,7 +38,7 @@ async function wsTest(N: number, secs: number) {
   let bytes = 0, snaps = 0, welcomed = 0; const socks: WebSocket[] = [];
   for (let i = 0; i < N; i++) {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`); socks.push(ws); let seq = 0; let a = Math.random() * 6.28;
-    ws.on('open', () => { ws.send(JSON.stringify({ t: 'hello', v: 1, token: 'tok_wsload_' + String(i).padStart(8, '0'), name: '부하' + i, cls: ['sword', 'archer', 'shaman'][i % 3] })); });
+    ws.on('open', () => { ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION, token: 'tok_wsload_' + String(i).padStart(8, '0'), name: '부하' + i, cls: ['sword', 'archer'][i % 2] })); });
     ws.on('message', (d, bin) => { bytes += (d as Buffer).length; if (bin) snaps++; else if (String(d).includes('"welcome"')) welcomed++; });
     const it = setInterval(() => { if (ws.readyState !== ws.OPEN) return; if (Math.random() < 0.05) a += Math.random() - 0.5; ws.send(JSON.stringify({ t: 'i', s: ++seq, x: Math.round(Math.cos(a) * 127), y: Math.round(Math.sin(a) * 127) })); }, 50);
     ws.on('close', () => clearInterval(it));

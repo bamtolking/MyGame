@@ -9,6 +9,7 @@ import { zoneAt } from '../shared/map.ts';
 import type { World } from './world.ts';
 import type { Player, Monster } from './entities.ts';
 import type { Ev } from '../shared/protocol.ts';
+import type { ClassId } from '../shared/types.ts';
 import { onMonsterKilled } from './progress.ts';
 
 const ULT_PER_KILL = 1.0, ULT_PER_SEC = 1.0;
@@ -52,12 +53,18 @@ export function shove(w: World, m: Monster, fx: number, fy: number, dist: number
     m.x = nx; m.y = ny;
   }
 }
-/** Stuns a monster for `t` seconds (bosses are only slowed). */
-export function stun(m: Monster, t: number): void {
-  if (m.boss) { m.slowT = Math.max(m.slowT, t); m.slowMul = Math.min(m.slowMul, 0.75); return; }
-  m.stunT = Math.max(m.stunT, t); m.slowT = Math.max(m.slowT, t); m.slowMul = Math.min(m.slowMul, 0.3);
+/** Stuns a monster for `t` seconds: it stops moving and attacking, and a charge being wound up is cancelled (bosses are only slowed). */
+export function stun(w: World, m: Monster, t: number): void {
+  if (m.boss) { slow(m, t, 0.75); return; }
+  m.stunT = Math.max(m.stunT, t); m.slowT = Math.max(m.slowT, t); // slowT only flags the tint; stunT does the freezing
+  if (m.def.beh === 'charger' && (m.st === 'wind' || m.st === 'dash')) { m.st = 'recover'; m.stT = m.stunT; w.hazards = w.hazards.filter(h => h.src !== m.id); }
 }
-function slow(m: Monster, t: number, mul: number): void { m.slowT = Math.max(m.slowT, t); m.slowMul = Math.min(m.slowMul, m.boss ? Math.max(0.75, mul) : mul); }
+/** Slows a monster; a stronger slow wins, and a slow that outlasts the current one replaces it. */
+function slow(m: Monster, t: number, mul: number): void {
+  const k = m.boss ? Math.max(0.75, mul) : mul; if (k <= m.slowMul || t >= m.slowT) m.slowMul = k; m.slowT = Math.max(m.slowT, t);
+}
+/** A delayed hit still belongs to this fight: the player is still in the world, outside town, and still the class that started it. */
+const still = (w: World, p: Player, c: ClassId) => w.players.get(p.id) === p && p.zone !== 0 && p.prof.cls === c;
 /** Assassin bonus against weakened monsters. */
 const execMul = (m: Monster) => (m.hp < m.maxHp * 0.3 ? 1.5 : 1);
 const R = Math.round;
@@ -242,15 +249,17 @@ function basicAttack(w: World, p: Player, tgt: Monster): void {
       break;
     }
     case 'musket': {
+      // the bullet pierces everything on the line (×0.85) and bursts at the target (×0.4 around it); nobody is hit twice
       const x2 = p.x + ca * cls.range, y2 = p.y + sa * cls.range; const id = tgt.id; const td = Math.hypot(tgt.x - p.x, tgt.y - p.y);
-      for (const [m, d] of onLine(w, p.x, p.y, x2, y2, ATK.musketW)) {
-        if (m === tgt) continue; const mid = m.id; w.after(d / ATK.bulletSpeed, () => { const mm = w.mons.get(mid); if (mm && !mm.dead) hitMonster(w, p, mm, 0.85); });
-      }
+      const near: number[] = [], far: number[] = [];
+      for (const [m, d] of onLine(w, p.x, p.y, x2, y2, ATK.musketW)) if (m !== tgt) (d <= td ? near : far).push(m.id);
+      const pierce = (ids: number[]) => { for (const mid of ids) { const mm = w.mons.get(mid); if (mm && !mm.dead) hitMonster(w, p, mm, 0.85); } };
       let bx = tgt.x, by = tgt.y;
       w.after(td / ATK.bulletSpeed, () => {
-        const m = w.mons.get(id); if (m && !m.dead) { bx = m.x; by = m.y; hitMonster(w, p, m, 1); }
-        w.spatial.each(bx, by, ATK.musketBurst, h => { if (h.id !== id) hitMonster(w, p, h, 0.4); });
+        pierce(near); const m = w.mons.get(id); if (m && !m.dead) { bx = m.x; by = m.y; hitMonster(w, p, m, 1); }
+        w.spatial.each(bx, by, ATK.musketBurst, h => { if (h.id !== id && !near.includes(h.id) && !far.includes(h.id)) hitMonster(w, p, h, 0.4); });
       });
+      if (far.length) w.after(cls.range / ATK.bulletSpeed, () => pierce(far));
       break;
     }
     case 'wave': {
@@ -263,7 +272,7 @@ function basicAttack(w: World, p: Player, tgt: Monster): void {
       w.after(d / 700, () => {
         const m = w.mons.get(id); if (m && !m.dead) { tx = m.x; ty = m.y; }
         w.spatial.each(tx, ty, ATK.inkR, h => { hitMonster(w, p, h, 0.8); slow(h, 1.2, 0.6); });
-        for (let k = 1; k <= ATK.inkTicks; k++) w.after(k * 0.5, () => { if (w.players.has(p.id)) w.spatial.each(tx, ty, ATK.inkR, h => { hitMonster(w, p, h, ATK.inkTickMul); slow(h, 0.7, 0.6); }); });
+        for (let k = 1; k <= ATK.inkTicks; k++) w.after(k * 0.5, () => { if (still(w, p, 'painter')) w.spatial.each(tx, ty, ATK.inkR, h => { hitMonster(w, p, h, ATK.inkTickMul); slow(h, 0.7, 0.6); }); });
       });
       break;
     }
@@ -278,19 +287,20 @@ export function useUlt(w: World, p: Player): boolean {
   const c = p.prof.cls; const def = CLASSES[c];
   p.ultT = def.ultDur; p.ultTick = 0;
   const cast = (tx?: number, ty?: number) => w.emit(tx == null ? { k: 'ult', p: p.id, x: R(p.x), y: R(p.y) } : { k: 'ult', p: p.id, x: R(p.x), y: R(p.y), tx: R(tx), ty: R(ty!) }, p.x, p.y);
-  /** Runs `fn` later only while the caster is still in this world and standing. */
-  const later = (t: number, fn: () => void) => w.after(t, () => { if (w.players.get(p.id) === p && !p.down) fn(); });
+  /** Runs `fn` later only while the caster is still standing in this fight (see `still`). */
+  const later = (t: number, fn: () => void) => w.after(t, () => { if (still(w, p, c) && !p.down) fn(); });
   switch (c) {
     case 'sword': case 'spear': case 'assassin': cast(); break;
     case 'archer': {
       const [bx, by] = densest(w, p, 470, 150, 150);
       cast(bx, by);
-      for (let v = 0; v < 8; v++) w.after(0.3 + v * 0.25, () => { w.spatial.each(bx, by, 160, m => { hitMonster(w, p, m, 1.15); }); });
+      for (let v = 0; v < 8; v++) w.after(0.3 + v * 0.25, () => { if (still(w, p, c)) w.spatial.each(bx, by, 160, m => { hitMonster(w, p, m, 1.15); }); }); // the rain falls even if the archer goes down
       break;
     }
     case 'shaman': {
       cast();
       w.after(0.35, () => {
+        if (!still(w, p, c)) return;
         w.spatial.each(p.x, p.y, 330, m => { hitMonster(w, p, m, 5); });
         for (const q of w.playersNear(p.x, p.y, 330, true)) {
           if (q.down) w.revivePlayer(q, p, 0.5); else w.healPlayer(q, q.stats.maxHp * 0.4 * CLASSES.shaman.heal);
@@ -304,7 +314,7 @@ export function useUlt(w: World, p: Player): boolean {
         const cand = w.spatial.list(p.x, p.y, 420); let x: number, y: number;
         if (cand.length) { const t = cand[Math.floor(w.rng.next() * cand.length)]; x = t.x; y = t.y; }
         else { const a = w.rng.range(0, Math.PI * 2), r = w.rng.range(60, 220); x = p.x + Math.cos(a) * r; y = p.y + Math.sin(a) * r; }
-        w.spatial.each(x, y, 70, m => { hitMonster(w, p, m, 1.6); stun(m, 0.8); });
+        w.spatial.each(x, y, 70, m => { hitMonster(w, p, m, 1.6); stun(w, m, 0.8); });
         w.emit({ k: 'uhit', p: p.id, x: R(x), y: R(y) }, x, y);
       });
       break;
@@ -313,7 +323,7 @@ export function useUlt(w: World, p: Player): boolean {
       cast();
       const v = p.stats.maxHp * 0.35 * def.heal;
       for (const q of w.playersNear(p.x, p.y, 300)) { if (v > q.shield) q.shield = v; q.shieldT = Math.max(q.shieldT, 5); w.emit({ k: 'shield', p: q.id }, q.x, q.y); }
-      for (const m of w.spatial.list(p.x, p.y, 220)) { hitMonster(w, p, m, 2); shove(w, m, p.x, p.y, 60); stun(m, 1.5); }
+      for (const m of w.spatial.list(p.x, p.y, 220)) { hitMonster(w, p, m, 2); shove(w, m, p.x, p.y, 60); stun(w, m, 1.5); }
       break;
     }
     case 'gunner': {
@@ -323,7 +333,7 @@ export function useUlt(w: World, p: Player): boolean {
         if (cand.length) { const t = cand[Math.floor(w.rng.next() * cand.length)]; x = t.x + w.rng.range(-20, 20); y = t.y + w.rng.range(-20, 20); }
         else { const a = p.face + w.rng.range(-0.6, 0.6), r = w.rng.range(160, 380); x = p.x + Math.cos(a) * r; y = p.y + Math.sin(a) * r; }
         w.emit({ k: 'uhit', p: p.id, x: R(p.x), y: R(p.y), x2: R(x), y2: R(y) }, p.x, p.y);
-        w.after(Math.hypot(x - p.x, y - p.y) / 900, () => { if (w.players.has(p.id)) w.spatial.each(x, y, 70, m => { hitMonster(w, p, m, 1.4); }); });
+        w.after(Math.hypot(x - p.x, y - p.y) / 900, () => { if (still(w, p, c)) w.spatial.each(x, y, 70, m => { hitMonster(w, p, m, 1.4); }); }); // a rocket in flight lands even if the gunner goes down
       });
       break;
     }

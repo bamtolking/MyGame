@@ -7,6 +7,7 @@ import { newProfile } from '../src/shared/data/items.ts';
 import { CLASSES } from '../src/shared/data/classes.ts';
 import type { ClassId } from '../src/shared/types.ts';
 import type { World } from '../src/server/world.ts';
+import { PROTOCOL_VERSION } from '../src/shared/constants.ts';
 
 export interface SimResult {
   cls: ClassId; seed: number; minutes: number; levelAt: Record<number, number>; finalLevel: number; kills: number; deaths: number;
@@ -21,7 +22,7 @@ export function simulate(cls: ClassId, seed: number, minutes: number): SimResult
   let fighting = false, wbTries = 0, wbWins = 0;
   // pre-made profile: new characters may only pick a starter class, but the sweep plays every class from level 1
   const token = 'tok_balance_' + seed + 'aaaaaaaa'; store.save(token, newProfile('밸런스', CLASSES[cls], 0));
-  const s = gs.connect(conn); gs.message(s, JSON.stringify({ t: 'hello', v: 1, token, name: '밸런스', cls }));
+  const s = gs.connect(conn); gs.message(s, JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION, token, name: '밸런스', cls }));
   const p = s.player!; w.brains.set(p.id, new BotBrain('quester', seed)); p.prof.opts = { autoSell: 0 };
   const levelAt: Record<number, number> = {}, questAt: Record<number, number> = {}; let firstBossMin: number | null = null;
   const bossQuest = MAIN_QUESTS.findIndex(q => q.kind === 'boss');

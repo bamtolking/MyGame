@@ -196,6 +196,7 @@ export class BotBrain {
   }
 }
 
+function shuffle<T>(a: T[], rng: Rng): T[] { for (let i = a.length - 1; i > 0; i--) { const j = rng.int(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 /** How far a bot keeps from its target: melee classes stay within reach, ranged ones keep a gap. */
 function meleeReach(p: Player, r: number, ranged: number): number {
   const c = CLASSES[p.prof.cls]; return c.melee ? r + Math.max(28, c.range * 0.42) : Math.min(ranged, c.range * 0.75);
@@ -211,8 +212,8 @@ export function addBots(w: World, count: number, level: number, buddyOf: number,
   const out: Player[] = []; const rng = new Rng(seed);
   const roamLv = [9, 15, 22, 12, 18, 26];
   // companions aren't bound by unlocks (they show players what's ahead); the first two buddies are always supports
-  const support = (['shaman', 'musician', 'guardian'] as ClassId[]).sort(() => rng.next() - 0.5).slice(0, 2);
-  const deck = [...support, ...CLASS_IDS.filter(c => !support.includes(c)).sort(() => rng.next() - 0.5)];
+  const support = shuffle(['shaman', 'musician', 'guardian'] as ClassId[], rng).slice(0, 2);
+  const deck = [...support, ...shuffle(CLASS_IDS.filter(c => !support.includes(c)), rng)];
   for (let i = 0; i < count; i++) {
     const role: 'buddy' | 'roamer' = i < Math.ceil(count / 2) ? 'buddy' : 'roamer';
     const lv = role === 'buddy' ? Math.max(1, level + rng.int(-1, 1)) : roamLv[(i - Math.ceil(count / 2)) % roamLv.length];
