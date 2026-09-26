@@ -151,22 +151,23 @@ export function charPortrait(c: CharacterDef, size = 96, running = false, look?:
 /** Preview of a cosmetic on a character for the 꾸미기 tab: palette → full portrait (56 px), hat → head-and-hat
  *  close-up, trail → the runner mid-stride with its trail (both 42 px, the size of the .cosm-ico circle).
  *  null for jump sounds (keep the note icon). Everything is the run's own drawing code. */
-export function cosmeticPreview(def: CosmeticDef, ch: CharacterDef, size?: number): HTMLCanvasElement | null {
+export function cosmeticPreview(def: CosmeticDef, ch: CharacterDef, size?: number, pal?: CharacterDef['palette'] | null): HTMLCanvasElement | null {
   if (def.kind === 'palette') return def.colors ? charPortrait({ ...ch, palette: def.colors }, size ?? 56) : null;
-  const S = size ?? 42;
+  const S = size ?? 42; const who = pal ? { ...ch, palette: pal } : ch;     // shown in the look the runner wears now
+  const round = (g: CanvasRenderingContext2D) => { g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); g.clip(); };  // matches the round .cosm-ico
   if (def.kind === 'hat') {
     const hat = hatIdOf(def.id); if (!hat) return null;
-    const { cv, g } = makeCanvas(S, 'portrait cosm-pic');
-    const top = headTop(shapeOf(ch)), k = S / 66;
-    g.translate(S / 2, S * 0.5); g.scale(k, k); g.translate(-top.x - 1, -top.y - 1);
-    try { drawCharacter(g, shapeOf(ch), ch.palette, { state: 'idle', t: 0.5, runPhase: 0, spin: 0, squash: 1, hurt: false, alpha: 1 }, hat); } catch { /* art in flux */ }
+    const { cv, g } = makeCanvas(S, 'portrait cosm-pic'); round(g);
+    const top = headTop(shapeOf(who)), k = S / 84;                          // window: 28 above the head top (hat) … 56 below (eyes)
+    g.translate(S / 2, S / 2); g.scale(k, k); g.translate(-top.x - 1, -top.y - 14);
+    try { drawCharacter(g, shapeOf(who), who.palette, { state: 'idle', t: 0.5, runPhase: 0, spin: 0, squash: 1, hurt: false, alpha: 1 }, hat); } catch { /* art in flux */ }
     return cv;
   }
   if (def.kind === 'trail') {
     const id = trailIdOf(def.id); if (!id) return null;
-    const { cv, g } = makeCanvas(S, 'portrait cosm-pic');
-    const k = S / 118; g.translate(S * 0.72, S * 0.86); g.scale(k, k);
-    drawTrailScene(g, id, ch);
+    const { cv, g } = makeCanvas(S, 'portrait cosm-pic'); round(g);
+    const k = S / 140; g.translate(S * 0.7, S * 0.8); g.scale(k, k);
+    drawTrailScene(g, id, who);
     return cv;
   }
   return null;

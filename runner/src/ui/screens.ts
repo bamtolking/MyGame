@@ -21,7 +21,7 @@ import {
 import { h, clear } from './dom';
 import {
   icon, starRow, pouchRow, medalBadge, bar, coinAmount, newDot, fmtNum, fmtDist, fmtDuration, fmtDateKey, fmtDateMs,
-  charPortrait, companionPortrait, paceText, MEDAL_NAMES,
+  charPortrait, companionPortrait, paceText, MEDAL_NAMES, cosmeticPreview, lookFor,
 } from './panels';
 import { josa } from './josa';
 import { VERSION, type App, type Screen } from './app';
@@ -135,9 +135,9 @@ export function showHome(app: App): void {
   const heroSize = landscape ? (vh < 420 ? 104 : 124) : vh >= 800 ? 156 : vh >= 700 ? 136 : 118;
   const hero = h('div', { class: 'home-hero' },
     h('div', { class: 'hero-pics' },
-      h('div', { class: 'hero-main' }, charPortrait(ch, heroSize)),
+      h('div', { class: 'hero-main' }, charPortrait(ch, heroSize, false, p)),
       comp ? h('div', { class: 'hero-comp', title: comp.name }, companionPortrait(comp, Math.round(heroSize * 0.4))) : null,
-      partner ? h('div', { class: 'hero-partner', title: `이어달리기 ${partner.name}` }, charPortrait(partner, 46)) : null),
+      partner ? h('div', { class: 'hero-partner', title: `이어달리기 ${partner.name}` }, charPortrait(partner, 46, false, p)) : null),
     h('div', { class: 'hero-txt' },
       h('b', {}, ch.name), h('small', {}, ch.title),
       h('span', { class: 'hero-line' }, comp ? `짝꿍 ${comp.name}` : '짝꿍 없음'),
@@ -201,7 +201,7 @@ export function openReady(app: App, o: { context: 'home' | 'stage' | 'endless'; 
         pic ?? h('span', { class: 'tile-none' }, icon('close')), h('span', { class: 'tile-name' }, name), on ? icon('check', 'tick') : null);
     add(body,
       h('div', { class: 'ready-sec' }, h('h4', {}, '주자'),
-        h('div', { class: 'tiles' }, ...owned.map(c => tile(c.id === main.id, charPortrait(c, 58), c.name, () => {
+        h('div', { class: 'tiles' }, ...owned.map(c => tile(c.id === main.id, charPortrait(c, 58, false, p), c.name, () => {
           if (p.loadout.partner === c.id) p.loadout.partner = main.id === c.id ? null : main.id;
           p.loadout.main = c.id; if (p.loadout.partner === p.loadout.main) p.loadout.partner = null;
           app.persist(); render();
@@ -211,7 +211,7 @@ export function openReady(app: App, o: { context: 'home' | 'stage' | 'endless'; 
       relay ? h('div', { class: 'ready-sec' }, h('h4', {}, '이어달리기 파트너'),
         h('div', { class: 'tiles' },
           tile(!p.loadout.partner, null, '없음', () => { p.loadout.partner = null; app.persist(); render(); }, 'none'),
-          ...owned.filter(c => c.id !== main.id).map(c => tile(p.loadout.partner === c.id, charPortrait(c, 58), c.name, () => { p.loadout.partner = c.id; app.persist(); render(); }, c.id))),
+          ...owned.filter(c => c.id !== main.id).map(c => tile(p.loadout.partner === c.id, charPortrait(c, 58, false, p), c.name, () => { p.loadout.partner = c.id; app.persist(); render(); }, c.id))),
         h('p', { class: 'ready-note' }, icon('relay'), h('span', {}, '주자가 다 식으면 파트너가 따끈함 절반으로 한 번 이어 달려요. 무한 달리기에서만 써요.'))) : null,
       h('div', { class: 'ready-sec' }, h('h4', {}, '짝꿍'),
         h('div', { class: 'tiles' },
@@ -293,7 +293,7 @@ export function openStageCard(app: App, id: string): void {
       kv('최고 기록', p.stageBest[id] ? `${fmtNum(p.stageBest[id])}점` : '아직 없어요'),
       h('label', { class: 'set ghost-row' }, h('span', { class: 'txt' }, h('b', {}, icon('ghost'), ' 유령과 달리기'), h('small', {}, ghost ? '내 최고 기록이 흐릿하게 함께 달려요' : '도착하면 최고 기록이 유령으로 남아요')), ghostSw),
       h('div', { class: 'stage-loadout' },
-        ch ? charPortrait(ch, 40) : null, comp ? companionPortrait(comp, 34) : null,
+        ch ? charPortrait(ch, 40, false, p) : null, comp ? companionPortrait(comp, 34) : null,
         h('span', {}, `${ch?.name ?? ''}${comp ? ` · ${comp.name.split(' ').pop()}` : ''}`),
         h('button', { class: 'ms-chip', onclick: app.click(() => openReady(app, { context: 'stage', onDone: () => openStageCard(app, id) })) }, icon('swap'), '바꾸기')),
       app.assistOpts().noHitDamage || app.assistOpts().halfDrain || app.assistOpts().autoSlide ? h('p', { class: 'ms-hint small' }, icon('assist'), ' 도움이 켜져 있어요. 별은 그대로 받고 기록에 작은 표시만 붙어요.') : null),
@@ -373,7 +373,7 @@ function renderCharsTab(app: App, pane: HTMLElement, rerender: () => void): void
       }
     }
     list.append(h('article', { class: 'ccard' + (own ? '' : ' locked') + (isMain ? ' main' : '') + (isPartner ? ' partner' : ''), 'data-char': c.id },
-      h('div', { class: 'pic' }, charPortrait(c, 84), own ? null : h('span', { class: 'pic-lock' }, icon('lock'))),
+      h('div', { class: 'pic' }, charPortrait(c, 84, false, own ? p : null), own ? null : h('span', { class: 'pic-lock' }, icon('lock'))),
       h('div', { class: 'info' },
         h('div', { class: 'name' }, h('b', {}, c.name), h('small', {}, c.title), isMain ? h('span', { class: 'tag gold' }, '주자') : null, isPartner ? h('span', { class: 'tag jade' }, '파트너') : null),
         h('p', {}, c.desc),
@@ -431,10 +431,10 @@ function renderCosmTab(app: App, pane: HTMLElement, rerender: () => void): void 
   pane.append(h('p', { class: 'ms-hint' }, `꾸미기 ${COSMETICS.filter(c => owned.has(c.id)).length}/${COSMETICS.length} · 업적을 이루면 하나씩 열려요. 모양만 바뀌고 달리기에는 영향이 없어요.`));
   // whose look are we changing?
   pane.append(h('div', { class: 'chips', role: 'radiogroup', 'aria-label': '누구를 꾸밀까요' },
-    ...CHARACTERS.filter(c => p.unlocked.includes(c.id)).map(c => h('button', { class: 'ms-chip' + (c.id === cosmTarget ? ' on' : ''), 'aria-pressed': c.id === cosmTarget ? 'true' : 'false', onclick: app.click(() => { cosmTarget = c.id; rerender(); }) }, charPortrait(c, 26), c.name))));
+    ...CHARACTERS.filter(c => p.unlocked.includes(c.id)).map(c => h('button', { class: 'ms-chip' + (c.id === cosmTarget ? ' on' : ''), 'aria-pressed': c.id === cosmTarget ? 'true' : 'false', onclick: app.click(() => { cosmTarget = c.id; rerender(); }) }, charPortrait(c, 26, false, p), c.name))));
   const eq = equippedFor(p, cosmTarget);
   const wearing = (['hat', 'trail', 'jumpSound', 'palette'] as CosmeticKind[]).map(k => eq[k]?.name).filter(Boolean);
-  pane.append(h('p', { class: 'ms-hint small' }, `${josa(target.name, '은/는')} 지금 ${wearing.length ? wearing.join(' · ') : '기본 모습'}이에요.`));
+  pane.append(h('p', { class: 'ms-hint small' }, `${josa(target.name, '은/는')} 지금 ${josa(wearing.length ? wearing.join(' · ') : '기본 모습', '이에요/예요')}.`));
   for (const kind of ['hat', 'trail', 'jumpSound', 'palette'] as CosmeticKind[]) {
     const items = COSMETICS.filter(c => c.kind === kind && (kind !== 'palette' || c.charId === cosmTarget));
     if (!items.length) continue;
@@ -455,7 +455,7 @@ function renderCosmTab(app: App, pane: HTMLElement, rerender: () => void): void 
         if (r.ok) { equipCosmetic(p, cosmTarget, c.id); app.audio.play('unlock'); app.toast(`${josa(c.name, '을/를')} 샀어요`, 'good'); app.persist(); } else { app.audio.play('error'); app.toast(r.error ?? '', 'warn'); }
         rerender();
       }) }, icon('coin'), '사기');
-      const pic = kind === 'palette' && c.colors ? charPortrait({ ...target, palette: c.colors }, 56) : icon(own ? COSM_ICON[kind] : 'lock');
+      const pic = secret ? icon('lock') : cosmeticPreview(c, target, undefined, kind === 'palette' ? null : lookFor(p, cosmTarget).palette) ?? icon(own ? COSM_ICON[kind] : 'lock');
       grid.append(h('div', { class: 'cosm' + (own ? '' : c.price ? ' shop' : ' locked') + (on ? ' on' : '') + (kind === 'palette' ? ' pal' : ''), 'data-cosm': c.id },
         h('span', { class: 'cosm-ico', style: c.color && own ? `color:${c.color === '#2b2b33' ? '#c9c3e6' : c.color}` : '' }, pic),
         h('b', {}, c.name),

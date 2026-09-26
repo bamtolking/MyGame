@@ -16,7 +16,7 @@ import { Renderer, type GhostView } from '../render/renderer';
 import { hatIdOf } from '../render/characters';
 import { trailIdOf } from '../render/fx';
 import { equippedFor } from '../meta/achievements';
-import { Audio } from '../platform/audio';
+import { Audio, JUMP_SOUND_IDS } from '../platform/audio';
 import * as store from '../platform/storage';
 import { applyRun, dailySeed, dailyChar, dailyCompanion, dailyArchive, todayKey, featureOpen, ghostKeyFor, type Progress, type RunReward, type GhostRec } from '../meta/progress';
 import { MISSION_BY_ID, missionText, liveMissionProgress } from '../meta/missions';
@@ -506,7 +506,7 @@ export class App {
       switch (e.t) {
         case 'jump': {   // 점프 소리 꾸미기 of whoever is running (the main runner; the partner after a relay): 0 default, 1–4 skins
           const js = equippedFor(this.p, s.charId).jumpSound?.id ?? '';
-          a.play(e.n === 2 ? 'jump2' : 'jump', Math.max(0, ['', 'jump_bell', 'jump_drum', 'jump_gayageum', 'jump_pop'].indexOf(js)));   // = audio JUMP_SOUND_IDS
+          a.play(e.n === 2 ? 'jump2' : 'jump', Math.max(0, JUMP_SOUND_IDS.indexOf(js)));
           break;
         }
         case 'land': a.play('land'); break;

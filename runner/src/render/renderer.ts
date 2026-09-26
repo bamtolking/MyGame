@@ -19,7 +19,7 @@ import { hurtbox } from '../sim/body';
 import { totalScore, flowLevel, jellyPct } from '../sim/run';
 import type { RunState, SimEvent, Hazard, PowerKind } from '../sim/types';
 import { Fx, TrailFx, star, vrand, type Box, type TrailId } from './fx';
-import { drawCharacter, rr, type Pose, type Shape, type HatId, type Palette } from './characters';
+import { drawCharacter, headTop, rr, type Pose, type Shape, type HatId, type Palette } from './characters';
 import { drawCompanion } from './companions';
 import { drawSpike, drawTall, drawHang, setHazardOutlineScale } from './hazards';
 import { drawPickup, LETTER_COLORS } from './pickups';
@@ -423,7 +423,9 @@ export class Renderer {
     const c = this.c; const b = s.body;
     const every = ch.skill.every || 1;
     const k = s.skillActive > 0 || (ch.skill.kind === 'shield' && s.shield > 0) ? 1 : Math.max(0, Math.min(1, 1 - s.skillT / every));
-    const cx = x, cy = y - (b.sliding ? 44 : RING_H) * b.scale - 16, r = 9;
+    const hat = !!this.hats[ch.id];             // a hat adds up to ~23 px above the head top: lift the ring over it
+    const up = b.sliding ? (hat ? 66 : 44) : hat ? Math.max(RING_H, -headTop(shapeOf(ch)).y + 26) : RING_H;
+    const cx = x, cy = y - up * b.scale - 16, r = 9;
     c.lineWidth = 4; c.strokeStyle = 'rgba(20,12,36,0.55)'; c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.stroke();
     c.strokeStyle = k >= 1 ? '#fff3a3' : '#ffd166'; c.lineWidth = 3.2;
     c.beginPath(); c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); c.stroke();
