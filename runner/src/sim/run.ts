@@ -177,7 +177,7 @@ function collideHazards(s: RunState): void {
 }
 
 function hitBy(s: RunState, h: Hazard): void {
-  h.broken = true; h.near = false;
+  h.touched = true; h.near = false;   // stays visible (so you can see what hit you) but can never hit again
   const cx = (h.x0 + h.x1) / 2, cy = Math.max(h.y0, 0) + 20;
   if (s.shield > 0) {
     s.shield--; s.iframes = HIT_IFRAMES * 0.6;

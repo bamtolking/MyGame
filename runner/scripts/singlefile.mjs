@@ -10,6 +10,8 @@ for (const f of readdirSync(assets)) {
   if (f.endsWith('.css')) html = html.replace(new RegExp(`<link[^>]*href="[^"]*${f}"[^>]*>`), () => `<style>${content}</style>`);
 }
 html = html.replace(/<link rel="modulepreload"[^>]*>/g, '');
+// the single file runs from disk: no manifest / service worker there
+html = html.replace(/<link rel="manifest"[^>]*>\s*/g, '').replace(/<link rel="apple-touch-icon"[^>]*>\s*/g, '');
 mkdirSync('play', { recursive: true });
 writeFileSync(join('play', 'index.html'), html);
 console.log('play/index.html written:', (html.length / 1024).toFixed(0), 'KB');

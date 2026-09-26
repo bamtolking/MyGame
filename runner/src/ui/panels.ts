@@ -69,7 +69,7 @@ export function deathExplain(s: RunState): { title: string; detail: string } {
   let title = '체력이 다 닳았어요';
   if (cause.startsWith('hit:')) title = `마지막 한 방: ${hitName(cause.slice(4))}`;
   else if (cause === 'pit') title = '마지막 한 방: 구덩이';
-  else if (cause === 'cap') title = '긴 달리기 끝! (15분 제한)';
+  else if (cause === 'cap') title = '긴 달리기 끝! (10분 제한)';
   // most common hazard → a concrete tip
   const worst = Object.entries(s.stats.hitsBy).sort((a, b) => b[1] - a[1])[0];
   let tip = '';

@@ -3,8 +3,8 @@
 // ---- HP ("체력"): drains over time, hits take chunks, potions refill ----
 export const BASE_MAX_HP = 100;
 export const DRAIN_BY_TIER = [0.95, 1.05, 1.18, 1.32, 1.48, 1.66]; // HP/s at each difficulty tier
-export const LATE_DRAIN_START = 420;    // s — after this, drain climbs so runs always end (soft cap)
-export const LATE_DRAIN_PER_S = 0.02;   // extra HP/s added per second past LATE_DRAIN_START
+export const LATE_DRAIN_START = 300;    // s — after this, drain climbs so runs always end (soft cap)
+export const LATE_DRAIN_PER_S = 0.025;  // extra HP/s added per second past LATE_DRAIN_START
 export const HIT_DAMAGE = 15;
 export const FALL_DAMAGE = 20;
 export const HIT_IFRAMES = 1.2;
@@ -50,4 +50,4 @@ export const TIER_EVERY_M = 300;
 export const BIOME_EVERY_M = 600;
 export const NO_REPEAT = 8;             // a chunk id cannot reappear within the last N chunks
 export const COUNTDOWN_T = 1.5;
-export const RUN_CAP_T = 900;           // hard stop (15 min) — a run always ends
+export const RUN_CAP_T = 600;           // hard stop (10 min) — a run always ends

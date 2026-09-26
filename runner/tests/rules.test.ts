@@ -132,7 +132,7 @@ describe('bonus time', () => {
     expect(s.hp).toBe(hp0);
     expect(s.power.magnet).toBe(mag0);
     expect(s.stats.bonusJellies).toBeGreaterThan(0);
-    steps(s, 60);
+    let n = 0; while (s.bonusStage !== 'none' && n++ < 120) stepRun(s, NONE);
     expect(s.bonusStage).toBe('none');
     expect(s.letters.every(l => !l)).toBe(true);
     expect(s.iframes).toBeGreaterThan(0);

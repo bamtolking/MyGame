@@ -24,6 +24,8 @@ export interface SolveOpts {
   endGrounded?: boolean;
   /** abort after this many simulated steps (planner budget); 0 = unlimited */
   budget?: number;
+  /** force the first decision (index into CHOICES) — the bot uses it to ask "is jumping NOW still safe?" */
+  firstChoice?: number;
 }
 export interface SolveResult { ok: boolean; explored: number; path: Decision[]; aborted?: boolean }
 
@@ -53,6 +55,7 @@ export function solve(solids: readonly Solid[], hazards: readonly Box[], start: 
     if (layer > maxLayers) return false;
     if (budget && explored > budget) { aborted = true; return false; }
     for (let ci = 0; ci < CHOICES.length; ci++) {
+      if (layer === 0 && opts.firstChoice !== undefined && ci !== opts.firstChoice) continue;
       const ch = CHOICES[ci];
       const b: Body = { ...b0 }; let got = got0; let dead = false; let done = false;
       for (let f = 0; f < step; f++) {
