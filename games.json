@@ -9,7 +9,7 @@
     {
       "slug": "abyss",
       "title": "심연의 군주",
-      "tagline": "디아블로 스타일 쿼터뷰 핵앤슬래시 액션 RPG. 직업 3종, 매번 새로 생성되는 12층 던전, 무작위 전리품, 보스 4종. 휴대폰은 가로 화면 추천.",
+      "tagline": "디아블로 스타일 쿼터뷰 핵앤슬래시 액션 RPG. 직업 10종(3종으로 시작, 7종 해금), 매번 새로 생성되는 12층 던전, 무작위 전리품, 보스 4종. 휴대폰은 가로 화면 전용.",
       "emoji": "🔥",
       "orientation": "landscape",
       "pwa": false,
@@ -48,9 +48,9 @@
     {
       "slug": "moonlit",
       "title": "달빛 퇴마단",
-      "tagline": "엄지 하나로 요괴 떼를 쓸어버리는 한 손 퇴마 MMORPG. 허브에서는 서버 없이 AI 동료 6명과 함께하는 오프라인 체험 월드로 실행됩니다.",
+      "tagline": "엄지 하나로 요괴 떼를 쓸어버리는 한 손 퇴마 MMORPG. 직업 10종(검객·궁사로 시작, 전직으로 해금). 허브에서는 서버 없이 AI 동료 6명과 함께하는 오프라인 체험 월드로 실행됩니다. 휴대폰은 가로 화면.",
       "emoji": "🌙",
-      "orientation": "any",
+      "orientation": "landscape",
       "pwa": false,
       "branch": "claude/nice-hypatia-xlm01y",
       "sourcePath": "mmorpg/ 폴더 (클라이언트 + 브라우저 안 오프라인 서버)",
