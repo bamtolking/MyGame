@@ -7,6 +7,7 @@ export type C2S =
   | { t: 'hello'; v: number; token: string; name: string; cls: ClassId }
   | { t: 'i'; s: number; x: number; y: number }
   | { t: 'ult' }
+  | { t: 'cls'; cls: ClassId }
   | { t: 'equip'; uid: number }
   | { t: 'unequip'; slot: GearSlot }
   | { t: 'sell'; uids: number[] }
@@ -24,9 +25,15 @@ export type C2S =
   | { t: 'ping'; n: number };
 
 export type Ev =
-  | { k: 'atk'; p: number; tx: number; ty: number; tid?: number }
+  | { k: 'atk'; p: number; tx: number; ty: number; tid?: number; pts?: number[] }
   | { k: 'tal'; p: number; tk: number; x: number; y: number; tx?: number; ty?: number; pts?: number[]; n?: number; r?: number }
   | { k: 'ult'; p: number; x: number; y: number; tx?: number; ty?: number }
+  /** A timed sub-hit of an ultimate (a thrust, a lightning strike, a rocket, a tiger dash): at (x, y), optionally to (x2, y2). */
+  | { k: 'uhit'; p: number; x: number; y: number; x2?: number; y2?: number }
+  /** Class change in town. */
+  | { k: 'cls'; p: number; c: ClassId }
+  /** A new class became available to this player (private). */
+  | { k: 'unlock'; c: ClassId }
   | { k: 'dmg'; id: number; v: number; cr?: 1; big?: 1 }
   | { k: 'hurt'; v: number }
   | { k: 'die'; id: number; t: number; x: number; y: number; el?: 1 }

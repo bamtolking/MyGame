@@ -1,6 +1,6 @@
 // Transport-agnostic game server: channels (worlds), sessions, persistence. Driven by tick() at 20 Hz.
 import { SNAP_EVERY, PROTOCOL_VERSION, CHANNEL_CAP } from '../shared/constants.ts';
-import { CLASSES, CLASS_IDS } from '../shared/data/classes.ts';
+import { CLASSES, STARTER_CLASSES, isClassId } from '../shared/data/classes.ts';
 import { newProfile, computeStats } from '../shared/data/items.ts';
 import type { ClassId, Profile } from '../shared/types.ts';
 import { generateMap } from '../shared/map.ts';
@@ -41,7 +41,7 @@ export class GameServer {
     if (prof && !validProfile(prof)) prof = null;
     if (!prof) {
       let name = cleanName(m.name); if (!name || /^ai\b/i.test(name)) name = '퇴마사' + Math.floor(1000 + Math.random() * 9000);
-      const cls: ClassId = CLASS_IDS.includes(m.cls) ? m.cls : 'sword';
+      const cls: ClassId = STARTER_CLASSES.includes(m.cls) ? m.cls : 'sword';
       prof = newProfile(name, CLASSES[cls], Math.floor(Date.now() / 1000));
     }
     const w = this.pickChannel(); if (!w) { s.kick('모든 채널이 가득 찼습니다. 잠시 후 다시 시도해주세요.'); return; }
@@ -83,5 +83,5 @@ export class GameServer {
 }
 function dedupe<T extends { id: number }>(a: T[]): T[] { const m = new Map<number, T>(); for (const x of a) m.set(x.id, x); return [...m.values()]; }
 function validProfile(p: Profile): boolean {
-  try { return p.v === 1 && typeof p.name === 'string' && CLASS_IDS.includes(p.cls) && p.level >= 1 && Array.isArray(p.inv) && Array.isArray(p.tals) && !!computeStats(p); } catch { return false; }
+  try { return p.v === 1 && typeof p.name === 'string' && isClassId(p.cls) && p.level >= 1 && Array.isArray(p.inv) && Array.isArray(p.tals) && !!computeStats(p); } catch { return false; }
 }

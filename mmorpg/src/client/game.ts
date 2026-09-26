@@ -16,6 +16,7 @@ import type { Transport } from './net.ts';
 import type { Sound } from './audio/engine.ts';
 import type { Settings } from './storage.ts';
 import { emoteText } from './render/art/icons.ts';
+import { CLASS_FX, type FxCtx } from './classfx/index.ts';
 
 interface Snap { tick: number; x: number; y: number; hp: number; f: number; face: number }
 interface Ent extends REnt { snaps: Snap[]; lastTick: number }
@@ -26,6 +27,8 @@ export interface GameHooks {
   onWelcome(): void; onMe(changed: Set<string>): void; onRoster(): void; onChat(name: string, text: string, sys: boolean, id: number): void;
   onAnn(text: string, kind: string): void; onToast(text: string, color?: string, big?: boolean): void; onBoss(b: BossInfo | null): void; onWb(w: WorldBossState): void;
   onError(msg: string, fatal: boolean): void; onLevel(level: number): void; onHurt(): void; onUlt(cls: ClassId): void;
+  /** A new class became available to this character. */
+  onUnlock?(cls: ClassId): void;
 }
 
 export class Game {
@@ -68,7 +71,7 @@ export class Game {
         this.r = new Renderer(this.stage, this.map, this.set.quality); this.r.showNames = this.set.names;
         this.fx = new FxSystem({ entPos: (k, id) => this.entPos(k, id), serverTime: () => this.serverTime(), me: () => this.hasPos ? { x: this.predX + this.corrX, y: this.predY + this.corrY } : null, solidAt: (x, y) => !isWalkable(this.map, x, y), players: () => this.visiblePlayers() }, this.r.art);
         this.r.fx = this.fx; this.fx.shakeOn = this.set.shake; this.r.setQuality(this.set.quality);
-        this.r.art.prewarm([m.me.cls, ...(['sword', 'archer', 'shaman'] as ClassId[]).filter(c => c !== m.me.cls)], MONSTERS.filter(d => d.zone === (m.me.zone || 1)).map(d => d.key));
+        this.r.art.prewarm([m.me.cls], MONSTERS.filter(d => d.zone === (m.me.zone || 1)).map(d => d.key));
         this.players.clear(); this.mons.clear(); this.pending = []; this.hasPos = false; this.evq = []; this.visLag = 0;
         this.wb = m.wb; this.ready = true; this.hooks.onWelcome(); this.hooks.onWb(this.wb); break;
       }
@@ -118,7 +121,7 @@ export class Game {
       this.predX = x; this.predY = y; this.prevX = x; this.prevY = y;
     }
   }
-  private speed(): number { const st = this.me.stats; return (st?.move ?? 150) * ((this.me.ultT ?? 0) > 0 && this.me.cls === 'sword' ? 1.3 : 1); }
+  private speed(): number { const st = this.me.stats; return (st?.move ?? 150) * ((this.me.ultT ?? 0) > 0 ? CLASSES[this.me.cls]?.ultMove ?? 1 : 1); }
 
   // ---------- per-frame ----------
   frame(now: number): void {
@@ -208,35 +211,27 @@ export class Game {
     switch (e.k) {
       case 'tele': this.fx.telegraph({ sh: e.sh, x: e.x, y: e.y, r: e.r, x2: e.x2 ?? 0, y2: e.y2 ?? 0, due: tick * DT + e.d, s: e.s ?? 0 }); if (this.near(e.x, e.y, 520)) this.snd.play('tele', 0.8, e.x, e.y); return;
       case 'proj': this.fx.enemyProj(e.x, e.y, e.vx, e.vy, e.r, e.life, e.s, tick * DT); if (this.near(e.x, e.y, 480)) this.snd.play('enemy_shot', 0.4, e.x, e.y); return;
-      case 'dmg': case 'hurt': case 'loot': case 'toast': case 'quest': this.playEv(e); return;
+      case 'dmg': case 'hurt': case 'loot': case 'toast': case 'quest': case 'unlock': this.playEv(e); return;
     }
-    if ('p' in e && e.p === this.myId && (e.k === 'atk' || e.k === 'tal' || e.k === 'ult')) { this.playEv(e); return; }
+    if ('p' in e && e.p === this.myId && (e.k === 'atk' || e.k === 'tal' || e.k === 'ult' || e.k === 'uhit')) { this.playEv(e); return; }
     this.evq.push({ tick, e });
   }
   private near(x: number, y: number, r: number): boolean { const m = this.myPos(); return (m.x - x) ** 2 + (m.y - y) ** 2 < r * r; }
+  /** Context handed to the per-class effect modules. `count` advances the caster's attack counter. */
+  private fxCtx(id: number, cls: ClassId, x: number, y: number, count: boolean): FxCtx {
+    const mine = id === this.myId; const n = this.swing.get(id) ?? 0; if (count) this.swing.set(id, n + 1);
+    const ult = mine ? (this.me.ultT ?? 0) > 0 : ((this.players.get(id)?.f ?? 0) & PF.WHIRL) !== 0;
+    return { fx: this.fx, snd: this.snd, art: this.r.art, id, mine, vol: mine ? 1 : 0.35, x, y, col: hexCol(CLASSES[cls].color), ult, n, near: (a, b, r) => this.near(a, b, r), entPos: (k, i) => this.entPos(k, i) };
+  }
 
   private playEv(e: Ev): void {
     const fx = this.fx, snd = this.snd, A = this.r.art;
     switch (e.k) {
       case 'atk': {
-        const p = this.players.get(e.p); const r = this.roster.get(e.p); if (!p || !r) return; const mine = e.p === this.myId; const vol = mine ? 1 : 0.35;
+        const p = this.players.get(e.p); const r = this.roster.get(e.p); if (!p || !r) return;
         const ang = Math.atan2(e.ty - p.y, e.tx - p.x); p.face = ((ang / (Math.PI * 2) * 255) + 256) % 256;
-        this.r.anim.attack(e.p, r.cls === 'sword' ? 0.26 : 0.3);
-        const to = e.tid ? { kind: 'm' as const, id: e.tid } : { x: e.tx, y: e.ty };
-        if (r.cls === 'sword') {
-          const dir = (this.swing.get(e.p) ?? 1) * -1; this.swing.set(e.p, dir);
-          fx.slash(p.x, p.y - 18, ang, CLASSES.sword.range, 0x9fd0ff, false, dir); snd.play(dir > 0 ? 'slash' : 'slash2', vol, p.x, p.y);
-          if (mine) fx.zoomPunch(0.004);
-        } else if (r.cls === 'archer') {
-          fx.homing({ x: p.x + Math.cos(ang) * 16, y: p.y - 26 }, to, 1100, 'arrow', q => { fx.sparks(q.x, q.y, 5, 0xfff2c0, 300, ang, 1.3, 8); fx.glow(q.x, q.y, 24, 0xfff0c0, 0.12); if (mine) snd.play('hit_arrow', 0.7, q.x, q.y); });
-          snd.play('bow', vol, p.x, p.y);
-        } else {
-          fx.homing({ x: p.x + 10, y: p.y - 32 }, to, 660, 'paper', q => {
-            fx.ring(q.x, q.y, 8, 62, 0.32, 0xff7ab8, true); fx.glow(q.x, q.y, 56, 0xff7ab8, 0.24); fx.burst(q.x, q.y, 9, [0xff7ab8, 0xffe07a, 0xffffff], 180, 7, 0.4);
-            fx.light(q.x, q.y, 120, 0xff7ab8, 0.8, 0.25); if (mine) { fx.wave(q.x, q.y, 70, 6, 0.35); snd.play('hit_magic', 0.6, q.x, q.y); }
-          });
-          snd.play('cast', vol, p.x, p.y);
-        }
+        const cf = CLASS_FX[r.cls] ?? CLASS_FX.sword; this.r.anim.attack(e.p, cf.atkDur);
+        cf.atk(this.fxCtx(e.p, r.cls, p.x, p.y, true), e, ang);
         return;
       }
       case 'tal': {
@@ -278,23 +273,24 @@ export class Game {
         return;
       }
       case 'ult': {
-        const r = this.roster.get(e.p); const cls = r?.cls ?? 'sword'; const mine = e.p === this.myId; const col = hexCol(CLASSES[cls].color);
+        const r = this.roster.get(e.p); const cls = r?.cls ?? 'sword'; const mine = e.p === this.myId; const col = hexCol(CLASSES[cls].color); const cf = CLASS_FX[cls] ?? CLASS_FX.sword;
         snd.play('ult_' + cls, mine ? 1 : 0.45, e.x, e.y);
         if (mine) { snd.duck(0.5, 1.2); fx.flash(0xffffff, 0.35); fx.shake(0.5); fx.stop(0.09, true); fx.zoomPunch(0.07); fx.chroma(0.014); fx.wave(e.x, e.y - 20, 380, 20, 0.8); this.hooks.onUlt(cls); }
-        fx.pillar(e.x, e.y, col, 0.9, 80, 380); fx.sigil(e.x, e.y, cls === 'shaman' ? 300 : 170, col, 1.4, 'sigil', 1.2, mine ? 0.8 : 0.4); fx.ring(e.x, e.y, 20, cls === 'shaman' ? 330 : 200, 0.7, col, true, 0); fx.light(e.x, e.y, 420, col, 1.2, 0.8);
-        if (cls === 'sword') fx.burst(e.x, e.y - 20, 30, [0x9fd0ff, 0xffffff], 520, 9, 0.5, 'spark', 0, 0.004);
-        if (cls === 'archer' && e.tx != null && e.ty != null) {
-          const tx = e.tx, ty = e.ty; fx.sigil(tx, ty, 165, 0xa6ff9e, 2.7, 'runes', 1.5, 0.8);
-          for (let v = 0; v < 8; v++) fx.later(0.3 + v * 0.25, () => {
-            for (let k = 0; k < 7; k++) { const x = tx + rnd(-150, 150), y = ty + rnd(-150, 150); fx.homing({ x: x - 70, y: y - 420 }, { x, y }, 1500, 'rain', q => { fx.sparks(q.x, q.y, 3, 0xc8ffc0, 220, -Math.PI / 2, 1.2, 7); fx.decal(q.x, q.y, 'crack', 26, 0x1a2a10, 1.2, 0.35); }); }
-            if (mine && v % 2 === 0) snd.play('bow', 0.6);
-          });
-        }
-        if (cls === 'shaman') fx.later(0.35, () => {
-          fx.ring(e.x, e.y, 30, 340, 0.55, 0xffe07a, false, 0); fx.glow(e.x, e.y - 30, 240, 0xffe07a, 0.5, mine ? 0.32 : 0.16); fx.burst(e.x, e.y - 20, mine ? 44 : 20, [0xffe07a, 0xff7ab8, 0xffffff], 460, 8, 0.8);
-          fx.debris(e.x, e.y - 20, 24, 'petal', [0xff9ac8, 0xffe07a, 0xffffff], 320, 8, 1.4); fx.stamp(e.x, e.y - 50, 110, 0.9);
-          if (mine) { fx.shake(0.6); fx.wave(e.x, e.y, 360, 26, 0.9); fx.flash(0xfff0c0, 0.3); } snd.play('boom', 0.8, e.x, e.y);
-        });
+        const R = cf.ultR ?? 170;
+        fx.pillar(e.x, e.y, col, 0.9, 80, 380); fx.sigil(e.x, e.y, R, col, 1.4, 'sigil', 1.2, mine ? 0.8 : 0.4); fx.ring(e.x, e.y, 20, R + 30, 0.7, col, true, 0); fx.light(e.x, e.y, 420, col, 1.2, 0.8);
+        cf.ult(this.fxCtx(e.p, cls, e.x, e.y, false), e);
+        return;
+      }
+      case 'uhit': {
+        const r = this.roster.get(e.p); const cls = r?.cls ?? 'sword'; const p = this.players.get(e.p);
+        CLASS_FX[cls]?.uhit?.(this.fxCtx(e.p, cls, p?.x ?? e.x, p?.y ?? e.y, false), e);
+        return;
+      }
+      case 'cls': {
+        const p = this.players.get(e.p); const x = p?.x ?? 0, y = p?.y ?? 0; const col = hexCol(CLASSES[e.c].color);
+        fx.pillar(x, y, col, 1.3, 64, 420); fx.sigil(x, y, 120, col, 1.6, 'sigil', 1.8, 0.7); fx.ring(x, y, 10, 150, 0.8, col, true, 0);
+        fx.burst(x, y - 30, 26, [col, 0xffffff], 260, 8, 0.9, 'star'); fx.light(x, y, 300, col, 1.2, 1);
+        if (e.p === this.myId) { snd.play('cls_change'); snd.duck(0.4, 1.2); fx.flash(col, 0.18); fx.wave(x, y, 240, 12, 0.7); this.r.art.prewarm([e.c], []); }
         return;
       }
       case 'dmg': {
@@ -384,6 +380,7 @@ export class Game {
       case 'emote': { const p = this.players.get(e.p); if (p) { p.bubble = { text: emoteText(e.e), until: performance.now() + 2600 }; if (this.near(p.x, p.y, 500)) snd.play('emote'); } return; }
       case 'quest': this.hooks.onToast(e.title, '#ffe066', true); snd.play('quest'); return;
       case 'toast': this.hooks.onToast(e.text, e.c); return;
+      case 'unlock': snd.play('cls_change', 0.8); this.hooks.onUnlock?.(e.c); return;
     }
   }
   resize(): void { this.r?.resize(); }

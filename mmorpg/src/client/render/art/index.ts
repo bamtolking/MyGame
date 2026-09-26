@@ -2,8 +2,9 @@
 // and rebuilt when it changes; effect textures have a fixed resolution. New sprites are baked within a per-frame budget.
 import type { ClassId } from '../../../shared/types.ts';
 import { type Tex, type PostOpts, makeTex } from './core.ts';
-import { FRAMES, drawChar, drawNpc, CHAR_W, CHAR_H, CHAR_FOOT } from './chars.ts';
+import { LOOKS, drawChar, drawNpc, CHAR_W, CHAR_H, CHAR_FOOT } from './chars.ts';
 import { MON_ART } from './mons.ts';
+import { FRAME_NAMES, type Pose } from './rig.ts';
 import { PROP_ART, drawHouse } from './props.ts';
 import { FX_ART } from './fxtex.ts';
 
@@ -34,8 +35,8 @@ export class Art {
   private scaled(t: Tex, ws: number): Tex { t.w *= ws; t.h *= ws; return t; }
 
   player(cls: ClassId, frame: string): Tex {
-    const f = FRAMES[cls][frame] ? frame : 'idle0'; const key = `pl:${cls}:${f}`;
-    return this.bake(key, () => this.scaled(makeTex(key, CHAR_W, CHAR_H, 0.5, CHAR_FOOT / CHAR_H, this.px * CHAR_WS, c => drawChar(c, cls, FRAMES[cls][f]), CHAR_POST), CHAR_WS), () => this.spr.get(`pl:${cls}:idle0`));
+    const frames = (LOOKS[cls] ?? LOOKS.sword).frames as Record<string, Pose>; const f = frames[frame] ? frame : 'idle0'; const key = `pl:${cls}:${f}`;
+    return this.bake(key, () => this.scaled(makeTex(key, CHAR_W, CHAR_H, 0.5, CHAR_FOOT / CHAR_H, this.px * CHAR_WS, c => drawChar(c, cls, frames[f]), CHAR_POST), CHAR_WS), () => this.spr.get(`pl:${cls}:idle0`));
   }
   npc(kind: string, f: number): Tex {
     const key = `npc:${kind}:${f}`;
@@ -62,7 +63,7 @@ export class Art {
   }
   /** Queue sprites to bake in idle time (a few ms per frame). */
   prewarm(classes: ClassId[], mons: string[]): void {
-    for (const cls of classes) for (const f of Object.keys(FRAMES[cls])) this.queue.push(() => { this.player(cls, f); });
+    for (const cls of classes) for (const f of FRAME_NAMES) this.queue.push(() => { this.player(cls, f); });
     for (const k of mons) { const a = MON_ART[k]; if (!a) continue; for (let f = 0; f < a.frames; f++) for (const s of MON_STATES[k] ?? 'm') this.queue.push(() => { this.mon(k, f, s); }); }
   }
   pending(): number { return this.queue.length; }

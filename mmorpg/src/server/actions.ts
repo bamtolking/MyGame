@@ -1,12 +1,13 @@
 // Validated player commands (inventory, talismans, shops, travel, chat). Never trust the client.
 import type { GearSlot, TalKind } from '../shared/types.ts';
+import { CLASSES, isClassId, classUnlocked } from '../shared/data/classes.ts';
 import { TAL_SLOTS, TAL_MAX_LV, NAME_MAX } from '../shared/constants.ts';
 import { enhanceCost, MAX_PLUS, sellValue, slotsUnlocked, talBuyCost, TAL_SHARD_COST, GEAR_SLOTS } from '../shared/data/items.ts';
 import { TAL_KINDS, TALS } from '../shared/data/talismans.ts';
 import { EMOTES } from '../shared/protocol.ts';
 import type { World } from './world.ts';
 import type { Player } from './entities.ts';
-import { giveGold, questEvent, questCheckState } from './progress.ts';
+import { giveGold, giveTal, questEvent, questCheckState, unlockProgress } from './progress.ts';
 import { useUlt } from './combat.ts';
 import { BotBrain } from './bots.ts';
 
@@ -17,6 +18,19 @@ export function doAction(w: World, p: Player, msg: any): ActResult {
   const pr = p.prof;
   switch (msg.t) {
     case 'ult': return useUlt(w, p) ? null : '';
+    case 'cls': {
+      const c = msg.cls; if (!isClassId(c)) return '없는 직업입니다'; if (c === pr.cls) return null;
+      if (!classUnlocked(c, unlockProgress(pr))) return `아직 잠긴 직업입니다 — ${CLASSES[c].unlock.text}`;
+      if (!inTown(p)) return '전직은 마을에서만 할 수 있습니다';
+      if (p.down) return '쓰러진 상태에서는 전직할 수 없습니다';
+      if (w.time - p.clsT < 3) return '잠시 후 다시 전직할 수 있습니다';
+      p.clsT = w.time; pr.cls = c; p.ultT = 0; p.ultTick = 0; p.atkT = 0.6; p.invVer++; w.recompute(p);
+      w.emit({ k: 'cls', p: p.id, c }, p.x, p.y);
+      w.toast(p, `전직 완료: ${CLASSES[c].name}`, CLASSES[c].color);
+      const tried = pr.tried ?? (pr.tried = []);
+      if (!tried.includes(c)) { tried.push(c); giveTal(w, p, CLASSES[c].startTal); }
+      return null;
+    }
     case 'equip': {
       const i = pr.inv.findIndex(x => x.uid === msg.uid); if (i < 0) return '없는 장비입니다';
       const it = pr.inv[i]; const old = pr.equip[it.slot]; pr.inv.splice(i, 1); pr.equip[it.slot] = it; if (old) pr.inv.push(old);

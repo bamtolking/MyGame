@@ -1,15 +1,16 @@
 // Bottom-sheet panels. Each builder returns fresh DOM from the latest `me` state.
-import type { Item, GearSlot, TalKind, Tal } from '../../shared/types.ts';
+import type { Item, GearSlot, TalKind, Tal, ClassId } from '../../shared/types.ts';
 import { itemName, computeStats, RARITY_NAMES, RARITY_COLORS, SLOT_NAMES, STAT_NAMES, baseStat, enhanceCost, MAX_PLUS, sellValue, tierOf, GEAR_SLOTS, talBuyCost, TAL_SHARD_COST, slotsUnlocked } from '../../shared/data/items.ts';
 import { TALS, TAL_KINDS, talDesc } from '../../shared/data/talismans.ts';
 import { MAIN_QUESTS, BOUNTY_N } from '../../shared/data/quests.ts';
 import { ZONES } from '../../shared/data/zones.ts';
-import { CLASSES } from '../../shared/data/classes.ts';
+import { CLASSES, CLASS_IDS, classUnlocked, type ClassDef } from '../../shared/data/classes.ts';
 import { MONSTERS } from '../../shared/data/monsters.ts';
 import { TAL_SLOT_LEVELS, TILE, TAL_MAX_LV } from '../../shared/constants.ts';
 import { EMOTES } from '../../shared/protocol.ts';
 import { fmtNum } from '../../shared/math.ts';
-import { h } from './dom.ts';
+import { h, type Child } from './dom.ts';
+import { appSize } from './orient.ts';
 import { itemIcon, talIcon, classIcon, npcIcon, monIcon } from '../render/art/icons.ts';
 import type { AppApi } from './app.ts';
 
@@ -126,7 +127,8 @@ export function questPanel(a: AppApi): HTMLElement {
 
 // ---------------- 지도 ----------------
 export function mapPanel(a: AppApi): HTMLElement {
-  const g = a.game(); const me = a.me(); const map = g.map; const size = Math.min(window.innerWidth - 32, 520);
+  // fit the side sheet (see #sheet in style.css): its width and the landscape height
+  const g = a.game(); const me = a.me(); const map = g.map; const [aw, ah] = appSize(); const size = Math.round(Math.max(200, Math.min(520, Math.min(460, aw * 0.72) - 32, ah - 76)));
   const cv = h('canvas', { width: size * 2, height: size * 2, style: { width: size + 'px', height: size + 'px' }, class: 'bigmap' }) as HTMLCanvasElement;
   const c = cv.getContext('2d')!; c.scale(2 * size / map.w, 2 * size / map.h); c.imageSmoothingEnabled = true;
   c.drawImage(g.r.terrain.miniMap, 0, 0);
@@ -173,4 +175,56 @@ export function codexPanel(): HTMLElement {
   return h('div', {}, h('p', { class: 'hint' }, '달빛 고을에 출몰하는 요괴들'), ...ZONES.filter(z => z.id >= 1).map(z => h('div', { class: 'card' }, h('h3', {}, `${z.name} ${z.id <= 4 ? `· Lv${z.minLv}~${z.maxLv}` : ''}`), h('p', {}, z.desc),
     h('div', { class: 'codex' }, ...MONSTERS.map((m, i) => ({ m, i })).filter(({ m }) => m.zone === z.id).map(({ m }) => h('div', { class: 'codexrow' }, h('img', { src: monIcon(m.key) }), h('div', {}, h('b', {}, m.name, m.beh === 'boss' ? ' (보스)' : ''), h('small', { class: 'block' }, m.desc))))))),
     h('div', { class: 'card' }, h('h3', {}, '황금 도깨비'), h('div', { class: 'codexrow' }, h('img', { src: monIcon('goldgob') }), h('small', {}, MONSTERS.find(m => m.key === 'goldgob')!.desc))));
+}
+
+// ---------------- 직업 (class cards, detail, 전직소) ----------------
+/** Stat bars relative to the other classes (min → 18 %, max → 100 %). */
+const CSTATS: [string, (c: ClassDef) => number][] = [['체력', c => c.hp], ['공격', c => c.atk * c.aspd], ['사거리', c => c.range], ['이동', c => c.move]];
+function classStats(id: ClassId): HTMLElement {
+  return h('div', { class: 'cstats' }, ...CSTATS.map(([label, f]) => {
+    const vs = CLASS_IDS.map(k => f(CLASSES[k])); const lo = Math.min(...vs), hi = Math.max(...vs); const p = 0.18 + 0.82 * (f(CLASSES[id]) - lo) / (hi - lo || 1);
+    return h('div', { class: 'cstat' }, h('small', {}, label), h('i', {}, h('b', { style: { width: `${Math.round(p * 100)}%` } })));
+  }));
+}
+/** Compact class card (character creation grid). */
+export function classCard(id: ClassId, o: { sel: boolean; peek: boolean; locked: boolean; onclick: () => void }): HTMLElement {
+  const c = CLASSES[id];
+  return h('button', { class: `classcard${o.sel ? ' sel' : ''}${o.peek ? ' peek' : ''}${o.locked ? ' locked' : ''}`, 'data-cls': id, style: { '--c': c.color }, onclick: o.onclick },
+    h('span', { class: 'glyph' }, c.glyph), o.locked ? h('span', { class: 'lock' }, '🔒') : null,
+    h('img', { src: classIcon(id), alt: '' }), h('b', {}, c.name), h('small', { class: 'role' }, o.locked ? `해금: ${c.unlock.text}` : c.role));
+}
+/** Full description of one class: portrait, role, description, ultimate and stat bars. */
+export function classDetail(id: ClassId, locked: boolean, ...extra: Child[]): HTMLElement {
+  const c = CLASSES[id];
+  return h('div', { class: `clsdetail${locked ? ' locked' : ''}`, style: { '--c': c.color } },
+    h('div', { class: 'cdhead' }, h('div', { class: 'cdicon' }, h('img', { src: classIcon(id, 96), alt: '' })),
+      h('div', { class: 'grow' }, h('b', {}, c.name, h('small', {}, c.eng)), h('small', { class: 'role' }, c.role))),
+    h('p', { class: 'desc' }, c.desc),
+    h('div', { class: 'cdult' }, h('span', { class: 'glyph' }, c.glyph), h('div', {}, h('b', {}, `필살기 · ${c.ultName}`), h('small', {}, c.ultDesc))),
+    classStats(id), ...extra);
+}
+export const lockBox = (id: ClassId): HTMLElement => h('div', { class: 'lockbox' }, h('b', {}, `🔒 해금: ${CLASSES[id].unlock.text}`), h('small', {}, '캐릭터를 키우면 열립니다 — 마을 신당 무당에게서 전직'));
+
+/** Name + 로/으로 (ㄹ-final and open syllables take 로). */
+const ro = (w: string) => { const k = (w.charCodeAt(w.length - 1) - 0xac00) % 28; return w + (k === 0 || k === 8 ? '로' : '으로'); };
+/** 직업 · 전직소: every class with its state; the selected one can be switched to (in town). */
+export function clsPanel(a: AppApi, pick: ClassId | null): HTMLElement {
+  const me = a.me(); const prog = { level: me.level, bosses: me.lstats.bosses, worldBoss: me.lstats.worldBoss };
+  const open = (id: ClassId) => id === me.cls || classUnlocked(id, prog); const fresh = a.newClasses(); const sel = pick ?? me.cls;
+  const list = h('div', { class: 'clslist' }, ...CLASS_IDS.map(id => {
+    const c = CLASSES[id]; const ok = open(id); const cur = id === me.cls;
+    return h('button', { class: `clsrow${id === sel ? ' sel' : ''}${ok ? '' : ' locked'}`, 'data-cls': id, style: { '--c': c.color }, onclick: () => a.openSheet('cls', id) },
+      h('img', { src: classIcon(id), alt: '' }),
+      h('span', { class: 'nm' }, h('b', {}, c.name, fresh.has(id) ? h('span', { class: 'newchip' }, 'NEW') : null), h('small', {}, c.role)),
+      h('small', { class: `st ${cur ? 'cur' : ok ? 'ok' : 'lock'}` }, cur ? '현재 직업' : ok ? '전직 가능' : `🔒 ${c.unlock.text}`));
+  }));
+  const ok = open(sel); const cur = sel === me.cls;
+  const act = cur ? h('button', { class: 'wide', disabled: true }, '현재 직업입니다')
+    : !ok ? lockBox(sel)
+    : h('div', {}, h('button', { class: 'primary wide cls-go', disabled: me.zone !== 0, onclick: () => a.send({ t: 'cls', cls: sel }) }, `${ro(CLASSES[sel].name)} 전직하기`),
+      me.zone !== 0 ? h('small', { class: 'hint block center' }, '마을에서만 전직할 수 있어요') : null);
+  return h('div', { class: 'clsgrid' },
+    h('div', {}, h('div', { class: 'npc' }, h('img', { src: npcIcon('priest'), alt: '' }), h('div', {}, h('b', {}, '신당 무당 월선'), h('p', {}, '"새 길이 열렸군요. 걸어갈 길을 고르세요."'))),
+      h('small', { class: 'hint block' }, `Lv${me.level} · 보스 토벌 ${me.lstats.bosses} · 불가사리 ${me.lstats.worldBoss}`), list),
+    h('div', { class: 'clsside' }, classDetail(sel, !ok, act)));
 }

@@ -7,6 +7,7 @@ import { Rng } from '../shared/rng.ts';
 import { MONSTERS, hpMul, dmgMul, isBossType } from '../shared/data/monsters.ts';
 import { ZONES, TOWN } from '../shared/data/zones.ts';
 import { computeStats } from '../shared/data/items.ts';
+import { CLASSES, ATK } from '../shared/data/classes.ts';
 import type { Profile, RosterEntry } from '../shared/types.ts';
 import type { Ev, S2C } from '../shared/protocol.ts';
 import type { Player, Monster, Hazard, EProj, Sched, WorldEvent } from './entities.ts';
@@ -29,6 +30,8 @@ export class World {
   events: WorldEvent[] = []; broadcast: S2C[] = [];
   rosterAdd: RosterEntry[] = []; rosterDel: number[] = [];
   brains = new Map<number, BotBrain>();
+  /** Standing musicians and guardians this tick (their passive auras). */
+  musicians: Player[] = []; guardians: Player[] = [];
   lairs: { mon: number; respawnT: number }[];
   wb: WorldBoss; goldGobT = 150; perf = { tickMs: 0, maxMs: 0 };
   deathLog: { by: string; lv: number; zone: number; bot: boolean; t: number }[] = [];
@@ -51,7 +54,7 @@ export class World {
       id, token, prof, stats, bot, x, y, face: Math.PI / 2, moving: false, ix: 0, iy: 0,
       hp: stats.maxHp, shield: 0, shieldT: 0, down: false, downT: 0, reviveP: 0, safeT: 3,
       inputs: [], lastSeq: 0, inBudget: 4, atkT: 0.5, cds: new Array(TAL_SLOTS).fill(0.5), bladeHits: new Map(), auraT: 0, lastAtkT: -99,
-      ult: 0, ultT: 0, ultTick: 0, lastHurtT: -99, hurtFlagT: 0, zone: zoneAt(this.map, x, y), wbDmg: 0, wbT: 0,
+      ult: 0, ultT: 0, ultTick: 0, buffT: 0, buffAspd: 0, clsT: -99, lastHurtT: -99, hurtFlagT: 0, zone: zoneAt(this.map, x, y), wbDmg: 0, wbT: 0,
       invVer: 1, talVer: 1, questVer: 1, statVer: 1, priv: [], dmgAcc: new Map(),
       chatT: -99, actT: 0, actBudget: 20, tpT: 0, surgeT: 60 + this.rng.range(0, 40), saveT: 60, joinedT: this.time, online: true, lastHitBy: '', auto: false, volleys: new Map(),
     };
@@ -99,7 +102,7 @@ export class World {
     const maxHp = Math.round(def.hp * hpMul(lvl) * (elite ? 5 : 1) * (o.hpScale ?? 1));
     const m: Monster = {
       id, t, def, x, y, vx: 0, vy: 0, hp: maxHp, maxHp, lv: lvl, elite, r: def.r * (elite ? 1.35 : 1), dmg: def.dmg * dmgMul(lvl) * (elite ? 1.5 : 1),
-      st: 'idle', stT: 0, tgt: 0, retT: this.rng.range(0, 0.5), atkT: this.rng.range(0.3, 1), slowT: 0, slowMul: 1, hitT: 0,
+      st: 'idle', stT: 0, tgt: 0, retT: this.rng.range(0, 0.5), atkT: this.rng.range(0.3, 1), slowT: 0, slowMul: 1, stunT: 0, hitT: 0,
       hx: x, hy: y, farT: 0, left: false, lifeT: 0, contrib: new Map(), boss: null, summon: !!o.summon, dead: false, dvx: 0, dvy: 0, lairIdx: o.lair ?? -1,
     };
     if (isBossType(t)) m.boss = { patT: 2.5, seq: 0, enraged: false, castT: 0, cast: '', scale: 1, summons: 0, hideT: 0, dashT: 0, dvx: 0, dvy: 0, engagedT: 0 };
@@ -119,7 +122,8 @@ export class World {
     if (p.down || p.safeT > 0 || !this.players.has(p.id)) return;
     if (src) p.lastHitBy = src;
     let dmg = raw * (1 - p.stats.dr) + pctOfMax * p.stats.maxHp * (1 - p.stats.dr * 0.5);
-    if (p.ultT > 0 && p.prof.cls === 'sword') dmg *= 0.5;
+    const ud = CLASSES[p.prof.cls].ultDr; if (p.ultT > 0 && ud) dmg *= ud;
+    if (this.guardians.length && this.guardians.some(g => g !== p && (g.x - p.x) ** 2 + (g.y - p.y) ** 2 < ATK.guardianAura ** 2)) dmg *= 1 - ATK.guardianDr;
     dmg = Math.max(1, Math.round(dmg));
     if (p.shield > 0) { const a = Math.min(p.shield, dmg); p.shield -= a; dmg -= a; }
     p.lastHurtT = this.time; p.hurtFlagT = 0.25;
@@ -132,7 +136,7 @@ export class World {
     const got = Math.round(p.hp - before); if (show && got >= 1) this.emit({ k: 'heal', p: p.id, v: got }, p.x, p.y);
   }
   downPlayer(p: Player): void {
-    p.hp = 0; p.down = true; p.downT = DOWN_TIME; p.reviveP = 0; p.shield = 0; p.ultT = 0; p.inputs.length = 0;
+    p.hp = 0; p.down = true; p.downT = DOWN_TIME; p.reviveP = 0; p.shield = 0; p.ultT = 0; p.buffT = 0; p.inputs.length = 0;
     p.prof.stats.deaths++; p.questVer++;
     if (this.deathLog.length < 5000) this.deathLog.push({ by: p.lastHitBy, lv: p.prof.level, zone: p.zone, bot: p.bot, t: this.time });
     this.emit({ k: 'down', p: p.id }, p.x, p.y);
@@ -158,6 +162,8 @@ export class World {
     this.tick++; this.time = this.tick * DT;
     for (const [id, b] of this.brains) { const p = this.players.get(id); if (p) b.update(this, p); else this.brains.delete(id); }
     for (const p of this.players.values()) this.movePlayer(p);
+    this.musicians.length = 0; this.guardians.length = 0;
+    for (const p of this.players.values()) if (!p.down) { if (p.prof.cls === 'musician') this.musicians.push(p); else if (p.prof.cls === 'guardian') this.guardians.push(p); }
     this.spatial.rebuild(this.mons.values());
     for (const p of this.players.values()) this.updatePlayer(p);
     for (const p of this.players.values()) if (!p.down) playerCombat(this, p);
@@ -178,7 +184,7 @@ export class World {
       const inp = p.inputs.shift()!; p.inBudget--; n++; p.lastSeq = inp.s;
       if (p.down) continue;
       p.ix = inp.x; p.iy = inp.y;
-      const speed = p.stats.move * (p.ultT > 0 && p.prof.cls === 'sword' ? 1.3 : 1);
+      const speed = p.stats.move * (p.ultT > 0 ? CLASSES[p.prof.cls].ultMove ?? 1 : 1);
       const [nx, ny] = stepPlayer(this.map, p.x, p.y, inp.x, inp.y, speed, PLAYER_R);
       if (nx !== p.x || ny !== p.y) moved = true;
       p.x = nx; p.y = ny;
@@ -207,6 +213,15 @@ export class World {
     if (z === TOWN) this.healPlayer(p, p.stats.maxHp * 0.15 * DT, false);
     else if (idle > 5) this.healPlayer(p, p.stats.maxHp * 0.02 * DT, false);
     if (p.ultT > 0) p.ultT -= DT;
+    if (p.buffT > 0) p.buffT -= DT;
+  }
+  /** Attack-speed multiplier from auras and buffs (musician passive/ult, assassin ult). */
+  aspdMul(p: Player): number {
+    let k = 1;
+    if (this.musicians.some(q => (q.x - p.x) ** 2 + (q.y - p.y) ** 2 < ATK.musicianAura ** 2)) k += ATK.musicianAspd;
+    if (p.buffT > 0) k += p.buffAspd;
+    if (p.ultT > 0 && p.prof.cls === 'assassin') k += 0.5;
+    return k;
   }
   private runSched(): void {
     if (!this.sched.length) return;

@@ -1,12 +1,12 @@
 // Dev contact sheet: every sprite, monster frame/state, prop, FX texture and UI icon on one page (npm run dev → /dev/art.html).
 import { Art } from '../src/client/render/art/index.ts';
-import { FRAMES } from '../src/client/render/art/chars.ts';
+import { FRAME_NAMES } from '../src/client/render/art/rig.ts';
+import { CLASS_IDS } from '../src/shared/data/classes.ts';
 import { MON_ART } from '../src/client/render/art/mons.ts';
 import { PROP_ART } from '../src/client/render/art/props.ts';
 import { FX_ART } from '../src/client/render/art/fxtex.ts';
 import { classIcon, monIcon, npcIcon, talIcon, itemIcon } from '../src/client/render/art/icons.ts';
 import { TAL_KINDS } from '../src/shared/data/talismans.ts';
-import type { ClassId } from '../src/shared/types.ts';
 import type { Tex } from '../src/client/render/art/core.ts';
 
 const Z = Number(new URLSearchParams(location.search).get('z') ?? 2);
@@ -21,7 +21,8 @@ const put = (t: Tex, name: string, scale = 1) => {
   c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillRect(x, y, w, h);
   c.drawImage(t.cv, x, y, w, h); c.fillStyle = '#f55'; c.fillRect(x + t.ax * w - 2, y + t.ay * h - 1, 4, 2); label(name); x += w + 12; rowH = Math.max(rowH, h);
 };
-for (const cls of ['sword', 'archer', 'shaman'] as ClassId[]) { for (const f of Object.keys(FRAMES[cls])) put(art.player(cls, f), `${cls} ${f}`, 1.5); nl(); }
+const only = new URLSearchParams(location.search).get('cls');
+for (const cls of CLASS_IDS.filter(c => !only || c === only)) { for (const f of FRAME_NAMES) put(art.player(cls, f), `${cls} ${f}`, only ? 3 : 1.5); nl(); }
 for (const k of ['smith', 'talshop', 'priest', 'board']) for (let f = 0; f < 3; f++) put(art.npc(k, f), `${k}${f}`, 1.5);
 nl();
 for (const k of Object.keys(MON_ART)) { const a = MON_ART[k]; for (let f = 0; f < a.frames; f++) put(art.mon(k, f, 'm'), `${k} ${f}`); put(art.mon(k, 0, 'w'), `${k} w`); put(art.mon(k, 0, 'd'), `${k} d`); }
@@ -31,7 +32,7 @@ nl(); put(art.house(4, 3, 0), 'house 4x3'); put(art.house(3, 2, 1), 'house 3x2')
 nl(); c.fillStyle = '#000'; c.fillRect(0, y - 20, W, 700);
 for (const k of Object.keys(FX_ART)) put(art.fx(k), k, Math.min(1.5, 128 / Math.max(FX_ART[k].w, FX_ART[k].h)));
 nl();
-const icons = [...(['sword', 'archer', 'shaman'] as ClassId[]).map(classIcon), ...['smith', 'talshop', 'priest', 'board'].map(npcIcon), ...Object.keys(MON_ART).map(monIcon), ...TAL_KINDS.map(talIcon),
-  ...(['weapon', 'armor', 'charm'] as const).flatMap(s => [0, 2, 4].map(r => itemIcon(s, 'sword', r, r))), itemIcon('weapon', 'archer', 3, 3), itemIcon('weapon', 'shaman', 4, 4)];
+const icons = [...CLASS_IDS.map(c => classIcon(c)), ...['smith', 'talshop', 'priest', 'board'].map(npcIcon), ...Object.keys(MON_ART).map(monIcon), ...TAL_KINDS.map(talIcon),
+  ...(['weapon', 'armor', 'charm'] as const).flatMap(s => [0, 2, 4].map(r => itemIcon(s, 'sword', r, r))), ...CLASS_IDS.map(c => itemIcon('weapon', c, 3, 3))];
 let loaded = 0; const imgs = icons.map(u => { const im = new Image(); im.onload = () => { if (++loaded === icons.length) done(); }; im.src = u; return im; });
 function done() { for (const im of imgs) { if (x + 64 > W) nl(); c.drawImage(im, x, y, 64, 64); x += 70; rowH = 64; } nl(); (window as any).__done = true; }

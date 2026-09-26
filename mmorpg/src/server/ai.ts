@@ -18,6 +18,7 @@ export function updateMonster(w: World, m: Monster): void {
   m.hitT = Math.max(0, m.hitT - DT); m.atkT -= DT; m.lifeT += DT;
   if (m.slowT > 0) { m.slowT -= DT; if (m.slowT <= 0) m.slowMul = 1; }
   if (m.boss) { updateBoss(w, m); return; }
+  if (m.stunT > 0) { m.stunT -= DT; m.atkT = Math.max(m.atkT, 0.3); if (m.st === 'chase' || m.st === 'idle') return; }
   if (m.def.beh === 'runner') { runner(w, m); return; }
   // --- targeting ---
   let tgt = m.tgt ? w.players.get(m.tgt) : undefined;

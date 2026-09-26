@@ -74,7 +74,7 @@ export class BotBrain {
       const ax = w.map.altar.x, ay = w.map.altar.y; const far = Math.hypot(ax - p.x, ay - p.y);
       if (far > 1300) { this.tryTp(w, p, 4); return this.goTo(w, p, ax, ay, 200); }
       const boss = wb.bossId ? w.mons.get(wb.bossId) : undefined;
-      if (boss && !boss.dead) return this.fightAround(w, p, boss.x, boss.y, p.prof.cls === 'sword' ? boss.r + 30 : 260);
+      if (boss && !boss.dead) return this.fightAround(w, p, boss.x, boss.y, meleeReach(p, boss.r, 260));
       return this.goTo(w, p, ax + this.orbit * 60, ay + 80, 60);
     }
     // 4) story-following (auto-hunt and the balance sweep's stand-in human)
@@ -114,7 +114,7 @@ export class BotBrain {
       if (p.prof.level < (MONSTERS[q.target].level ?? 1) - 1) return null; // not ready yet: keep levelling
       const boss = w.lairs[li].mon ? w.mons.get(w.lairs[li].mon) : undefined; const d = Math.hypot(lair.x - p.x, lair.y - p.y);
       if (d > 1500) this.tryTp(w, p, SHRINE_FOR_ZONE[lair.zone]);
-      if (boss && !boss.dead && Math.hypot(boss.x - p.x, boss.y - p.y) < 650) return this.fightAround(w, p, boss.x, boss.y, p.prof.cls === 'sword' ? boss.r + 28 : 230);
+      if (boss && !boss.dead && Math.hypot(boss.x - p.x, boss.y - p.y) < 650) return this.fightAround(w, p, boss.x, boss.y, meleeReach(p, boss.r, 230));
       return this.fightLocal(w, p) ?? this.goTo(w, p, lair.x, lair.y + 140, 120);
     }
     if ((q.kind === 'visit' || q.kind === 'killZone' || q.kind === 'kill') && p.zone !== q.zone && q.zone >= 1 && q.zone <= 4) {
@@ -134,7 +134,7 @@ export class BotBrain {
   }
   private fightLocal(w: World, p: Player): [number, number] | null {
     const near = w.spatial.nearest(p.x, p.y, 380); if (!near) return null;
-    return this.fightAround(w, p, near.x, near.y, p.prof.cls === 'sword' ? 40 : 200);
+    return this.fightAround(w, p, near.x, near.y, meleeReach(p, 0, 200));
   }
   private fightAround(w: World, p: Player, tx: number, ty: number, want: number): [number, number] {
     const dx = tx - p.x, dy = ty - p.y; const d = Math.hypot(dx, dy) || 1; const ux = dx / d, uy = dy / d;
@@ -196,6 +196,10 @@ export class BotBrain {
   }
 }
 
+/** How far a bot keeps from its target: melee classes stay within reach, ranged ones keep a gap. */
+function meleeReach(p: Player, r: number, ranged: number): number {
+  const c = CLASSES[p.prof.cls]; return c.melee ? r + Math.max(28, c.range * 0.42) : Math.min(ranged, c.range * 0.75);
+}
 function centroid(w: World, p: Player, r: number): [number, number] | null {
   let sx = 0, sy = 0, n = 0; w.spatial.each(p.x, p.y, r, m => { sx += m.x; sy += m.y; n++; }); return n ? [sx / n, sy / n] : null;
 }
@@ -206,10 +210,13 @@ function nearestShrine(w: World, x: number, y: number): number { let b = 0, bd =
 export function addBots(w: World, count: number, level: number, buddyOf: number, seed: number): Player[] {
   const out: Player[] = []; const rng = new Rng(seed);
   const roamLv = [9, 15, 22, 12, 18, 26];
+  // companions aren't bound by unlocks (they show players what's ahead); the party always has a healer
+  const healer: ClassId = rng.chance(0.5) ? 'shaman' : 'musician';
+  const deck = CLASS_IDS.filter(c => c !== healer).sort(() => rng.next() - 0.5);
   for (let i = 0; i < count; i++) {
     const role: 'buddy' | 'roamer' = i < Math.ceil(count / 2) ? 'buddy' : 'roamer';
-    const cls = CLASS_IDS[(i + rng.int(0, 2)) % 3];
     const lv = role === 'buddy' ? Math.max(1, level + rng.int(-1, 1)) : roamLv[(i - Math.ceil(count / 2)) % roamLv.length];
+    const cls = i === 0 ? healer : deck[(i - 1) % deck.length];
     const name = BOT_NAMES[(i + (seed % BOT_NAMES.length)) % BOT_NAMES.length];
     const prof = makeBotProfile(name, cls, lv, seed + i * 17);
     const p = w.addPlayer('bot:' + name, prof, true);

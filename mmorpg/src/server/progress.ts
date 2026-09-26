@@ -5,9 +5,9 @@ import { xpMul, GOLD_GOBLIN, WORLD_BOSS } from '../shared/data/monsters.ts';
 import { makeItem, rollRarity, sellValue, GEAR_SLOTS, slotsUnlocked, RARITY_NAMES, itemName } from '../shared/data/items.ts';
 import { TAL_KINDS, TALS } from '../shared/data/talismans.ts';
 import { MAIN_QUESTS, BOUNTY_N, bountyReward, type QuestDef } from '../shared/data/quests.ts';
-import { CLASSES } from '../shared/data/classes.ts';
+import { CLASSES, unlockedClasses, type UnlockProgress } from '../shared/data/classes.ts';
 import { ZONES } from '../shared/data/zones.ts';
-import type { GearSlot, Rarity, TalKind } from '../shared/types.ts';
+import type { GearSlot, Profile, Rarity, TalKind } from '../shared/types.ts';
 import type { World } from './world.ts';
 import type { Player, Monster } from './entities.ts';
 import { ULT_PER_KILL } from './combat.ts';
@@ -59,7 +59,7 @@ function reward(w: World, p: Player, m: Monster, coop: number): void {
   if (!m.summon || m.boss) w.emitTo(p, loot);
   // quests
   questEvent(w, p, 'kill', m.t); questEvent(w, p, 'killZone', d.zone);
-  if (m.boss) { questEvent(w, p, 'boss', m.t); pr.stats.bosses++; }
+  if (m.boss) { questEvent(w, p, 'boss', m.t); withUnlocks(w, p, () => { pr.stats.bosses++; }); }
   if (!m.summon && d.zone >= 1 && d.zone <= 4) {
     const q = pr.quest; if (q.bountyZone !== d.zone) { q.bountyZone = d.zone; q.bountyProg = 0; }
     q.bountyProg++;
@@ -71,10 +71,26 @@ function reward(w: World, p: Player, m: Monster, coop: number): void {
   }
 }
 
+export const unlockProgress = (pr: Profile): UnlockProgress => ({ level: pr.level, bosses: pr.stats.bosses, worldBoss: pr.stats.worldBoss });
+/** Runs `change` (a level up, boss kill...) and announces any class it unlocked. */
+let unlockDepth = 0;
+export function withUnlocks(w: World, p: Player, change: () => void): void {
+  if (unlockDepth > 0 || p.bot) { change(); return; } // nested (quest reward → more xp): the outermost call announces
+  const before = unlockedClasses(unlockProgress(p.prof));
+  unlockDepth++; try { change(); } finally { unlockDepth--; }
+  for (const c of unlockedClasses(unlockProgress(p.prof))) if (!before.includes(c)) {
+    w.emitTo(p, { k: 'unlock', c }); w.toast(p, `새 직업 해금: ${CLASSES[c].name}! 마을에서 전직할 수 있습니다`, CLASSES[c].color);
+  }
+}
+
 export function giveGold(p: Player, g: number): void { p.prof.gold += g; p.prof.stats.goldEarned += g; }
 
 export function grantXp(w: World, p: Player, xp: number): void {
   const pr = p.prof; if (pr.level >= MAX_LEVEL) return;
+  withUnlocks(w, p, () => levelUp(w, p, xp));
+}
+function levelUp(w: World, p: Player, xp: number): void {
+  const pr = p.prof;
   pr.xp += xp; let leveled = false;
   while (pr.level < MAX_LEVEL && pr.xp >= xpNeed(pr.level)) {
     pr.xp -= xpNeed(pr.level); pr.level++; leveled = true;

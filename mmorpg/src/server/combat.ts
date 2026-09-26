@@ -1,11 +1,14 @@
 // Player offense: auto attacks, auto-cast talismans, ultimates, damage + kill credit.
 import { DT } from '../shared/constants.ts';
-import { CLASSES, SHAMAN_AOE } from '../shared/data/classes.ts';
+import { CLASSES, SHAMAN_AOE, ATK } from '../shared/data/classes.ts';
 import { TALS, TAL_IDX } from '../shared/data/talismans.ts';
 import { WORLD_BOSS } from '../shared/data/monsters.ts';
 import { segDist2 } from '../shared/math.ts';
+import { moveCircle } from '../shared/movement.ts';
+import { zoneAt } from '../shared/map.ts';
 import type { World } from './world.ts';
 import type { Player, Monster } from './entities.ts';
+import type { Ev } from '../shared/protocol.ts';
 import { onMonsterKilled } from './progress.ts';
 
 const ULT_PER_KILL = 1.0, ULT_PER_SEC = 1.0;
@@ -34,37 +37,55 @@ function inArc(p: Player, m: Monster, ang: number, range: number, half: number):
   return Math.abs(da) <= half;
 }
 
+/** Every monster within `w` (+ its radius) of the segment (x,y)→(x2,y2), with its distance from the start. */
+function onLine(w: World, x: number, y: number, x2: number, y2: number, hw: number): [Monster, number][] {
+  const out: [Monster, number][] = []; const L = Math.hypot(x2 - x, y2 - y);
+  w.spatial.each((x + x2) / 2, (y + y2) / 2, L / 2 + hw, m => { if (segDist2(m.x, m.y, x, y, x2, y2) < (hw + m.r) ** 2) out.push([m, Math.hypot(m.x - x, m.y - y)]); });
+  return out;
+}
+/** Pushes a monster `dist` units away from (fx,fy) in small steps (walls stop it; bosses don't budge; never into town). */
+export function shove(w: World, m: Monster, fx: number, fy: number, dist: number): void {
+  if (m.boss || m.dead) return;
+  const a = Math.atan2(m.y - fy, m.x - fx); const r = Math.min(m.r, 15); const n = Math.ceil(dist / 12); const sx = Math.cos(a) * dist / n, sy = Math.sin(a) * dist / n;
+  for (let i = 0; i < n; i++) {
+    const [nx, ny] = moveCircle(w.map, m.x, m.y, sx, sy, r); if ((nx === m.x && ny === m.y) || zoneAt(w.map, nx, ny) === 0) break;
+    m.x = nx; m.y = ny;
+  }
+}
+/** Stuns a monster for `t` seconds (bosses are only slowed). */
+export function stun(m: Monster, t: number): void {
+  if (m.boss) { m.slowT = Math.max(m.slowT, t); m.slowMul = Math.min(m.slowMul, 0.75); return; }
+  m.stunT = Math.max(m.stunT, t); m.slowT = Math.max(m.slowT, t); m.slowMul = Math.min(m.slowMul, 0.3);
+}
+function slow(m: Monster, t: number, mul: number): void { m.slowT = Math.max(m.slowT, t); m.slowMul = Math.min(m.slowMul, m.boss ? Math.max(0.75, mul) : mul); }
+/** Assassin bonus against weakened monsters. */
+const execMul = (m: Monster) => (m.hp < m.maxHp * 0.3 ? 1.5 : 1);
+const R = Math.round;
+
 export function playerCombat(w: World, p: Player): void {
   const cls = CLASSES[p.prof.cls]; const S = p.stats;
   const inTown = p.zone === 0;
   if (p.lastAtkT > w.time - 2) p.ult = Math.min(100, p.ult + ULT_PER_SEC * DT);
   if (inTown) return;
   // ---- ultimate (active part) ----
-  if (p.ultT > 0 && p.prof.cls === 'sword') {
+  if (p.ultT > 0) {
     p.ultTick -= DT;
-    if (p.ultTick <= 0) { p.ultTick = 0.25; w.spatial.each(p.x, p.y, 175, m => { hitMonster(w, p, m, 1.25); }); }
+    if (p.ultTick <= 0) {
+      if (p.prof.cls === 'sword') { p.ultTick = 0.25; w.spatial.each(p.x, p.y, 175, m => { hitMonster(w, p, m, 1.25); }); }
+      else if (p.prof.cls === 'spear') {
+        p.ultTick = 0.199; const t = w.spatial.nearest(p.x, p.y, 300); const a = t ? Math.atan2(t.y - p.y, t.x - p.x) : p.face; p.face = a; p.lastAtkT = w.time;
+        const x2 = p.x + Math.cos(a) * ATK.ultThrustLen, y2 = p.y + Math.sin(a) * ATK.ultThrustLen;
+        for (const [m] of onLine(w, p.x - Math.cos(a) * 12, p.y - Math.sin(a) * 12, x2, y2, ATK.ultThrustW)) hitMonster(w, p, m, 0.9);
+        w.emit({ k: 'uhit', p: p.id, x: R(p.x), y: R(p.y), x2: R(x2), y2: R(y2) }, p.x, p.y);
+      } else p.ultTick = 1;
+    }
   }
   // ---- basic attack ----
   p.atkT -= DT;
   if (p.atkT <= 0) {
     const tgt = w.spatial.nearest(p.x, p.y, cls.range);
-    if (tgt) {
-      p.atkT = 1 / S.aspd; const ang = Math.atan2(tgt.y - p.y, tgt.x - p.x); p.face = ang; p.lastAtkT = w.time;
-      w.emit({ k: 'atk', p: p.id, tx: Math.round(tgt.x), ty: Math.round(tgt.y), tid: tgt.id }, p.x, p.y);
-      if (p.prof.cls === 'sword') {
-        const hits: Monster[] = []; w.spatial.each(p.x, p.y, cls.range, m => { if (inArc(p, m, ang, cls.range, 1.2)) hits.push(m); });
-        for (const m of hits) hitMonster(w, p, m, 1);
-      } else if (p.prof.cls === 'archer') {
-        const d = Math.hypot(tgt.x - p.x, tgt.y - p.y); const id = tgt.id;
-        w.after(d / 950, () => { const m = w.mons.get(id); if (m && !m.dead) hitMonster(w, p, m, 1); });
-      } else {
-        const d = Math.hypot(tgt.x - p.x, tgt.y - p.y); const id = tgt.id; let tx = tgt.x, ty = tgt.y;
-        w.after(d / 620, () => {
-          const m = w.mons.get(id); if (m && !m.dead) { tx = m.x; ty = m.y; }
-          const hits = w.spatial.list(tx, ty, SHAMAN_AOE); for (const h of hits) hitMonster(w, p, h, h.id === id ? 1 : 0.7);
-        });
-      }
-    } else p.atkT = 0.1;
+    if (tgt) { p.atkT = 1 / (S.aspd * w.aspdMul(p)); basicAttack(w, p, tgt); }
+    else p.atkT = 0.1;
   }
   // ---- talismans ----
   const slots = w.talSlotsOf(p);
@@ -166,28 +187,173 @@ export function playerCombat(w: World, p: Player): void {
   }
 }
 
+/** One basic attack at `tgt` (already in range); behaviour depends on the class's attack kind. */
+function basicAttack(w: World, p: Player, tgt: Monster): void {
+  const cls = CLASSES[p.prof.cls];
+  const ang = Math.atan2(tgt.y - p.y, tgt.x - p.x); p.face = ang; p.lastAtkT = w.time;
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  const ev: Ev & { k: 'atk' } = { k: 'atk', p: p.id, tx: R(tgt.x), ty: R(tgt.y), tid: tgt.id };
+  switch (cls.atkKind) {
+    case 'cone': {
+      const hits: Monster[] = []; w.spatial.each(p.x, p.y, cls.range, m => { if (inArc(p, m, ang, cls.range, 1.2)) hits.push(m); });
+      for (const m of hits) hitMonster(w, p, m, 1);
+      break;
+    }
+    case 'shot': {
+      const d = Math.hypot(tgt.x - p.x, tgt.y - p.y); const id = tgt.id;
+      w.after(d / 950, () => { const m = w.mons.get(id); if (m && !m.dead) hitMonster(w, p, m, 1); });
+      break;
+    }
+    case 'blast': {
+      const d = Math.hypot(tgt.x - p.x, tgt.y - p.y); const id = tgt.id; let tx = tgt.x, ty = tgt.y;
+      w.after(d / 620, () => {
+        const m = w.mons.get(id); if (m && !m.dead) { tx = m.x; ty = m.y; }
+        const hits = w.spatial.list(tx, ty, SHAMAN_AOE); for (const h of hits) hitMonster(w, p, h, h.id === id ? 1 : 0.7);
+      });
+      break;
+    }
+    case 'thrust': {
+      for (const [m] of onLine(w, p.x - ca * 10, p.y - sa * 10, p.x + ca * cls.range, p.y + sa * cls.range, ATK.thrustW)) hitMonster(w, p, m, 1);
+      break;
+    }
+    case 'chain': {
+      const hit: Monster[] = [tgt]; const pts: number[] = [];
+      for (let k = 1; k < ATK.chainMul.length; k++) {
+        const last = hit[hit.length - 1]; let next: Monster | null = null, bd = Infinity;
+        w.spatial.each(last.x, last.y, ATK.chainR, (m, d2) => { if (!hit.includes(m) && d2 < bd) { bd = d2; next = m; } });
+        if (!next) break; const n = next as Monster; hit.push(n); pts.push(R(n.x), R(n.y));
+      }
+      hit.forEach((m, k) => hitMonster(w, p, m, ATK.chainMul[k]));
+      if (pts.length) ev.pts = pts;
+      break;
+    }
+    case 'bash': {
+      const hits: Monster[] = []; w.spatial.each(p.x, p.y, cls.range, m => { if (inArc(p, m, ang, cls.range, ATK.bashHalf)) hits.push(m); });
+      for (const m of hits) { hitMonster(w, p, m, 1); shove(w, m, p.x, p.y, ATK.bashPush); }
+      break;
+    }
+    case 'stab': {
+      hitMonster(w, p, tgt, execMul(tgt));
+      if (p.ultT > 0) { // shadow clones strike up to three more monsters nearby
+        const extra = w.spatial.list(p.x, p.y, 160).filter(m => m !== tgt && !m.dead).slice(0, 3); const pts: number[] = [];
+        for (const m of extra) { pts.push(R(m.x), R(m.y)); hitMonster(w, p, m, execMul(m)); }
+        if (pts.length) ev.pts = pts;
+      }
+      break;
+    }
+    case 'musket': {
+      const x2 = p.x + ca * cls.range, y2 = p.y + sa * cls.range; const id = tgt.id; const td = Math.hypot(tgt.x - p.x, tgt.y - p.y);
+      for (const [m, d] of onLine(w, p.x, p.y, x2, y2, ATK.musketW)) {
+        if (m === tgt) continue; const mid = m.id; w.after(d / ATK.bulletSpeed, () => { const mm = w.mons.get(mid); if (mm && !mm.dead) hitMonster(w, p, mm, 0.85); });
+      }
+      let bx = tgt.x, by = tgt.y;
+      w.after(td / ATK.bulletSpeed, () => {
+        const m = w.mons.get(id); if (m && !m.dead) { bx = m.x; by = m.y; hitMonster(w, p, m, 1); }
+        w.spatial.each(bx, by, ATK.musketBurst, h => { if (h.id !== id) hitMonster(w, p, h, 0.4); });
+      });
+      break;
+    }
+    case 'wave': {
+      const hits: Monster[] = []; w.spatial.each(p.x, p.y, cls.range, m => { if (inArc(p, m, ang, cls.range, ATK.waveHalf)) hits.push(m); });
+      for (const m of hits) hitMonster(w, p, m, 0.9);
+      break;
+    }
+    case 'ink': {
+      const d = Math.hypot(tgt.x - p.x, tgt.y - p.y); const id = tgt.id; let tx = tgt.x, ty = tgt.y;
+      w.after(d / 700, () => {
+        const m = w.mons.get(id); if (m && !m.dead) { tx = m.x; ty = m.y; }
+        w.spatial.each(tx, ty, ATK.inkR, h => { hitMonster(w, p, h, 0.8); slow(h, 1.2, 0.6); });
+        for (let k = 1; k <= ATK.inkTicks; k++) w.after(k * 0.5, () => { if (w.players.has(p.id)) w.spatial.each(tx, ty, ATK.inkR, h => { hitMonster(w, p, h, ATK.inkTickMul); slow(h, 0.7, 0.6); }); });
+      });
+      break;
+    }
+  }
+  w.emit(ev, p.x, p.y);
+}
+
 /** Ultimate activation (validated by caller: p.ult >= 100). */
 export function useUlt(w: World, p: Player): boolean {
   if (p.down || p.ult < 100 || p.zone === 0) return false;
   p.ult = 0; p.lastAtkT = w.time;
-  if (p.prof.cls === 'sword') {
-    p.ultT = 4; p.ultTick = 0;
-    w.emit({ k: 'ult', p: p.id, x: Math.round(p.x), y: Math.round(p.y) }, p.x, p.y);
-  } else if (p.prof.cls === 'archer') {
-    const cand = w.spatial.list(p.x, p.y, 470);
-    let bx = p.x + Math.cos(p.face) * 150, by = p.y + Math.sin(p.face) * 150, best = -1;
-    for (let i = 0; i < Math.min(30, cand.length); i++) { const c = cand[i]; const n = w.spatial.count(c.x, c.y, 150); if (n > best) { best = n; bx = c.x; by = c.y; } }
-    w.emit({ k: 'ult', p: p.id, x: Math.round(p.x), y: Math.round(p.y), tx: Math.round(bx), ty: Math.round(by) }, p.x, p.y);
-    for (let v = 0; v < 8; v++) w.after(0.3 + v * 0.25, () => { w.spatial.each(bx, by, 160, m => { hitMonster(w, p, m, 1.15); }); });
-  } else {
-    w.emit({ k: 'ult', p: p.id, x: Math.round(p.x), y: Math.round(p.y) }, p.x, p.y);
-    w.after(0.35, () => {
-      w.spatial.each(p.x, p.y, 330, m => { hitMonster(w, p, m, 5); });
-      for (const q of w.playersNear(p.x, p.y, 330, true)) {
-        if (q.down) w.revivePlayer(q, p, 0.5); else w.healPlayer(q, q.stats.maxHp * 0.4 * CLASSES.shaman.heal);
-      }
-    });
+  const c = p.prof.cls; const def = CLASSES[c];
+  p.ultT = def.ultDur; p.ultTick = 0;
+  const cast = (tx?: number, ty?: number) => w.emit(tx == null ? { k: 'ult', p: p.id, x: R(p.x), y: R(p.y) } : { k: 'ult', p: p.id, x: R(p.x), y: R(p.y), tx: R(tx), ty: R(ty!) }, p.x, p.y);
+  /** Runs `fn` later only while the caster is still in this world and standing. */
+  const later = (t: number, fn: () => void) => w.after(t, () => { if (w.players.get(p.id) === p && !p.down) fn(); });
+  switch (c) {
+    case 'sword': case 'spear': case 'assassin': cast(); break;
+    case 'archer': {
+      const [bx, by] = densest(w, p, 470, 150, 150);
+      cast(bx, by);
+      for (let v = 0; v < 8; v++) w.after(0.3 + v * 0.25, () => { w.spatial.each(bx, by, 160, m => { hitMonster(w, p, m, 1.15); }); });
+      break;
+    }
+    case 'shaman': {
+      cast();
+      w.after(0.35, () => {
+        w.spatial.each(p.x, p.y, 330, m => { hitMonster(w, p, m, 5); });
+        for (const q of w.playersNear(p.x, p.y, 330, true)) {
+          if (q.down) w.revivePlayer(q, p, 0.5); else w.healPlayer(q, q.stats.maxHp * 0.4 * CLASSES.shaman.heal);
+        }
+      });
+      break;
+    }
+    case 'taoist': {
+      cast();
+      for (let k = 0; k < 12; k++) later(0.15 + k * 0.2, () => {
+        const cand = w.spatial.list(p.x, p.y, 420); let x: number, y: number;
+        if (cand.length) { const t = cand[Math.floor(w.rng.next() * cand.length)]; x = t.x; y = t.y; }
+        else { const a = w.rng.range(0, Math.PI * 2), r = w.rng.range(60, 220); x = p.x + Math.cos(a) * r; y = p.y + Math.sin(a) * r; }
+        w.spatial.each(x, y, 70, m => { hitMonster(w, p, m, 1.6); stun(m, 0.8); });
+        w.emit({ k: 'uhit', p: p.id, x: R(x), y: R(y) }, x, y);
+      });
+      break;
+    }
+    case 'guardian': {
+      cast();
+      const v = p.stats.maxHp * 0.35 * def.heal;
+      for (const q of w.playersNear(p.x, p.y, 300)) { if (v > q.shield) q.shield = v; q.shieldT = Math.max(q.shieldT, 5); w.emit({ k: 'shield', p: q.id }, q.x, q.y); }
+      for (const m of w.spatial.list(p.x, p.y, 220)) { hitMonster(w, p, m, 2); shove(w, m, p.x, p.y, 60); stun(m, 1.5); }
+      break;
+    }
+    case 'gunner': {
+      cast();
+      for (let k = 0; k < 16; k++) later(k * 0.1, () => {
+        const cand = w.spatial.list(p.x, p.y, 480); let x: number, y: number;
+        if (cand.length) { const t = cand[Math.floor(w.rng.next() * cand.length)]; x = t.x + w.rng.range(-20, 20); y = t.y + w.rng.range(-20, 20); }
+        else { const a = p.face + w.rng.range(-0.6, 0.6), r = w.rng.range(160, 380); x = p.x + Math.cos(a) * r; y = p.y + Math.sin(a) * r; }
+        w.emit({ k: 'uhit', p: p.id, x: R(p.x), y: R(p.y), x2: R(x), y2: R(y) }, p.x, p.y);
+        w.after(Math.hypot(x - p.x, y - p.y) / 900, () => { if (w.players.has(p.id)) w.spatial.each(x, y, 70, m => { hitMonster(w, p, m, 1.4); }); });
+      });
+      break;
+    }
+    case 'musician': {
+      cast();
+      for (const q of w.playersNear(p.x, p.y, 320)) { w.healPlayer(q, q.stats.maxHp * 0.25 * def.heal); q.buffT = 6; q.buffAspd = 0.35; }
+      for (const t of [0.2, 1.7, 3.2, 4.7]) later(t, () => {
+        w.spatial.each(p.x, p.y, 240, m => { hitMonster(w, p, m, 1.2); });
+        w.emit({ k: 'uhit', p: p.id, x: R(p.x), y: R(p.y) }, p.x, p.y);
+      });
+      break;
+    }
+    case 'painter': {
+      cast();
+      for (const t of [0.3, 0.9, 1.5]) later(t, () => {
+        const [tx, ty] = densest(w, p, 420, 120, 200); const a = Math.atan2(ty - p.y, tx - p.x);
+        const x = p.x - Math.cos(a) * 60, y = p.y - Math.sin(a) * 60, x2 = p.x + Math.cos(a) * 360, y2 = p.y + Math.sin(a) * 360;
+        for (const [m] of onLine(w, x, y, x2, y2, 46)) hitMonster(w, p, m, 3);
+        w.emit({ k: 'uhit', p: p.id, x: R(x), y: R(y), x2: R(x2), y2: R(y2) }, p.x, p.y);
+      });
+      break;
+    }
   }
   return true;
+}
+/** The monster (within r) with the most neighbours within `nr`; falls back to a point `fb` ahead of the player. */
+function densest(w: World, p: Player, r: number, nr: number, fb: number): [number, number] {
+  const cand = w.spatial.list(p.x, p.y, r);
+  let bx = p.x + Math.cos(p.face) * fb, by = p.y + Math.sin(p.face) * fb, best = -1;
+  for (let i = 0; i < Math.min(30, cand.length); i++) { const c = cand[i]; const n = w.spatial.count(c.x, c.y, nr); if (n > best) { best = n; bx = c.x; by = c.y; } }
+  return [bx, by];
 }
 export { ULT_PER_KILL };

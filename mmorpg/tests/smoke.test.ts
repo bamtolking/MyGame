@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { simulate } from './sim.ts';
+import { CLASS_IDS } from '../src/shared/data/classes.ts';
 
 describe('smoke: 6-minute headless play-through per class', () => {
-  for (const cls of ['sword', 'archer', 'shaman'] as const) it(`${cls} levels up, earns gold and progresses the story`, () => {
+  for (const cls of CLASS_IDS) it(`${cls} levels up, earns gold and progresses the story`, () => {
     const r = simulate(cls, 3, 6);
     expect(r.finalLevel).toBeGreaterThanOrEqual(4);
     expect(r.kills).toBeGreaterThan(300);

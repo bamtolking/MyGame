@@ -8,7 +8,7 @@ import { MONSTERS } from '../src/shared/data/monsters.ts';
 import { ZONES } from '../src/shared/data/zones.ts';
 import { MAIN_QUESTS } from '../src/shared/data/quests.ts';
 import { computeStats, newProfile, makeItem } from '../src/shared/data/items.ts';
-import { CLASSES } from '../src/shared/data/classes.ts';
+import { CLASSES, CLASS_IDS } from '../src/shared/data/classes.ts';
 import { PLAYER_R } from '../src/shared/constants.ts';
 import { MAP, mkWorld, mkPlayer, spotIn } from './helpers.ts';
 
@@ -85,7 +85,7 @@ describe('data sanity', () => {
     expect(xpNeed(30)).toBe(0);
     for (const q of MAIN_QUESTS) expect(ZONES[q.zone]).toBeTruthy();
     const r = new Rng(1);
-    for (const cls of ['sword', 'archer', 'shaman'] as const) for (let lv = 1; lv <= 30; lv += 7) {
+    for (const cls of CLASS_IDS) for (let lv = 1; lv <= 30; lv += 7) {
       const p = newProfile('x', CLASSES[cls], 0); p.level = lv; p.equip.weapon = makeItem(r, 9, 'weapon', lv, 4); p.equip.armor = makeItem(r, 10, 'armor', lv, 4);
       const s = computeStats(p); for (const v of Object.values(s)) expect(Number.isFinite(v)).toBe(true);
       expect(s.crit).toBeLessThanOrEqual(0.75); expect(s.dr).toBeLessThanOrEqual(0.7);

@@ -9,10 +9,17 @@ const RARITY_MUL = [1, 1.12, 1.26, 1.42, 1.62];
 export const GEAR_SLOTS: GearSlot[] = ['weapon', 'armor', 'charm'];
 export const SLOT_NAMES: Record<GearSlot, string> = { weapon: '무기', armor: '갑옷', charm: '노리개' };
 
-const WEAPON_NAMES: Record<ClassId, string[]> = {
+export const WEAPON_NAMES: Record<ClassId, string[]> = {
   sword: ['복숭아나무 검', '청동 환도', '강철 환도', '월철 환도', '천뢰검'],
   archer: ['복숭아나무 활', '각궁', '강철 각궁', '월광 각궁', '천뢰궁'],
   shaman: ['복숭아나무 방울', '청동 방울', '은방울', '월광 방울', '천뢰 방울'],
+  spear: ['복숭아나무 창', '청동 창', '강철 삼지창', '월철 청룡창', '천뢰창'],
+  taoist: ['복숭아나무 목검', '청동 법검', '뇌격 법검', '월광 법검', '천뢰 법검'],
+  guardian: ['나무 방패', '청동 방패', '강철 방패', '월철 방패', '천뢰 방패'],
+  assassin: ['나무 단검', '청동 비수', '강철 비수', '월철 비수', '천뢰 비수'],
+  gunner: ['화승총', '조총', '강철 조총', '월광 조총', '천뢰 조총'],
+  musician: ['오동 가야금', '명주 가야금', '산조 가야금', '월광 가야금', '천뢰 가야금'],
+  painter: ['대나무 붓', '족제비털 붓', '호랑이털 붓', '월광 붓', '천뢰 붓'],
 };
 const ARMOR_NAMES = ['무명 도포', '누비 도포', '두정갑', '월철 갑주', '천뢰 갑주'];
 const CHARM_NAMES = ['나무 노리개', '옥 노리개', '호박 노리개', '월석 노리개', '천뢰 노리개'];
@@ -75,7 +82,7 @@ export function computeStats(p: Pick<Profile, 'cls' | 'level' | 'equip' | 'tals'
   for (const k of Object.keys(CAPS) as StatKey[]) add[k] = Math.min(add[k], CAPS[k]!);
   const atk = Math.round(((c.atk * (1 + 0.12 * (L - 1))) + atkFlat) * (1 + add.atkPct));
   const maxHp = Math.round((c.hp + c.hpLv * (L - 1) + hpFlat) * (1 + add.hpPct));
-  const crit = Math.min(0.75, c.crit + add.crit), critDmg = 1.5 + add.critDmg;
+  const crit = Math.min(0.75, c.crit + add.crit), critDmg = 1.5 + (c.critDmg ?? 0) + add.critDmg;
   const aspd = c.aspd * (1 + add.aspd), move = c.move * (1 + add.move);
   const dr = Math.min(0.7, c.dr + add.dr);
   let talPow = 0; for (const uid of p.slots) { const t = uid == null ? null : p.tals.find(x => x.uid === uid); if (t) talPow += 40 * t.lv * t.lv; }
@@ -89,7 +96,7 @@ export function newProfile(name: string, cls: ClassDefLike, now: number): Profil
     tals: [{ uid: 1, kind: cls.startTal, lv: 1 }], slots: [1, null, null, null],
     quest: { main: 0, prog: 0, bountyZone: 1, bountyProg: 0, bountyDone: 0 }, shrines: [0],
     stats: { kills: 0, deaths: 0, bosses: 0, worldBoss: 0, playSec: 0, revives: 0, merges: 0, goldEarned: 0, legendaries: 0 },
-    pity: 0, nextUid: 2, created: now, opts: { autoSell: 0 },
+    pity: 0, nextUid: 2, created: now, opts: { autoSell: 0 }, tried: [cls.id],
   };
 }
 interface ClassDefLike { id: ClassId; startTal: TalKind }

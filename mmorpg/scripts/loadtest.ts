@@ -2,6 +2,7 @@
 //             node scripts/loadtest.ts ws [clients=60] [seconds=30]      — real WebSocket clients against a spawned server
 import { GameServer } from '../src/server/server.ts';
 import { BotBrain, makeBotProfile } from '../src/server/bots.ts';
+import { CLASS_IDS } from '../src/shared/data/classes.ts';
 import { spawn } from 'node:child_process';
 import WebSocket from 'ws';
 import type { World } from '../src/server/world.ts';
@@ -16,7 +17,7 @@ function inProcess(N: number, secs: number) {
   W = gs.worlds[0]; let bytes = 0;
   for (let i = 0; i < N; i++) {
     const tok = 'tok_load_' + String(i).padStart(10, '0'); const lv = [1, 4, 9, 13, 17, 22, 27][i % 7];
-    store.save(tok, makeBotProfile('부하' + i, (['sword', 'archer', 'shaman'] as const)[i % 3], lv, i + 1));
+    store.save(tok, makeBotProfile('부하' + i, CLASS_IDS[i % CLASS_IDS.length], lv, i + 1));
     const s = gs.connect({ send: (d) => { bytes += d.length; }, close() {} });
     gs.message(s, JSON.stringify({ t: 'hello', v: 1, token: tok, name: 'x', cls: 'sword' }));
     const b = new BotBrain(i % 2 ? 'quester' : 'roamer', i); s.world!.brains.set(s.player!.id, b);

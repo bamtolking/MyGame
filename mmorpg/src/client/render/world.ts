@@ -14,6 +14,7 @@ import { SCENE, LIGHT, EMIT, CanvasPainter, noPost, type Painter, type Cam } fro
 import { GLPainter } from './gl.ts';
 import { Anim } from './anim.ts';
 import { hexCol, type FxSystem } from './fx.ts';
+import { CLASS_FX } from '../classfx/index.ts';
 
 export type Quality = 'high' | 'mid' | 'low';
 export interface REnt { id: number; kind: 'p' | 'm'; t: number; x: number; y: number; hp: number; f: number; face: number; dieT: number; vx: number; seenT: number; bubble?: { text: string; until: number } }
@@ -65,7 +66,8 @@ export class Renderer {
     this.p = new CanvasPainter(this.cv);
   }
   resize(): void {
-    const r = this.stage.getBoundingClientRect(); this.W = Math.max(1, r.width); this.H = Math.max(1, r.height);
+    // layout size, not getBoundingClientRect(): the UI may be CSS-rotated into landscape (ui/orient.ts)
+    this.W = Math.max(1, this.stage.clientWidth); this.H = Math.max(1, this.stage.clientHeight);
     this.dpr = Math.min(this.dprCap, window.devicePixelRatio || 1);
     this.baseZoom = Math.max(Math.min(this.W, this.H) / 560, Math.max(this.W, this.H) / 1180);
     this.p.resize(this.W, this.H, this.dpr);
@@ -216,10 +218,7 @@ export class Renderer {
         p.draw(EMIT, A.fx('soft'), bx, by, 0.5, 0.5, 0, 0x9fd7ff, 0.6, 1); p.draw(EMIT, A.fx('spark'), bx, by, 1.2, 1.6, an + Math.PI / 2, 0xeaf6ff, 1, 1);
       }
     }
-    if (pl.f & PF.WHIRL) {
-      const w = A.fx('whirl'); p.draw(EMIT, w, pl.x, pl.y - 14, 300 / 128, 300 / 128 * 0.8, this.t * 16, 0x9fd0ff, 0.85, 1);
-      p.draw(EMIT, w, pl.x, pl.y - 14, 200 / 128, 200 / 128 * 0.8, -this.t * 11 + 1, 0xffffff, 0.6, 1);
-    }
+    if (pl.f & PF.WHIRL) CLASS_FX[cls]?.aura?.(p, A, this.t, pl.x, pl.y);
   }
 
   // ---------- monsters ----------

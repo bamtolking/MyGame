@@ -12,6 +12,8 @@ export interface Player {
   inputs: InputStep[]; lastSeq: number; inBudget: number;
   atkT: number; cds: number[]; bladeHits: Map<number, number>; auraT: number; lastAtkT: number;
   ult: number; ultT: number; ultTick: number;
+  /** Musician ult buff: seconds left and bonus attack speed. */
+  buffT: number; buffAspd: number; clsT: number;
   lastHurtT: number; hurtFlagT: number;
   zone: number; wbDmg: number; wbT: number;
   invVer: number; talVer: number; questVer: number; statVer: number;
@@ -26,7 +28,7 @@ export interface Monster {
   id: number; t: number; def: MonsterDef; x: number; y: number; vx: number; vy: number;
   hp: number; maxHp: number; lv: number; elite: boolean; r: number; dmg: number;
   st: 'idle' | 'chase' | 'wind' | 'dash' | 'recover' | 'cast' | 'flee'; stT: number;
-  tgt: number; retT: number; atkT: number; slowT: number; slowMul: number; hitT: number;
+  tgt: number; retT: number; atkT: number; slowT: number; slowMul: number; stunT: number; hitT: number;
   hx: number; hy: number; farT: number; left: boolean; lifeT: number;
   contrib: Map<number, number>; boss: BossState | null; summon: boolean; dead: boolean;
   dvx: number; dvy: number; lairIdx: number;

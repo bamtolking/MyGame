@@ -15,9 +15,15 @@ const CFG: Record<string, Partial<Cfg>> = {
   boom: { gap: 70, max: 4, vary: 0.08, rev: 0.2 }, slam: { gap: 150, max: 2, rev: 0.3 }, roar: { gap: 600, max: 1, rev: 0.3 }, level: { rev: 0.35, vary: 0 }, legend: { rev: 0.35, vary: 0 },
   quest: { rev: 0.3, vary: 0 }, ult_sword: { vary: 0, rev: 0.25 }, ult_archer: { vary: 0, rev: 0.25 }, ult_shaman: { vary: 0, rev: 0.35 }, horn: { vary: 0, rev: 0.45 }, click: { gap: 40, vary: 0.03, rev: 0 },
   open: { gap: 60, vary: 0.05, rev: 0 }, hurt: { gap: 120, max: 2, vary: 0.08, rev: 0.05 }, item: { rev: 0.25 }, item_epic: { rev: 0.3, vary: 0 }, down: { vary: 0, rev: 0.35 }, revive: { vary: 0, rev: 0.3 },
+  thrust: { gap: 60, max: 4, vary: 0.08, rev: 0.08 }, zap: { gap: 60, max: 4, vary: 0.1, rev: 0.1 }, bash: { gap: 80, max: 3, vary: 0.07, rev: 0.1 }, stab: { gap: 40, max: 6, vary: 0.12, rev: 0.05 },
+  musket: { gap: 70, max: 4, vary: 0.06, rev: 0.15 }, strum: { gap: 70, max: 4, vary: 0.06, rev: 0.15 }, brush: { gap: 70, max: 3, vary: 0.1, rev: 0.06 }, ink: { gap: 50, max: 5, vary: 0.12, rev: 0.08 },
+  rocket: { gap: 45, max: 6, vary: 0.12, rev: 0.12 }, cls_change: { gap: 250, max: 2, vary: 0, rev: 0.3 },
+  ult_spear: { vary: 0, rev: 0.28 }, ult_taoist: { vary: 0, rev: 0.35 }, ult_guardian: { vary: 0, rev: 0.35 }, ult_assassin: { vary: 0, rev: 0.25 }, ult_gunner: { vary: 0, rev: 0.3 },
+  ult_musician: { vary: 0, rev: 0.4 }, ult_painter: { vary: 0, rev: 0.3 },
 };
 const DRUM_KEYS = ['deong', 'kung', 'deok', 'gi', 'buk', 'taiko', 'jing', 'kkwaeng', 'moktak', 'shaker', 'bells'];
-const PRIORITY = ['click', 'open', 'hit', 'slash', 'slash2', 'bow', 'cast', 'hit_arrow', 'hit_magic', 'kill', 'coin', 'hurt', 'hit_crit', 'wisp_cast', 'wisp_boom', 'pierce', 'thunder', 'frost', 'bell', 'guard', 'whirl', 'tele', 'boom', 'enemy_shot', 'level', 'quest', 'item', 'soul', 'dash', 'ult_sword', 'ult_archer', 'ult_shaman', 'roar', 'slam', 'horn', 'kill_big', 'down', 'revive', 'tp', 'summon', 'blink', 'item_epic', 'legend', 'merge', 'emote', 'error'];
+const PRIORITY = ['click', 'open', 'hit', 'slash', 'slash2', 'bow', 'cast', 'hit_arrow', 'hit_magic', 'kill', 'coin', 'hurt', 'hit_crit', 'wisp_cast', 'wisp_boom', 'pierce', 'thunder', 'frost', 'bell', 'guard', 'whirl', 'tele', 'boom', 'enemy_shot', 'level', 'quest', 'item', 'soul', 'dash', 'ult_sword', 'ult_archer', 'ult_shaman', 'roar', 'slam', 'horn', 'kill_big', 'down', 'revive', 'tp', 'summon', 'blink', 'item_epic', 'legend', 'merge', 'emote', 'error',
+  'thrust', 'zap', 'bash', 'stab', 'musket', 'strum', 'brush', 'ink', 'rocket', 'cls_change', 'ult_spear', 'ult_taoist', 'ult_guardian', 'ult_assassin', 'ult_gunner', 'ult_musician', 'ult_painter'];
 
 export class Sound {
   ctx: AudioContext | null = null; sfxVol = 0.7; bgmVol = 0.45; music: Music | null = null;

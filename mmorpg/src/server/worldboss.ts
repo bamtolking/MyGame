@@ -3,7 +3,7 @@ import { DT } from '../shared/constants.ts';
 import { WORLD_BOSS } from '../shared/data/monsters.ts';
 import type { World } from './world.ts';
 import type { Player } from './entities.ts';
-import { giveItem, giveTal, giveGold, grantXp, questEvent } from './progress.ts';
+import { giveItem, giveTal, giveGold, grantXp, questEvent, withUnlocks } from './progress.ts';
 import { TAL_KINDS } from '../shared/data/talismans.ts';
 import { xpNeed } from '../shared/data/xp.ts';
 
@@ -69,7 +69,7 @@ function finish(w: World, win: boolean): void {
       if (w.rng.chance(0.6)) giveTal(w, p, w.rng.pick(TAL_KINDS));
       const shards = 15 + (rank === 0 ? 15 : rank === 1 ? 10 : rank === 2 ? 5 : 0);
       p.prof.shards += shards; giveGold(p, 150 + p.prof.level * 40); grantXp(w, p, Math.round(xpNeed(p.prof.level) * 0.35));
-      p.prof.stats.worldBoss++; p.questVer++; p.invVer++;
+      withUnlocks(w, p, () => { p.prof.stats.worldBoss++; }); p.questVer++; p.invVer++;
       questEvent(w, p, 'worldboss', 0);
       w.toast(p, `불가사리 보상 상자! 달빛 조각 +${shards}${rank >= 0 && rank < 3 ? ` (피해 ${rank + 1}위!)` : ''}`, '#ffd54a');
     }

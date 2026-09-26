@@ -2,7 +2,7 @@
 import type { C2S, BossInfo, WorldBossState } from '../../shared/protocol.ts';
 import { PROTOCOL_VERSION, TILE, TAL_SLOT_LEVELS } from '../../shared/constants.ts';
 import type { ClassId, Item, MeState } from '../../shared/types.ts';
-import { CLASSES, CLASS_IDS } from '../../shared/data/classes.ts';
+import { CLASSES, CLASS_IDS, STARTER_CLASSES, unlockedClasses } from '../../shared/data/classes.ts';
 import { MONSTERS } from '../../shared/data/monsters.ts';
 import { TALS } from '../../shared/data/talismans.ts';
 import { ZONES } from '../../shared/data/zones.ts';
@@ -17,18 +17,20 @@ import { Sound } from '../audio/engine.ts';
 import * as store from '../storage.ts';
 import { h, $, clear, fmtTime } from './dom.ts';
 import { Joystick } from './joystick.ts';
-import { bagPanel, itemModal, smithPanel, talPanel, questPanel, mapPanel, rosterPanel, chatPanel, codexPanel } from './panels.ts';
+import { initOrient, onOrient, toLocal, goLandscape } from './orient.ts';
+import { bagPanel, itemModal, smithPanel, talPanel, questPanel, mapPanel, rosterPanel, chatPanel, codexPanel, clsPanel, classCard, classDetail, lockBox } from './panels.ts';
 import { classIcon, talIcon } from '../render/art/icons.ts';
 
 export interface AppApi {
   me(): MeState; game(): Game; send(m: C2S): void; openSheet(name: string, arg?: unknown): void; closeSheet(): void;
   openItem(it: Item, equipped: boolean): void; openModal(el: HTMLElement): void; closeModal(): void; toast(text: string, color?: string): void; confirm(text: string, yes: () => void): void;
   chatLines(): { name: string; text: string; sys: boolean }[];
+  /** Classes unlocked since the player last opened the 직업 sheet (shown with a NEW chip). */
+  newClasses(): ReadonlySet<ClassId>;
 }
 type Mode = 'offline' | 'online';
 /** `me` fields each sheet displays (a change re-renders it). */
-const SHEET_KEYS: Record<string, string[]> = { bag: ['inv', 'equip', 'gold', 'shards', 'stats', 'autoSell', 'zone'], tal: ['tals', 'slots', 'gold', 'shards', 'zone', 'level'], smith: ['equip', 'gold', 'zone'], quest: ['quest', 'lstats'], map: ['shrines'] };
-const ULT_GLYPH: Record<ClassId, string> = { sword: '斬', archer: '矢', shaman: '巫' };
+const SHEET_KEYS: Record<string, string[]> = { bag: ['inv', 'equip', 'gold', 'shards', 'stats', 'autoSell', 'zone'], tal: ['tals', 'slots', 'gold', 'shards', 'zone', 'level'], smith: ['equip', 'gold', 'zone'], quest: ['quest', 'lstats'], map: ['shrines'], cls: ['cls', 'level', 'lstats', 'zone'] };
 
 export class App implements AppApi {
   root: HTMLElement; set = store.loadSettings(); snd = new Sound();
@@ -39,12 +41,14 @@ export class App implements AppApi {
   private zoneSamples: [number, number][][] | null = null; private retry = 0; private lastZone = -1; private tutorial = true;
   el: Record<string, HTMLElement> = {};
   pendingHello: { name: string; cls: ClassId } | null = null;
+  /** Class unlocks already shown to the player (localStorage 'moonlit.seenCls'); `clsNew` = the ones flagged NEW in the open 직업 sheet. */
+  private seenCls = new Set<string>(store.seenClasses().length ? store.seenClasses() : STARTER_CLASSES); private clsNew = new Set<ClassId>();
 
   constructor(root: HTMLElement) {
     this.root = root; this.snd.setVolumes(this.set.sfx, this.set.bgm);
     (window as any).__app = this;
+    initOrient(); onOrient(() => { this.g?.resize(); if (this.sheet?.name === 'map') this.renderSheet(); });
     this.showTitle();
-    window.addEventListener('resize', () => this.g?.resize());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { this.snd.suspend(); if (this.tr instanceof LocalTransport) this.tr.saveNow(); }
       else this.snd.resume();
@@ -58,14 +62,14 @@ export class App implements AppApi {
     const off = store.knownChar('offline'), on = store.knownChar('online');
     const onlineBox = h('div', { class: 'online-box' }, h('small', {}, '서버 확인 중…'));
     const t = h('div', { id: 'title' },
-      h('div', { class: 'sky' }, h('div', { class: 'moon' }), h('div', { class: 'hills' }), ...Array.from({ length: 14 }, (_, i) => h('i', { class: 'firefly', style: { left: `${(i * 37) % 100}%`, top: `${40 + (i * 23) % 50}%`, animationDelay: `${(i * 0.7) % 5}s` } }))),
-      h('div', { class: 'logo' }, h('small', {}, '한 손으로 즐기는 요괴 퇴마 MMORPG'), h('h1', {}, '달빛 퇴마단'), h('div', { class: 'eng' }, 'MOONLIT EXORCISTS')),
+      h('div', { class: 'sky' }, h('div', { class: 'hills' }), ...Array.from({ length: 14 }, (_, i) => h('i', { class: 'firefly', style: { left: `${(i * 37) % 100}%`, top: `${40 + (i * 23) % 50}%`, animationDelay: `${(i * 0.7) % 5}s` } }))),
+      h('div', { class: 'brand' }, h('div', { class: 'moon' }), h('div', { class: 'logo' }, h('small', {}, '한 손으로 즐기는 요괴 퇴마 MMORPG'), h('h1', {}, '달빛 퇴마단'), h('div', { class: 'eng' }, 'MOONLIT EXORCISTS')),
+        h('div', { class: 'foot' }, '이동만 하세요. 공격·부적은 자동입니다. · v0.2 알파', h('br'), store.storageOk ? '' : '⚠ 브라우저 저장소를 쓸 수 없어 진행이 저장되지 않습니다')),
       h('div', { class: 'menu' },
         off ? h('button', { class: 'primary big', onclick: () => this.start('offline', null) }, h('span', {}, `이어하기`), h('small', {}, `${off.name} · Lv${off.level} ${CLASSES[off.cls].name}`)) : null,
         h('button', { class: off ? '' : 'primary big', onclick: () => this.showCreate('offline') }, off ? '새 캐릭터 (오프라인)' : h('span', {}, '모험 시작', h('small', { class: 'block' }, 'AI 동료들과 함께하는 체험 월드'))),
         onlineBox,
         h('div', { class: 'row' }, h('button', { onclick: () => this.titleModal(codexPanel()) }, '요괴 도감'), h('button', { onclick: () => this.titleModal(this.settingsPanel(true)) }, '설정'))),
-      h('div', { class: 'foot' }, '이동만 하세요. 공격·부적은 자동입니다. · v0.2 알파', h('br'), store.storageOk ? '' : '⚠ 브라우저 저장소를 쓸 수 없어 진행이 저장되지 않습니다'),
       h('div', { id: 'modal', class: 'hidden' }));
     this.root.append(t);
     const fill = (info: Awaited<ReturnType<typeof detectServer>>) => {
@@ -78,22 +82,31 @@ export class App implements AppApi {
   }
   private titleModal(el: HTMLElement): void { const m = $('#modal'); clear(m); m.classList.remove('hidden'); m.append(h('div', { class: 'modal-card tall' }, h('button', { class: 'close', onclick: () => m.classList.add('hidden') }, '✕'), el)); }
 
+  /** Character creation: all classes in a landscape 5×2 grid (only the starters can be picked) + a detail panel. */
   showCreate(mode: Mode): void {
-    clear(this.root); let cls: ClassId = 'sword';
-    const name = h('input', { type: 'text', maxlength: 10, placeholder: '이름 (최대 10자)', autocomplete: 'off' }) as HTMLInputElement;
-    const cards = h('div', { class: 'classes' });
-    const draw = () => { clear(cards); for (const id of CLASS_IDS) { const c = CLASSES[id]; cards.append(h('button', { class: `classcard ${cls === id ? 'sel' : ''}`, style: { '--c': c.color } as any, onclick: () => { cls = id; this.snd.unlock(); this.snd.play('click'); draw(); } }, h('img', { src: classIcon(id) }), h('b', {}, c.name), h('small', { class: 'role' }, c.role), h('p', {}, c.desc), h('small', { class: 'ultname' }, `필살기 · ${c.ultName}`), h('small', { class: 'tal' }, h('img', { src: talIcon(c.startTal) }), TALS[c.startTal].name))); } };
+    clear(this.root); let cls: ClassId = 'sword', view: ClassId = 'sword';
+    const name = h('input', { type: 'text', maxlength: 10, placeholder: '이름 (최대 10자)', autocomplete: 'off', enterkeyhint: 'go' }) as HTMLInputElement;
+    const cards = h('div', { class: 'classes' }), detail = h('div', { class: 'cdwrap' });
+    const draw = () => {
+      clear(cards); for (const id of CLASS_IDS) { const locked = !STARTER_CLASSES.includes(id); cards.append(classCard(id, { sel: cls === id, peek: view === id && cls !== id, locked, onclick: () => { view = id; if (!locked) cls = id; this.snd.unlock(); this.snd.play('click'); draw(); } })); }
+      const locked = !STARTER_CLASSES.includes(view); const c = CLASSES[view];
+      clear(detail); detail.append(classDetail(view, locked, locked ? lockBox(view) : h('small', { class: 'tal' }, '시작 부적', h('img', { src: talIcon(c.startTal), alt: '' }), TALS[c.startTal].name)));
+    };
     draw();
     const go = () => { const n = name.value.trim(); if (!n) { name.focus(); name.classList.add('shake'); setTimeout(() => name.classList.remove('shake'), 400); return; } this.start(mode, { name: n, cls }); };
-    this.root.append(h('div', { id: 'create' }, h('h2', {}, mode === 'online' ? '온라인 캐릭터 만들기' : '퇴마사 만들기'),
-      h('p', { class: 'hint' }, mode === 'offline' ? '오프라인 체험 월드: 이 기기에 저장되며, AI 동료(AI 표시)들이 함께 사냥합니다.' : '온라인 서버에 저장됩니다. 같은 채널의 다른 사람들과 함께 플레이합니다.'),
-      cards, name, h('div', { class: 'row' }, h('button', { onclick: () => this.showTitle() }, '뒤로'), h('button', { class: 'primary grow', onclick: go }, '퇴마 시작!'))));
+    this.root.append(h('div', { id: 'create' },
+      h('div', { class: 'cmain' },
+        h('div', { class: 'chead' }, h('button', { class: 'ghost small', onclick: () => this.showTitle() }, '‹ 뒤로'), h('h2', {}, mode === 'online' ? '온라인 캐릭터 만들기' : '퇴마사 만들기'),
+          h('p', { class: 'hint' }, mode === 'offline' ? '오프라인 체험 월드 · 이 기기에 저장, AI 동료와 함께' : '온라인 서버에 저장 · 같은 채널 사람들과 함께')),
+        cards, h('p', { class: 'hint unlockhint' }, '처음엔 검객·궁사 중 하나로 시작해요. 나머지 직업은 캐릭터를 키우면 하나씩 열리고, 마을 신당 무당에게서 전직합니다.'),
+        h('div', { class: 'cform' }, name, h('button', { class: 'primary', onclick: go }, '퇴마 시작!'))),
+      detail));
     name.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
   }
 
   // ======================= session =======================
   start(mode: Mode, create: { name: string; cls: ClassId } | null): void {
-    this.snd.unlock(); this.mode = mode; this.retry = 0;
+    goLandscape(); this.snd.unlock(); this.mode = mode; this.retry = 0;
     if (mode === 'offline' && create) { const lt = new store.LocalProfileStore(); lt.wipe(store.token('offline')); }
     this.pendingHello = create ?? { name: store.knownChar(mode)?.name ?? '퇴마사', cls: store.knownChar(mode)?.cls ?? 'sword' };
     this.buildGameDom(); this.connect();
@@ -117,7 +130,7 @@ export class App implements AppApi {
   private hooks() {
     return {
       onWelcome: () => { this.el.loading.classList.add('hidden'); const me = this.g!.me; store.rememberChar(this.mode, { name: me.name, cls: me.cls, level: me.level, t: Date.now() }); this.renderStatic(); this.zoneSamples = null; this.questPath.t = 0; this.tutorial = me.level <= 1 && me.quest.main === 0; if (this.tutorial) this.el.tutorial.classList.remove('hidden'); },
-      onMe: (ch: Set<string>) => { if (ch.has('level')) store.rememberChar(this.mode, { name: this.g!.me.name, cls: this.g!.me.cls, level: this.g!.me.level, t: Date.now() }); if (this.sheet && (SHEET_KEYS[this.sheet.name] ?? []).some(k => ch.has(k))) this.sheetDirty = true; if (ch.has('slots') || ch.has('tals') || ch.has('level')) this.renderSlots(); },
+      onMe: (ch: Set<string>) => { if (ch.has('cls')) this.renderStatic(); if (ch.has('level') || ch.has('cls')) store.rememberChar(this.mode, { name: this.g!.me.name, cls: this.g!.me.cls, level: this.g!.me.level, t: Date.now() }); if (this.sheet && (SHEET_KEYS[this.sheet.name] ?? []).some(k => ch.has(k))) this.sheetDirty = true; if (ch.has('slots') || ch.has('tals') || ch.has('level')) this.renderSlots(); },
       onRoster: () => { if (this.sheet?.name === 'roster') this.sheetDirty = true; },
       onChat: (name: string, text: string, sys: boolean) => this.addChat(name, text, sys),
       onAnn: (text: string, kind: string) => { this.ann.push(text); this.addChat('', text, true); if (kind === 'legend' || kind === 'boss') this.snd.play('quest'); },
@@ -178,7 +191,7 @@ export class App implements AppApi {
     };
   }
   private renderStatic(): void {
-    const g = this.g!; const me = g.me; this.el.portrait.setAttribute('src', classIcon(me.cls)); this.el.ultGlyph.textContent = ULT_GLYPH[me.cls];
+    const g = this.g!; const me = g.me; this.el.portrait.setAttribute('src', classIcon(me.cls)); this.el.ultGlyph.textContent = CLASSES[me.cls].glyph;
     this.el.ult.style.setProperty('--c', CLASSES[me.cls].color); this.el.ult.title = CLASSES[me.cls].ultName; this.renderSlots();
   }
   private renderSlots(): void {
@@ -249,6 +262,7 @@ export class App implements AppApi {
     E.menu_bag.classList.toggle('badge', up);
     const open = slotsUnlocked(me.level); const canMerge = hasMerge(me); const emptySlot = me.tals.length > me.slots.filter(s => s != null).length && [0, 1, 2, 3].some(i => i < open && me.slots[i] == null);
     E.menu_tal.classList.toggle('badge', canMerge || emptySlot);
+    E.menu_settings.classList.toggle('badge', this.unseenClasses().length > 0);
   }
   private zoneBanner(name: string, z: number): void {
     const b = h('div', { class: 'zonebanner' }, h('small', {}, z === 0 ? '안전 지역' : z === 5 ? '월드 보스 지역' : `권장 Lv${ZONES[z].minLv}~${ZONES[z].maxLv}`), h('b', {}, name));
@@ -313,7 +327,7 @@ export class App implements AppApi {
   /** Full-width ultimate cut-in: class portrait sweeping across a slanted band with the skill name. */
   private cutIn(cls: ClassId): void {
     const E = this.el.cutin; const c = CLASSES[cls]; clear(E); E.style.setProperty('--c', c.color);
-    E.append(h('div', { class: 'band' }), h('img', { src: classIcon(cls, 160) }), h('div', { class: 'name' }, h('b', {}, c.ultName), h('small', {}, ULT_GLYPH[cls])));
+    E.append(h('div', { class: 'band' }), h('img', { src: classIcon(cls, 160) }), h('div', { class: 'name' }, h('b', {}, c.ultName), h('small', {}, CLASSES[cls].glyph)));
     E.classList.remove('show'); void E.offsetWidth; E.classList.add('show');
   }
   private titleCard(name: string, sub: string): void {
@@ -338,13 +352,17 @@ export class App implements AppApi {
   private useUlt(): void { const me = this.g?.me; if (!me) return; if (me.zone === 0) { this.toast('마을에서는 필살기를 쓸 수 없습니다'); return; } if (me.ult < 100) { this.toast(`필살기 충전 중 (${Math.floor(me.ult)}%) — 요괴를 처치하면 찹니다`); return; } this.send({ t: 'ult' }); }
   private quickEmote(): void { const i = [0, 1, 3, 4, 5][Math.floor(Math.random() * 5)]; this.send({ t: 'emote', e: i }); }
   private tapWorld(sx: number, sy: number): void {
-    const g = this.g; if (!g?.ready) return; const rect = (this.el.cv as HTMLCanvasElement).getBoundingClientRect(); const [wx, wy] = g.r.toWorld(sx - rect.left, sy - rect.top);
-    for (const n of g.map.npcs) if (Math.hypot(n.x - wx, n.y - 24 - wy) < 44) { this.snd.play('click'); this.openSheet(n.kind === 'smith' ? 'smith' : n.kind === 'talshop' ? 'tal' : n.kind === 'board' ? 'quest' : 'map'); return; }
+    // #cv fills #app, so #app-local coordinates are canvas coordinates (also when the layout is rotated)
+    const g = this.g; if (!g?.ready) return; const [lx, ly] = toLocal(sx, sy); const [wx, wy] = g.r.toWorld(lx, ly);
+    for (const n of g.map.npcs) if (Math.hypot(n.x - wx, n.y - 24 - wy) < 44) { this.snd.play('click'); this.openSheet(n.kind === 'smith' ? 'smith' : n.kind === 'talshop' ? 'tal' : n.kind === 'board' ? 'quest' : n.kind === 'priest' ? 'cls' : 'map'); return; }
   }
   send(m: C2S): void { this.g?.send(m); if (m.t !== 'i') this.snd.play('click'); }
   me(): MeState { return this.g!.me; }
   game(): Game { return this.g!; }
   chatLines() { return this.chat; }
+  newClasses(): ReadonlySet<ClassId> { return this.clsNew; }
+  /** Unlocked classes the player has not seen yet (the current class never counts). */
+  private unseenClasses(): ClassId[] { const me = this.g?.me; if (!me) return []; return unlockedClasses({ level: me.level, bosses: me.lstats.bosses, worldBoss: me.lstats.worldBoss }).filter(id => id !== me.cls && !this.seenCls.has(id)); }
   private addChat(name: string, text: string, sys: boolean): void {
     this.chat.push({ name, text, sys, t: Date.now() }); if (this.chat.length > 100) this.chat.shift();
     const el = h('div', { class: sys ? 'sys' : '', 'data-t': String(performance.now()) }, name ? h('b', {}, name + ': ') : null, text);
@@ -360,16 +378,17 @@ export class App implements AppApi {
   closeModal(): void { $('#modal')?.classList.add('hidden'); }
   openItem(it: Item, equipped: boolean): void { this.openModal(itemModal(this, it, equipped)); }
   toggleSheet(name: string): void { if (this.sheet?.name === name) this.closeSheet(); else this.openSheet(name); }
-  openSheet(name: string, arg: unknown = null): void { if (!this.g?.ready) return; this.snd.play('click'); this.sheet = { name, arg }; this.renderSheet(); }
+  openSheet(name: string, arg: unknown = null): void { if (!this.g?.ready) return; this.snd.play('click'); if (name === 'cls' && this.sheet?.name !== 'cls') this.clsNew.clear(); this.sheet = { name, arg }; this.renderSheet(); }
   closeSheet(): void { this.sheet = null; this.sheetPointer = false; const el = $('#sheet'); if (el) { el.classList.add('hidden'); clear(el); } }
   private renderSheet(): void {
     const s = this.sheet; const el = $('#sheet'); if (!s || !el) return;
-    const titles: Record<string, string> = { bag: '가방', tal: '부적', quest: '퀘스트', map: '지도 · 신당 이동', settings: '메뉴', roster: '접속자', chat: '채팅', smith: '대장간', codex: '요괴 도감' };
+    const titles: Record<string, string> = { bag: '가방', tal: '부적', quest: '퀘스트', map: '지도 · 신당 이동', settings: '메뉴', roster: '접속자', chat: '채팅', smith: '대장간', codex: '요괴 도감', cls: '직업 · 전직소' };
+    if (s.name === 'cls') { const fresh = this.unseenClasses(); if (fresh.length) { for (const id of fresh) { this.clsNew.add(id); this.seenCls.add(id); } store.saveSeenClasses([...this.seenCls]); } }
     let body: HTMLElement;
     switch (s.name) {
       case 'bag': body = bagPanel(this); break; case 'tal': body = talPanel(this, s.arg as number | null); break; case 'quest': body = questPanel(this); break;
       case 'map': body = mapPanel(this); break; case 'roster': body = rosterPanel(this); break; case 'chat': body = chatPanel(this); break; case 'smith': body = smithPanel(this); break;
-      case 'codex': body = codexPanel(); break; default: body = this.settingsPanel(false);
+      case 'codex': body = codexPanel(); break; case 'cls': body = clsPanel(this, s.arg as ClassId | null); break; default: body = this.settingsPanel(false);
     }
     this.sheetT = performance.now();
     const card = el.querySelector('.sheet-card') as HTMLElement | null;
@@ -389,7 +408,7 @@ export class App implements AppApi {
     server.addEventListener('change', () => { S.server = server.value.trim(); save(); });
     const g = this.g;
     return h('div', {},
-      !onTitle && g ? h('div', { class: 'grid2' }, h('button', { onclick: () => this.openSheet('roster') }, '👥 접속자'), h('button', { onclick: () => this.openSheet('codex') }, '📖 요괴 도감'), h('button', { onclick: () => this.openSheet('chat') }, '💬 채팅'), h('button', { onclick: () => this.openSheet('smith') }, '⚒ 대장간')) : null,
+      !onTitle && g ? h('div', { class: 'grid3' }, h('button', { class: 'clsbtn', onclick: () => this.openSheet('cls') }, '🎭 직업', this.unseenClasses().length ? h('span', { class: 'newchip' }, 'NEW') : null), h('button', { onclick: () => this.openSheet('roster') }, '👥 접속자'), h('button', { onclick: () => this.openSheet('codex') }, '📖 요괴 도감'), h('button', { onclick: () => this.openSheet('chat') }, '💬 채팅'), h('button', { onclick: () => this.openSheet('smith') }, '⚒ 대장간')) : null,
       h('h3', {}, '소리 · 화면'), slider('효과음', 'sfx'), slider('배경음', 'bgm'), h('div', { class: 'set' }, h('span', {}, '그래픽'), quality), h('small', { class: 'hint' }, '고화질: 빛 번짐·왜곡 효과·고해상도 / 저사양: 효과를 줄여 배터리 절약'),
       toggle('화면 흔들림', 'shake'), toggle('피해 숫자 표시', 'dmgNums'), toggle('이름표 표시', 'names'),
       h('h3', {}, '온라인 서버'), h('small', { class: 'hint' }, '게임 서버(npm start)를 켠 주소. 서버가 이 페이지를 직접 제공하면 비워두세요.'), server,

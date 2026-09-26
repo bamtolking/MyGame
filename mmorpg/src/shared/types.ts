@@ -1,5 +1,5 @@
 // Plain data types shared by the server simulation, the wire protocol and the client UI.
-export type ClassId = 'sword' | 'archer' | 'shaman';
+export type ClassId = 'sword' | 'archer' | 'shaman' | 'spear' | 'taoist' | 'guardian' | 'assassin' | 'gunner' | 'musician' | 'painter';
 export type GearSlot = 'weapon' | 'armor' | 'charm';
 export type Rarity = 0 | 1 | 2 | 3 | 4;
 export type StatKey = 'atkPct' | 'hpPct' | 'crit' | 'critDmg' | 'aspd' | 'move' | 'cdr' | 'leech' | 'xpPct' | 'goldPct' | 'dr';
@@ -17,6 +17,8 @@ export interface Profile {
   inv: Item[]; equip: Equip; tals: Tal[]; slots: (number | null)[];
   quest: QuestState; shrines: number[]; stats: LifeStats; pity: number; nextUid: number; created: number;
   x?: number; y?: number; opts?: { autoSell: number };
+  /** Classes this character has played (each grants its starting talisman once). */
+  tried?: ClassId[];
 }
 
 /** Derived combat stats. */

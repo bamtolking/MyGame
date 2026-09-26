@@ -3,6 +3,8 @@ import { GameServer } from '../src/server/server.ts';
 import { BotBrain } from '../src/server/bots.ts';
 import { MAIN_QUESTS } from '../src/shared/data/quests.ts';
 import { MemStore, FakeConn } from './helpers.ts';
+import { newProfile } from '../src/shared/data/items.ts';
+import { CLASSES } from '../src/shared/data/classes.ts';
 import type { ClassId } from '../src/shared/types.ts';
 import type { World } from '../src/server/world.ts';
 
@@ -17,7 +19,9 @@ export function simulate(cls: ClassId, seed: number, minutes: number): SimResult
   W = gs.worlds[0]; const w = W; w.rng.s = seed >>> 0;
   const conn = new FakeConn(); let bytes = 0; conn.send = (d: string | Uint8Array) => { bytes += d.length; if (typeof d === 'string' && d.includes('"t":"wb"')) { const m = JSON.parse(d); if (m.w.state === 'fight' && !fighting) { fighting = true; wbTries++; } if (m.w.state === 'idle' && fighting) { fighting = false; } } if (typeof d === 'string' && d.includes('토벌 성공')) wbWins++; };
   let fighting = false, wbTries = 0, wbWins = 0;
-  const s = gs.connect(conn); gs.message(s, JSON.stringify({ t: 'hello', v: 1, token: 'tok_balance_' + seed + 'aaaaaaaa', name: '밸런스', cls }));
+  // pre-made profile: new characters may only pick a starter class, but the sweep plays every class from level 1
+  const token = 'tok_balance_' + seed + 'aaaaaaaa'; store.save(token, newProfile('밸런스', CLASSES[cls], 0));
+  const s = gs.connect(conn); gs.message(s, JSON.stringify({ t: 'hello', v: 1, token, name: '밸런스', cls }));
   const p = s.player!; w.brains.set(p.id, new BotBrain('quester', seed)); p.prof.opts = { autoSell: 0 };
   const levelAt: Record<number, number> = {}, questAt: Record<number, number> = {}; let firstBossMin: number | null = null;
   const bossQuest = MAIN_QUESTS.findIndex(q => q.kind === 'boss');
