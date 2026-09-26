@@ -50,7 +50,7 @@ export const guardian: ClassLook = {
     atk0: pose({ bob: 1.5, lean: -0.16, armF: -0.45, armB: 0.35, wpn: -0.1, extra: 0.05, eyes: 'fierce', legF: 0.35, legB: -0.35, step: -0.6 }),
     atk1: pose({ bob: 1.5, lean: 0.26, armF: 1.5, armB: -0.75, wpn: -0.9, extra: 1, eyes: 'fierce', legF: 0.7, legB: -0.5, step: 1 }),
     atk2: pose({ bob: 1, lean: 0.1, armF: 0.95, armB: -0.4, wpn: -0.6, extra: 0.7, eyes: 'fierce', legF: 0.4, legB: -0.3, step: 0.5 }),
-    hurt: pose({ lean: -0.28, bob: 1.5, armF: -0.6, armB: -1.1, wpn: -1.0, extra: 0.1, eyes: 'hurt' }),
+    hurt: pose({ lean: -0.28, bob: 1.5, armF: -0.6, armB: -1.1, wpn: -0.35, extra: 0.1, eyes: 'hurt' }),
   },
   hem: HEM, sashTails: false,
   leg: (c, P, back) => {
@@ -92,12 +92,13 @@ export const guardian: ClassLook = {
     for (const k of [0, 1]) line(c, [hx - 2 - k * 2, hy - 26 + k * 1.4, hx - 12 - k + s * 0.4, hy - 22 + k * 1.5, hx - 19 - k * 1.5 + s, hy - 9 + k], 'rgba(120,10,30,0.7)', 0.9);
     // 드림: studded neck guard behind, narrow cheek guard in front
     c.beginPath(); c.moveTo(hx - 17, hy - 9); c.quadraticCurveTo(hx - 21, hy + 3, hx - 19, hy + 14); c.quadraticCurveTo(hx - 14, hy + 15.5, hx - 9, hy + 13); c.quadraticCurveTo(hx - 9.5, hy + 2, hx - 8, hy - 8); c.closePath();
-    vol(c, NAVY, hx - 20, hy - 9, hx - 8, hy + 14, 1.8, INK, 0.3, -0.25);
+    vol(c, STEEL, hx - 20, hy - 9, hx - 8, hy + 14, 1.8, INK, 0.2, -0.4);
+    for (const y of [0, 6]) { c.beginPath(); c.moveTo(hx - 20.4, hy + y); c.quadraticCurveTo(hx - 14.5, hy + y + 1.6, hx - 8.8, hy + y - 0.6); c.strokeStyle = 'rgba(30,34,56,0.65)'; c.lineWidth = 1; c.stroke(); }
     c.beginPath(); c.moveTo(hx - 19, hy + 12.4); c.quadraticCurveTo(hx - 14, hy + 13.8, hx - 9.4, hy + 11.4); c.strokeStyle = RED; c.lineWidth = 1.8; c.stroke();
-    for (const [x, y] of [[-16, -3], [-12, -3], [-16.5, 2.5], [-12, 2.5], [-16.5, 8], [-12, 8]]) { circle(c, hx + x, hy + y, 0.9); c.fillStyle = STUD; c.fill(); }
-    c.beginPath(); c.moveTo(hx + 12.5, hy - 8); c.quadraticCurveTo(hx + 14.2, hy + 1, hx + 13.2, hy + 9); c.lineTo(hx + 18.4, hy + 8); c.quadraticCurveTo(hx + 18.6, hy - 1, hx + 17.4, hy - 8); c.closePath();
-    vol(c, NAVY, hx + 12, hy - 8, hx + 19, hy + 9, 1.6, INK, 0.3, -0.25);
-    for (const y of [-3, 3]) { circle(c, hx + 15.6, hy + y, 0.85); c.fillStyle = STUD; c.fill(); }
+    for (const [x, y] of [[-16, -3.5], [-12, -3.5], [-16.5, 3], [-12, 3], [-16.5, 9], [-12, 9]]) { circle(c, hx + x, hy + y, 0.85); c.fillStyle = GOLD; c.fill(); }
+    c.beginPath(); c.moveTo(hx + 13.4, hy - 8); c.quadraticCurveTo(hx + 14.6, hy - 1, hx + 14, hy + 5.5); c.quadraticCurveTo(hx + 16.4, hy + 6.6, hx + 18.4, hy + 5); c.quadraticCurveTo(hx + 18.8, hy - 1, hx + 17.6, hy - 8); c.closePath();
+    vol(c, STEEL, hx + 13, hy - 8, hx + 19, hy + 6, 1.6, INK, 0.2, -0.4);
+    circle(c, hx + 16, hy - 1.5, 0.85); c.fillStyle = GOLD; c.fill(); c.beginPath(); c.moveTo(hx + 14.2, hy + 4.4); c.quadraticCurveTo(hx + 16.3, hy + 5.4, hx + 18.2, hy + 4); c.strokeStyle = RED; c.lineWidth = 1.4; c.stroke();
     // steel bowl with plate seams and a gold brow band
     c.beginPath(); c.ellipse(hx + 0.5, hy - 8, 17.4, 16, 0, Math.PI, 0); c.closePath(); vol(c, STEEL, hx - 16, hy - 24, hx + 17, hy - 8, 2, INK, 0.35, -0.35);
     for (const k of [-9, 0, 9]) { c.beginPath(); c.moveTo(hx + 0.5 + k * 0.25, hy - 23.6); c.quadraticCurveTo(hx + 0.5 + k * 1.05, hy - 18, hx + 0.5 + k * 1.3, hy - 9); c.strokeStyle = 'rgba(30,34,56,0.6)'; c.lineWidth = 1; c.stroke(); }
@@ -113,9 +114,8 @@ export const guardian: ClassLook = {
   },
   hand: (c, P, p, back) => { if (back) { c.save(); c.rotate(p.wpn - p.lean + p.armB); mace(c, shade(P.skin, -0.2)); c.restore(); } },
   front: (c, _P, p) => {
-    const a = p.armF, L = 14, x = 6 + Math.sin(a) * L, y = -20 + Math.cos(a) * L, f = 1 - Math.min(1, p.extra) * 0.3;
-    if (p.extra >= 1) for (const [dy, len] of [[-9, 13], [0, 17], [9, 12]]) { const x0 = x - 13 * f - 5; line(c, [x0 - len, y + dy, x0, y + dy], INK, 3.4); line(c, [x0 - len, y + dy, x0, y + dy], '#fff0b8', 1.6); }
-    c.save(); c.translate(x, y); c.rotate(a > 1 ? -0.08 : (0.3 - a) * 0.12); shield(c, 13.6, f); c.restore();
+    const a = p.armF, L = p.extra >= 1 ? 19 : 14, x = 6 + Math.sin(a) * L, y = -20 + Math.cos(a) * L, f = 1 - Math.min(1, p.extra) * 0.3;
+    c.save(); c.translate(x, y); c.rotate(a > 1 ? -0.08 : (0.3 - a) * 0.12); shield(c, 15, f); c.restore();
   },
   weaponIcon: (c, tc) => { c.save(); c.translate(24, 24); c.rotate(-0.12); shield(c, 20, 1, tc); c.restore(); },
 };

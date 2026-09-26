@@ -45,7 +45,7 @@ export const taoist: ClassLook = {
     idle0: pose({ armF: 0.3, armB: -0.35, wpn: 0.5 }), idle1: pose({ bob: 1, armF: 0.34, armB: -0.32, wpn: 0.52 }), blink: pose({ eyes: 'blink', armF: 0.3, armB: -0.35, wpn: 0.5 }),
     walk0: pose({ ...WALK(-1.6, 0.5, 1), wpn: 0.6 }), walk1: pose({ ...WALK(0, 0.05, 0), wpn: 0.6 }), walk2: pose({ ...WALK(-1.6, -0.5, -1), wpn: 0.6 }), walk3: pose({ ...WALK(0, -0.05, 0), wpn: 0.6 }),
     atk0: pose({ lean: -0.14, armF: -0.5, armB: -2.55, wpn: 0.55, eyes: 'fierce', legF: 0.25, legB: -0.25, extra: 0.5 }),
-    atk1: pose({ lean: 0.2, bob: 1.5, armF: 1.2, armB: -1.1, wpn: 0.05, eyes: 'fierce', legF: 0.55, legB: -0.4, step: 1, extra: 1 }),
+    atk1: pose({ lean: 0.1, bob: 1.5, armF: 1.55, armB: 1.3, wpn: -0.1, eyes: 'fierce', legF: 0.55, legB: -0.4, step: 1, extra: 1 }),
     atk2: pose({ lean: 0.1, bob: 1, armF: 0.85, armB: -0.6, wpn: -1.7, eyes: 'fierce', legF: 0.4, legB: -0.3, step: 0.5, extra: 0.9 }),
     hurt: pose({ lean: -0.28, bob: 1.5, armF: -0.9, armB: -1.1, eyes: 'hurt', wpn: 0.9 }),
   },
@@ -82,12 +82,16 @@ export const taoist: ClassLook = {
   hand: (c, _P, p, back) => {
     if (!back) { peachSword(c, p); return; }
     // extra: 0 rest, 0.5 charged (raised, glowing), 1 cast (papers thrown), 0.9 after the cast
+    if (p.extra >= 1) return; // atk1: the papers are in flight (see front)
     const up = p.extra > 0.2 && p.extra < 0.8;
     fan(c, up ? 0.2 : p.extra >= 0.8 ? 0.5 : 0.8, p.extra >= 0.8 ? 2 : 4, up);
   },
   front: (c, _P, p) => {
-    if (p.extra < 1) return; // atk1: two talismans fly up along the sword towards the sky
-    for (const [x, y, r] of [[19, -54, 0.3], [23, -67, 0.55]]) { c.save(); c.translate(x, y); glowDot(c, 0, 0, 8, 'rgba(180,140,255,0.55)'); c.rotate(r); c.translate(0, 5.5); talisman(c, 4.6, 11); c.restore(); }
+    if (p.extra < 1) return; // atk1: three talismans flicked forward past the raised sword, crackling (the chain bolt starts here)
+    glowDot(c, 31, -28, 13, 'rgba(176,136,255,0.62)');
+    for (const [x0, y0, x1, y1] of [[18, -25, 24, -25.3], [20, -32.5, 26, -32.8], [22, -28.8, 28, -29]]) line(c, [x0, y0, x1, y1], 'rgba(236,228,255,0.75)', 1);
+    for (const [x, y, r] of [[29.5, -25, 1.52], [31, -32.5, 1.4], [33, -28.8, 1.62]]) { c.save(); c.translate(x, y); c.rotate(r); c.translate(0, 4.6); talisman(c, 4, 9.2); c.restore(); }
+    line(c, [34.5, -36, 36.5, -32.5, 34.8, -31, 37.5, -27.5], '#f4ecff', 1.1);
   },
   weaponIcon: (c, tc) => {
     // talisman on a red cord from the pommel, then the diagonal peach-wood sword over it

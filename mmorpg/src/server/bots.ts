@@ -210,13 +210,13 @@ function nearestShrine(w: World, x: number, y: number): number { let b = 0, bd =
 export function addBots(w: World, count: number, level: number, buddyOf: number, seed: number): Player[] {
   const out: Player[] = []; const rng = new Rng(seed);
   const roamLv = [9, 15, 22, 12, 18, 26];
-  // companions aren't bound by unlocks (they show players what's ahead); the party always has a healer
-  const healer: ClassId = rng.chance(0.5) ? 'shaman' : 'musician';
-  const deck = CLASS_IDS.filter(c => c !== healer).sort(() => rng.next() - 0.5);
+  // companions aren't bound by unlocks (they show players what's ahead); the first two buddies are always supports
+  const support = (['shaman', 'musician', 'guardian'] as ClassId[]).sort(() => rng.next() - 0.5).slice(0, 2);
+  const deck = [...support, ...CLASS_IDS.filter(c => !support.includes(c)).sort(() => rng.next() - 0.5)];
   for (let i = 0; i < count; i++) {
     const role: 'buddy' | 'roamer' = i < Math.ceil(count / 2) ? 'buddy' : 'roamer';
     const lv = role === 'buddy' ? Math.max(1, level + rng.int(-1, 1)) : roamLv[(i - Math.ceil(count / 2)) % roamLv.length];
-    const cls = i === 0 ? healer : deck[(i - 1) % deck.length];
+    const cls = deck[i % deck.length];
     const name = BOT_NAMES[(i + (seed % BOT_NAMES.length)) % BOT_NAMES.length];
     const prof = makeBotProfile(name, cls, lv, seed + i * 17);
     const p = w.addPlayer('bot:' + name, prof, true);

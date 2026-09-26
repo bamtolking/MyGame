@@ -45,7 +45,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   spear: {
     id: 'spear', name: '창술사', eng: 'Spearman', role: '중거리 · 관통',
     desc: '청룡 술이 달린 긴 창을 든 무사. 앞으로 길게 찔러 일직선의 요괴를 한 번에 꿰뚫습니다.',
-    hp: 160, hpLv: 19, atk: 16, aspd: 1.1, range: 150, move: 150, crit: 0.07, dr: 0.1, heal: 1, leech: 0.012,
+    hp: 165, hpLv: 20, atk: 16, aspd: 1.1, range: 150, move: 150, crit: 0.07, dr: 0.12, heal: 1, leech: 0.02,
     startTal: 'aura', ultName: '백룡창', ultDesc: '3초 동안 가까운 요괴를 향해 창을 쉴 새 없이 내질러 길게 꿰뚫습니다.', color: '#b8e04a', glyph: '槍',
     atkKind: 'thrust', melee: true, unlock: { lv: 8, text: '레벨 8 달성' }, ultDur: 3,
   },
