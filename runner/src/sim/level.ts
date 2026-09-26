@@ -12,7 +12,7 @@ import {
 } from '../data/tuning';
 import { CHUNKS } from '../data/chunks';
 import { BIOME_ORDER } from '../data/biomes';
-import { STAGES, type StageDef } from '../data/stages';
+import { STAGES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { parseChunk, type ParsedChunk } from './chunk';
 import { rngNext, seedRng } from './rng';
 import type { RunState, Level, PlacedChunk, PowerKind, Pickup, GenState } from './types';
@@ -168,7 +168,7 @@ export function placeChunk(s: RunState, p: ParsedChunk, tier: number, biome: str
         } else lv.pickups.push({ ...base, type: 'big' });
         break;
       case 'slotB':
-        if (s.mode === 'stage' && !sky) lv.pickups.push({ ...base, type: 'pouch', pouch: g.pouchesPlaced++ });
+        if (s.mode === 'stage' && !sky) lv.pickups.push({ ...base, type: 'pouch', pouch: stagePouchCount(s) + g.pouchesPlaced++ });   // after the stage's own pouches (distinct ★3 bits)
         else lv.pickups.push({ ...base, type: 'coin' });
         break;
       case 'slotL':
@@ -226,6 +226,8 @@ export function ensureLevel(s: RunState): void {
     lv.pickups = lv.pickups.filter(o => o.x >= cut && !o.taken);
   }
 }
+
+function stagePouchCount(s: RunState): number { return (s.stageId ? STAGE_BY_ID[s.stageId]?.pouches?.length : 0) ?? 0; }
 
 /** Stage-defined golden pouches for course slot `slot` (a stage may also use 'B' glyphs inside chunks). */
 function placeStagePouches(s: RunState, pc: PlacedChunk, slot: number): void {

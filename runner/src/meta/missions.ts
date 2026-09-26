@@ -9,7 +9,7 @@
 //   · deterministic: the same save always offers the same next mission (no Math.random)
 import type { RunState, Mode } from '../sim/types';
 import { newRun, stepRun } from '../sim/run';
-import { STAGES } from '../data/stages';
+import { STAGES, stagePouchTotal } from '../data/stages';
 import { CHARACTERS } from '../data/characters';
 // NOTE: circular import (progress.ts imports this module). Only used inside functions, never at module init.
 import { featureOpen, stageCleared, stageUnlocked, starsOf, stageStarMask, type Progress } from './progress';
@@ -67,7 +67,7 @@ export function starsAvailable(p: Progress): number {
   for (const st of STAGES) {
     if (!stageUnlocked(p, st.id)) continue;
     const mask = p.starMask[st.id] ?? 0;
-    n += (mask & 1 ? 0 : 1) + (mask & 2 ? 0 : 1) + (mask & 4 || (st.pouches?.length ?? 0) < 3 ? 0 : 1);
+    n += (mask & 1 ? 0 : 1) + (mask & 2 ? 0 : 1) + (mask & 4 || stagePouchTotal(st) < 3 ? 0 : 1);
   }
   return n;
 }
@@ -75,9 +75,10 @@ export function starsAvailable(p: Progress): number {
 export function pouchesAvailable(p: Progress): number {
   let n = 0;
   for (const st of STAGES) {
-    if (!stageUnlocked(p, st.id) || !st.pouches?.length) continue;
+    const total = Math.min(3, stagePouchTotal(st));
+    if (!stageUnlocked(p, st.id) || !total) continue;
     const have = p.pouches[st.id] ?? 0;
-    for (let i = 0; i < Math.min(3, st.pouches.length); i++) if (!(have & (1 << i))) n++;
+    for (let i = 0; i < total; i++) if (!(have & (1 << i))) n++;
   }
   return n;
 }

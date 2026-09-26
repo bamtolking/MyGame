@@ -141,3 +141,4 @@
 | set_river_benches | 1–5 | 44 | 14 | 14 | 100% | setpiece platform pit slide |
 | set_bridge_cables | 1–5 | 48 | 14 | 14 | 100% | setpiece tunnel double pit |
 | set_dawn_rooftops | 1–5 | 48 | 23 | 23 | 100% | setpiece pit platform double |
+| stage_fastfall | 2–3 | 44 | 14 | 14 | 100% | stageonly combo jump slide |

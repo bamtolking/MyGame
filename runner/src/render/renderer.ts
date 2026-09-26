@@ -18,8 +18,8 @@ import { PARSED_BY_ID } from '../sim/level';
 import { hurtbox } from '../sim/body';
 import { totalScore, flowLevel, jellyPct } from '../sim/run';
 import type { RunState, SimEvent, Hazard, PowerKind } from '../sim/types';
-import { Fx, star, vrand, type Box } from './fx';
-import { drawCharacter, rr, type Pose, type Shape, type HatId } from './characters';
+import { Fx, TrailFx, star, vrand, type Box, type TrailId } from './fx';
+import { drawCharacter, rr, type Pose, type Shape, type HatId, type Palette } from './characters';
 import { drawCompanion } from './companions';
 import { drawSpike, drawTall, drawHang, setHazardOutlineScale } from './hazards';
 import { drawPickup, LETTER_COLORS } from './pickups';
@@ -58,7 +58,11 @@ export class Renderer {
   fx = new Fx();
   opts: RenderOpts = { reduceMotion: false, highContrast: false, lowFx: false, showHitbox: false, shake: 1, uiScale: 1 };
   hud: HudInfo = { pbDist: 0, stageGoalPct: 0, pouchesBefore: 0, pauseW: 52 };
+  /** cosmetics per character id (the app fills these from equippedFor at run start; relay partner included) */
   hats: Record<string, HatId | null> = {};
+  palettes: Record<string, Palette | null> = {};
+  trails: Record<string, TrailId | null> = {};
+  private trail = new TrailFx();
   time = 0;
   backdrop = new Backdrop();
   resumeCount = 0;                     // s left of the post-pause 3-2-1 (the app holds the sim)
@@ -73,7 +77,7 @@ export class Renderer {
   private hitV = 0; private frostK = 0; private dim = 0; private goT = 0; private lastPhase = '';
   private speedWarn = 0;
   private banner: { text: string; sub: string; t: number; color: string } | null = null;
-  private runPhase = 0; private lastX = 0;
+  private runPhase = 0; private lastX = 0; private bodyV = 0;
   private skyMix = 0;
   private comp = { x: 0, y: 0, init: false };
   private hazBoxes: Box[] = [];
@@ -153,7 +157,7 @@ export class Renderer {
         case 'relay': { const ch = CHAR_BY_ID[e.id]; this.doFlash(0.4, '255,255,255'); this.banner = { text: '이어달리기!', sub: ch ? `${ch.name} 출발!` : '', t: 0, color: '#80ed99' }; break; }
         case 'nearMiss': f.text(b.x + 10, b.y - 96, '아슬아슬!', '#b8f2e6', 16, false, 0.6); break;
         case 'streak': { const lv = flowLevel(s); this.banner = { text: `흐름 ${lv}단계`, sub: `별사탕 점수 +${Math.round(lv * STREAK_BONUS * 100)}%`, t: 0, color: '#ffb347' }; break; }
-        case 'rewind': this.fx.clear(); this.trauma = 0; break;
+        case 'rewind': this.fx.clear(); this.trail.reset(); this.trauma = 0; break;
         case 'death': break;
         case 'clear': this.banner = { text: '도착!', sub: '', t: 0, color: '#ffd166' }; break;
       }
@@ -192,8 +196,12 @@ export class Renderer {
     if (this.banner) { this.banner.t += dt; if (this.banner.t > 1.8) this.banner = null; }
     if (this.hint) this.hint.t += dt;
     if (!s.body.onGround) this.airVy = s.body.vy;
+    const vNow = dt > 0 && Math.abs(bodyX - this.lastX) < 400 ? Math.max(0, bodyX - this.lastX) / dt : 0;
+    this.bodyV += (Math.min(vNow, s.speed * 1.5 + 50) - this.bodyV) * Math.min(1, dt * 14);   // actual run speed (0 while the app holds the sim)
     if (Math.abs(bodyX - this.lastX) < 400) this.runPhase = (this.runPhase + Math.max(0, bodyX - this.lastX) / 64) % 1;
     this.lastX = bodyX;
+    this.trail.id = this.trails[s.charId] ?? null; this.trail.sizeK = this.portrait ? 1.35 : 1;
+    this.trail.update(this.fx, dt, bodyX, bodyY, s.body.scale, s.body.sliding, this.bodyV, s.phase === 'run' && this.resumeCount <= 0, this.opts);
     if (s.body.sliding && s.body.onGround && s.phase === 'run' && !this.opts.lowFx) { this.dustT -= dt; if (this.dustT <= 0) { this.dustT = 0.05; this.fx.burst(bodyX - 22, bodyY - 2, 1, 'rgba(230,210,180,0.7)', 60, 'dot', 3, -60); } }
     const skyTarget = s.bonusStage === 'sky' ? 1 : 0;
     this.skyMix += (skyTarget - this.skyMix) * Math.min(1, dt * 6);
@@ -240,6 +248,7 @@ export class Renderer {
     this.drawSigns(s, x0, x1);
     if (this.hud.pbDist > 50 && s.bonusStage === 'none' && s.mode !== 'stage') this.drawPbFlag(s, bodyX, x0, x1);
     this.drawSpeedLines(s);
+    this.trail.drawRibbon(c);
     this.fx.drawParticles(c);
     this.drawPickups(s, x0, x1);
     this.drawHazards(s, biome, x0, x1);
@@ -395,7 +404,7 @@ export class Renderer {
     const pose: Pose = { state, t: this.time, runPhase: this.runPhase, spin: state === 'air2' && !this.opts.reduceMotion ? -this.spinT / 0.25 * Math.PI * 2 : 0, squash, hurt: s.hurtT < 0.4 && Math.floor(this.time * 20) % 2 === 0, alpha: blinkOff ? 0.35 : 1 };
     c.save(); c.translate(x, y); c.scale(b.scale, b.scale);
     if (s.power.giant > 0 && s.power.giant < 1 && Math.floor(this.time * 10) % 2 === 0) c.globalAlpha = 0.6;
-    drawCharacter(c, shapeOf(ch), ch.palette, pose, this.hats[ch.id] ?? null);
+    drawCharacter(c, shapeOf(ch), this.palettes[ch.id] ?? ch.palette, pose, this.hats[ch.id] ?? null);
     c.restore(); c.globalAlpha = 1;
     if (s.shield > 0) {
       c.strokeStyle = 'rgba(155,231,255,0.9)'; c.fillStyle = 'rgba(155,231,255,0.18)'; c.lineWidth = 3;
@@ -423,7 +432,7 @@ export class Renderer {
 
   private drawDown(ch: CharacterDef, x: number, y: number, s: RunState): void {
     const c = this.c; c.save(); c.translate(x, Math.min(y, GROUND_Y)); c.rotate(-Math.min(1, s.dyingT * 3) * 1.3);
-    drawCharacter(c, shapeOf(ch), ch.palette, { state: 'dead', t: this.time, runPhase: 0, spin: 0, squash: 1, hurt: false, alpha: 1 }, this.hats[ch.id] ?? null); c.restore();
+    drawCharacter(c, shapeOf(ch), this.palettes[ch.id] ?? ch.palette, { state: 'dead', t: this.time, runPhase: 0, spin: 0, squash: 1, hurt: false, alpha: 1 }, this.hats[ch.id] ?? null); c.restore();
   }
 
   private drawHitboxes(s: RunState, x0: number, x1: number): void {

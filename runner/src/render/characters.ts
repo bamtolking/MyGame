@@ -11,8 +11,12 @@
 // Extra exports (optional, not required by callers):
 //  - drawCharacter(c, shape, pal, pose, hat?)  — the 5th arg draws a cosmetic hat in the same call.
 //  - drawHat(c, hatId, shape, pose)            — same hat, as a separate call with the same transform.
-//  - HAT_IDS / HatId                           — 'gat' 갓, 'bokgeon' 복건, 'band' 머리띠.
+//  - HAT_IDS / HatId / hatIdOf                 — the 12 cosmetic hats (COSMETICS id minus 'hat_'), see HATS below.
+//  - headTop(shape)                            — where the hat sits (UI close-ups).
 //  - drawCompanion (re-exported from ./companions).
+// Hats: the static part of every hat is cached like the body (hat × head width × resolution bucket); only
+// fluttering ties / tassels / a twinkle are live (≤ 3 paths). Every hat sits on the crown of the head and stays
+// above the eyes (each head spot carries its own `brow` limit and the head's curvature `sag`).
 
 export type PoseState = 'run' | 'jump' | 'air2' | 'fall' | 'slide' | 'fly' | 'idle' | 'dead';
 export interface Pose {
@@ -30,8 +34,13 @@ import type { Shape } from '../data/characters';
 export { drawCompanion, COMPANION_IDS } from './companions';
 export type { CompanionId } from './companions';
 
-export type HatId = 'gat' | 'bokgeon' | 'band';
-export const HAT_IDS: HatId[] = ['gat', 'bokgeon', 'band'];
+export type HatId = 'gat' | 'bokgeon' | 'band' | 'jokduri' | 'jobawi' | 'flowerpin' | 'beanie' | 'pouch' | 'horns' | 'satgat' | 'crown' | 'laurel';
+export const HAT_IDS: HatId[] = ['gat', 'bokgeon', 'band', 'jokduri', 'jobawi', 'flowerpin', 'beanie', 'pouch', 'horns', 'satgat', 'crown', 'laurel'];
+/** 'hat_gat' (a COSMETICS id) or 'gat' → 'gat'; anything else → null */
+export function hatIdOf(id: string | null | undefined): HatId | null {
+  const h = (id ?? '').replace(/^hat_/, '') as HatId;
+  return HAT_IDS.includes(h) ? h : null;
+}
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -80,7 +89,7 @@ export function drawCharacter(c: Ctx, shape: Shape, pal: Palette, p: Pose, hat?:
   limb(c, k, sp, sp.armF[0], sp.armF[1], af);
   const m = moodFor(p);
   face(c, sp.face, k, m[0], m[1], m[2], m[3], p.t);
-  if (hat) { c.save(); c.translate(sp.hat.x, sp.hat.y); c.rotate(sp.hat.rot); hatArt(c, hat, sp.hat.w, p.t); c.restore(); }
+  if (hat) { c.save(); c.translate(sp.hat.x, sp.hat.y); c.rotate(sp.hat.rot); hatArt(c, hat, sp.hat, p.t, res); c.restore(); }
   if (p.state === 'air2') swoosh(c, sp, p.spin);
   if (dead) dizzy(c, sp, p.t);
   c.restore();
@@ -94,10 +103,11 @@ export function drawHat(c: Ctx, hatId: HatId, shape: Shape, p: Pose): void {
   c.globalAlpha *= p.alpha; c.lineCap = 'round'; c.lineJoin = 'round';
   const sq = p.squash > 0 ? p.squash : 1;
   c.scale(sq, 1 / sq);
-  if (p.state === 'slide') { const h = sp.slide.hat; c.translate(h.x, h.y); c.rotate(h.rot); hatArt(c, hatId, h.w, p.t); }
+  const res = resFor(c);
+  if (p.state === 'slide') { const h = sp.slide.hat; c.translate(h.x, h.y); c.rotate(h.rot); hatArt(c, hatId, h, p.t, res); }
   else {
     const bob = p.state === 'run' ? Math.abs(Math.sin(TAU * p.runPhase)) * 2.6 : 0;
-    enterBody(c, sp, p, bob); c.translate(sp.hat.x, sp.hat.y); c.rotate(sp.hat.rot); hatArt(c, hatId, sp.hat.w, p.t);
+    enterBody(c, sp, p, bob); c.translate(sp.hat.x, sp.hat.y); c.rotate(sp.hat.rot); hatArt(c, hatId, sp.hat, p.t, res);
   }
   c.restore();
 }
@@ -421,41 +431,342 @@ function drawSlide(c: Ctx, shape: Shape, sp: Spec, pal: Palette, k: Ink, p: Pose
   // one arm swept back over the top
   limb(c, k, sp, S.arm[0], S.arm[1], 1.75);
   face(c, S.face, k, p.hurt ? 'squeeze' : 'squint', p.hurt ? 'ouch' : 'grit', 0, 0, t);
-  if (hat) { c.save(); c.translate(S.hat.x, S.hat.y); c.rotate(S.hat.rot); hatArt(c, hat, S.hat.w, t); c.restore(); }
+  if (hat) { c.save(); c.translate(S.hat.x, S.hat.y); c.rotate(S.hat.rot); hatArt(c, hat, S.hat, t, res); c.restore(); }
 }
 
 // ------------------------------------------------------------------ hats (cosmetics; origin = top-centre of the head)
+//
+// A HatSpot says where the crown of the head is (x, y, rot in the body frame), how wide it is (w) and how far the
+// head surface drops at x = ±w/2 (sag — bands and brims hug it with a parabola). The eyes start 5.5–25 px below (
+// nothing may hang lower than ≈ 5 px across the face — 꼬치 / 어묵이 have the shortest foreheads — so ties and
+// tassels hang at the back, x < −w/2 · 0.8; scripts/preview-chars.mjs checks that no hat pixel lands on an eye).
+// Shapes are sized by w (widths) and s = w/44 clamped (heights, ornaments) so a narrow head gets a smaller hat.
 
-function hatArt(c: Ctx, id: HatId, w: number, t: number): void {
-  const ink = '#140c1c';
-  c.lineWidth = 1.5; c.strokeStyle = ink;
-  switch (id) {
-    case 'gat': {      // 갓: translucent horsehair brim, tall crown, bead chin strap
-      c.fillStyle = 'rgba(24,18,30,0.62)'; ell(c, 0, 1, w * 0.78, 3.6); c.fill(); c.stroke();
-      c.fillStyle = '#1d1726'; c.beginPath(); c.moveTo(-w * 0.24, 1); c.lineTo(-w * 0.21, -15); c.quadraticCurveTo(0, -20, w * 0.21, -15); c.lineTo(w * 0.24, 1); c.closePath(); c.fill(); c.stroke();
-      c.fillStyle = 'rgba(255,255,255,0.22)'; c.fillRect(-w * 0.16, -13, 2.2, 12);
-      c.fillStyle = '#e9b44c'; c.beginPath(); for (let i = 0; i < 5; i++) circSub(c, w * 0.3 + i * 0.4, 5 + i * 4.2, 1.5); c.fill();
-      break;
-    }
-    case 'bokgeon': {  // 복건: soft black scholar's cap with a back flap and ties
-      c.fillStyle = '#211c33';
-      c.beginPath(); c.moveTo(-w * 0.52, 5); c.quadraticCurveTo(-w * 0.58, -14, 0, -15); c.quadraticCurveTo(w * 0.5, -13, w * 0.5, 4); c.quadraticCurveTo(0, -1, -w * 0.52, 5); c.closePath(); c.fill(); c.stroke();
-      c.beginPath(); c.moveTo(-w * 0.5, 2); c.quadraticCurveTo(-w * 0.66, 10, -w * 0.56, 20); c.lineTo(-w * 0.4, 12); c.closePath(); c.fill(); c.stroke();
-      const fl = Math.sin(t * 9) * 2;
-      c.strokeStyle = '#211c33'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(-w * 0.45, 4); c.quadraticCurveTo(-w * 0.7, 8 + fl, -w * 0.9, 6 - fl); c.moveTo(-w * 0.42, 6); c.quadraticCurveTo(-w * 0.62, 13 - fl, -w * 0.82, 14 + fl); c.stroke();
-      c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(-w * 0.2, -11); c.quadraticCurveTo(0, -6, w * 0.25, -9); c.stroke();
-      break;
-    }
-    case 'band': {     // 머리띠: red headband with a knot and fluttering tails
-      const fl = Math.sin(t * 10) * 2.2;
-      c.fillStyle = '#e63946'; c.beginPath(); rrSub(c, -w * 0.5, 7, w, 5.5, 2.7); c.fill(); c.stroke();
-      c.fillStyle = '#fff4e6'; c.fillRect(-w * 0.1, 8.6, w * 0.2, 2.3);
-      c.strokeStyle = ink; c.lineWidth = 5; c.beginPath(); c.moveTo(-w * 0.48, 10); c.quadraticCurveTo(-w * 0.7, 9 + fl, -w * 0.9, 12 - fl); c.moveTo(-w * 0.48, 11); c.quadraticCurveTo(-w * 0.68, 16 - fl, -w * 0.84, 19 + fl); c.stroke();
-      c.strokeStyle = '#e63946'; c.lineWidth = 3; c.stroke();
-      c.fillStyle = '#e63946'; ell(c, -w * 0.5, 10, 3.2, 3.6); c.fill(); c.strokeStyle = ink; c.lineWidth = 1.4; c.stroke();
-      break;
+export interface HatSpot { x: number; y: number; w: number; rot: number; sag: number }
+interface HatDef {
+  art(g: Ctx, h: HatSpot): void;                              // static, cached per hat × spot × resolution
+  under?(c: Ctx, h: HatSpot, t: number): void;                // live, under the cached art (ties, tassels)
+  over?(c: Ctx, h: HatSpot, t: number): void;                 // live, over it (twinkles, dangles)
+}
+const HAT_INK = '#231527';
+const hatS = (w: number): number => Math.max(0.8, Math.min(1.15, w / 44));
+/** y of the head surface at x (0 at the crown, h.sag at x = ±w/2) */
+const hy = (h: HatSpot, x: number): number => h.sag * (2 * x / h.w) * (2 * x / h.w);
+/** a strip that hugs the head: top edge = surface + top, bottom edge = surface + bot (exact parabola segments) */
+function hugPath(g: Ctx, h: HatSpot, x0: number, x1: number, top: number, bot: number): void {
+  const a = h.sag * 4 / (h.w * h.w), m = (x0 + x1) / 2, cy = a * x0 * x1;
+  g.beginPath(); g.moveTo(x0, a * x0 * x0 + top); g.quadraticCurveTo(m, cy + top, x1, a * x1 * x1 + top);
+  g.lineTo(x1, a * x1 * x1 + bot); g.quadraticCurveTo(m, cy + bot, x0, a * x0 * x0 + bot); g.closePath();
+}
+function fillStroke(g: Ctx, fill: string, lw = 1.6, ink = HAT_INK): void { g.fillStyle = fill; g.fill(); g.lineWidth = lw; g.strokeStyle = ink; g.stroke(); }
+/** fluttering tails hanging back from (x, y): ink-outlined ribbons */
+function tails(c: Ctx, x: number, y: number, len: number, col: string, t: number, lw = 3, speed = 10): void {
+  const fl = Math.sin(t * speed) * 2.2, fl2 = Math.sin(t * speed + 1.3) * 2.2;
+  c.beginPath();
+  c.moveTo(x, y); c.quadraticCurveTo(x - len * 0.5, y - 1 + fl, x - len, y + 2 - fl);
+  c.moveTo(x, y + 1); c.quadraticCurveTo(x - len * 0.45, y + 6 - fl2, x - len * 0.85, y + 9 + fl2);
+  c.strokeStyle = HAT_INK; c.lineWidth = lw + 2; c.stroke(); c.strokeStyle = col; c.lineWidth = lw; c.stroke();
+}
+
+const HATS: Record<HatId, HatDef> = {
+  // 갓: translucent horsehair brim, tall black crown, amber bead strap hanging at the back
+  gat: {
+    art(g, h) {
+      const w = h.w, s = hatS(w);
+      g.beginPath(); for (let i = 0; i < 5; i++) circSub(g, -w * 0.36 - i * 0.9, 4 + i * 3.6 * s, 1.7);
+      fillStroke(g, '#e9b44c', 1);
+      ell(g, 0, 1, w * 0.8, 3.9 * s); fillStroke(g, 'rgba(28,20,36,0.7)', 1.6);
+      g.strokeStyle = 'rgba(255,255,255,0.16)'; g.lineWidth = 1; ell(g, 0, 1, w * 0.56, 2.5 * s); g.stroke();
+      g.beginPath(); g.moveTo(-w * 0.24, 1); g.lineTo(-w * 0.21, -15 * s); g.quadraticCurveTo(0, -20 * s, w * 0.21, -15 * s); g.lineTo(w * 0.24, 1); g.closePath();
+      fillStroke(g, '#1d1726');
+      g.fillStyle = '#433853'; g.beginPath(); g.moveTo(-w * 0.235, -3.8 * s); g.lineTo(w * 0.235, -3.8 * s); g.lineTo(w * 0.24, 0.4); g.lineTo(-w * 0.24, 0.4); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.24)'; g.fillRect(-w * 0.15, -13 * s, 2.2, 8 * s);
+    },
+  },
+  // 복건: soft navy scholar's cap with a back flap and two ties
+  bokgeon: {
+    art(g, h) {
+      const w = h.w, s = hatS(w);
+      g.beginPath(); g.moveTo(-w * 0.5, 2); g.quadraticCurveTo(-w * 0.68, 10 * s, -w * 0.58, 20 * s); g.lineTo(-w * 0.4, 12 * s); g.closePath();
+      fillStroke(g, '#2a2544');
+      g.beginPath(); g.moveTo(-w * 0.53, hy(h, -w * 0.5) + 2); g.quadraticCurveTo(-w * 0.6, -14 * s, 0, -15 * s); g.quadraticCurveTo(w * 0.5, -13 * s, w * 0.5, hy(h, w * 0.5) + 1);
+      g.quadraticCurveTo(0, -1, -w * 0.53, hy(h, -w * 0.5) + 2); g.closePath();
+      fillStroke(g, '#2f2a52');
+      g.strokeStyle = 'rgba(160,170,255,0.35)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(-w * 0.12, -14 * s); g.quadraticCurveTo(-w * 0.02, -6 * s, -w * 0.06, 0); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(-w * 0.3, -9 * s); g.quadraticCurveTo(-w * 0.1, -13 * s, w * 0.12, -12 * s); g.stroke();
+    },
+    under(c, h, t) { tails(c, -h.w * 0.44, hy(h, -h.w * 0.44) + 4, h.w * 0.44, '#2f2a52', t, 2.4, 9); },
+  },
+  // 머리띠: red headband hugging the head, white badge in front, knot + fluttering tails at the back
+  band: {
+    art(g, h) {
+      const w = h.w, u = w / 2, s = hatS(w);
+      hugPath(g, h, -u * 1.02, u * 1.04, -1.6, 3.9); fillStroke(g, '#e63946');
+      hugPath(g, h, u * 0.05, u * 0.5, -0.1, 2.4); g.fillStyle = '#fff4e6'; g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.35)'; hugPath(g, h, -u * 0.8, u * 0.9, -0.6, 0.5); g.fill();
+      ell(g, -u, hy(h, -u) + 1.6, 3.2 * s, 3.8 * s); fillStroke(g, '#e63946', 1.4);
+    },
+    under(c, h, t) { const u = h.w / 2; tails(c, -u, hy(h, -u) + 1.6, h.w * 0.42, '#e63946', t); },
+  },
+  // 족두리: small purple bridal coronet with gold rims, coral + jade beads on top and two swinging bead drops
+  jokduri: {
+    art(g, h) {
+      const s = hatS(h.w), b0 = 10.5 * s, b1 = 13.8 * s, H = 11 * s;
+      g.lineWidth = 1.4; g.strokeStyle = '#d9a93a';
+      g.beginPath(); g.moveTo(0, -H - 1); g.lineTo(0, -H - 5 * s); g.moveTo(-5 * s, -H); g.lineTo(-8 * s, -H - 3.4 * s); g.moveTo(5 * s, -H); g.lineTo(8 * s, -H - 3.4 * s); g.stroke();
+      g.beginPath(); g.moveTo(-b0, 2); g.lineTo(-b1, -H + 2); g.quadraticCurveTo(0, -H - 2.5 * s, b1, -H + 2); g.lineTo(b0, 2); g.quadraticCurveTo(0, 3.4, -b0, 2); g.closePath();
+      fillStroke(g, '#7a3fa0');
+      g.strokeStyle = '#4e2270'; g.lineWidth = 1.3; g.beginPath();
+      g.moveTo(-3.6 * s, 2.6); g.lineTo(-4.4 * s, -H + 0.6); g.moveTo(3.6 * s, 2.6); g.lineTo(4.4 * s, -H + 0.6); g.stroke();
+      g.fillStyle = 'rgba(255,255,255,0.22)'; g.beginPath(); g.moveTo(-b1 + 2, -H + 3); g.lineTo(-b0 + 1.6, 0); g.lineTo(-5.5 * s, 0.6); g.lineTo(-6.2 * s, -H + 1.8); g.closePath(); g.fill();
+      g.strokeStyle = '#f0c14b'; g.lineWidth = 2.2; g.beginPath(); g.moveTo(-b0 + 0.6, 1.2); g.quadraticCurveTo(0, 2.6, b0 - 0.6, 1.2); g.stroke();
+      g.lineWidth = 1.8; g.beginPath(); g.moveTo(-b1 + 1, -H + 1.6); g.quadraticCurveTo(0, -H - 1.6 * s, b1 - 1, -H + 1.6); g.stroke();
+      g.beginPath(); circSub(g, -8.2 * s, -H - 3.8 * s, 2.1 * s); circSub(g, 8.2 * s, -H - 3.8 * s, 2.1 * s); fillStroke(g, '#4fc4a0', 1.1);
+      g.beginPath(); circSub(g, 0, -H - 5.8 * s, 2.9 * s); fillStroke(g, '#ff5a5f', 1.1);
+      g.fillStyle = '#fff'; g.beginPath(); circSub(g, -0.9 * s, -H - 6.8 * s, 0.9 * s); circSub(g, -3.4 * s, -H - 1.2 * s, 1.2 * s); circSub(g, 3.4 * s, -H - 1.2 * s, 1.2 * s); g.fill();
+    },
+    over(c, h, t) {
+      const s = hatS(h.w), b1 = 13.8 * s, H = 11 * s;
+      c.strokeStyle = '#d9a93a'; c.lineWidth = 1.1; c.beginPath();
+      for (let i = 0; i < 2; i++) {
+        const x = (i ? 1 : -1) * (b1 - 0.5), a = Math.sin(t * 5 + i * 1.7) * 0.28 + (i ? -0.1 : 0.1), L = 5.5 * s;
+        c.moveTo(x, -H + 2); c.lineTo(x + Math.sin(a) * L, -H + 2 + Math.cos(a) * L);
+        BEAD[i * 2] = x + Math.sin(a) * (L + 1.4 * s); BEAD[i * 2 + 1] = -H + 2 + Math.cos(a) * (L + 1.4 * s);
+      }
+      c.stroke();
+      c.beginPath(); circSub(c, BEAD[0], BEAD[1], 1.7 * s); circSub(c, BEAD[2], BEAD[3], 1.7 * s); fillStroke(c, '#ff8fb1', 1);
+    },
+  },
+  // 조바위: burgundy winter cap open at the top, dark trim, pearl string over the top, jade ornament, pink tassel
+  jobawi: {
+    art(g, h) {
+      const w = h.w, u = w / 2, s = hatS(w), top = -10.5 * s;
+      const yb = hy(h, -u) + 2, yf = hy(h, u * 0.95) + 2.2;
+      g.beginPath();
+      g.moveTo(u * 0.95, yf);
+      g.bezierCurveTo(u * 1.02, top * 0.55, u * 0.62, top, u * 0.3, top);
+      g.lineTo(-u * 0.3, top);
+      g.bezierCurveTo(-u * 0.7, top, -u * 1.08, top * 0.5, -u * 1.02, yb);
+      g.quadraticCurveTo(-u * 1.14, yb + 7 * s, -u * 1.02, yb + 12 * s);
+      g.quadraticCurveTo(-u * 0.82, yb + 7 * s, -u * 0.62, hy(h, -u * 0.62) + 3);
+      g.quadraticCurveTo(u * 0.165, -h.sag * 0.589 + 2.6, u * 0.95, yf);
+      g.closePath(); fillStroke(g, '#8a2f4a');
+      g.save(); g.clip();
+      g.strokeStyle = '#3c1424'; g.lineWidth = 3.2; hugPath(g, h, -u * 0.62, u * 0.95, 3, 3); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(-u * 0.55, top + 2); g.quadraticCurveTo(-u * 0.75, -2 * s, -u * 0.72, 4 * s); g.moveTo(u * 0.4, top + 2); g.quadraticCurveTo(u * 0.66, -3 * s, u * 0.7, 2 * s); g.stroke();
+      g.restore();
+      ell(g, 0, top + 0.3, u * 0.34, 1.9 * s); fillStroke(g, '#4a1426', 1.2);
+      g.strokeStyle = '#f0c14b'; g.lineWidth = 1.2; ell(g, 0, top + 0.3, u * 0.34, 1.9 * s); g.stroke();
+      // pearl string arcing over the top, front ornament → back ornament
+      const ax = u * 0.62, ay = -2.6 * s, bx = -u * 0.66, by = -1.8 * s, cx = 0, cy = top - 7 * s;
+      g.beginPath(); for (let i = 0; i <= 8; i++) { const k = i / 8, a = (1 - k) * (1 - k), b = 2 * k * (1 - k), d = k * k; circSub(g, a * ax + b * cx + d * bx, a * ay + b * cy + d * by, 1.25 * s); }
+      fillStroke(g, '#fffaf0', 0.9);
+      g.beginPath(); circSub(g, ax, ay, 2.7 * s); fillStroke(g, '#5fd0ae', 1.2);
+      g.beginPath(); circSub(g, bx, by, 2.2 * s); fillStroke(g, '#f0c14b', 1.1);
+      g.fillStyle = '#fff'; g.beginPath(); circSub(g, ax - 0.8 * s, ay - 0.9 * s, 0.8 * s); g.fill();
+    },
+    under(c, h, t) {
+      const u = h.w / 2, s = hatS(h.w), x = -u * 1.02, y = hy(h, -u) + 2 + 12 * s, a = Math.sin(t * 5) * 0.22 + 0.15;
+      c.save(); c.translate(x, y); c.rotate(a);
+      c.beginPath(); c.moveTo(0, -1); c.lineTo(0, 3.5 * s); c.strokeStyle = '#c0283c'; c.lineWidth = 1.6; c.stroke();
+      c.beginPath(); circSub(c, 0, 3.8 * s, 1.9 * s); fillStroke(c, '#e63950', 1);
+      c.beginPath(); c.moveTo(-1.6 * s, 5 * s); c.lineTo(-3 * s, 12 * s); c.quadraticCurveTo(0, 13.4 * s, 3 * s, 12 * s); c.lineTo(1.6 * s, 5 * s); c.closePath(); fillStroke(c, '#ff6f9a', 1.1);
+      c.restore();
+    },
+  },
+  // 꽃핀: a pink five-petal flower with a yellow heart and leaves, pinned on the front-top of the head
+  flowerpin: {
+    art(g, h) {
+      const w = h.w, s = hatS(w), fx = w * 0.14, fy = hy(h, fx) - 4.4 * s;
+      g.beginPath(); g.moveTo(fx - 2 * s, fy + 2 * s); g.lineTo(fx - 13 * s, fy + 3.2 * s + (hy(h, fx - 13 * s) - hy(h, fx)));
+      g.strokeStyle = HAT_INK; g.lineWidth = 3.4; g.stroke(); g.strokeStyle = '#f0c14b'; g.lineWidth = 1.8; g.stroke();
+      g.beginPath(); ellSub(g, fx - 7.4 * s, fy - 1 * s, 4.2 * s, 2 * s, -0.5); ellSub(g, fx - 6.4 * s, fy + 3.8 * s, 3.8 * s, 1.9 * s, 0.45);
+      fillStroke(g, '#5fae4f', 1.2);
+      g.beginPath(); for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * TAU / 5; circSub(g, fx + Math.cos(a) * 4.4 * s, fy + Math.sin(a) * 4.4 * s, 4.2 * s); }
+      fillStroke(g, '#ff86ab', 1.5);
+      g.fillStyle = 'rgba(255,255,255,0.55)'; g.beginPath(); for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * TAU / 5 - 0.35; ellSub(g, fx + Math.cos(a) * 5.4 * s, fy + Math.sin(a) * 5.4 * s, 1.6 * s, 1 * s, a); } g.fill();
+      g.beginPath(); circSub(g, fx, fy, 2.5 * s); fillStroke(g, '#ffd84a', 1.1);
+    },
+  },
+  // 털모자: cream knitted beanie, red stripes, ribbed cuff hugging the head, red pompom
+  beanie: {
+    art(g, h) {
+      const w = h.w, u = w / 2, s = hatS(w), top = -15 * s, ct = -3.6 * s;
+      const dome = (): void => {
+        g.beginPath(); g.moveTo(-u * 0.98, hy(h, -u * 0.98) + ct);
+        g.bezierCurveTo(-u * 0.98, top * 0.75, -u * 0.46, top, 0, top); g.bezierCurveTo(u * 0.46, top, u * 0.98, top * 0.75, u * 0.98, hy(h, u * 0.98) + ct);
+        g.lineTo(-u * 0.98, hy(h, -u * 0.98) + ct); g.closePath();
+      };
+      g.beginPath(); circSub(g, u * 0.06, top - 3.4 * s, 5 * s); fillStroke(g, '#e2543f', 1.4);
+      g.strokeStyle = 'rgba(120,20,20,0.45)'; g.lineWidth = 1; g.beginPath();
+      for (let i = 0; i < 6; i++) { const a = i * TAU / 6 + 0.3, r = 5 * s; g.moveTo(u * 0.06 + Math.cos(a) * r * 0.45, top - 3.4 * s + Math.sin(a) * r * 0.45); g.lineTo(u * 0.06 + Math.cos(a) * r * 0.85, top - 3.4 * s + Math.sin(a) * r * 0.85); }
+      g.stroke();
+      dome(); g.fillStyle = '#f1ead6'; g.fill();
+      g.save(); dome(); g.clip();
+      g.strokeStyle = '#e2543f'; g.lineWidth = 2.6 * s; g.beginPath(); g.moveTo(-u, -6.8 * s); g.quadraticCurveTo(0, -9.8 * s, u, -6.8 * s); g.moveTo(-u, -11 * s); g.quadraticCurveTo(0, -14 * s, u, -11 * s); g.stroke();
+      g.fillStyle = 'rgba(160,140,110,0.22)'; g.fillRect(u * 0.35, top, u, 20 * s);
+      g.restore();
+      dome(); g.lineWidth = 1.6; g.strokeStyle = HAT_INK; g.stroke();
+      hugPath(g, h, -u * 1.04, u * 1.04, ct, 3.2); fillStroke(g, '#e6dcc2');
+      g.save(); hugPath(g, h, -u * 1.04, u * 1.04, ct, 3.2); g.clip();
+      g.strokeStyle = 'rgba(110,90,60,0.35)'; g.lineWidth = 1; g.beginPath();
+      for (let i = -5; i <= 5; i++) { const x = i * u / 5.2; g.moveTo(x, hy(h, x) + ct); g.lineTo(x, hy(h, x) + 3.2); }
+      g.stroke(); g.restore();
+    },
+  },
+  // 복주머니 모자: a golden lucky pouch perched on the head — gathered neck, red cord, frilled top, red medallion
+  pouch: {
+    art(g, h) {
+      const w = h.w, s = hatS(w), B = Math.max(0.32 * w, 12 * s), nk = -11.5 * s;
+      g.beginPath(); g.moveTo(-0.42 * B, nk); g.lineTo(-0.8 * B, nk - 5.4 * s);
+      for (let i = 0; i < 4; i++) { const x0 = -0.8 * B + i * 0.4 * B, x1 = x0 + 0.4 * B; g.quadraticCurveTo((x0 + x1) / 2, nk - 8.2 * s, x1, nk - 5.4 * s); }
+      g.lineTo(0.42 * B, nk); g.closePath(); fillStroke(g, '#f3cf5f');
+      g.strokeStyle = 'rgba(150,100,20,0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-0.2 * B, nk); g.lineTo(-0.36 * B, nk - 5 * s); g.moveTo(0.18 * B, nk); g.lineTo(0.3 * B, nk - 5.2 * s); g.stroke();
+      const body = (): void => {
+        const a = h.sag * 4 / (w * w);
+        g.beginPath(); g.moveTo(-B * 0.95, hy(h, -B * 0.95) + 1.8);
+        g.bezierCurveTo(-B * 1.16, -5 * s, -B * 0.72, nk + 0.5, -B * 0.4, nk);
+        g.lineTo(B * 0.4, nk);
+        g.bezierCurveTo(B * 0.72, nk + 0.5, B * 1.16, -5 * s, B * 0.95, hy(h, B * 0.95) + 1.8);
+        g.quadraticCurveTo(0, -a * B * B * 0.9 + 1.8, -B * 0.95, hy(h, -B * 0.95) + 1.8); g.closePath();
+      };
+      body(); g.fillStyle = '#e8b83e'; g.fill();
+      g.save(); body(); g.clip();
+      g.fillStyle = 'rgba(170,100,10,0.3)'; ell(g, B * 0.95, 0, B * 0.55, 12 * s); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.4)'; ell(g, -B * 0.45, -6.5 * s, B * 0.22, 2.2 * s, -0.5); g.fill();
+      g.strokeStyle = 'rgba(150,95,15,0.45)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-B * 0.25, nk + 1); g.quadraticCurveTo(-B * 0.5, -4 * s, -B * 0.55, 1); g.moveTo(B * 0.3, nk + 1); g.quadraticCurveTo(B * 0.55, -5 * s, B * 0.62, 0); g.stroke();
+      g.restore();
+      body(); g.lineWidth = 1.6; g.strokeStyle = HAT_INK; g.stroke();
+      g.beginPath(); circSub(g, B * 0.06, -4.6 * s, 3.6 * s); fillStroke(g, '#d9343f', 1.2);
+      g.strokeStyle = '#ffd86a'; g.lineWidth = 1.1; g.beginPath(); circSub(g, B * 0.06, -4.6 * s, 1.9 * s);
+      g.moveTo(B * 0.06 - 1.9 * s, -4.6 * s); g.lineTo(B * 0.06 + 1.9 * s, -4.6 * s); g.stroke();
+      g.beginPath(); rrSub(g, -0.5 * B, nk - 1.7 * s, B, 3.2 * s, 1.6 * s); fillStroke(g, '#d9343f', 1.2);
+      g.beginPath(); circSub(g, -0.52 * B, nk, 2.2 * s); fillStroke(g, '#e63950', 1.1);
+    },
+    under(c, h, t) { const B = Math.max(0.32 * h.w, 12 * hatS(h.w)), s = hatS(h.w); tails(c, -0.52 * B, -11.5 * s, 9 * s, '#e63950', t, 1.8, 7); },
+  },
+  // 도깨비 뿔: two little striped yellow horns with orange tips
+  horns: {
+    art(g, h) {
+      const w = h.w, s = hatS(w);
+      for (const [bx, H, hw, lean] of [[-w * 0.25, 12 * s, 4 * s, -3.4 * s], [w * 0.2, 13.8 * s, 4.5 * s, 3 * s]]) {
+        const by = hy(h, bx) + 2.6;
+        const path = (): void => {
+          g.beginPath(); g.moveTo(bx - hw, by);
+          g.quadraticCurveTo(bx - hw * 0.7 + lean * 0.1, by - H * 0.62, bx + lean, by - H);
+          g.quadraticCurveTo(bx + hw * 0.75 + lean * 0.45, by - H * 0.5, bx + hw, by);
+          g.quadraticCurveTo(bx, by + 1.4, bx - hw, by); g.closePath();
+        };
+        path(); g.fillStyle = '#f2c14e'; g.fill();
+        g.save(); path(); g.clip();
+        g.fillStyle = '#e8622c'; g.fillRect(bx - hw - 4, by - H - 4, hw * 2 + 8, H * 0.42 + 4);
+        g.strokeStyle = '#b8741c'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(bx - hw, by - H * 0.22); g.lineTo(bx + hw, by - H * 0.16); g.moveTo(bx - hw, by - H * 0.44); g.lineTo(bx + hw, by - H * 0.38); g.stroke();
+        g.fillStyle = 'rgba(255,255,255,0.45)'; g.fillRect(bx - hw * 0.55, by - H * 0.62, 1.4, H * 0.5);
+        g.restore();
+        path(); g.lineWidth = 1.9; g.strokeStyle = HAT_INK; g.stroke();
+      }
+    },
+  },
+  // 삿갓: wide conical bamboo hat — woven rays, rings, a knob on top
+  satgat: {
+    art(g, h) {
+      const w = h.w, s = hatS(w), rx = w * 0.8 + 3, ry = 3.4 * s, cy = 1.6, ay = -14 * s;
+      ell(g, 0, cy, rx, ry); fillStroke(g, '#8e6a33');
+      const cone = (): void => {
+        g.beginPath(); g.moveTo(-rx, cy); g.quadraticCurveTo(-rx * 0.42, ay * 0.45, -1.4, ay); g.lineTo(1.4, ay);
+        g.quadraticCurveTo(rx * 0.42, ay * 0.45, rx, cy); g.ellipse(0, cy, rx, ry, 0, 0, Math.PI); g.closePath();
+      };
+      cone(); g.fillStyle = '#dcb86e'; g.fill();
+      g.save(); cone(); g.clip();
+      g.fillStyle = 'rgba(140,90,30,0.28)'; g.beginPath(); g.moveTo(1, ay - 2); g.lineTo(rx + 2, cy - 2); g.lineTo(rx + 2, cy + ry + 2); g.lineTo(0, cy + ry + 2); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(120,78,28,0.5)'; g.lineWidth = 1; g.beginPath();
+      for (let i = 1; i < 8; i++) { const a = i / 8 * Math.PI; g.moveTo(0, ay); g.lineTo(Math.cos(a) * rx, cy + Math.sin(a) * ry); }
+      g.stroke();
+      g.strokeStyle = 'rgba(150,100,40,0.8)'; g.lineWidth = 1.3; g.beginPath();
+      for (const k of [0.42, 0.72]) { const x = rx * k, y = ay + (cy - ay) * k; g.moveTo(-x, y); g.quadraticCurveTo(0, y + ry * k * 2, x, y); }
+      g.stroke();
+      g.strokeStyle = 'rgba(255,245,210,0.55)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(-2, ay + 3); g.quadraticCurveTo(-rx * 0.3, ay * 0.4, -rx * 0.62, cy - 1); g.stroke();
+      g.restore();
+      cone(); g.lineWidth = 1.6; g.strokeStyle = HAT_INK; g.stroke();
+      g.beginPath(); circSub(g, 0, ay - 0.6, 1.9 * s); fillStroke(g, '#8e6a33', 1.2);
+    },
+  },
+  // 왕관: gold crown with five pearl-tipped points, a gem band, and a twinkle
+  crown: {
+    art(g, h) {
+      const s = hatS(h.w), cw = Math.max(0.34 * h.w, 12.5 * s), H = 11.5 * s;
+      const tips: [number, number][] = [[-cw * 1.06, -H * 0.72], [-cw * 0.52, -H * 0.95], [0, -H * 1.14], [cw * 0.52, -H * 0.95], [cw * 1.06, -H * 0.72]];
+      const vals: [number, number][] = [[-cw * 0.76, -H * 0.3], [-cw * 0.26, -H * 0.42], [cw * 0.26, -H * 0.42], [cw * 0.76, -H * 0.3]];
+      const shape = (): void => {
+        g.beginPath(); g.moveTo(-cw, hy(h, -cw) + 2.6); g.lineTo(tips[0][0], tips[0][1]);
+        for (let i = 0; i < 4; i++) { g.lineTo(vals[i][0], vals[i][1]); g.lineTo(tips[i + 1][0], tips[i + 1][1]); }
+        g.lineTo(cw, hy(h, cw) + 2.6); g.quadraticCurveTo(0, -hy(h, cw) + 2.6, -cw, hy(h, -cw) + 2.6); g.closePath();
+      };
+      shape(); g.fillStyle = '#ffd24a'; g.fill();
+      g.save(); shape(); g.clip();
+      g.fillStyle = 'rgba(214,120,10,0.3)'; g.fillRect(cw * 0.25, -H * 1.4, cw, H * 2);
+      g.fillStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.moveTo(-cw * 0.8, -H * 0.2); g.lineTo(-cw * 0.52, -H * 0.8); g.lineTo(-cw * 0.4, -H * 0.3); g.closePath(); g.fill();
+      g.restore();
+      shape(); g.lineWidth = 1.6; g.strokeStyle = HAT_INK; g.stroke();
+      hugPath(g, h, -cw * 1.02, cw * 1.02, -2.4 * s, 2.6); fillStroke(g, '#f0ae2a', 1.2);
+      g.beginPath(); ellSub(g, cw * 0.08, hy(h, cw * 0.08) - 0.1 * s, 2.6 * s, 2.1 * s); fillStroke(g, '#e63946', 1);
+      g.beginPath(); circSub(g, -cw * 0.6, hy(h, -cw * 0.6) + 0.1, 1.5 * s); circSub(g, cw * 0.72, hy(h, cw * 0.72) + 0.1, 1.5 * s); fillStroke(g, '#4aa3ff', 0.9);
+      g.beginPath(); for (const [x, y] of tips) circSub(g, x, y, 1.9 * s); fillStroke(g, '#fff3b0', 1.1);
+      g.fillStyle = '#fff'; g.beginPath(); circSub(g, cw * 0.02, hy(h, cw * 0.08) - 1 * s, 0.8 * s); g.fill();
+    },
+    over(c, h, t) {
+      const ph = (t + 0.9) % 2.4; if (ph > 0.45) return;
+      const s = hatS(h.w), cw = Math.max(0.34 * h.w, 12.5 * s), a = Math.sin(ph / 0.45 * Math.PI);
+      c.fillStyle = `rgba(255,255,235,${(a * 0.95).toFixed(3)})`; c.beginPath(); sparkSub(c, cw * 0.62, -11.5 * s * 1.1, 1.6 + a * 2.8); c.fill();
+    },
+  },
+  // 월계관: a green laurel wreath around the head, two rows of leaves pointing back, gold bow + tails at the back
+  laurel: {
+    art(g, h) {
+      const w = h.w, u = w / 2, s = hatS(w), a = h.sag * 4 / (w * w), N = 7;
+      const rows: [number, string][] = [[-1, '#7cc35a'], [1, '#5a9a3e']];
+      g.strokeStyle = '#3d7a2c'; g.lineWidth = 1.8; g.beginPath(); g.moveTo(-u * 1.0, hy(h, -u)); g.quadraticCurveTo(-u * 0.14, a * -u * u * 0.72, u * 0.72, hy(h, u * 0.72)); g.stroke();
+      for (const [side, col] of rows) {
+        g.beginPath();
+        for (let i = 0; i < N; i++) {
+          const x = -u * 0.9 + (u * 1.58) * (i / (N - 1)), y = hy(h, x), ang = Math.atan(2 * a * x), off = side < 0 ? 2.2 * s : 1.7 * s;
+          const cx = x - Math.cos(ang) * 2.2 * s + Math.sin(ang) * side * -off, cy = y - Math.sin(ang) * 2.2 * s + Math.cos(ang) * side * off;
+          ellSub(g, cx, cy, 3.9 * s, 1.75 * s, ang + side * 0.5);
+        }
+        fillStroke(g, col, 1.1);
+      }
+      g.beginPath(); ellSub(g, u * 0.8, hy(h, u * 0.8) - 1.4, 3.6 * s, 1.6 * s, -0.5); fillStroke(g, '#7cc35a', 1.1);
+      const kx = -u * 1.0, ky = hy(h, -u);
+      g.beginPath(); ellSub(g, kx - 2.6 * s, ky - 2 * s, 2.6 * s, 1.7 * s, 0.6); ellSub(g, kx - 2.4 * s, ky + 2.2 * s, 2.5 * s, 1.6 * s, -0.6); fillStroke(g, '#f0c14b', 1.1);
+      g.beginPath(); circSub(g, kx, ky, 1.7 * s); fillStroke(g, '#e8a92a', 1);
+    },
+    under(c, h, t) { const u = h.w / 2; tails(c, -u * 1.02, hy(h, -u) + 0.8, h.w * 0.34, '#f0c14b', t, 1.8, 8); },
+  },
+};
+const BEAD = [0, 0, 0, 0];
+
+const hatSprites = new Map<string, HTMLCanvasElement>();
+function hatArt(c: Ctx, id: HatId, h: HatSpot, t: number, res: number): void {
+  const d = HATS[id]; if (!d) return;
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  d.under?.(c, h, t);
+  // static part: cached (bounds generous enough for every hat: the brim of 갓/삿갓, 복건's flap)
+  const x0 = -(h.w * 0.95 + 10), y0 = -34, bw = -2 * x0, bh = 64;
+  const key = id + '|' + h.w + '|' + h.sag + '@' + res;
+  let cv = hatSprites.get(key);
+  if (!cv && typeof document !== 'undefined') {
+    const n = document.createElement('canvas'); n.width = Math.ceil(bw * res); n.height = Math.ceil(bh * res);
+    const g = n.getContext('2d');
+    if (g) {
+      g.scale(res, res); g.translate(-x0, -y0); g.lineCap = 'round'; g.lineJoin = 'round';
+      d.art(g, h);
+      if (hatSprites.size >= 96) hatSprites.delete(hatSprites.keys().next().value as string);   // oldest first
+      hatSprites.set(key, n); cv = n;
     }
   }
+  if (cv) c.drawImage(cv, x0, y0, bw, bh);
+  else { c.save(); d.art(c, h); c.restore(); }
+  d.over?.(c, h, t);
 }
 
 // ------------------------------------------------------------------ shapes
@@ -463,14 +774,14 @@ function hatArt(c: Ctx, id: HatId, w: number, t: number): void {
 interface SlideSpec {
   mode: 'squash' | 'lie';
   sx: number; sy: number; lean: number; rot: number; cx: number;   // squash: skew/rotate/scale about the feet; lie: rotate 90° head-first
-  face: FaceSpot; arm: [number, number]; feet: [number, number]; hat: { x: number; y: number; w: number; rot: number };
+  face: FaceSpot; arm: [number, number]; feet: [number, number]; hat: HatSpot;
 }
 interface Spec {
   cy: number; top: number; bottom: number;                     // body centre (flip pivot), top, bottom (y)
   hipX: number; hipY: number;
   armB: [number, number]; armF: [number, number];
   face: FaceSpot;
-  hat: { x: number; y: number; w: number; rot: number };
+  hat: HatSpot;
   fins?: boolean;
   slide: SlideSpec;
   body(g: Ctx, pal: Palette, k: Ink): void;                   // static art (cached)
@@ -729,43 +1040,53 @@ function bodyPotato(g: Ctx, pal: Palette, k: Ink): void {
 const SPECS: Record<Shape, Spec> = {
   disc: {
     cy: -47, top: -73, bottom: -12, hipX: 10, hipY: -22, armB: [-33, -44], armF: [33, -42],
-    face: { x: 5, y: -49, gap: 16, k: 1.05 }, hat: { x: 0, y: -72, w: 50, rot: 0 },
-    slide: { mode: 'squash', sx: 0.95, sy: 0.58, lean: -0.2, rot: 0, cx: 0, face: { x: 13, y: -17, gap: 15, k: 0.92 }, arm: [-8, -28], feet: [-36, -2], hat: { x: 6, y: -34, w: 40, rot: 0.12 } },
+    face: { x: 5, y: -49, gap: 16, k: 1.05 }, hat: { x: 0, y: -72, w: 50, rot: 0, sag: 7 },
+    slide: { mode: 'squash', sx: 0.95, sy: 0.58, lean: -0.2, rot: 0, cx: 0, face: { x: 13, y: -17, gap: 15, k: 0.92 }, arm: [-8, -28], feet: [-36, -2], hat: { x: 6, y: -35, w: 40, rot: 0.12, sag: 4 } },
     body: bodyDisc,
   },
   fish: {
     cy: -45, top: -86, bottom: -17, hipX: 8, hipY: -19, armB: [-12, -31], armF: [9, -30], fins: true,
-    face: { x: 12, y: -50, gap: 13.5, k: 0.95 }, hat: { x: 4, y: -73, w: 36, rot: 0.08 },
-    slide: { mode: 'squash', sx: 1.0, sy: 0.55, lean: -0.05, rot: 0.04, cx: 0, face: { x: 16, y: -16, gap: 13, k: 0.85 }, arm: [-4, -16], feet: [-40, -2], hat: { x: 8, y: -32, w: 32, rot: 0.1 } },
+    face: { x: 12, y: -50, gap: 13.5, k: 0.95 }, hat: { x: 4, y: -73, w: 36, rot: 0.08, sag: 8 },
+    slide: { mode: 'squash', sx: 1.0, sy: 0.55, lean: -0.05, rot: 0.04, cx: 0, face: { x: 16, y: -16, gap: 13, k: 0.85 }, arm: [-4, -16], feet: [-40, -2], hat: { x: 8, y: -35, w: 32, rot: 0.1, sag: 5 } },
     body: bodyFish, behind: fishTail,
   },
   skewer: {
     cy: -50, top: -86, bottom: -15, hipX: 8, hipY: -18, armB: [-21, -47], armF: [21, -46],
-    face: { x: 4, y: -71.5, gap: 15, k: 0.95 }, hat: { x: 0, y: -86, w: 44, rot: 0 },
-    slide: { mode: 'lie', sx: 0.7, sy: 0.84, lean: 0, rot: 0, cx: -2, face: { x: 15, y: -18, gap: 13, k: 0.82 }, arm: [-10, -30], feet: [-40, -2], hat: { x: 14, y: -35, w: 34, rot: 0.1 } },
+    face: { x: 4, y: -71.5, gap: 15, k: 0.95 }, hat: { x: 0, y: -87.5, w: 44, rot: 0, sag: 6.5 },
+    slide: { mode: 'lie', sx: 0.7, sy: 0.84, lean: 0, rot: 0, cx: -2, face: { x: 15, y: -18, gap: 13, k: 0.82 }, arm: [-10, -30], feet: [-40, -2], hat: { x: 14, y: -35, w: 34, rot: 0.1, sag: 3 } },
     body: bodySkewer,
   },
   fishcake: {
     cy: -52, top: -88, bottom: -15, hipX: 8, hipY: -18, armB: [-24, -50], armF: [23, -50],
-    face: { x: 3, y: -74, gap: 15, k: 0.95 }, hat: { x: 1, y: -88, w: 44, rot: 0 },
-    slide: { mode: 'lie', sx: 0.7, sy: 0.86, lean: 0, rot: 0, cx: -2, face: { x: 15, y: -18, gap: 13, k: 0.82 }, arm: [-10, -30], feet: [-40, -2], hat: { x: 14, y: -35, w: 34, rot: 0.1 } },
+    face: { x: 3, y: -74, gap: 15, k: 0.95 }, hat: { x: 1, y: -90, w: 44, rot: 0, sag: 8 },
+    slide: { mode: 'lie', sx: 0.7, sy: 0.86, lean: 0, rot: 0, cx: -2, face: { x: 15, y: -18, gap: 13, k: 0.82 }, arm: [-10, -30], feet: [-40, -2], hat: { x: 14, y: -35, w: 34, rot: 0.1, sag: 3 } },
     body: bodyFishcake,
     front: (c, _k, p) => steamWisps(c, 1, -94, 3, p.t, 0.55, '255,255,255', 0.6),
   },
   star: {
     cy: -48, top: -78, bottom: -18, hipX: 8, hipY: -20, armB: [-28, -43], armF: [28, -41],
-    face: { x: 4, y: -47, gap: 15, k: 1 }, hat: { x: 0, y: -78, w: 40, rot: 0 },
-    slide: { mode: 'squash', sx: 1.06, sy: 0.57, lean: -0.2, rot: 0, cx: 0, face: { x: 13, y: -17, gap: 14, k: 0.9 }, arm: [-8, -28], feet: [-36, -2], hat: { x: 6, y: -34, w: 36, rot: 0.12 } },
+    face: { x: 4, y: -47, gap: 15, k: 1 }, hat: { x: 0, y: -78, w: 40, rot: 0, sag: 7.5 },
+    slide: { mode: 'squash', sx: 1.06, sy: 0.57, lean: -0.2, rot: 0, cx: 0, face: { x: 13, y: -17, gap: 14, k: 0.9 }, arm: [-8, -28], feet: [-36, -2], hat: { x: 6, y: -35.5, w: 36, rot: 0.12, sag: 4 } },
     body: bodyStar, front: starTwinkle,
   },
   potato: {
     cy: -50, top: -88, bottom: -13, hipX: 8, hipY: -16, armB: [-24, -42], armF: [24, -40],
-    face: { x: 5, y: -51, gap: 15, k: 1 }, hat: { x: 1, y: -86, w: 30, rot: 0 },
-    slide: { mode: 'lie', sx: 0.68, sy: 0.86, lean: 0, rot: 0, cx: -2, face: { x: 16, y: -18, gap: 13, k: 0.84 }, arm: [-10, -30], feet: [-40, -2], hat: { x: 14, y: -35, w: 30, rot: 0.1 } },
+    face: { x: 5, y: -51, gap: 15, k: 1 }, hat: { x: 1, y: -86, w: 30, rot: 0, sag: 7 },
+    slide: { mode: 'lie', sx: 0.68, sy: 0.86, lean: 0, rot: 0, cx: -2, face: { x: 16, y: -18, gap: 13, k: 0.84 }, arm: [-10, -30], feet: [-40, -2], hat: { x: 14, y: -35, w: 30, rot: 0.1, sag: 3 } },
     body: bodyPotato,
     front: (c, _k, p) => steamWisps(c, -10, -80, 2, p.t, 0.7, '255,236,200', 0.55),
   },
 };
 
+/** where a hat sits on this shape (standing, body frame) — for UI framing, e.g. a head-and-hat close-up */
+export function headTop(shape: Shape): { x: number; y: number } { const h = (SPECS[shape] ?? SPECS.disc).hat; return { x: h.x, y: h.y }; }
+
+/** tooling: the two eye ellipses [cx, cy, rx, ry] (open-eye size + outline; body frame, standing = before the pose
+ *  transform) — a hat must never paint inside them */
+function eyeBox(shape: Shape, slide: boolean): [number, number, number, number][] {
+  const sp = SPECS[shape] ?? SPECS.disc, f = slide ? sp.slide.face : sp.face, W = 6 * f.k + 1, H = 7.4 * f.k + 1;
+  return [[f.x - f.gap / 2, f.y, W, H], [f.x + f.gap / 2, f.y, W, H]];
+}
+
 // debug / tooling hook (scripts/preview-chars.mjs renders a contact sheet through it)
-if (typeof window !== 'undefined') (window as any).__drawCharacter = drawCharacter;
+if (typeof window !== 'undefined') { (window as any).__drawCharacter = drawCharacter; (window as any).__charDebug = { eyeBox, HAT_IDS }; }

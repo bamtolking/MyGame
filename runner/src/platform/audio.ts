@@ -6,6 +6,7 @@
 //    also pumps it). A music change hands over on the next beat (next bar between biomes) with a short crossfade.
 //  • SFX: ~45 names, pitched in the key of the current music, max 6 voices (priority stealing), per-name rate limit.
 //    Star-candy pickups climb a pentatonic ladder (+1 step per candy within 400 ms, 10 steps then hold, ≥45 ms apart).
+//    jump/jump2 take a 점프 소리 skin as arg (JUMP_SOUND_IDS index: 방울, 장구, 가야금, 뻥튀기), 0 = the default sounds.
 //  • Mix: sfx and bgm(→duck) → master → compressor. Volume 0 means no scheduling work. Nothing here throws.
 
 export type MusicStyle = 'market' | 'riverside' | 'bridge' | 'dawn';
@@ -211,7 +212,7 @@ export const SFX_NAMES = Object.keys(SFX);
  *  Index 0 ('' = nothing equipped) is the default sound; an unknown id (indexOf = -1) also plays the default. */
 export const JUMP_SOUND_IDS: readonly string[] = ['', 'jump_bell', 'jump_drum', 'jump_gayageum', 'jump_pop'];
 /** jump-skin levels (voice gain), tuned against the default jump with an OfflineAudioContext render */
-const JS = { bell: 0.14, bellAir: 0.11, bellRattle: 0.02, dung: 0.17, duk: 0.15, gaya: 0.156, pop: 0.2, popBlip: 0.21 };
+const JS = { bell: 0.14, bellAir: 0.11, bellRattle: 0.02, dung: 0.17, duk: 0.15, gaya: 0.156, pop: 0.22, popBlip: 0.17 };
 
 // ------------------------------------------------------------------------------------------------ engine types
 interface Env {

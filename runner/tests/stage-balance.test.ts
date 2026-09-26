@@ -3,8 +3,9 @@
 //  - ★1: its first-try clear rate sits on the world ramp (W1 95→85 %, W2 85→70 %, W3 75→55 %, remix ≥ 40 %);
 //  - ★2: `stars.jellyPct` is the recommendation = p55 of the star-candy % over its clears, rounded DOWN to a multiple
 //        of 5 and clamped to 60–90 (a failing assertion prints the value to paste into src/data/stages.ts);
-//  - ★3: every golden pouch is off the lazy line — the casual bot, which never detours for pickups, misses each one
-//        at least sometimes (and a pouch nobody ever brushes past is fine: it is proven reachable in stages.test.ts).
+//  - ★3: every golden pouch the stage places is off the lazy line — the casual bot, which never detours for pickups,
+//        misses each one at least sometimes (one it never brushes past is fine: stages.test.ts proves it reachable).
+//        A set piece's own 'B' glyph belongs to the chunk; if the lazy line crosses it, that is reported, not failed.
 // Results → docs/stages.md (the stage table).
 import { describe, it, expect } from 'vitest';
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -40,15 +41,15 @@ export function recommendStar2(pcts: number[]): number {
   return Math.max(60, Math.min(90, Math.floor(percentile(pcts, 0.55) / 5) * 5));
 }
 
-interface Pouch { label: string; x: number; y: number }   // chunk-local cell of course slot `slot`
+interface Pouch { label: string; x: number; y: number; glyph: boolean }   // chunk-local cell of course slot `slot`
 /** The stage's three pouches in order: setpiece 'B' glyphs and `pouches` defs, each with its course slot. */
 function pouchesOf(st: StageDef): (Pouch & { slot: number })[] {
   const course = resolveCourse(st)!; const out: (Pouch & { slot: number })[] = [];
   course.forEach((id, slot) => {
     const p = PARSED_BY_ID.get(id)!;
-    for (const k of p.pickups.filter(k => k.kind === 'slotB')) out.push({ label: `${id} B`, slot, x: k.x, y: k.y });
+    for (const k of p.pickups.filter(k => k.kind === 'slotB')) out.push({ label: `${id} B`, slot, x: k.x, y: k.y, glyph: true });
   });
-  (st.pouches ?? []).forEach(q => out.push({ label: `${course[q.slot]} ${q.col},${q.row}`, slot: q.slot, x: q.col * TILE + TILE / 2, y: q.row * TILE + TILE / 2 }));
+  (st.pouches ?? []).forEach(q => out.push({ label: `${course[q.slot]} ${q.col},${q.row}`, slot: q.slot, x: q.col * TILE + TILE / 2, y: q.row * TILE + TILE / 2, glyph: false }));
   return out.sort((a, b) => a.slot - b.slot || a.x - b.x);
 }
 
@@ -73,7 +74,7 @@ function casualRun(st: StageDef, seed: number): CasualRun {
 }
 const pouchKey = (slot: number, x: number, y: number) => `${slot}:${Math.round(x)},${Math.round(y)}`;
 
-interface StageReport { st: StageDef; m: number; secs: number; clear: number; p55: number; star2: number; pouchPct: number[]; pouchLabels: string[] }
+interface StageReport { st: StageDef; m: number; secs: number; clear: number; p55: number; star2: number; pouchPct: number[]; pouchLabels: string[]; pouchGlyph: boolean[] }
 function measure(st: StageDef): StageReport {
   const course = resolveCourse(st)!;
   const total = course.reduce((a, id) => a + PARSED_BY_ID.get(id)!.width, 0) / PX_PER_M;
@@ -91,7 +92,7 @@ function measure(st: StageDef): StageReport {
     const key = pouchKey(q.slot, q.x, q.y);
     return Math.round(100 * runs.filter(r => r.got.has(key)).length / runs.length);
   });
-  return { st, m: Math.round(total), secs, clear: Math.round(100 * clears.length / runs.length), p55, star2: recommendStar2(clears.map(r => r.jellyPct)), pouchPct, pouchLabels: pouches.map(q => q.label) };
+  return { st, m: Math.round(total), secs, clear: Math.round(100 * clears.length / runs.length), p55, star2: recommendStar2(clears.map(r => r.jellyPct)), pouchPct, pouchLabels: pouches.map(q => q.label), pouchGlyph: pouches.map(q => q.glyph) };
 }
 
 const reports: StageReport[] = [];
@@ -107,14 +108,21 @@ describe('stage balance (casual bot, 30 first tries per stage)', () => {
 
   for (const world of [1, 2, 3]) {
     it(`world ${world}: first-try ★1 rates on the ramp, ★2 = casual p55, pouches off the lazy line`, () => {
-      const fails: string[] = [];
+      const fails: string[] = []; const notes: string[] = [];
       for (const st of STAGES.filter(s => s.world === world)) {
         const r = measure(st); reports.push(r);
         const tgt = clearTarget(st);
         if (st.remix ? r.clear < tgt : Math.abs(r.clear - tgt) > CLEAR_TOL) fails.push(`${st.id}: first-try clear ${r.clear}% vs target ${st.remix ? '≥ ' : ''}${tgt}%`);
         if (st.stars.jellyPct !== r.star2) fails.push(`${st.id}: stars.jellyPct ${st.stars.jellyPct} — recommended ${r.star2} (casual p55 ${r.p55.toFixed(1)}%)`);
-        r.pouchPct.forEach((pc, i) => { if (pc >= 100) fails.push(`${st.id}: pouch ${i + 1} (${r.pouchLabels[i]}) is on the lazy line (casual bot takes it every time)`); });
+        r.pouchPct.forEach((pc, i) => {
+          if (pc < 100) return;
+          const msg = `${st.id}: pouch ${i + 1} (${r.pouchLabels[i]}) is on the lazy line (casual bot takes it every time)`;
+          // a set piece's own 'B' glyph is placed by the chunk, not by the stage: reported, not failed
+          if (r.pouchGlyph[i]) notes.push(msg); else fails.push(msg);
+        });
+        console.log(`${st.id.padEnd(4)} ${String(r.m).padStart(5)} m ${r.secs.toFixed(0).padStart(3)} s  ★1 ${String(r.clear).padStart(3)}% (target ${st.remix ? '≥' : ''}${Math.round(tgt)})  ★2 ${r.star2}% (p55 ${r.p55.toFixed(1)})  pouches ${r.pouchPct.map((p, i) => `${p}% ${r.pouchLabels[i]}`).join(' · ')}`);
       }
+      if (notes.length) console.warn(notes.join('\n'));
       expect(fails).toEqual([]);
     }, 180_000);
   }
@@ -131,7 +139,8 @@ describe('stage balance (casual bot, 30 first tries per stage)', () => {
       '',
       '- **첫 시도 ★1**: 결승까지 간 비율. 괄호는 GDD 목표(W1 95→85 %, W2 85→70 %, W3 75→55 %, 리믹스 40 % 이상).',
       '- **★2**: 별사탕 비율 기준. 완주한 판들의 p55를 5 단위로 내리고 60–90으로 묶은 값.',
-      '- **복주머니**: 순서대로 ① 높은 길 ② 위험한 줄 ③ 계획형. 캐주얼 봇은 일부러 먹으러 가지 않으므로, 이 값은 "게으른 길에서 저절로 먹히는 비율"입니다(목표 약 70 / 50 / 40 %).',
+      '- **복주머니**: 코스 순서대로 `청크 열,행`(세트피스 안의 것은 `B`). 스테이지마다 높은 길(발판·2단 점프 정점), 위험한 줄(위험물 사이의 낮은 줄), 계획형(일찍 보이고 길을 골라야 하는 것)이 하나씩 있습니다.',
+      '  캐주얼 봇은 일부러 먹으러 가지 않으므로 이 값은 "게으른 길에서 저절로 먹히는 비율"입니다(목표 약 70 / 50 / 40 %). 판이 일찍 끝나면 뒤쪽 복주머니는 못 먹은 것으로 셉니다.',
       '- 코스는 고정입니다(`src/data/stages.ts`). 모든 스테이지는 `landing`으로 시작해 `finish_runout`으로 끝납니다.',
       '',
       '| id | 이름 | 소개 | 풍경 | 길이(m) | 티어 | 시간(s) | 첫 시도 ★1 | ★2 | 복주머니 (캐주얼 봇 획득률 · 위치) |',

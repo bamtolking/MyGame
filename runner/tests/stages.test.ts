@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { STAGES } from '../src/data/stages';
 import { BIOME_ORDER } from '../src/data/biomes';
 import { SPEED_TIERS, TILE, PX_PER_M } from '../src/data/physics';
-import { PARSED_BY_ID, resolveCourse } from '../src/sim/level';
+import { PARSED_BY_ID, resolveCourse, ensureLevel } from '../src/sim/level';
 import { validateChunk, tierCaps } from '../src/sim/validate';
 import { newRun, stepRun } from '../src/sim/run';
 import { Autopilot } from '../src/sim/autopilot';
@@ -89,6 +89,14 @@ describe('stages', () => {
       const allowed = st.tiers[1] >= piece.def.tiers[0] - 1 && !(st.world === 1 && !st.remix && st.index <= 3);
       expect(course.filter(id => id === piece.def.id).length, `${st.id} set piece`).toBe(allowed ? 1 : 0);
       for (const id of course) expect(PARSED_BY_ID.get(id)!.def.tags?.some(t => ['sky', 'special', 'tutorial'].includes(t)), `${st.id}: ${id} is not a course chunk`).toBeFalsy();
+      // speed follows the table: a chunk runs at the stage's tier, or one tier faster only in the closing exam
+      let m = 0; const total = course.reduce((a, id) => a + PARSED_BY_ID.get(id)!.width, 0);
+      for (const id of course) {
+        const p = PARSED_BY_ID.get(id)!; const f = m / total;
+        const tier = Math.round(st.tiers[0] + (st.tiers[1] - st.tiers[0]) * f); const t = Math.max(p.def.tiers[0], Math.min(p.def.tiers[1], tier));
+        expect(t === tier || (t === tier + 1 && f >= 0.65), `${st.id}: ${id} runs at tier ${t} at ${Math.round(f * 100)}% of a tier-${tier} stretch`).toBe(true);
+        m += p.width;
+      }
       if (st.world === 1 && !st.remix && st.index < 5) {
         for (const id of course) expect(PARSED_BY_ID.get(id)!.def.rows[11].includes('.'), `${st.id}: ${id} has a pit`).toBe(false);
       }
@@ -112,6 +120,19 @@ describe('stages', () => {
         cells.add(`${q.slot}:${q.col},${q.row}`);
       }
       expect(cells.size, st.id).toBe(st.pouches?.length ?? 0);
+    }
+  });
+
+  // ★3 is a bitmask of pouch indices 0..2: a set piece's 'B' glyph is numbered after the stage's own `pouches`.
+  it('the three pouches of a stage carry three distinct ★3 bits', () => {
+    for (const st of STAGES) {
+      const s = newRun({ mode: 'stage', seed: st.seed, charId: 'hotteok', stageId: st.id, noCountdown: true });
+      const bits = new Map<number, number>();
+      for (let x = 0; s.level.finishX === Infinity && x < 80000; x += 200) {
+        s.body.x = x; ensureLevel(s);
+        for (const p of s.level.pickups) if (p.type === 'pouch') bits.set(p.id, p.pouch ?? -1);
+      }
+      expect([...new Set(bits.values())].sort(), `${st.id} pouch bits`).toEqual([0, 1, 2]);
     }
   });
 

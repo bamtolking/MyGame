@@ -13,7 +13,9 @@ import { BIOME_BY_ID } from '../data/biomes';
 import { newRun, stepRun, totalScore, type RunConfig } from '../sim/run';
 import type { RunState, SimEvent, Mode } from '../sim/types';
 import { Renderer, type GhostView } from '../render/renderer';
-import { HAT_IDS, type HatId } from '../render/characters';
+import { hatIdOf } from '../render/characters';
+import { trailIdOf } from '../render/fx';
+import { equippedFor } from '../meta/achievements';
 import { Audio } from '../platform/audio';
 import * as store from '../platform/storage';
 import { applyRun, dailySeed, dailyChar, dailyCompanion, dailyArchive, todayKey, featureOpen, ghostKeyFor, type Progress, type RunReward, type GhostRec } from '../meta/progress';
@@ -243,8 +245,13 @@ export class App {
       pouchesBefore: s.stageId ? p.pouches[s.stageId] ?? 0 : 0,
       pauseW: 52,
     };
-    r.hats = {};
-    for (const [cid, eq] of Object.entries(p.cosmetics?.equipped ?? {})) { const hat = (eq?.hat ?? '').replace(/^hat_/, '') as HatId; if (HAT_IDS.includes(hat)) r.hats[cid] = hat; }
+    // cosmetics (GDD §9.5, looks only): the main runner and the relay partner wear their equipped hat / palette / trail
+    r.hats = {}; r.palettes = {}; r.trails = {};
+    for (const cid of [s.mainId, s.partnerId]) {
+      if (!cid) continue;
+      const eq = equippedFor(p, cid);
+      r.hats[cid] = hatIdOf(eq.hat?.id); r.palettes[cid] = eq.palette?.colors ?? null; r.trails[cid] = trailIdOf(eq.trail?.id);
+    }
     this.applySettings();
     rc.unbind = bindSurface(runEl, this.input, {
       zoneAt: e => this.zoneAt(e),
@@ -497,7 +504,11 @@ export class App {
     const a = this.audio;
     for (const e of evs) {
       switch (e.t) {
-        case 'jump': a.play(e.n === 2 ? 'jump2' : 'jump'); break;
+        case 'jump': {   // 점프 소리 꾸미기 of whoever is running (the main runner; the partner after a relay): 0 default, 1–4 skins
+          const js = equippedFor(this.p, s.charId).jumpSound?.id ?? '';
+          a.play(e.n === 2 ? 'jump2' : 'jump', Math.max(0, ['', 'jump_bell', 'jump_drum', 'jump_gayageum', 'jump_pop'].indexOf(js)));   // = audio JUMP_SOUND_IDS
+          break;
+        }
         case 'land': a.play('land'); break;
         case 'slide': a.play('slide'); break;
         case 'fastFall': a.play('fastfall'); break;

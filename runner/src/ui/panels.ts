@@ -3,8 +3,9 @@
 import type { CharacterDef } from '../data/characters';
 import type { CompanionDef } from '../data/companions';
 import type { Progress } from '../meta/progress';
-import { estimateRuns } from '../meta/achievements';
-import { drawCharacter } from '../render/characters';
+import { estimateRuns, equippedFor, type CosmeticDef } from '../meta/achievements';
+import { drawCharacter, headTop, hatIdOf, type HatId, type Palette, type Pose } from '../render/characters';
+import { Fx, TrailFx, trailIdOf } from '../render/fx';
 import { drawCompanion } from '../render/companions';
 import { shapeOf } from '../render/renderer';
 import { h } from './dom';
@@ -127,13 +128,60 @@ function makeCanvas(size: number, cls: string): { cv: HTMLCanvasElement; g: Canv
   return { cv, g };
 }
 
-/** A small canvas with the character in an idle/run pose. */
-export function charPortrait(c: CharacterDef, size = 96, running = false): HTMLCanvasElement {
+/** A look to draw a runner in: a hat (HatId or 'hat_…' id) and/or a palette (null = the character's own). */
+export interface PortraitLook { hat?: HatId | string | null; palette?: Palette | null }
+/** The look a character wears in this save (owned + equipped hat and palette, GDD §9.5). */
+export function lookFor(p: Progress, charId: string): PortraitLook {
+  const e = equippedFor(p, charId);
+  return { hat: e.hat?.id ?? null, palette: e.palette?.colors ?? null };
+}
+const isProgress = (x: unknown): x is Progress => !!x && typeof x === 'object' && 'cosmetics' in (x as object);
+
+/** A small canvas with the character in an idle/run pose. `look` (optional): a PortraitLook, or the save itself
+ *  (then the character's equipped hat + palette are drawn — e.g. charPortrait(ch, 124, false, app.p)). */
+export function charPortrait(c: CharacterDef, size = 96, running = false, look?: PortraitLook | Progress | null): HTMLCanvasElement {
   const { cv, g } = makeCanvas(size, 'portrait');
+  const lk = isProgress(look) ? lookFor(look, c.id) : look ?? {};
   const k = size / 124; g.translate(size / 2, size * 0.93); g.scale(k, k);
   g.fillStyle = 'rgba(0,0,0,0.2)'; g.beginPath(); g.ellipse(0, 2, 26, 6, 0, 0, Math.PI * 2); g.fill();
-  try { drawCharacter(g, shapeOf(c), c.palette, { state: running ? 'run' : 'idle', t: 0.5, runPhase: 0.25, spin: 0, squash: 1, hurt: false, alpha: 1 }); } catch { /* art in flux */ }
+  try { drawCharacter(g, shapeOf(c), lk.palette ?? c.palette, { state: running ? 'run' : 'idle', t: 0.5, runPhase: 0.25, spin: 0, squash: 1, hurt: false, alpha: 1 }, hatIdOf(lk.hat)); } catch { /* art in flux */ }
   return cv;
+}
+
+/** Preview of a cosmetic on a character for the 꾸미기 tab: palette → full portrait (56 px), hat → head-and-hat
+ *  close-up, trail → the runner mid-stride with its trail (both 42 px, the size of the .cosm-ico circle).
+ *  null for jump sounds (keep the note icon). Everything is the run's own drawing code. */
+export function cosmeticPreview(def: CosmeticDef, ch: CharacterDef, size?: number): HTMLCanvasElement | null {
+  if (def.kind === 'palette') return def.colors ? charPortrait({ ...ch, palette: def.colors }, size ?? 56) : null;
+  const S = size ?? 42;
+  if (def.kind === 'hat') {
+    const hat = hatIdOf(def.id); if (!hat) return null;
+    const { cv, g } = makeCanvas(S, 'portrait cosm-pic');
+    const top = headTop(shapeOf(ch)), k = S / 66;
+    g.translate(S / 2, S * 0.5); g.scale(k, k); g.translate(-top.x - 1, -top.y - 1);
+    try { drawCharacter(g, shapeOf(ch), ch.palette, { state: 'idle', t: 0.5, runPhase: 0, spin: 0, squash: 1, hurt: false, alpha: 1 }, hat); } catch { /* art in flux */ }
+    return cv;
+  }
+  if (def.kind === 'trail') {
+    const id = trailIdOf(def.id); if (!id) return null;
+    const { cv, g } = makeCanvas(S, 'portrait cosm-pic');
+    const k = S / 118; g.translate(S * 0.72, S * 0.86); g.scale(k, k);
+    drawTrailScene(g, id, ch);
+    return cv;
+  }
+  return null;
+}
+/** A runner mid-stride at (0,0) with ~1 s of its trail behind it (deterministic enough for a thumbnail). */
+function drawTrailScene(g: CanvasRenderingContext2D, id: ReturnType<typeof trailIdOf>, ch: CharacterDef): void {
+  const fx = new Fx(), tr = new TrailFx(); tr.id = id; tr.sizeK = 1.7;          // thumbnail: bigger, denser wake
+  const v = 300, dt = 1 / 30; let x = 0;
+  for (let i = 0; i < 40; i++) {
+    x += v * dt; const y = -Math.max(0, Math.sin(i / 40 * Math.PI * 1.25)) * 30;
+    fx.update(dt); tr.update(fx, dt, x, y, 1, false, v, true, { reduceMotion: false, lowFx: false });
+  }
+  g.save(); g.translate(-x, 0); tr.drawRibbon(g); fx.drawParticles(g); g.restore();
+  const pose: Pose = { state: 'run', t: 0.5, runPhase: 0.3, spin: 0, squash: 1, hurt: false, alpha: 1 };
+  try { drawCharacter(g, shapeOf(ch), ch.palette, pose); } catch { /* art in flux */ }
 }
 
 /** A companion (짝꿍) — the same procedural art the run draws (src/render/companions.ts). */
