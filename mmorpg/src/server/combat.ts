@@ -271,7 +271,7 @@ function basicAttack(w: World, p: Player, tgt: Monster): void {
       const d = Math.hypot(tgt.x - p.x, tgt.y - p.y); const id = tgt.id; let tx = tgt.x, ty = tgt.y;
       w.after(d / 700, () => {
         const m = w.mons.get(id); if (m && !m.dead) { tx = m.x; ty = m.y; }
-        w.spatial.each(tx, ty, ATK.inkR, h => { hitMonster(w, p, h, 0.8); slow(h, 1.2, 0.6); });
+        w.spatial.each(tx, ty, ATK.inkR, h => { hitMonster(w, p, h, h.id === id ? 1 : 0.8); slow(h, 1.2, 0.6); }); // the blob itself hits its target full
         for (let k = 1; k <= ATK.inkTicks; k++) w.after(k * 0.5, () => { if (still(w, p, 'painter')) w.spatial.each(tx, ty, ATK.inkR, h => { hitMonster(w, p, h, ATK.inkTickMul); slow(h, 0.7, 0.6); }); });
       });
       break;
