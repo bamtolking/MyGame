@@ -2,19 +2,24 @@
 // wide, then tiled), stars / moon / fireworks / birds (a handful of cheap draws per frame), the ground, pits,
 // one-way platforms, the finish gate and the bonus-time sky. Presentation only — geometry comes from the sim.
 // Per-frame cost target: ≤ ~15 drawImage + ~60 fillRect for the whole background, no shadowBlur / filter.
-import { BIOMES, BIOME_ORDER, type BiomeDef } from '../data/biomes';
+import { BIOMES, BIOME_ORDER, BIOME_BY_ID, type BiomeDef } from '../data/biomes';
 import type { RunState } from '../sim/types';
 import { VIEW_H, GROUND_Y, TILE, PLATFORM_THICK } from '../data/physics';
 import { rr, drawCharacter } from './characters';
 import { CHAR_BY_ID } from '../data/characters';
+import { warmFonts } from './fx';
 
 // ================================================================ shared colour / canvas helpers
-export function hexRgb(h: string): [number, number, number] {
-  if (h.startsWith('rgb')) { const m = h.match(/[\d.]+/g)!; return [+m[0], +m[1], +m[2]]; }
-  let s = h.slice(1); if (s.length === 3) s = s.split('').map(ch => ch + ch).join('');
-  const n = parseInt(s, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+const rgbCache = new Map<string, readonly [number, number, number]>();
+/** '#rgb' / '#rrggbb' / 'rgb(…)' → [r, g, b] (memoised: the painters convert the same palette colours thousands of times) */
+export function hexRgb(h: string): readonly [number, number, number] {
+  let v = rgbCache.get(h); if (v) return v;
+  if (h.startsWith('rgb')) { const m = h.match(/[\d.]+/g)!; v = [+m[0], +m[1], +m[2]]; }
+  else { let s = h.slice(1); if (s.length === 3) s = s.split('').map(ch => ch + ch).join(''); const n = parseInt(s, 16); v = [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  if (rgbCache.size > 512) rgbCache.clear();
+  rgbCache.set(h, v); return v;
 }
-function toHex(c: number[]): string { return '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join(''); }
+function toHex(c: readonly number[]): string { return '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join(''); }
 /** linear blend of two colours (t = 0 → a, 1 → b) */
 export function mix(a: string, b: string, t: number): string { const A = hexRgb(a), B = hexRgb(b); return toHex(A.map((v, i) => v + (B[i] - v) * t)); }
 export function rgba(a: string, al: number): string { const [r, g, b] = hexRgb(a); return `rgba(${r},${g},${b},${al})`; }
@@ -29,10 +34,115 @@ export function makeCanvas(w: number, h: number, res: number): [HTMLCanvasElemen
   const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.ceil(w * res)); cv.height = Math.max(1, Math.ceil(h * res));
   const g = cv.getContext('2d')!; g.scale(res, res); return [cv, g];
 }
+function newCanvas(w: number, h: number): HTMLCanvasElement { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; return cv; }
+/** allocate a canvas's pixels now (a canvas gets them on its first draw) */
+function touch(cv: HTMLCanvasElement): HTMLCanvasElement { cv.getContext('2d')?.clearRect(0, 0, 1, 1); return cv; }
+/** a parallax layer: the top `sh` rows of a (pooled, possibly taller) canvas. The far layers are painted below the
+ *  device resolution and were bilinearly upscaled on every frame — on a CPU-rastered canvas the dearest thing a frame
+ *  does (≈ 30 ms of 50 at 4× throttle, landscape) — so each also gets `px`: the same upscale done once (at the whole
+ *  device px it is always drawn at, so the pixels are the same), blitted 1:1. `ps`: 0 none yet · 1 canvas · 2 drawn ·
+ *  3 ready (or not needed). */
+interface Layer { cv: HTMLCanvasElement; sh: number; px: HTMLCanvasElement | null; pw: number; ph: number; ps: 0 | 1 | 2 | 3 }
+const layerOf = (cv: HTMLCanvasElement, sh: number): Layer => ({ cv, sh, px: null, pw: 0, ph: 0, ps: 0 });
+/** a layer being painted ahead of time: its painter's canvas calls are recorded once (one frame), replayed three times
+ *  (−W, 0, +W) a time slice per frame, then rasterised in a frame of their own — the painters issue thousands of calls,
+ *  12–20 ms at 4× CPU throttle for one copy of the busiest layer */
+interface Job { L: Layer; g: CanvasRenderingContext2D; paint: (g: CanvasRenderingContext2D) => void; W: number; ops: unknown[] | null; at: number; flushed: boolean; done: boolean }
+let gradCtx: CanvasRenderingContext2D | null = null;
+function grads(): CanvasRenderingContext2D { if (!gradCtx) { const cv = document.createElement('canvas'); cv.width = cv.height = 1; gradCtx = cv.getContext('2d')!; } return gradCtx; }
+// opcodes of the flat recording (opcode, then its arguments)
+const enum O { Save, Restore, Translate, Scale, Rotate, Begin, Close, Move, Line, Quad, Bezier, Arc, ArcTo, Ellipse, Rect, Fill, FillPath, Stroke, Clip, FillRect, StrokeRect, FillText, StrokeText, Dash,
+  FillStyle, StrokeStyle, LineWidth, LineCap, LineJoin, Font, TextAlign, TextBaseline, Alpha, MiterLimit, Composite }
+/** records the canvas calls of a painter into one flat array (no allocation per call; only what painters use —
+ *  gradients are real objects, made on a scratch context) */
+class Recorder {
+  q: unknown[] = [];
+  save(): void { this.q.push(O.Save); }
+  restore(): void { this.q.push(O.Restore); }
+  translate(x: number, y: number): void { this.q.push(O.Translate, x, y); }
+  scale(x: number, y: number): void { this.q.push(O.Scale, x, y); }
+  rotate(a: number): void { this.q.push(O.Rotate, a); }
+  beginPath(): void { this.q.push(O.Begin); }
+  closePath(): void { this.q.push(O.Close); }
+  moveTo(x: number, y: number): void { this.q.push(O.Move, x, y); }
+  lineTo(x: number, y: number): void { this.q.push(O.Line, x, y); }
+  quadraticCurveTo(a: number, b: number, x: number, y: number): void { this.q.push(O.Quad, a, b, x, y); }
+  bezierCurveTo(a: number, b: number, c: number, d: number, x: number, y: number): void { this.q.push(O.Bezier, a, b, c, d, x, y); }
+  arc(x: number, y: number, r: number, a0: number, a1: number, ccw = false): void { this.q.push(O.Arc, x, y, r, a0, a1, ccw); }
+  arcTo(a: number, b: number, c: number, d: number, r: number): void { this.q.push(O.ArcTo, a, b, c, d, r); }
+  ellipse(x: number, y: number, rx: number, ry: number, rot: number, a0: number, a1: number, ccw = false): void { this.q.push(O.Ellipse, x, y, rx, ry, rot, a0, a1, ccw); }
+  rect(x: number, y: number, w: number, h: number): void { this.q.push(O.Rect, x, y, w, h); }
+  fill(path?: Path2D): void { if (path) this.q.push(O.FillPath, path); else this.q.push(O.Fill); }
+  stroke(): void { this.q.push(O.Stroke); }
+  clip(): void { this.q.push(O.Clip); }
+  fillRect(x: number, y: number, w: number, h: number): void { this.q.push(O.FillRect, x, y, w, h); }
+  strokeRect(x: number, y: number, w: number, h: number): void { this.q.push(O.StrokeRect, x, y, w, h); }
+  fillText(t: string, x: number, y: number): void { this.q.push(O.FillText, t, x, y); }
+  strokeText(t: string, x: number, y: number): void { this.q.push(O.StrokeText, t, x, y); }
+  setLineDash(d: number[]): void { this.q.push(O.Dash, d.slice()); }
+  createLinearGradient(x0: number, y0: number, x1: number, y1: number): CanvasGradient { return grads().createLinearGradient(x0, y0, x1, y1); }
+  createRadialGradient(x0: number, y0: number, r0: number, x1: number, y1: number, r1: number): CanvasGradient { return grads().createRadialGradient(x0, y0, r0, x1, y1, r1); }
+  set fillStyle(v: unknown) { this.q.push(O.FillStyle, v); }
+  set strokeStyle(v: unknown) { this.q.push(O.StrokeStyle, v); }
+  set lineWidth(v: unknown) { this.q.push(O.LineWidth, v); }
+  set lineCap(v: unknown) { this.q.push(O.LineCap, v); }
+  set lineJoin(v: unknown) { this.q.push(O.LineJoin, v); }
+  set font(v: unknown) { this.q.push(O.Font, v); }
+  set textAlign(v: unknown) { this.q.push(O.TextAlign, v); }
+  set textBaseline(v: unknown) { this.q.push(O.TextBaseline, v); }
+  set globalAlpha(v: unknown) { this.q.push(O.Alpha, v); }
+  set miterLimit(v: unknown) { this.q.push(O.MiterLimit, v); }
+  set globalCompositeOperation(v: unknown) { this.q.push(O.Composite, v); }
+}
+/** replay the call at q[i] on g; returns the index of the next one */
+function play(g: CanvasRenderingContext2D, q: unknown[], i: number): number {
+  const n = (k: number) => q[i + k] as number;
+  switch (q[i] as O) {
+    case O.Save: g.save(); return i + 1;
+    case O.Restore: g.restore(); return i + 1;
+    case O.Translate: g.translate(n(1), n(2)); return i + 3;
+    case O.Scale: g.scale(n(1), n(2)); return i + 3;
+    case O.Rotate: g.rotate(n(1)); return i + 2;
+    case O.Begin: g.beginPath(); return i + 1;
+    case O.Close: g.closePath(); return i + 1;
+    case O.Move: g.moveTo(n(1), n(2)); return i + 3;
+    case O.Line: g.lineTo(n(1), n(2)); return i + 3;
+    case O.Quad: g.quadraticCurveTo(n(1), n(2), n(3), n(4)); return i + 5;
+    case O.Bezier: g.bezierCurveTo(n(1), n(2), n(3), n(4), n(5), n(6)); return i + 7;
+    case O.Arc: g.arc(n(1), n(2), n(3), n(4), n(5), q[i + 6] as boolean); return i + 7;
+    case O.ArcTo: g.arcTo(n(1), n(2), n(3), n(4), n(5)); return i + 6;
+    case O.Ellipse: g.ellipse(n(1), n(2), n(3), n(4), n(5), n(6), n(7), q[i + 8] as boolean); return i + 9;
+    case O.Rect: g.rect(n(1), n(2), n(3), n(4)); return i + 5;
+    case O.Fill: g.fill(); return i + 1;
+    case O.FillPath: g.fill(q[i + 1] as Path2D); return i + 2;
+    case O.Stroke: g.stroke(); return i + 1;
+    case O.Clip: g.clip(); return i + 1;
+    case O.FillRect: g.fillRect(n(1), n(2), n(3), n(4)); return i + 5;
+    case O.StrokeRect: g.strokeRect(n(1), n(2), n(3), n(4)); return i + 5;
+    case O.FillText: g.fillText(q[i + 1] as string, n(2), n(3)); return i + 4;
+    case O.StrokeText: g.strokeText(q[i + 1] as string, n(2), n(3)); return i + 4;
+    case O.Dash: g.setLineDash(q[i + 1] as number[]); return i + 2;
+    case O.FillStyle: g.fillStyle = q[i + 1] as string; return i + 2;
+    case O.StrokeStyle: g.strokeStyle = q[i + 1] as string; return i + 2;
+    case O.LineWidth: g.lineWidth = n(1); return i + 2;
+    case O.LineCap: g.lineCap = q[i + 1] as CanvasLineCap; return i + 2;
+    case O.LineJoin: g.lineJoin = q[i + 1] as CanvasLineJoin; return i + 2;
+    case O.Font: g.font = q[i + 1] as string; return i + 2;
+    case O.TextAlign: g.textAlign = q[i + 1] as CanvasTextAlign; return i + 2;
+    case O.TextBaseline: g.textBaseline = q[i + 1] as CanvasTextBaseline; return i + 2;
+    case O.Alpha: g.globalAlpha = n(1); return i + 2;
+    case O.MiterLimit: g.miterLimit = n(1); return i + 2;
+    case O.Composite: g.globalCompositeOperation = q[i + 1] as GlobalCompositeOperation; return i + 2;
+  }
+  throw new Error('backdrop recorder: bad opcode');
+}
+const SLICE_MS = 2.5;                    // replay budget per pre-warm frame (performance.now ms)
 /** device px per logical px of a world-space context (quantised so sprite caches stay small) */
 export function worldRes(c: CanvasRenderingContext2D): number {
-  const m = c.getTransform(); return Math.max(0.5, Math.min(3, Math.round(Math.hypot(m.a, m.b) * 8) / 8));
+  const m = c.getTransform(); return quantRes(Math.hypot(m.a, m.b));
 }
+/** worldRes() of a transform scaling `k` device px per logical px */
+export function quantRes(k: number): number { return Math.max(0.5, Math.min(3, Math.round(k * 8) / 8)); }
 /** tiny LRU of pre-rendered sprites */
 export class SpriteCache<T = HTMLCanvasElement> {
   private map = new Map<string, T>();
@@ -445,6 +555,13 @@ function hanokRoofRow(g: CanvasRenderingContext2D, W: number, r: () => number, c
 }
 
 const LAYERS: Record<BiomeDef['style'], LayerSpec[]> = { market: marketLayers, riverside: riversideLayers, bridge: bridgeLayers, dawn: dawnLayers };
+/** per layer index, the tallest layer of any style: layer canvases are all this tall (a layer uses its top rows), so a
+ *  biome that leaves the cache hands its canvases on (a fresh 1–3 Mpx canvas costs ~10 ms at 4× CPU throttle on its
+ *  first draw) */
+const TOP_MAX = [0, 1, 2, 3].map(li => Math.max(...Object.values(LAYERS).map(ls => ls[li].top)));
+/** text painted into the layers (warmed at prepare, so no pre-warm frame resolves a Hangul font) */
+const LAYER_FONTS = [10, 11, 12, 15].map(px => `800 ${px}px ${FONT}`).concat(`900 26px ${FONT}`);
+const LAYER_TEXT = [...new Set(MARKET_WORDS.join('') + TENT_WORDS.join('') + '도착')].join('');
 
 // ================================================================ celestial sprites (moon, fireworks, sky lanterns)
 function moonSprite(rad: number, res: number, pale: boolean, rabbit = false): HTMLCanvasElement {
@@ -516,6 +633,7 @@ function cloud(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: 
   g.fillStyle = col; blob(-2, 0.92);
 }
 
+const STAR_N: Record<BiomeDef['style'], number> = { market: 26, riverside: 42, bridge: 60, dawn: 14 };
 const FIREWORK_COLS: [string, string][] = [['#ff7ab8', '#ffd1ea'], ['#7ae8ff', '#e0fbff'], ['#ffd36b', '#fff3c4'], ['#b69cff', '#ffffff']];
 
 // ================================================================ ground / platform textures
@@ -715,74 +833,206 @@ function paintEdge(g: CanvasRenderingContext2D, st: GroundStyle, P: Pal, dir: 1 
   g.fillStyle = st === 'sky' ? '#ffffff' : P.top; g.beginPath(); g.arc(x + dir * 6, EDGE_UP + 2, 6, 0, Math.PI * 2); g.fill();
 }
 
+/** one copy of a bonus-sky cloud bank (the tile repeats every W) */
+function paintClouds(g: CanvasRenderingContext2D, W: number, li: number): void {
+  const r = srng(4242 + li * 17);
+  if (li === 0) {
+    for (let x = 0; x < W; x += 150 + r() * 120) cloud(g, x, -60 - r() * 120, 140 + r() * 120, 26 + r() * 14, 'rgba(255,214,236,0.55)', 'rgba(190,140,220,0.35)', r);
+    for (let x = 0; x < W; x += 90 + r() * 60) cloud(g, x, -20 - r() * 20, 120 + r() * 90, 30 + r() * 12, 'rgba(255,226,240,0.8)', 'rgba(214,160,220,0.6)', r);
+  } else {
+    for (let x = 0; x < W; x += 110 + r() * 90) cloud(g, x, -10 - r() * 40, 150 + r() * 100, 34 + r() * 16, '#fff4fa', 'rgba(236,190,236,0.95)', r);
+  }
+}
+/** the moon each style shows: [radius, pale] (the bridge has fireworks instead) */
+const MOON: Record<BiomeDef['style'], [number, boolean] | null> = { market: [30, false], riverside: [26, false], dawn: [92, true], bridge: null };
+
 // ================================================================ the Backdrop
+/** the Backdrop sized last. Every run gets a new renderer: a new run on the same screen takes over the last one's painted
+ *  layers, sprites and spare canvases (an instant retry repaints and allocates nothing) */
+let last: Backdrop | null = null;
+
 export class Backdrop {
   cssW = 1; cssH = 1; dpr = 1; scale = 1;
   lowFx = false; reduceMotion = false;
-  private layers = new Map<string, (HTMLCanvasElement | null)[]>();   // biome id → 4 lazily painted layer canvases
-  private jobs = new Map<string, { cv: HTMLCanvasElement; g: CanvasRenderingContext2D; i: number }>();   // layers being pre-warmed
+  private layers = new Map<string, (Layer | null)[]>();   // biome id → 4 lazily painted layers
+  private jobs = new Map<string, Job>();                 // layers being pre-warmed
+  private pool = new Map<string, HTMLCanvasElement[]>(); // spare layer canvases by size (from biomes that left the cache)
+  private pxPool = new Map<string, HTMLCanvasElement[]>(); // spare device-resolution copies by size
   private skyCache = new Map<string, HTMLCanvasElement>();
   private sprites = new SpriteCache(40);
   private tileW = 1440;                  // logical width of one parallax tile (≈1.5× the view)
   private frameT = NaN; private budget = 1;
   private ta = 1; private td = 1; private te = 0; private tf = 0;   // current screen transform (device px)
   private stars = new Map<string, Float32Array>();
+  private flushG: CanvasRenderingContext2D | null = null;
+  private toFlush: HTMLCanvasElement | null = null;       // a pre-warmed bonus piece to rasterise next
+  private moons = new Map<number, { res: number; cv: HTMLCanvasElement }>();
+  private clouds: (Job | null)[] = [null, null];           // the bonus sky's two cloud banks
 
   resize(cssW: number, cssH: number, dpr: number, scale: number): void {
+    if (cssW === this.cssW && cssH === this.cssH && dpr === this.dpr && scale === this.scale) return;   // (layout runs twice at a run start)
     this.cssW = cssW; this.cssH = cssH; this.dpr = dpr; this.scale = scale;
     this.tileW = Math.max(1440, Math.ceil((1.5 * cssW) / scale / 40) * 40);
-    this.layers.clear(); this.jobs.clear(); this.skyCache.clear(); this.sprites.clear();
+    this.layers.clear(); this.jobs.clear(); this.pool.clear(); this.pxPool.clear(); this.skyCache.clear(); this.sprites.clear(); this.moons.clear(); this.toFlush = null; this.clouds = [null, null];
+    const p = last; last = this;
+    if (p && p !== this && p.cssW === cssW && p.cssH === cssH && p.dpr === dpr && p.scale === scale) this.adopt(p);
+  }
+
+  /** take over another (dropped) Backdrop's caches for the same screen — everything in them depends only on its size */
+  private adopt(p: Backdrop): void {
+    [this.layers, p.layers] = [p.layers, this.layers]; [this.jobs, p.jobs] = [p.jobs, this.jobs];
+    [this.pool, p.pool] = [p.pool, this.pool]; [this.pxPool, p.pxPool] = [p.pxPool, this.pxPool];
+    [this.skyCache, p.skyCache] = [p.skyCache, this.skyCache]; [this.sprites, p.sprites] = [p.sprites, this.sprites];
+    [this.stars, p.stars] = [p.stars, this.stars]; [this.moons, p.moons] = [p.moons, this.moons];
+    [this.clouds, p.clouds] = [p.clouds, this.clouds]; [this.toFlush, p.toFlush] = [p.toFlush, null]; this.flushG = p.flushG;
   }
 
   /** screen y (css px) of the ground line */
   private get gy(): number { return this.cssH - (VIEW_H - GROUND_Y) * this.scale; }
 
-  /** paint every layer of a biome now (loading screens, previews); otherwise layers appear one per frame */
-  prepare(bi: BiomeDef): void { for (let li = 0; li < 4; li++) this.layer(bi, li, true); }
+  /** paint every layer of a biome now (loading, resize, a biome switch that outran its pre-warm); otherwise layers are
+   *  pre-warmed a piece per frame */
+  prepare(bi: BiomeDef): void {
+    warmFonts(LAYER_FONTS, LAYER_TEXT);
+    for (let li = 0; li < 4; li++) this.layer(bi, li, true);
+  }
 
-  private layer(bi: BiomeDef, li: number, force = false): HTMLCanvasElement | null {
+  /** a layer's canvas size (device px) and the rows it uses (its own height, from the top) */
+  private dims(bi: BiomeDef, li: number): { res: number; w: number; h: number; sh: number } {
+    const spec = LAYERS[bi.style][li]; const res = Math.min(2.5, this.scale * Math.min(this.dpr, spec.k));
+    return { res, w: Math.max(1, Math.round(this.tileW * res)), h: Math.max(1, Math.ceil((TOP_MAX[li] + BELOW) * res)), sh: Math.max(1, Math.ceil((spec.top + BELOW) * res)) };
+  }
+
+  private job(bi: BiomeDef, li: number): Job {
+    const key = bi.id + '|' + li; let job = this.jobs.get(key); if (job) return job;
+    const d = this.dims(bi, li); const pk = d.w + 'x' + d.h;
+    const pooled = this.pool.get(pk)?.pop(); const cv = pooled ?? touch(newCanvas(d.w, d.h));
+    const g = cv.getContext('2d')!; g.setTransform(1, 0, 0, 1, 0, 0); if (pooled) g.clearRect(0, 0, cv.width, cv.height);
+    // (clipped to the layer's own rows, as its own canvas would be — popped when the layer is done)
+    g.save(); g.beginPath(); g.rect(0, 0, d.w, d.sh); g.clip();
+    // the canvas is a whole number of px wide and the content period is exactly that width (seamless tiling)
+    g.setTransform(d.w / this.tileW, 0, 0, d.res, 0, 0); g.translate(0, LAYERS[bi.style][li].top);
+    const spec = LAYERS[bi.style][li]; const W = this.tileW; const P = pal(bi); const seed = 1000 + li * 97 + bi.id.length * 13 + bi.id.charCodeAt(0);
+    job = { L: layerOf(cv, d.sh), g, paint: r => spec.paint(r, W, srng(seed), P), W, ops: null, at: 0, flushed: false, done: false }; this.jobs.set(key, job);
+    return job;
+  }
+
+  /** advance a job by one frame's worth (record → replay slices → rasterise); `force`: finish it now. True when done. */
+  private advance(job: Job, force: boolean): boolean {
+    if (!job.ops && force) {                      // all at once: paint the three copies straight away (no recording)
+      const g = job.g; for (let copy = 0; copy < 3; copy++) { g.save(); g.translate((copy - 1) * job.W, 0); job.paint(g); g.restore(); }
+      g.restore(); job.done = true; return true;
+    }
+    if (!job.ops) { const r = new Recorder(); job.paint(r as unknown as CanvasRenderingContext2D); job.ops = r.q; return false; }
+    const q = job.ops, n = q.length, total = 3 * n, g = job.g;
+    if (job.at < total) {
+      const t0 = performance.now(); let calls = 0;
+      while (job.at < total) {
+        const copy = Math.floor(job.at / n), k = job.at - copy * n;
+        if (k === 0) { g.save(); g.translate((copy - 1) * job.W, 0); }
+        const next = play(g, q, k); job.at = copy * n + next;
+        if (next === n) g.restore();
+        if (!force && (++calls & 31) === 0 && performance.now() - t0 > SLICE_MS) break;
+      }
+      if (job.at < total || !force) return false;
+    }
+    if (!job.flushed && !force) { this.flush(job.L.cv); job.flushed = true; }
+    job.g.restore(); job.done = true; return true;
+  }
+
+  private layer(bi: BiomeDef, li: number, force = false): Layer | null {
     let arr = this.layers.get(bi.id);
     if (arr) { this.layers.delete(bi.id); this.layers.set(bi.id, arr); }          // LRU touch
     else {
       arr = [null, null, null, null]; this.layers.set(bi.id, arr);
-      // keep at most 3 biomes (current, previous for the cross-fade, next being pre-warmed) ≈ 3 × 7 MB on a phone
-      if (this.layers.size > 3) this.layers.delete(this.layers.keys().next().value as string);
+      // keep at most 2 biomes (≈ 2 × 7 MB on a phone): the current one and the previous one while they cross-fade, then
+      // the next one being pre-warmed (pre-warming waits for the cross-fade) — which takes over the leaving one's canvases
+      if (this.layers.size > 2) {
+        const old = this.layers.keys().next().value as string; const gone = this.layers.get(old)!; this.layers.delete(old);
+        for (let k = 0; k < 4; k++) {
+          const L = gone[k]; this.jobs.delete(old + '|' + k);          // (a half-painted layer's canvas is dropped, not reused)
+          if (L) { const pk = L.cv.width + 'x' + L.cv.height; const list = this.pool.get(pk) ?? []; list.push(L.cv); this.pool.set(pk, list); }
+          if (L?.px && L.ps === 3) { const pk = L.px.width + 'x' + L.px.height; const list = this.pxPool.get(pk) ?? []; list.push(L.px); this.pxPool.set(pk, list); }
+        }
+      }
     }
     if (arr[li]) return arr[li];
     if (!force && this.budget <= 0) return null;
     this.budget--;
-    const spec = LAYERS[bi.style][li]; const W = this.tileW; const key = bi.id + '|' + li;
-    let job = this.jobs.get(key);
-    if (!job) {
-      const res = Math.min(2.5, this.scale * Math.min(this.dpr, spec.k));
-      // the canvas is a whole number of px wide and the content period is exactly that width (seamless tiling)
-      const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(W * res)); cv.height = Math.max(1, Math.ceil((spec.top + BELOW) * res));
-      const g = cv.getContext('2d')!; g.setTransform(cv.width / W, 0, 0, res, 0, 0);
-      g.translate(0, spec.top);
-      job = { cv, g, i: 0 }; this.jobs.set(key, job);
-    }
-    // three copies (−W, 0, +W) make the tile seamless: a pre-warm paints one copy per frame (no 10–20 ms spike on a
-    // slow phone), a forced paint (biome switch, resize) whatever is left
-    const P = pal(bi);
-    do { const g = job.g; g.save(); g.translate((job.i - 1) * W, 0); spec.paint(g, W, srng(1000 + li * 97 + bi.id.length * 13 + bi.id.charCodeAt(0)), P); g.restore(); job.i++; }
-    while (force && job.i < 3);
-    if (job.i < 3) return null;
-    this.jobs.delete(key);
-    arr[li] = job.cv; return job.cv;
+    // three copies (−W, 0, +W) make the tile seamless. A pre-warm spreads the work over several frames and rasterises
+    // the finished layer in a frame of its own (so none of it lands on the frame the biome comes in); a forced paint
+    // (biome switch, resize) does whatever is left at once
+    const had = this.jobs.has(bi.id + '|' + li); const job = this.job(bi, li);
+    if (!had && !force) return null;                    // (a new canvas's pixels: a step of their own)
+    if (!this.advance(job, force)) return null;
+    this.jobs.delete(bi.id + '|' + li);
+    arr[li] = job.L; return job.L;
   }
 
-  /** paint the 보름달 잔치 sky's pieces ahead of time, one per frame (from the 4th letter on) — its first frame used
-   *  to paint them all at once (≈ 90 ms at 4× CPU throttle) */
-  prewarmBonus(): void {
+  /** one frame's step toward a finished layer's device-resolution copy (see Layer); false when there was none to do */
+  private prescale(L: Layer, top: number): boolean {
+    if (L.ps === 3) return false;
+    const a = this.dpr, want = this.tileW * this.scale * a, hDev = (top + BELOW) * this.scale * a;   // (= tiled()'s)
+    if (Math.abs(want - L.cv.width) <= 1.5 && Math.abs(hDev - L.sh) <= 2) { L.ps = 3; return false; }   // painted 1:1 already
+    const w = Math.max(1, Math.round(want)), h = Math.ceil(hDev);
+    if (L.ps === 0) {
+      const pooled = this.pxPool.get(w + 'x' + h)?.pop();
+      if (pooled) { const g = pooled.getContext('2d')!; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h); }
+      L.px = pooled ?? touch(newCanvas(w, h)); L.pw = w; L.ph = hDev; L.ps = 1; return true;
+    }
+    const px = L.px!;
+    if (L.ps === 1) {                   // the very upscale tiled() would do each frame, into device px at (0, 0)
+      const g = px.getContext('2d')!; g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.imageSmoothingEnabled = true;
+      g.drawImage(L.cv, 0, 0, L.cv.width, L.sh, 0, 0, w, hDev); L.ps = 2; return true;
+    }
+    this.flush(px); L.ps = 3; return true;
+  }
+
+  /** rasterise a canvas's recorded drawing now (drawing it anywhere does; a 1×1 scratch keeps it cheap) */
+  private flush(cv: HTMLCanvasElement): void {
+    if (!this.flushG) { const f = document.createElement('canvas'); f.width = f.height = 1; this.flushG = f.getContext('2d'); }
+    const g = this.flushG; if (!g) return;
+    g.drawImage(cv, 0, 0, 1, 1); g.clearRect(0, 0, 1, 1);
+  }
+
+  /** paint the 보름달 잔치 sky's pieces ahead of time, one per frame (from the 4th letter on), each rasterised on the
+   *  frame after it is painted — its first frame used to paint them all at once (≈ 90 ms at 4× CPU throttle) */
+  prewarmBonus(bi?: BiomeDef): void {
     if (this.budget <= 0) return;
+    if (this.toFlush) { this.budget--; this.flush(this.toFlush); this.toFlush = null; return; }
     const res = Math.min(2.5, this.scale * this.dpr); const has = (k: string) => this.sprites.has(`${k}|${res}`);
+    const wres = quantRes(this.scale * this.dpr);                                           // = worldRes() of the world transform
     const job = !this.skyCache.has('__bonus') ? () => this.skyCanvas(null)
       : !has('bonusMoon') ? () => this.sprite('bonusMoon', r => moonSprite(118, r, false, true))
       : !has('sparkle') ? () => this.sprite('sparkle', r => sparkleSprite(r))
       : !has('skyLantern') ? () => this.sprite('skyLantern', r => skyLanternSprite(r))
-      : !has(`bonusClouds0|${this.tileW}`) ? () => this.bonusCloudLayer(0)
-      : !has(`bonusClouds1|${this.tileW}`) ? () => this.bonusCloudLayer(1) : null;
-    if (job) { this.budget--; job(); }
+      : bi && !this.sprites.has(`gt|sky|${bi.id}|${wres}`) ? () => this.groundTile('sky', bi, wres) : null;
+    if (job) { this.budget--; this.toFlush = job(); return; }
+    for (let li = 0; li < 2; li++) {           // the cloud banks: allocate, record, replay in slices, rasterise
+      const cj = this.clouds[li]; if (cj?.done) continue;
+      this.budget--; if (!cj) this.cloudJob(li); else this.advance(cj, false);
+      return;
+    }
+  }
+
+  /** spend the frame's budget on a step of a finished layer's device-resolution copy (see Layer) */
+  private prescaleBiome(bi: BiomeDef): void {
+    const arr = this.layers.get(bi.id); if (!arr) return;
+    for (let li = 0; li < 4 && this.budget > 0; li++) { const L = arr[li]; if (L && this.prescale(L, LAYERS[bi.style][li].top)) this.budget--; }
+  }
+
+  /** the next biome's sky, moon and firework sprites, one per frame after its layers (not on the frame it comes in) */
+  private prewarmExtras(bi: BiomeDef): void {
+    if (this.budget <= 0) return;
+    if (this.toFlush) { this.budget--; this.flush(this.toFlush); this.toFlush = null; return; }
+    const res = Math.min(2.5, this.scale * this.dpr);
+    let job: (() => HTMLCanvasElement) | null = !this.skyCache.has(bi.id) ? () => this.skyCanvas(bi) : null;
+    if (!job) {
+      const moon = MOON[bi.style];
+      if (moon) { const m = this.moons.get(moon[0] * (moon[1] ? -1 : 1)); if (!m || m.res !== res) job = () => this.moonSprite(moon[0], moon[1]); }
+      else for (let k = 0; k < FIREWORK_COLS.length && !job; k++) if (!this.sprites.has(`fw${k}|${res}`)) { const [col, col2] = FIREWORK_COLS[k]; job = () => this.sprite(`fw${k}`, r => burstSprite(80, r, col, col2)); }
+    }
+    if (job) { this.budget--; this.toFlush = job(); }
   }
 
   private skyCanvas(bi: BiomeDef | null): HTMLCanvasElement {
@@ -805,13 +1055,20 @@ export class Backdrop {
     this.skyCache.set(key, cv); return cv;
   }
 
+  /** the colour at the very top of the sky gradient: the renderer fills the strip the camera uncovers above the
+   *  world with it, so the two never show a seam (bonus sky: #1d1650 only when the gradient starts below the top) */
+  skyTop(bi: BiomeDef | null): string {
+    if (bi) return bi.sky[0];
+    return this.cssH - VIEW_H * this.scale > 0.5 ? '#1d1650' : '#2a1d6b';
+  }
+
   private sprite(key: string, make: (res: number) => HTMLCanvasElement): HTMLCanvasElement {
     const res = Math.min(2.5, this.scale * this.dpr);
     return this.sprites.get(`${key}|${res}`, () => make(res));
   }
 
   /** sky gradient + stars/moon/fireworks + 4 tiled parallax layers (screen space, css px) */
-  drawBiome(c: CanvasRenderingContext2D, bi: BiomeDef, alpha: number, camX: number, time: number): void {
+  drawBiome(c: CanvasRenderingContext2D, bi: BiomeDef, alpha: number, camX: number, time: number, prewarm = true): void {
     if (time !== this.frameT) { this.frameT = time; this.budget = 1; }
     const sc = this.scale, gy = this.gy, W = this.cssW; this.readTransform(c);
     c.globalAlpha = alpha;
@@ -831,9 +1088,11 @@ export class Backdrop {
     }
     c.globalAlpha = 1;
     // pre-warm the next biome in the cycle with any budget left this frame
-    if (this.budget > 0) {
+    // (not during a cross-fade: those frames draw two biomes already); this biome's device-resolution copies come first
+    if (prewarm && this.budget > 0) {
+      this.prescaleBiome(bi);
       const next = BIOMES[(BIOME_ORDER.indexOf(bi.id) + 1) % BIOMES.length];
-      if (next && next.id !== bi.id) for (let li = 0; li < 4 && this.budget > 0; li++) this.layer(next, li);
+      if (next && next.id !== bi.id) { for (let li = 0; li < 4 && this.budget > 0; li++) this.layer(next, li); this.prescaleBiome(next); this.prewarmExtras(next); }
     }
   }
 
@@ -842,17 +1101,22 @@ export class Backdrop {
     c.drawImage(sky, 0, 0, this.cssW, this.cssH); c.imageSmoothingEnabled = sm;
   }
 
-  /** draw a periodic layer canvas across the screen; tiles abut on whole device pixels (no seams, no overlap) */
-  private tiled(c: CanvasRenderingContext2D, L: HTMLCanvasElement, scroll: number, y: number, h: number): void {
+  /** draw a periodic layer (the top `sh` rows of canvas L) across the screen; tiles abut on whole device pixels (no
+   *  seams, no overlap) */
+  private tiled(c: CanvasRenderingContext2D, L: Layer, scroll: number, y: number, h: number): void {
     // work in device pixels (the context may carry a fractional camera translate): tiles abut exactly, and a
     // canvas painted at device resolution is blitted 1:1 (fast path, crisp)
-    const a = this.ta, d = this.td;
-    const want = this.tileW * this.scale * a; const one = Math.abs(want - L.width) <= 1.5 && Math.abs(h * d - L.height) <= 2;
-    const stepDev = one ? L.width : Math.max(1, Math.round(want)); const hDev = one ? L.height : h * d;
+    const a = this.ta, d = this.td; const cv = L.cv, sh = L.sh;
+    const want = this.tileW * this.scale * a; const one = Math.abs(want - cv.width) <= 1.5 && Math.abs(h * d - sh) <= 2;
+    const stepDev = one ? cv.width : Math.max(1, Math.round(want)); const hDev = one ? sh : h * d;
+    const pre = !one && L.ps === 3 && L.px && L.pw === stepDev && L.ph === hDev ? L.px : null;   // the upscale, done once
     let off = -((scroll * this.scale * a) % stepDev); if (off > 0) off -= stepDev;
     const Y = Math.round(y * d + this.tf);
     let X = Math.round(off + this.te); while (X > this.te) X -= stepDev;
-    for (const end = this.cssW * a + this.te; X < end; X += stepDev) c.drawImage(L, (X - this.te) / a, (Y - this.tf) / d, stepDev / a, hDev / d);
+    for (const end = this.cssW * a + this.te; X < end; X += stepDev) {
+      if (pre) c.drawImage(pre, (X - this.te) / a, (Y - this.tf) / d, pre.width / a, pre.height / d);
+      else c.drawImage(cv, 0, 0, cv.width, sh, (X - this.te) / a, (Y - this.tf) / d, stepDev / a, hDev / d);
+    }
   }
   /** drawImage snapped to device pixels (1:1 when the sprite was painted at device resolution) */
   private blit(c: CanvasRenderingContext2D, img: HTMLCanvasElement, x: number, y: number, w: number, h: number): void {
@@ -864,7 +1128,7 @@ export class Backdrop {
   private readTransform(c: CanvasRenderingContext2D): void { const m = c.getTransform(); this.ta = m.a || 1; this.td = m.d || 1; this.te = m.e; this.tf = m.f; }
 
   private drawStars(c: CanvasRenderingContext2D, bi: BiomeDef, time: number, alpha: number): void {
-    const n = { market: 26, riverside: 42, bridge: 60, dawn: 14 }[bi.style];
+    const n = STAR_N[bi.style];
     let st = this.stars.get(bi.id);
     if (!st) { const r = srng(bi.id.length * 131 + 7); st = new Float32Array(n * 4); for (let i = 0; i < n; i++) { st[i * 4] = r(); st[i * 4 + 1] = Math.pow(r(), 1.3); st[i * 4 + 2] = 1 + r() * 1.6; st[i * 4 + 3] = r() * 6.28; } this.stars.set(bi.id, st); }
     const top = 0, bot = this.gy - 250 * this.scale; if (bot <= top) return;
@@ -878,8 +1142,14 @@ export class Backdrop {
     c.globalAlpha = alpha;
   }
 
+  /** a moon sprite, kept per radius (no key strings per frame) */
+  private moonSprite(rad: number, pale: boolean): HTMLCanvasElement {
+    const key = rad * (pale ? -1 : 1); let m = this.moons.get(key); const res = Math.min(2.5, this.scale * this.dpr);
+    if (!m || m.res !== res) { m = { res, cv: this.sprite(`moon${rad}${pale}`, r => moonSprite(rad, r, pale)) }; this.moons.set(key, m); }
+    return m.cv;
+  }
   private drawMoon(c: CanvasRenderingContext2D, x: number, y: number, rad: number, pale: boolean, alpha: number): void {
-    const spr = this.sprite(`moon${rad}${pale}`, res => moonSprite(rad, res, pale));
+    const spr = this.moonSprite(rad, pale);
     const R = rad * (pale ? 1.7 : 2.4) * this.scale; c.globalAlpha = alpha; this.blit(c, spr, x - R, y - R, R * 2, R * 2);
   }
 
@@ -954,21 +1224,16 @@ export class Backdrop {
     c.globalAlpha = 1;
   }
 
-  private bonusCloudLayer(li: number): HTMLCanvasElement {
-    return this.sprite(`bonusClouds${li}|${this.tileW}`, res => {
-      const W = this.tileW, top = li ? 150 : 230; const [cv, g] = makeCanvas(W, top + BELOW, Math.min(res, li ? 2 : 1.25)); g.translate(0, top);
-      for (const ox of [-W, 0, W]) {
-        g.save(); g.translate(ox, 0); const r = srng(4242 + li * 17);
-        if (li === 0) {
-          for (let x = 0; x < W; x += 150 + r() * 120) cloud(g, x, -60 - r() * 120, 140 + r() * 120, 26 + r() * 14, 'rgba(255,214,236,0.55)', 'rgba(190,140,220,0.35)', r);
-          for (let x = 0; x < W; x += 90 + r() * 60) cloud(g, x, -20 - r() * 20, 120 + r() * 90, 30 + r() * 12, 'rgba(255,226,240,0.8)', 'rgba(214,160,220,0.6)', r);
-        } else {
-          for (let x = 0; x < W; x += 110 + r() * 90) cloud(g, x, -10 - r() * 40, 150 + r() * 100, 34 + r() * 16, '#fff4fa', 'rgba(236,190,236,0.95)', r);
-        }
-        g.restore();
-      }
-      return cv;
-    });
+  private cloudJob(li: number): Job {
+    let job = this.clouds[li]; if (job) return job;
+    const W = this.tileW, top = li ? 150 : 230; const res = Math.min(Math.min(2.5, this.scale * this.dpr), li ? 2 : 1.25);
+    const [cv, g] = makeCanvas(W, top + BELOW, res); g.clearRect(0, 0, 1, 1); g.save(); g.translate(0, top);      // (allocates the pixels now)
+    job = { L: { ...layerOf(cv, cv.height), ps: 3 }, g, paint: r => paintClouds(r, W, li), W, ops: null, at: 0, flushed: false, done: false };
+    return (this.clouds[li] = job);
+  }
+  private bonusCloudLayer(li: number): Layer {
+    const job = this.cloudJob(li); if (!job.done) this.advance(job, true);
+    return job.L;
   }
 
   private drawSkyLanterns(c: CanvasRenderingContext2D, camX: number, time: number, alpha: number): void {
@@ -992,50 +1257,80 @@ export class Backdrop {
     return this.sprites.get(`pl|${st}|${bi.id}|${w}|${res}`, () => { const [cv, g] = makeCanvas(w + 8, PL_H, res); g.translate(4, 0); paintPlatform(g, st, pal(bi), w); return cv; });
   }
 
-  /** ground, pits, one-way platforms and the finish gate (world space; ctx already transformed) */
+  /** ground, pits, one-way platforms and the finish gate (world space; ctx already transformed). Every piece wears
+   *  the skin of the chunk it belongs to (as hazards do), so a biome seam scrolls in with the new chunk instead of the
+   *  whole floor swapping on the frame the runner crosses it; `bi` (the runner's biome) skins the finish gate and the
+   *  bonus sky. */
   drawGround(c: CanvasRenderingContext2D, s: RunState, bi: BiomeDef, x0: number, x1: number, sky: boolean, time: number): void {
-    const res = worldRes(c); const st: GroundStyle = sky ? 'sky' : bi.style; const P = pal(bi);
-    const tile = this.groundTile(st, bi, res); const th = tile.height / res;
+    const res = worldRes(c);
+    const chunks = s.level.chunks;
+    const biAt = (x: number): BiomeDef => {   // the chunk covering world x (chunks are placed left to right, ≤ ~12 kept)
+      if (sky) return bi;
+      for (let k = chunks.length - 1; k >= 0; k--) if (x >= chunks[k].x) return BIOME_BY_ID[chunks[k].biome] ?? bi;
+      return chunks.length ? BIOME_BY_ID[chunks[0].biome] ?? bi : bi;
+    };
+    const stOf = (b: BiomeDef): GroundStyle => (sky ? 'sky' : b.style);
+    // true when ground at x opens a chunk with nothing, or a bonus-sky chunk, right before it: run start, bonus return
+    const startsCourse = (x: number): boolean => {
+      for (let k = chunks.length - 1; k >= 0; k--) {
+        const ch = chunks[k];
+        if (x >= ch.x && x < ch.x + ch.width) return x - ch.x < 1 && (k === 0 || chunks[k - 1].sky);
+      }
+      return false;
+    };
     const bridged = !sky && (s.rescue > 0 || s.power.giant > 0 || s.power.dash > 0);
     let prev: { x0: number; x1: number } | null = null;
     const solids = s.level.solids;
     for (let i = 0; i < solids.length; i++) {
       const so = solids[i];
       if (!so.ground) continue;
-      // pit between the previous ground run and this one
-      if (prev && so.x0 - prev.x1 > 1 && so.x0 - prev.x1 < 2400 && so.x0 > x0 && prev.x1 < x1) this.drawPit(c, st, P, prev.x1, so.x0, x0, x1, time, bridged);
-      const adjL = !!prev && Math.abs(prev.x1 - so.x0) < 1;
+      // pit between the previous ground run and this one (split at chunk joins: each part takes its own chunk's skin)
+      if (prev && so.x0 - prev.x1 > 1 && so.x0 - prev.x1 < 2400 && so.x0 > x0 && prev.x1 < x1) {
+        let a = prev.x1;
+        while (a < so.x0) {
+          const pb = biAt(a); let b = so.x0;
+          for (const ch of chunks) if (ch.x > a && ch.x < b) { b = ch.x; break; }
+          this.drawPit(c, stOf(pb), pal(pb), a, b, x0, x1, time, bridged, res);
+          a = b;
+        }
+      }
+      // nothing is generated behind the course start or a bonus return: extend the first ground run leftwards as a
+      // lead-in instead of leaving a flat block that reads as a pit right behind the runner
+      const lead = !prev && !sky && so.x0 > x0 - 20 && startsCourse(so.x0);
+      const adjL = lead || (!!prev && Math.abs(prev.x1 - so.x0) < 1);
       prev = so;
       if (so.x1 < x0 || so.x0 > x1) continue;
-      // texture tiles anchored to world x (seamless across chunk joins)
-      const a = Math.max(so.x0, x0 - 20), b = Math.min(so.x1, x1 + 20);
+      const sb = biAt(so.x0), st = stOf(sb), P = pal(sb);
+      const tile = this.groundTile(st, sb, res); const th = tile.height / res;
+      // texture tiles anchored to world x (seamless across chunk joins of one biome)
+      const a = lead ? x0 - 20 : Math.max(so.x0, x0 - 20), b = Math.min(so.x1, x1 + 20);
       for (let tx = Math.floor(a / GT_W) * GT_W; tx < b; tx += GT_W) {
         const u0 = Math.max(a, tx), u1 = Math.min(b, tx + GT_W); if (u1 <= u0) continue;
         c.drawImage(tile, (u0 - tx) * res, 0, (u1 - u0) * res, tile.height, u0, GROUND_Y - GT_UP, u1 - u0 + (u1 < b ? 0.5 : 0), th);
       }
       // pit edges: dark cliff face + a bright rounded lip so gaps read instantly
       let adjR = false; for (let j = i + 1; j < solids.length && solids[j].x0 <= so.x1 + 1; j++) if (solids[j].ground && Math.abs(solids[j].x0 - so.x1) < 1) { adjR = true; break; }
-      if (!adjL && so.x0 > x0 - 20) this.drawEdge(c, st, P, so.x0, 1);
-      if (!adjR && so.x1 < x1 + 20) this.drawEdge(c, st, P, so.x1, -1);
+      if (!adjL && so.x0 > x0 - 20) this.drawEdge(c, st, P, so.x0, 1, res);
+      if (!adjR && so.x1 < x1 + 20) this.drawEdge(c, st, P, so.x1, -1, res);
     }
     // one-way platforms
     for (const so of solids) {
       if (so.ground || so.x1 < x0 || so.x0 > x1) continue;
-      const w = Math.round(so.x1 - so.x0); const spr = this.platformSprite(st, bi, w, res);
+      const pb = biAt(so.x0);
+      const w = Math.round(so.x1 - so.x0); const spr = this.platformSprite(stOf(pb), pb, w, res);
       c.drawImage(spr, so.x0 - 4, so.top - PL_UP, spr.width / res, spr.height / res);
     }
     // finish gate
-    if (s.level.finishX !== Infinity && s.level.finishX > x0 - 300 && s.level.finishX < x1 + 200) this.drawFinish(c, s.level.finishX + 5 * TILE, P, time);
+    if (s.level.finishX !== Infinity && s.level.finishX > x0 - 300 && s.level.finishX < x1 + 200) this.drawFinish(c, s.level.finishX + 5 * TILE - 84, pal(bi), time);   // the runner stops (sim: finishX + 5 tiles) under the banner
   }
 
-  private drawPit(c: CanvasRenderingContext2D, st: GroundStyle, P: Pal, a: number, b: number, x0: number, x1: number, time: number, bridged: boolean): void {
+  private drawPit(c: CanvasRenderingContext2D, st: GroundStyle, P: Pal, a: number, b: number, x0: number, x1: number, time: number, bridged: boolean, res: number): void {
     const L = Math.max(a, x0 - 10), R = Math.min(b, x1 + 10); if (R <= L) return;
     const bottom = VIEW_H + 30;
     if (st === 'sky') {
       c.fillStyle = 'rgba(120,80,200,0.25)'; c.fillRect(L, GROUND_Y + 10, R - L, bottom - GROUND_Y);
       return;
     }
-    const res = worldRes(c);
     const col = this.sprites.get(`pit|${st}|${P.id}|${res}`, () => { const [cv, g] = makeCanvas(8, PIT_H, res); paintPitColumn(g, st, P); return cv; });
     c.drawImage(col, L, GROUND_Y - 2, R - L, PIT_H);
     if (st === 'riverside') {
@@ -1054,8 +1349,7 @@ export class Backdrop {
     }
   }
 
-  private drawEdge(c: CanvasRenderingContext2D, st: GroundStyle, P: Pal, x: number, dir: 1 | -1): void {
-    const res = worldRes(c);
+  private drawEdge(c: CanvasRenderingContext2D, st: GroundStyle, P: Pal, x: number, dir: 1 | -1, res: number): void {
     const spr = this.sprites.get(`edge|${st}|${P.id}|${dir}|${res}`, () => { const [cv, g] = makeCanvas(EDGE_W, EDGE_H, res); paintEdge(g, st, P, dir); return cv; });
     c.drawImage(spr, dir > 0 ? x : x - EDGE_W, GROUND_Y - EDGE_UP, EDGE_W, EDGE_H);
   }
@@ -1076,7 +1370,8 @@ export class Backdrop {
     const wave = this.reduceMotion ? 0 : Math.sin(time * 6) * 4;
     for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) { c.fillStyle = (i + j) % 2 ? '#fff6e0' : '#231a2a'; c.fillRect(fx + span + 4 + i * 12, gy - H + 60 + j * 11 + (i * wave) / 4, 12, 11); }
     // 뚝딱이 the dokkaebi cheering by the gate
-    const bx = fx - 40, by = gy; const hop = this.reduceMotion ? 0 : Math.abs(Math.sin(time * 5)) * 6;
+    const bx = fx + 150 + 84, by = gy;   // past the flag, clear of where the runner stops
+    const hop = this.reduceMotion ? 0 : Math.abs(Math.sin(time * 5)) * 6;
     c.save(); c.translate(bx, by - hop);
     c.fillStyle = 'rgba(0,0,0,0.2)'; c.beginPath(); c.ellipse(0, hop + 1, 16, 4, 0, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#5bb8a6'; c.beginPath(); c.ellipse(0, -22, 17, 21, 0, 0, Math.PI * 2); c.fill();

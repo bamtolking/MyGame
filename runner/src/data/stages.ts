@@ -58,64 +58,64 @@ export const STAGES: StageDef[] = [
     pouches: [{ slot: 13, col: 16, row: 10 }, { slot: 8, col: 10, row: 5 }], stars: { jellyPct: 65 } },
 
   // ---- W2 포장마차 강변 (riverside) ----
-  // 2-1: one-way platforms (tut_5_platform sign), air-jump review at the end. ① shelf-top arc ② set-piece bench B ③ bench route
+  // 2-1: one-way platforms (tut_5_platform sign), no bonus breather, spike beats and an air-jump review at the end. ① shelf-top arc ② set-piece bench B ③ bench route
   { id: '2-1', world: 2, index: 1, name: '평상 위로', intro: '평상 위로 뛰어올라요', biome: 'riverside', seed: 2101, tiers: [1, 1], length: 500,
-    course: ['tut_5_platform', 'plat_low', 'bench_to_slide', 'twin_shelves', 'bench_row', 'rest_float', 'high_shelf', 'pit_plat', 'plat_over_spikes', 'bonus_float', 'set_river_benches', 'fork_spike_easy', 'pit_bridge', 'spike_fork_easy', 'pit_tower', 'fork_twice'],
-    pouches: [{ slot: 3, col: 13, row: 5 }, { slot: 4, col: 19, row: 8 }], stars: { jellyPct: 70 } },
-  // 2-2: stairs (benches, tent steps, stone steps over pits). ① top step ② set-piece bench B ③ stair route over the pit
+    course: ['tut_5_platform', 'plat_low', 'bench_to_slide', 'twin_shelves', 'bench_row', 'rest_float', 'bench_boost', 'pit_plat', 'plat_over_spikes', 'slide_jump', 'set_river_benches', 'fork_spike_easy', 'pit_bridge', 'spike_rhythm', 'spike_fork_easy', 'pit_tower', 'fork_twice'],
+    pouches: [{ slot: 3, col: 13, row: 5 }, { slot: 4, col: 19, row: 8 }], stars: { jellyPct: 65 } },
+  // 2-2: stairs (benches, tent steps, stone steps over pits), closing on tier-2 spike beats and a read. ① top step ② set-piece bench B ③ stair route over the pit
   { id: '2-2', world: 2, index: 2, name: '천막 사다리', intro: '천막 계단을 밟고 올라가요', biome: 'riverside', seed: 2102, tiers: [1, 2], length: 550,
-    course: ['bench_pyramid', 'stairs_gentle', 'fork_single', 'plat_over_spikes', 'twin_shelves', 'pit_hop_row', 'bridge_spike', 'stairs_pit', 'bench_boost', 'pit_tower', 'fork_bench', 'set_river_benches', 'stairs_up', 'bonus_float', 'stairs_spikes', 'two_lanes', 'stone_steps', 'tall_slide'],
-    pouches: [{ slot: 1, col: 17, row: 4 }, { slot: 7, col: 12, row: 6 }], stars: { jellyPct: 60 } },
+    course: ['bench_pyramid', 'stairs_gentle', 'fork_single', 'plat_over_spikes', 'twin_shelves', 'pit_hop_row', 'bridge_spike', 'stairs_pit', 'bench_boost', 'pit_tower', 'set_river_benches', 'stairs_up', 'stairs_spikes', 'spike_rhythm', 'two_lanes', 'stone_steps', 'read_alternate', 'tall_slide'],
+    pouches: [{ slot: 1, col: 17, row: 4 }, { slot: 7, col: 12, row: 6 }], stars: { jellyPct: 65 } },
   // 2-3: fast-fall lesson: stage_fastfall (sign) first, then jump→slide chunks where it pays. ① tower apex ② set-piece bench B ③ stone-step route
   { id: '2-3', world: 2, index: 3, name: '쏙 내려오기', intro: '공중에서 슬라이드로 쏙 내려와요', biome: 'riverside', seed: 2103, tiers: [2, 2], length: 600,
     course: ['breather_spike', 'stage_fastfall', 'bench_boost', 'jump_slide', 'tunnel_exit_spike', 'slide_jump_slide', 'ceiling_run', 'bridge_hang', 'spike_rhythm', 'slide_fork_slide', 'read_alternate', 'set_river_benches', 'two_lanes', 'fork_then_pit', 'pit_hops', 'tut_6_recap', 'tall_slide', 'stone_steps'],
     pouches: [{ slot: 9, col: 14, row: 3 }, { slot: 17, col: 24, row: 8 }], stars: { jellyPct: 70 } },
-  // 2-4: up/down forks (two_lanes, split_route, stairs_choice). ① upper lane ② set-piece bench B ③ upper route of split_route
+  // 2-4: up/down forks (two_lanes, split_route, stairs_choice); a fork/stone-step drill instead of bench breathers. ① upper lane ② set-piece bench B ③ upper route of split_route
   { id: '2-4', world: 2, index: 4, name: '두 갈래 길', intro: '위아래 두 갈래 중 골라요', biome: 'riverside', seed: 2104, tiers: [2, 2], length: 650,
-    course: ['shelf_spike', 'high_shelf', 'twin_shelves', 'bench_row', 'bonus_float', 'plat_over_spikes', 'hang_pit', 'stairs_spikes', 'set_river_benches', 'read_alternate', 'slide_fork_slide', 'two_lanes', 'wide_pit_double', 'breather_fork', 'pit_hops', 'split_route', 'stairs_choice', 'tall_slide', 'twin_spike_beats', 'stone_steps'],
-    pouches: [{ slot: 11, col: 22, row: 5 }, { slot: 15, col: 12, row: 4 }], stars: { jellyPct: 65 } },
-  // 2-5: rhythm patterns (spike/pit/slide beats) ramping tier 2→3. ① tower apex ② set-piece bench B ③ bridge route
+    course: ['shelf_spike', 'high_shelf', 'twin_shelves', 'plat_over_spikes', 'fork_twice', 'stone_steps', 'hang_pit', 'stairs_spikes', 'set_river_benches', 'read_alternate', 'slide_fork_slide', 'two_lanes', 'breather_fork', 'spike_rhythm', 'pit_hops', 'split_route', 'stairs_choice', 'tall_slide', 'pit_to_ledge'],
+    pouches: [{ slot: 11, col: 22, row: 5 }, { slot: 15, col: 12, row: 4 }], stars: { jellyPct: 70 } },
+  // 2-5: rhythm patterns (spike/pit/slide beats) ramping tier 2→3, two breathers only. ① tower apex ② set-piece bench B ③ bridge route
   { id: '2-5', world: 2, index: 5, name: '강바람', intro: '강바람 박자에 맞춰 뛰어요', biome: 'riverside', seed: 2105, tiers: [2, 3], length: 700,
-    course: ['spike_rhythm', 'pit_hop_row', 'breather_pit', 'spike_pit_rhythm', 'slide_jump_slide', 'hang_pit', 'twin_spike_beats', 'breather_spike', 'breather_slide', 'fork_twice', 'set_river_benches', 'ceiling_run', 'beat_jjs', 'pit_chain', 'beat_sjs', 'read_alternate', 'fork_slide_fork', 'pit_hops', 'stone_steps', 'bridge_twin_spikes', 'zigzag_read'],
+    course: ['spike_rhythm', 'pit_hop_row', 'breather_pit', 'wide_pit_double', 'slide_jump_slide', 'read_alternate', 'twin_spike_beats', 'breather_spike', 'jump_slide', 'fork_twice', 'set_river_benches', 'ceiling_run', 'beat_jjs', 'pit_chain', 'beat_sjs', 'hang_pit', 'fork_slide_fork', 'pit_hops', 'stone_steps', 'bridge_twin_spikes', 'zigzag_read'],
     pouches: [{ slot: 9, col: 10, row: 3 }, { slot: 19, col: 4, row: 7 }], stars: { jellyPct: 65 } },
   // 2-6: W2 recap at tier 3 (platforms, stairs, fast-fall reprise, forks, beats). ① air-jump apex ② set-piece bench B ③ planned_route upper path
   { id: '2-6', world: 2, index: 6, name: '포장마차 종점', intro: '강변에서 배운 걸 모두 써요', biome: 'riverside', seed: 2106, tiers: [3, 3], length: 800,
-    course: ['breather_spike', 'stairs_spikes', 'slide_jump_slide', 'hang_pit', 'wide_pit_double', 'fork_then_pit', 'breather_fork', 'breather_slide', 'read_alternate', 'pit_to_ledge', 'stage_fastfall', 'bridge_slide_spike', 'planned_route', 'pit_hops', 'two_lanes', 'set_river_benches', 'tall_slide', 'twin_forks', 'coin_arcade', 'plat_gauntlet', 'split_route', 'step_spikes', 'beat_jjs', 'stone_steps'],
-    pouches: [{ slot: 6, col: 13, row: 2 }, { slot: 12, col: 8, row: 5 }], stars: { jellyPct: 60 } },
+    course: ['breather_spike', 'stairs_spikes', 'slide_jump_slide', 'hang_pit', 'wide_pit_double', 'fork_then_pit', 'breather_fork', 'breather_slide', 'read_alternate', 'pit_to_ledge', 'stage_fastfall', 'bridge_slide_spike', 'planned_route', 'pit_hops', 'two_lanes', 'set_river_benches', 'tall_slide', 'fork_slide_fork', 'coin_arcade', 'plat_gauntlet', 'split_route', 'step_spikes', 'beat_jjs', 'stone_steps'],
+    pouches: [{ slot: 6, col: 13, row: 2 }, { slot: 12, col: 8, row: 5 }], stars: { jellyPct: 65 } },
   // 2-R: riverside remix at tier 4. ① tower apex ② set-piece bench B ③ bench route over the hurdles
   { id: '2-R', world: 2, index: 7, name: '비 오는 강변', intro: '비 오는 강변은 더 빨라요', biome: 'riverside', seed: 2107, tiers: [4, 4], length: 800, remix: true,
     course: ['breather_spike', 'bench_hurdles', 'stairs_spikes', 'breather_slide', 'stairs_descent', 'beat_jjs', 'split_route', 'twin_pits_slide', 'dense_b', 'three_lanes', 'twin_forks', 'bridge_twin_spikes', 'hang_maze', 'set_river_benches', 'sky_bridge', 'slide_bench_pit', 'step_dance', 'ceiling_spike_mix', 'plat_rhythm', 'fork_pit', 'fork_spike_fork'],
-    pouches: [{ slot: 20, col: 7, row: 3 }, { slot: 1, col: 16, row: 8 }], stars: { jellyPct: 70 } },
+    pouches: [{ slot: 20, col: 7, row: 3 }, { slot: 1, col: 16, row: 8 }], stars: { jellyPct: 65 } },
 
   // ---- W3 불꽃놀이 다리 (bridge) ----
   // 3-1: pits + platforms (bridges, ledges, stone steps). ① set-piece cable apex B ② low arc between pits ③ planned_route upper path
   { id: '3-1', world: 3, index: 1, name: '다리 입구', intro: '구덩이를 건너 발판에 올라요', biome: 'bridge', seed: 3101, tiers: [3, 3], length: 700,
     course: ['breather_pit', 'pit_plat', 'stairs_pit', 'pit_bench', 'bridge_hang', 'pit_bridge', 'bridge_spike', 'breather_fork', 'wide_pit_double', 'pit_ceiling', 'pit_to_ledge', 'bridge_slide_spike', 'pit_chain', 'set_bridge_cables', 'bridge_twin_spikes', 'pit_then_slide', 'planned_route', 'stone_steps', 'step_spikes', 'pit_hops', 'plat_gauntlet'],
     pouches: [{ slot: 10, col: 12, row: 9 }, { slot: 16, col: 23, row: 4 }], stars: { jellyPct: 65 } },
-  // 3-2: tunnels: ceilings and lantern rows, tier 3→4. ① set-piece cable apex B ② between lantern and tower ③ long arc over the pit before the ceiling
+  // 3-2: tunnels: ceilings and lantern rows, tier 3→4; no potion stop in the slide/fork exam (spike_stream one tier faster). ① set-piece cable apex B ② between lantern and tower ③ long arc over the pit before the ceiling
   { id: '3-2', world: 3, index: 2, name: '불꽃 터널', intro: '불꽃 터널에선 몸을 낮춰요', biome: 'bridge', seed: 3102, tiers: [3, 4], length: 750,
-    course: ['tunnel_short', 'ceiling_run', 'bridge_hang', 'tunnel_exit_spike', 'bridge_slide_spike', 'beat_sjs', 'beat_jjs', 'pit_ceiling', 'danger_line', 'slide_fork_spike', 'tunnel_long', 'dense_a', 'set_bridge_cables', 'hang_maze', 'twin_forks', 'ceiling_spike_mix', 'zigzag_read', 'tunnel_pit', 'dense_b', 'gauntlet'],
-    pouches: [{ slot: 9, col: 13, row: 9 }, { slot: 7, col: 8, row: 6 }], stars: { jellyPct: 80 } },
-  // 3-3: broken railings: pits in a row, tier 3→4. ① set-piece cable apex B ② low hop between pits ③ planned_route upper path
+    course: ['tunnel_short', 'ceiling_run', 'tunnel_exit_spike', 'beat_sjs', 'pit_ceiling', 'danger_line', 'slide_fork_spike', 'tunnel_long', 'read_alternate', 'set_bridge_cables', 'hang_maze', 'tunnel_pit', 'slide_fork_slide', 'ceiling_spike_mix', 'twin_pits_slide', 'zigzag_read', 'final_mix', 'fork_slide_fork', 'spike_stream'],
+    pouches: [{ slot: 6, col: 13, row: 9 }, { slot: 4, col: 8, row: 6 }], stars: { jellyPct: 80 } },
+  // 3-3: broken railings: pits in a row, tier 3→4, no spike breather. ① set-piece cable apex B ② low hop between pits ③ planned_route upper path
   { id: '3-3', world: 3, index: 3, name: '끊어진 난간', intro: '끊어진 난간을 줄줄이 건너요', biome: 'bridge', seed: 3103, tiers: [3, 4], length: 800,
-    course: ['breather_pit', 'pit_hops', 'pit_then_slide', 'wide_pit_double', 'breather_spike', 'spike_pit_rhythm', 'planned_route', 'fork_then_pit', 'hang_pit', 'plat_gauntlet', 'bridge_twin_spikes', 'pit_to_ledge', 'pit_ceiling', 'set_bridge_cables', 'step_dance', 'twin_pits_slide', 'slide_pit_spike', 'step_spikes', 'ledge_leap', 'pit_chain', 'stone_steps', 'sky_bridge', 'fork_pit', 'plat_rhythm'],
-    pouches: [{ slot: 1, col: 12, row: 9 }, { slot: 6, col: 23, row: 4 }], stars: { jellyPct: 75 } },
-  // 3-4: fast slide↔jump switches at tier 4. ① set-piece cable apex B ② slide line between spike and lanterns ③ bridge route
+    course: ['breather_pit', 'pit_hops', 'pit_then_slide', 'wide_pit_double', 'pit_bench', 'spike_pit_rhythm', 'planned_route', 'step_spikes', 'hang_pit', 'plat_gauntlet', 'bridge_twin_spikes', 'bridge_spike', 'set_bridge_cables', 'step_dance', 'twin_pits_slide', 'slide_pit_spike', 'fork_then_pit', 'ledge_leap', 'pit_chain', 'stone_steps', 'sky_bridge', 'fork_pit', 'plat_rhythm'],
+    pouches: [{ slot: 1, col: 12, row: 9 }, { slot: 6, col: 23, row: 4 }], stars: { jellyPct: 70 } },
+  // 3-4: fast slide↔jump switches at tier 4, one opening breather; spike_stream (tier 5) closes. ① set-piece cable apex B ② slide line between spike and lanterns ③ bridge route
   { id: '3-4', world: 3, index: 4, name: '박자 맞추기', intro: '슬라이드와 점프를 빠르게 바꿔요', biome: 'bridge', seed: 3104, tiers: [4, 4], length: 850,
-    course: ['breather_slide', 'slide_jump_slide', 'tunnel_exit_spike', 'tall_slide', 'breather_spike', 'ceiling_run', 'twin_pits_slide', 'danger_line', 'bridge_slide_spike', 'beat_sjs', 'slide_fork_slide', 'read_alternate', 'dense_a', 'beat_jjs', 'set_bridge_cables', 'slide_fork_spike', 'fork_slide_fork', 'dense_b', 'tunnel_pit', 'zigzag_read', 'slide_pit_spike', 'final_mix', 'gauntlet'],
-    pouches: [{ slot: 9, col: 18, row: 10 }, { slot: 8, col: 27, row: 7 }], stars: { jellyPct: 80 } },
-  // 3-5: two- and three-lane route choices, tier 4→5. ① set-piece cable apex B ② slide line between spike and lanterns ③ upper lane
+    course: ['breather_slide', 'slide_jump_slide', 'tunnel_exit_spike', 'tall_slide', 'ceiling_run', 'twin_pits_slide', 'danger_line', 'bridge_slide_spike', 'beat_sjs', 'slide_fork_slide', 'read_alternate', 'dense_a', 'beat_jjs', 'set_bridge_cables', 'slide_fork_spike', 'fork_slide_fork', 'dense_b', 'ceiling_spike_mix', 'zigzag_read', 'slide_pit_spike', 'final_mix', 'gauntlet', 'spike_stream'],
+    pouches: [{ slot: 8, col: 18, row: 10 }, { slot: 7, col: 27, row: 7 }], stars: { jellyPct: 80 } },
+  // 3-5: two- and three-lane route choices, tier 4→5; gauntlet before the set piece, a fork-heavy finale. ① set-piece cable apex B ② slide line between spike and lanterns ③ upper lane
   { id: '3-5', world: 3, index: 5, name: '세 갈래 불빛', intro: '세 갈래 불빛 중 하나를 골라요', biome: 'bridge', seed: 3105, tiers: [4, 5], length: 900,
-    course: ['breather_spike', 'two_lanes', 'breather_fork', 'breather_slide', 'split_route', 'stairs_choice', 'danger_line', 'plat_gauntlet', 'planned_route', 'three_lanes', 'bench_hurdles', 'coin_arcade', 'twin_forks', 'step_dance', 'hang_maze', 'set_bridge_cables', 'final_mix', 'sky_bridge', 'zigzag_read', 'stairs_descent', 'fork_pit', 'gauntlet', 'plat_rhythm', 'dense_a', 'spike_stream'],
-    pouches: [{ slot: 14, col: 29, row: 10 }, { slot: 1, col: 15, row: 5 }], stars: { jellyPct: 70 } },
+    course: ['breather_spike', 'two_lanes', 'breather_slide', 'split_route', 'stairs_choice', 'danger_line', 'plat_gauntlet', 'planned_route', 'three_lanes', 'bench_hurdles', 'coin_arcade', 'twin_forks', 'gauntlet', 'hang_maze', 'set_bridge_cables', 'final_mix', 'sky_bridge', 'zigzag_read', 'fork_pit', 'stairs_descent', 'plat_rhythm', 'fork_spike_fork', 'ceiling_spike_mix', 'fork_pit_row'],
+    pouches: [{ slot: 13, col: 29, row: 10 }, { slot: 1, col: 15, row: 5 }], stars: { jellyPct: 70 } },
   // 3-6: final exam at tier 5, hardest chunks last. ① set-piece cable apex B ② danger_line low line ③ upper route of split_route
   { id: '3-6', world: 3, index: 6, name: '보름달 언덕', intro: '보름달까지 마지막 시험이에요', biome: 'bridge', seed: 3106, tiers: [5, 5], length: 1000,
     course: ['breather_spike', 'beat_jjs', 'breather_slide', 'split_route', 'ceiling_pit', 'coin_arcade', 'bridge_slide_spike', 'twin_forks', 'beat_sjs', 'fork_slide_fork', 'planned_route', 'step_spikes', 'pit_then_slide', 'danger_line', 'slide_pit_spike', 'step_dance', 'set_bridge_cables', 'tunnel_pit', 'ceiling_spike_mix', 'three_lanes', 'bench_hurdles', 'final_mix', 'pit_chain', 'dense_a', 'spike_stream', 'fork_spike_fork', 'fork_pit_row'],
     pouches: [{ slot: 13, col: 26, row: 10 }, { slot: 3, col: 18, row: 5 }], stars: { jellyPct: 70 } },
   // 3-R: bridge remix at tier 5. ① set-piece cable apex B ② ground between tower and pit ③ planned_route upper path
   { id: '3-R', world: 3, index: 7, name: '불꽃 대폭발', intro: '불꽃이 터지는 마지막 골목이에요', biome: 'bridge', seed: 3107, tiers: [5, 5], length: 1000, remix: true,
-    course: ['breather_pit', 'dense_b', 'breather_fork', 'danger_line', 'breather_spike', 'planned_route', 'stairs_choice', 'twin_forks', 'beat_sjs', 'bridge_twin_spikes', 'ceiling_pit', 'tunnel_long', 'pit_then_slide', 'fork_pit', 'three_lanes', 'step_dance', 'set_bridge_cables', 'bench_hurdles', 'hang_maze', 'twin_pits_slide', 'plat_gauntlet', 'gauntlet', 'spike_stream', 'dense_a', 'fork_row', 'fork_pit_row'],
-    pouches: [{ slot: 13, col: 12, row: 10 }, { slot: 5, col: 8, row: 5 }], stars: { jellyPct: 75 } },
+    course: ['breather_pit', 'dense_b', 'breather_fork', 'danger_line', 'breather_spike', 'planned_route', 'stairs_choice', 'twin_forks', 'fork_pit', 'bridge_twin_spikes', 'ceiling_pit', 'tunnel_long', 'pit_then_slide', 'step_dance', 'three_lanes', 'stairs_descent', 'set_bridge_cables', 'bench_hurdles', 'hang_maze', 'twin_pits_slide', 'plat_gauntlet', 'gauntlet', 'spike_stream', 'dense_a', 'fork_row', 'fork_pit_row'],
+    pouches: [{ slot: 8, col: 12, row: 10 }, { slot: 5, col: 8, row: 5 }], stars: { jellyPct: 70 } },
 ];
 export const STAGE_BY_ID: Record<string, StageDef> = Object.fromEntries(STAGES.map(s => [s.id, s]));
 

@@ -46,10 +46,13 @@ export class Fx {
   clear(): void { this.parts.length = 0; this.pops.length = 0; }
 
   update(dt: number): void {
-    for (const p of this.parts) { p.life += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; }
-    if (this.parts.some(p => p.life >= p.max)) this.parts = this.parts.filter(p => p.life < p.max);
-    for (const p of this.pops) { p.life += dt; p.y += p.vy * dt; p.vy *= 0.94; }
-    if (this.pops.some(p => p.life >= p.max)) this.pops = this.pops.filter(p => p.life < p.max);
+    // (compacted in place: no new arrays every frame a particle dies)
+    const parts = this.parts; let n = 0;
+    for (const p of parts) { p.life += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; if (p.life < p.max) parts[n++] = p; }
+    parts.length = n;
+    const pops = this.pops; n = 0;
+    for (const p of pops) { p.life += dt; p.y += p.vy * dt; p.vy *= 0.94; if (p.life < p.max) pops[n++] = p; }
+    pops.length = n;
   }
 
   /** particles (world space) — drawn under pickups and hazards */
@@ -57,7 +60,7 @@ export class Fx {
     for (const p of this.parts) {
       const k = 1 - p.life / p.max;
       c.globalAlpha = Math.max(0, Math.min(1, k * 1.4));
-      c.fillStyle = p.color; c.strokeStyle = p.color;
+      c.fillStyle = p.color; if (p.kind === 'ring' || p.kind === 'flake') c.strokeStyle = p.color;
       if (p.kind === 'ring') { c.lineWidth = 4 * k; c.beginPath(); c.arc(p.x, p.y, p.size * (1.6 - k), 0, Math.PI * 2); c.stroke(); continue; }
       if (p.kind === 'star') { star(c, p.x, p.y, p.size * (0.5 + k * 0.5), p.rot); continue; }
       if (p.kind === 'chunk') { c.save(); c.translate(p.x, p.y); c.rotate(p.rot); c.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7); c.restore(); continue; }
@@ -84,11 +87,41 @@ function popText(c: CanvasRenderingContext2D, p: Popup, maxA: number): void {
   const k = p.life / p.max;
   const s = k < 0.15 ? 0.6 + k / 0.15 * 0.5 : 1.1 - Math.min(0.1, (k - 0.15));
   c.globalAlpha = Math.min(maxA, k > 0.7 ? (1 - k) / 0.3 : 1);
-  c.font = `900 ${Math.round(p.size * s)}px system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`;
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.lineWidth = Math.max(3, p.size * 0.22); c.strokeStyle = 'rgba(30,16,40,0.85)'; c.lineJoin = 'round';
-  c.strokeText(p.text, p.x, p.y); c.fillStyle = p.color; c.fillText(p.text, p.x, p.y);
+  outlinedText(c, POP_FONT, p.x, p.y, p.text, p.size * s, p.color, 'rgba(30,16,40,0.85)', Math.max(3, p.size * 0.22));
   c.globalAlpha = 1;
+}
+
+// ---------------------------------------------------------------- scaled outlined text
+// Canvas text costs 5–20 ms at 4× CPU throttle the first time Hangul is shaped in a font SIZE the page has not used yet
+// (fallback font resolution + shaping), and well under a millisecond in a font it keeps using. Popups used to animate
+// their font size (a new size on most frames of their life); now every popup is shaped in ONE reference font and grows
+// through the transform (Skia still rasterises the glyphs at their real device size), as do the overlay texts. (Text
+// painted into sprites was tried: a fresh canvas context sets its fonts up again, 1–9 ms a sprite.)
+export const POP_FONT = '900 30px system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
+const refPx = new Map<string, number>();
+/** `text` at `px` units drawn in `font` (whose own px size is only the reference), filled over a round-joined `stroke`
+ *  `lw` units wide, anchored like textAlign `align` + textBaseline 'middle' */
+export function outlinedText(c: CanvasRenderingContext2D, font: string, x: number, y: number, text: string, px: number, fill: string, stroke: string | null, lw: number, align: CanvasTextAlign = 'center'): void {
+  let ref = refPx.get(font); if (ref === undefined) { ref = parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? '30'); refPx.set(font, ref); }
+  const k = px / ref;
+  c.save(); c.translate(x, y); c.scale(k, k);
+  c.font = font; c.textAlign = align; c.textBaseline = 'middle';
+  if (stroke) { c.lineJoin = 'round'; c.lineWidth = lw / k; c.strokeStyle = stroke; c.strokeText(text, 0, 0); }
+  c.fillStyle = fill; c.fillText(text, 0, 0);
+  c.restore();
+}
+let scratch: CanvasRenderingContext2D | null = null;
+function scratchCtx(): CanvasRenderingContext2D {
+  if (!scratch) { const cv = document.createElement('canvas'); cv.width = cv.height = 1; scratch = cv.getContext('2d')!; }
+  return scratch;
+}
+/** resolve fonts ahead of time (run start / resize) with the syllables they will show, so no frame pays for it */
+const warmed = new Set<string>();
+export function warmFonts(fonts: string[], sample: string): void {
+  const g = scratchCtx(); g.lineWidth = 3; g.lineJoin = 'round';
+  // stroke + fill, not just measure: drawing is what the frames will do (measuring alone did not always warm a font)
+  for (const f of fonts) { const key = f + '|' + sample; if (warmed.has(key)) continue; warmed.add(key); g.font = f; g.strokeText(sample, 0, 0); g.fillText(sample, 0, 0); }
+  g.clearRect(0, 0, 1, 1);          // (drops the recorded text: this canvas is never shown)
 }
 
 export function star(c: CanvasRenderingContext2D, x: number, y: number, r: number, rot = 0): void {

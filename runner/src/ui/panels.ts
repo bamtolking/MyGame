@@ -142,7 +142,7 @@ const isProgress = (x: unknown): x is Progress => !!x && typeof x === 'object' &
 export function charPortrait(c: CharacterDef, size = 96, running = false, look?: PortraitLook | Progress | null): HTMLCanvasElement {
   const { cv, g } = makeCanvas(size, 'portrait');
   const lk = isProgress(look) ? lookFor(look, c.id) : look ?? {};
-  const k = size / 124; g.translate(size / 2, size * 0.93); g.scale(k, k);
+  const k = size / 138; g.translate(size / 2, size * 0.95); g.scale(k, k);   // headroom for 어묵이's steam + the tallest hats
   g.fillStyle = 'rgba(0,0,0,0.2)'; g.beginPath(); g.ellipse(0, 2, 26, 6, 0, 0, Math.PI * 2); g.fill();
   try { drawCharacter(g, shapeOf(c), lk.palette ?? c.palette, { state: running ? 'run' : 'idle', t: 0.5, runPhase: 0.25, spin: 0, squash: 1, hurt: false, alpha: 1 }, hatIdOf(lk.hat)); } catch { /* art in flux */ }
   return cv;

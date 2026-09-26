@@ -10,20 +10,20 @@
 //    flame ring + progress + stage chips top-centre; the RIGHT 25 % of the play band stays clear.
 // Draw order (GDD §11.4-5): parallax → ground → speed lines → particles → pickups → HAZARDS → ghost / companion /
 // runner → floating text (≤ 60 % over hazards) → overlays → HUD.
-import { VIEW_W, VIEW_H, GROUND_Y, TILE, PLAYER_SCREEN_X } from '../data/physics';
+import { VIEW_W, VIEW_H, GROUND_Y, TILE, PLAYER_SCREEN_X, SPIKE_TIP_W } from '../data/physics';
 import { LOW_HP_FRAC, BONUS_WORD, POWER_DUR, MAGNET_R, STREAK_STEP, STREAK_BONUS } from '../data/tuning';
 import { BIOME_BY_ID, BIOMES, type BiomeDef } from '../data/biomes';
-import { CHAR_BY_ID, type CharacterDef } from '../data/characters';
+import { CHAR_BY_ID, CHARACTERS, type CharacterDef } from '../data/characters';
 import { PARSED_BY_ID } from '../sim/level';
 import { hurtbox } from '../sim/body';
 import { totalScore, flowLevel, jellyPct } from '../sim/run';
 import type { RunState, SimEvent, Hazard, PowerKind } from '../sim/types';
-import { Fx, TrailFx, star, vrand, type Box, type TrailId } from './fx';
+import { Fx, TrailFx, star, vrand, outlinedText, warmFonts, POP_FONT, type Box, type TrailId } from './fx';
 import { drawCharacter, headTop, rr, type Pose, type Shape, type HatId, type Palette } from './characters';
 import { drawCompanion } from './companions';
-import { drawSpike, drawTall, drawHang, setHazardOutlineScale } from './hazards';
-import { drawPickup, LETTER_COLORS } from './pickups';
-import { Backdrop } from './backdrops';
+import { drawSpike, drawTall, drawHang, prepareHang, setHazardOutlineScale, setHazardReduceMotion, prewarmHazards } from './hazards';
+import { drawPickup, prewarmPickups, LETTER_COLORS } from './pickups';
+import { Backdrop, quantRes } from './backdrops';
 export { POWER_NAME, POWER_DESC, POWER_COLOR, POWER_ICON } from './pickups';
 
 export interface RenderOpts { reduceMotion: boolean; highContrast: boolean; lowFx: boolean; showHitbox: boolean; shake: number; uiScale: number; swapSides?: boolean }
@@ -49,6 +49,20 @@ const FROST = '190,225,255';
 /** HUD labels the player reads mid-run (따끈함, 별사탕 goal, progress, 흐름) never go below this (css px) */
 const MIN_LABEL_PX = 11;
 const labelPx = (base: number, u: number): number => Math.max(MIN_LABEL_PX, Math.round(base * u));
+/** the one font of the overlay texts (countdown, banners, hints, the PB flag), scaled per use (see fx.outlinedText) */
+const BIG_FONT = `900 40px ${FONT}`;
+const SIGN_FONT = `800 22px ${FONT}`;
+const INK = 'rgba(20,10,35,0.85)';
+/** every syllable the canvas may show in text: warmed into each text font at resize (the first Hangul text in a font
+ *  costs 5–20 ms at 4× CPU throttle; later ones in it well under 1 ms) */
+const TEXT_SAMPLE = [...new Set([
+  ...Object.values(POWER_LABEL), ...Object.values(POWER_SUB), BONUS_WORD.join(''), POWER_GLYPH.dash,
+  '왕보름달 잔치! 보름달 잔치! 더 길게, 끝나면 따끈함도 채워요 점프를 누르고 있으면 날아올라요 빨라져요! 속도 단계 새 풍경',
+  '이어달리기! 출발! 흐름 단계 별사탕 점수 도착! 준비하세요 한 줄 완성! 방울막! 쿵! 뚝딱! 통통 구출! 스킬! 한 번 더! 아슬아슬!',
+  '꿀물 한 방울 따끈따끈! 보름달 떡! 황금 복주머니! 최고 기록 넘었어요! 최고까지 따끈함 m % / + - , . ◎ 0123456789 왼쪽 오른쪽',
+  ...CHARACTERS.map(ch => ch.name + ch.skillName), ...BIOMES.map(b => b.name),
+  ...[...PARSED_BY_ID.values()].flatMap(p => (p.def.signs ?? []).map(sg => sg.text)),
+].join(''))].join('');
 
 export class Renderer {
   canvas: HTMLCanvasElement; c: CanvasRenderingContext2D;
@@ -86,6 +100,11 @@ export class Renderer {
   private comp = { x: 0, y: 0, init: false };
   private hazBoxes: Box[] = [];
   private dt = 0;
+  private widths = new Map<string, Map<string, number>>();           // measureText cache: font → text → advance
+  private mc: CanvasRenderingContext2D | null = null; private mcFont = '';   // the context that measures
+  private nums: [number, string][] = [];                             // per call site: last n → n.toLocaleString('ko-KR')
+  private slots = new Map<string, Slot>();                           // cached HUD pieces
+  private grads = new Map<string, { x0: number; y0: number; x1: number; y1: number; g: CanvasGradient }>();   // per call site
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -109,6 +128,96 @@ export class Renderer {
     this.backdrop.resize(this.cssW, this.worldH, this.dpr, this.scale);
     setHazardOutlineScale(this.portrait ? 1.5 : 1);     // portrait render assist: hazard outline ×1.5
     const bi = BIOME_BY_ID[this.curBiome]; if (bi) this.backdrop.prepare(bi);
+    // resolve every text font and paint every pickup / hazard sprite now, not on the frame one first shows up
+    warmFonts([POP_FONT, BIG_FONT, SIGN_FONT, ...this.hudFonts()], TEXT_SAMPLE);
+    const wr = this.scale * this.dpr;
+    prewarmPickups(this.portrait ? [wr, wr * 1.15] : [wr]);
+    prewarmHazards(BIOMES, wr, this.opts.highContrast);
+  }
+
+  /** the HUD's text fonts for the current layout (mirrors hudLandscape / hudPortrait) */
+  private hudFonts(): string[] {
+    const W = this.cssW, H = this.cssH; const f: string[] = [];
+    const add = (w: number, px: number) => f.push(`${w} ${px}px ${FONT}`);
+    if (this.portrait) {
+      const u = Math.max(0.85, Math.min(1.15, W / 390)) * this.opts.uiScale; const bh = this.bandH;
+      const ls = Math.min(19 * u, bh * 0.27); const us = Math.min(u * 0.95, bh / 70); const k = Math.min(u * 0.85, bh / 76);
+      add(800, labelPx(10.5, u)); add(900, Math.round(ls * 0.58)); add(900, Math.round(22 * us)); add(800, labelPx(10, us));
+      add(700, labelPx(10, k)); add(800, labelPx(10.5, k)); add(900, Math.round(10 * u * 1.05));
+    } else {
+      const u = Math.max(0.78, Math.min(1.2, Math.min(W / 860, H / 420))) * this.opts.uiScale; const ls = 21 * u;
+      add(800, labelPx(10.5, u)); add(900, Math.round(ls * 0.58)); add(900, Math.round(ls * 0.55 * 1.05)); add(900, Math.round(14 * u));
+      add(900, Math.round(22 * u)); add(800, labelPx(10, u)); add(700, labelPx(10, u));
+    }
+    return f;
+  }
+
+  /** advance width of `text` in `font` (cached: HUD labels and signs are measured every frame) */
+  private textW(font: string, text: string): number {
+    let m = this.widths.get(font); if (!m) { m = new Map(); this.widths.set(font, m); }
+    let w = m.get(text);
+    if (w === undefined) {
+      const runs = text.length > 1 && isNumeric(text) ? [text] : text.length > 1 && /\d/.test(text) ? text.match(/[\d,]+|[^\d,]+/g) : null;
+      if (runs) {       // a changing number (score, distance, 따끈함 N): cached text pieces + per-digit advances (no kerning there)
+        w = 0; for (const r of runs) if (isNumeric(r)) { for (let i = 0; i < r.length; i++) w += this.textW(font, r[i]); } else w += this.textW(font, r);
+      } else {
+        if (!this.mc) { const cv = document.createElement('canvas'); cv.width = cv.height = 1; this.mc = cv.getContext('2d')!; }
+        if (this.mcFont !== font) { this.mc.font = font; this.mcFont = font; }
+        w = this.mc.measureText(text).width;
+      }
+      if (m.size > 256) m.clear();
+      m.set(text, w);
+    }
+    return w;
+  }
+  /** n.toLocaleString('ko-KR'), memoised per call site (the HUD formats the score and distances every frame) */
+  private num(n: number, site: number): string {
+    const e = this.nums[site];
+    if (e && e[0] === n) return e[1];
+    const t = Number.isInteger(n) && n >= 0 && n < 1e15 ? grouped(n) : n.toLocaleString('ko-KR'); this.nums[site] = [n, t]; return t;
+  }
+  /** a cached HUD piece: the css-px box (x, y, w, h) painted into its own canvas at the same device-pixel phase (so it
+   *  matches drawing in place) and blitted 1:1; repainted only when `key` or the box changes */
+  private slot(name: string, key: unknown, x: number, y: number, w: number, h: number, paint: (g: CanvasRenderingContext2D) => void): void {
+    let sl = this.slots.get(name); if (!sl) { sl = new Slot(); this.slots.set(name, sl); }
+    const d = this.dpr;
+    if (!sl.cv || !sl.g || sl.key !== key || sl.x !== x || sl.y !== y || sl.w !== w || sl.h !== h || sl.d !== d) {
+      const X = Math.floor(x * d), Y = Math.floor(y * d);
+      const W = Math.max(1, Math.ceil((x + w) * d) - X), H = Math.max(1, Math.ceil((y + h) * d) - Y);
+      // one canvas per piece, kept (with room to grow) so its context keeps its fonts: a fresh context sets them up again
+      if (!sl.cv || !sl.g || sl.cv.width < W || sl.cv.height < H) {
+        sl.cv = document.createElement('canvas'); sl.cv.width = Math.ceil(W * 1.3) + 8; sl.cv.height = H + 4; sl.g = sl.cv.getContext('2d'); if (!sl.g) return;
+      } else { sl.g.setTransform(1, 0, 0, 1, 0, 0); sl.g.clearRect(0, 0, sl.W, sl.H); }
+      sl.g.setTransform(d, 0, 0, d, -X, -Y); paint(sl.g);
+      sl.key = key; sl.x = x; sl.y = y; sl.w = w; sl.h = h; sl.d = d; sl.X = X; sl.Y = Y; sl.W = W; sl.H = H;
+    }
+    this.c.drawImage(sl.cv, 0, 0, sl.W, sl.H, sl.X / d, sl.Y / d, sl.W / d, sl.H / d);
+  }
+  /** outlined HUD text (stroke under fill) as a cached piece, repainted when the text changes: strokeText is several
+   *  times dearer than fillText, and these labels change about once a second at most */
+  private label(name: string, x: number, y: number, t: string, font: string, px: number, fill: string, stroke: string, lw: number, align: 'left' | 'center'): void {
+    const sl = this.slots.get(name);
+    if (sl && sl.cv && sl.t === t && sl.ax === x && sl.ay === y && sl.f === font && sl.fill === fill && sl.d === this.dpr) {   // unchanged: just the blit
+      const d = sl.d; this.c.drawImage(sl.cv, 0, 0, sl.W, sl.H, sl.X / d, sl.Y / d, sl.W / d, sl.H / d); return;
+    }
+    const tw = this.textW(font, t); const m = lw / 2 + 2; const x0 = align === 'left' ? x : x - tw / 2;
+    this.slot(name, t, x0 - m, y - px * 0.85 - m, tw + m * 2, px * 1.7 + m * 2, g => {
+      g.font = font; g.textAlign = align; g.textBaseline = 'middle'; g.lineJoin = 'round';
+      g.lineWidth = lw; g.strokeStyle = stroke; g.strokeText(t, x, y); g.fillStyle = fill; g.fillText(t, x, y);
+    });
+    const s2 = this.slots.get(name); if (s2) { s2.t = t; s2.ax = x; s2.ay = y; s2.f = font; s2.fill = fill; }
+  }
+  /** a two-stop linear gradient, kept per call site while its geometry stands */
+  private grad(site: string, x0: number, y0: number, x1: number, y1: number, c0: string, c1: string): CanvasGradient {
+    const e = this.grads.get(site);
+    if (e && e.x0 === x0 && e.y0 === y0 && e.x1 === x1 && e.y1 === y1) return e.g;
+    const g = this.c.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, c0); g.addColorStop(1, c1);
+    this.grads.set(site, { x0, y0, x1, y1, g }); return g;
+  }
+
+  /** outlined overlay text (countdown, banners, hints), centred at (x, y) in css px, in the one overlay font */
+  private bigText(x: number, y: number, t: string, color: string, size: number): void {
+    outlinedText(this.c, BIG_FONT, x, y, t, Math.round(size), color, INK, Math.max(3, size * 0.18));
   }
 
   /** world → css px */
@@ -226,7 +335,10 @@ export class Renderer {
 
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     c.imageSmoothingEnabled = true;
-    c.fillStyle = this.skyMix >= 1 ? '#1d1650' : biome.sky[0]; c.fillRect(0, 0, this.cssW, this.cssH);
+    // the sky blit below covers the world area (it follows the camera down) and the portrait band gets the HUD's own
+    // fill, so only the strip the camera uncovers at the top needs the sky colour (not a whole-screen fill every frame)
+    const strip = this.camY * this.scale;
+    if (strip > 0) { c.fillStyle = this.backdrop.skyTop(this.skyMix >= 1 ? null : biome); c.fillRect(0, 0, this.cssW, Math.min(this.worldH, Math.ceil(strip) + 1)); }
     c.save();
     if (this.portrait) { c.beginPath(); c.rect(0, 0, this.cssW, this.worldH); c.clip(); }
 
@@ -234,17 +346,17 @@ export class Renderer {
     const bd = this.backdrop; bd.lowFx = this.opts.lowFx; bd.reduceMotion = this.opts.reduceMotion;
     c.save(); c.translate(0, this.camY * this.scale);
     if (this.skyMix < 1) {
-      if (this.biomeFade < 1 && this.prevBiome && BIOME_BY_ID[this.prevBiome]) { bd.drawBiome(c, BIOME_BY_ID[this.prevBiome], 1, this.camX, this.time); bd.drawBiome(c, biome, this.biomeFade, this.camX, this.time); }
+      if (this.biomeFade < 1 && this.prevBiome && BIOME_BY_ID[this.prevBiome]) { bd.drawBiome(c, BIOME_BY_ID[this.prevBiome], 1, this.camX, this.time, false); bd.drawBiome(c, biome, this.biomeFade, this.camX, this.time, false); }
       else bd.drawBiome(c, biome, 1, this.camX, this.time);
     }
     if (this.skyMix > 0) bd.drawBonusSky(c, this.skyMix, this.camX, this.time);
-    else if (s.bonusStage === 'none' && s.letters.filter(Boolean).length >= BONUS_WORD.length - 1) bd.prewarmBonus();
+    else if (s.bonusStage === 'none' && litCount(s.letters) >= BONUS_WORD.length - 1) bd.prewarmBonus(biome);
     c.restore();
 
     // ---- world
-    const sh = this.shakeOffset();
+    const sk = this.shakeK();
     c.save();
-    c.translate(sh[0], sh[1]);
+    if (sk > 0) c.translate((vrand() * 2 - 1) * sk, (vrand() * 2 - 1) * sk);
     c.translate(-this.camX * this.scale, this.worldH - VIEW_H * this.scale + this.camY * this.scale);
     c.scale(this.scale, this.scale);
     const x0 = this.camX - 80, x1 = this.camX + this.viewW + 80;
@@ -271,10 +383,10 @@ export class Renderer {
     this.fx.drawScreen(c);
   }
 
-  private shakeOffset(): [number, number] {
+  /** screen-shake amplitude this frame (0 = none) */
+  private shakeK(): number {
     const k = this.trauma * this.trauma * 10 * Math.max(0, Math.min(1, this.opts.shake)) * (this.opts.reduceMotion ? 0 : 1) * Math.min(1, this.scale / 0.72);
-    if (k < 0.05) return [0, 0];
-    return [(vrand() * 2 - 1) * k, (vrand() * 2 - 1) * k];
+    return k < 0.05 ? 0 : k;
   }
 
   private drawPbFlag(s: RunState, bodyX: number, x0: number, x1: number): void {
@@ -283,9 +395,8 @@ export class Renderer {
     const c = this.c;
     c.fillStyle = 'rgba(255,255,255,0.85)'; c.fillRect(fx - 2, GROUND_Y - 170, 4, 170);
     c.fillStyle = '#ff5d8f'; c.beginPath(); c.moveTo(fx + 2, GROUND_Y - 168); c.lineTo(fx + 58, GROUND_Y - 152); c.lineTo(fx + 2, GROUND_Y - 136); c.closePath(); c.fill();
-    const t = `최고 ${Math.floor(this.hud.pbDist).toLocaleString('ko-KR')}m`;
-    c.font = `900 16px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle';
-    c.lineWidth = 4; c.strokeStyle = 'rgba(20,10,35,0.8)'; c.strokeText(t, fx + 8, GROUND_Y - 186); c.fillStyle = '#fff'; c.fillText(t, fx + 8, GROUND_Y - 186);
+    const t = `최고 ${this.num(Math.floor(this.hud.pbDist), 0)}m`;
+    outlinedText(c, BIG_FONT, fx + 8, GROUND_Y - 186, t, 16, '#fff', 'rgba(20,10,35,0.8)', 4, 'left');
   }
 
   private drawSigns(s: RunState, x0: number, x1: number): void {
@@ -296,10 +407,10 @@ export class Renderer {
       for (const sg of def.signs) {
         const x = ch.x + sg.col * TILE; const y = 150;
         const text = this.opts.swapSides ? swapSides(sg.text) : sg.text;      // 좌우 바꾸기: 「점프! (왼쪽/…)」 → 오른쪽
-        c.font = `800 22px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle';
-        const w = c.measureText(text).width + 28;
-        c.fillStyle = 'rgba(20,14,40,0.78)'; rr(c, x, y - 22, w, 44, 12); c.fill();
-        c.strokeStyle = '#ffd166'; c.lineWidth = 3; rr(c, x, y - 22, w, 44, 12); c.stroke();
+        const w = this.textW(SIGN_FONT, text) + 28;
+        c.font = SIGN_FONT; c.textAlign = 'left'; c.textBaseline = 'middle';
+        c.fillStyle = 'rgba(20,14,40,0.78)'; rrect(c, x, y - 22, w, 44, 12); c.fill();
+        c.strokeStyle = '#ffd166'; c.lineWidth = 3; c.stroke();
         c.fillStyle = '#fff'; c.fillText(text, x + 14, y + 1);
         c.fillStyle = 'rgba(20,14,40,0.6)'; c.fillRect(x + 16, y + 22, 5, GROUND_Y - y - 22);
       }
@@ -325,38 +436,47 @@ export class Renderer {
   }
 
   private drawHazards(s: RunState, bi: BiomeDef, x0: number, x1: number): void {
+    setHazardReduceMotion(this.opts.reduceMotion);
     const c = this.c; const hc = this.opts.highContrast;
     const hz = s.level.hazards; const boxes = this.hazBoxes; boxes.length = 0;
-    const draw = (h: Hazard, right: number) => {
-      const hb = BIOME_BY_ID[h.biome] ?? bi;      // a hazard keeps its own biome's skin AND colour across a crossfade
-      const col = hc ? '#ff1744' : hb.hazard[h.kind];
-      const st = hb.style;
-      if (h.kind === 'spike') drawSpike(c, h, col, hc, st);
-      else if (h.kind === 'tall') drawTall(c, h, col, hc, this.time, st);
-      else drawHang(c, h.x0, right, h.y1, col, hc, this.time, st);
+    let res = 0;                                  // worldRes(c), read once
+    const viewTop = VIEW_H - this.viewH - 220;    // highest world y a frame can show (camera ≤ 160 up, + shake, + margin)
+    const colOf = (h: Hazard) => { const hb = BIOME_BY_ID[h.biome] ?? bi; return [hc ? '#ff1744' : hb.hazard[h.kind], hb.style] as const; };   // a hazard keeps its own biome's skin AND colour across a crossfade
+    const rightOf = (i: number) => {             // merge touching hanging hazards (same bottom) into one slab
+      const h = hz[i]; let right = h.x1; let j = i;
+      if (h.kind === 'hang') while (j + 1 < hz.length) { const n = hz[j + 1]; if (n.kind === 'hang' && !n.broken && Math.abs(n.x0 - right) < 1 && Math.abs(n.y1 - h.y1) < 1) { right = n.x1; j++; } else break; }
+      return [right, j] as const;
     };
-    for (let i = 0; i < hz.length; i++) {
+    let i = 0;
+    for (; i < hz.length; i++) {
       const h = hz[i];
       if (h.x1 < x0) continue; if (h.x0 > x1) break;
       if (h.broken) continue;                     // smashed by 왕만두 / 불꽃 질주 (debris is FX)
-      let right = h.x1; let j = i;
-      if (h.kind === 'hang') {                    // merge touching hanging hazards (same bottom) into one slab
-        while (j + 1 < hz.length) { const n = hz[j + 1]; if (n.kind === 'hang' && !n.broken && Math.abs(n.x0 - right) < 1 && Math.abs(n.y1 - h.y1) < 1) { right = n.x1; j++; } else break; }
-      }
+      const [right, j] = rightOf(i);
       boxes.push({ x0: h.x0 - 4, x1: right + 4, y0: Math.max(h.y0, -400) - 16, y1: h.y1 + 8 });
-      draw(h, right);
+      const [col, st] = colOf(h);
+      if (h.kind !== 'hang' && !res) { const m = c.getTransform(); res = quantRes(Math.hypot(m.a, m.b)); }
+      if (h.kind === 'spike') drawSpike(c, h, col, hc, st, res);
+      else if (h.kind === 'tall') drawTall(c, h, col, hc, this.time, st, res);
+      else drawHang(c, h.x0, right, h.y1, col, hc, this.time, st, viewTop);
       i = j;
+    }
+    // the next hanging slab to come in gets its paths built now (a few ms on a slow phone), not on its first frame
+    for (; i < hz.length && hz[i].x0 < x1 + this.viewW; i++) {
+      const h = hz[i]; if (h.kind !== 'hang' || h.broken) continue;
+      const [col, st] = colOf(h); prepareHang(h.x0, rightOf(i)[0], h.y1, col, st, viewTop); break;
     }
   }
 
   private drawPickups(s: RunState, x0: number, x1: number): void {
     const c = this.c; const t = this.time; const big = this.portrait ? 1.15 : 1;
+    const m = c.getTransform(); const k = Math.hypot(m.a, m.b); const res = quantRes(k), resBig = quantRes(k * big);   // = worldRes(), once
     for (const p of s.level.pickups) {
       if (p.taken || p.x < x0) continue; if (p.x > x1) break;
       const bob = this.opts.reduceMotion ? 0 : Math.sin(t * 4 + p.x * 0.05) * 2;
-      if (big !== 1 && (p.type === 'jelly' || p.type === 'big' || p.type === 'bonusJelly')) {
-        c.save(); c.translate(p.x, p.y + bob); c.scale(big, big); drawPickup(c, p, 0, 0, t); c.restore();
-      } else drawPickup(c, p, p.x, p.y + bob, t);
+      const rm = this.opts.reduceMotion;
+      if (big !== 1 && (p.type === 'jelly' || p.type === 'big' || p.type === 'bonusJelly')) drawPickup(c, p, p.x, p.y + bob, t, resBig, big, 0, rm);
+      else drawPickup(c, p, p.x, p.y + bob, t, res, 1, p.x, rm);
     }
   }
 
@@ -446,7 +566,14 @@ export class Renderer {
   private drawHitboxes(s: RunState, x0: number, x1: number): void {
     const c = this.c; c.lineWidth = 2;
     c.strokeStyle = '#00ff88'; const hb = hurtbox(s.body); c.strokeRect(hb.x0, hb.y0, hb.x1 - hb.x0, hb.y1 - hb.y0);
-    c.strokeStyle = '#ff00aa'; for (const h of s.level.hazards) { if (h.x1 < x0 || h.x0 > x1 || h.broken) continue; c.strokeRect(h.x0, Math.max(h.y0, -200), h.x1 - h.x0, h.y1 - Math.max(h.y0, -200)); }
+    c.strokeStyle = '#ff00aa';
+    for (const h of s.level.hazards) {
+      if (h.x1 < x0 || h.x0 > x1 || h.broken) continue;
+      if (h.kind === 'spike') {   // the sim's compound box (sim/body.ts hazardOverlap): full-width base + narrow tip
+        const mid = (h.y0 + h.y1) / 2, cx = (h.x0 + h.x1) / 2;
+        c.strokeRect(h.x0, mid, h.x1 - h.x0, h.y1 - mid); c.strokeRect(cx - SPIKE_TIP_W / 2, h.y0, SPIKE_TIP_W, mid - h.y0);
+      } else c.strokeRect(h.x0, Math.max(h.y0, -200), h.x1 - h.x0, h.y1 - Math.max(h.y0, -200));
+    }
   }
 
   // ------------------------------------------------------------------ overlays (css px, world area)
@@ -472,21 +599,21 @@ export class Renderer {
     const big = Math.min(W * 0.18, H * 0.34);
     if (s.phase === 'countdown') {
       const n = Math.ceil(s.countdown / 0.5);
-      bigText(c, W / 2, H * 0.42, String(Math.max(1, n)), '#fff', big);
+      this.bigText(W / 2, H * 0.42, String(Math.max(1, n)), '#fff', big);
     } else if (this.resumeCount > 0) {
       c.fillStyle = 'rgba(10,6,30,0.35)'; c.fillRect(0, 0, W, H);
-      bigText(c, W / 2, H * 0.42, String(Math.max(1, Math.ceil(this.resumeCount / 0.5))), '#fff', big);
-      bigText(c, W / 2, H * 0.42 + big * 0.62, '준비하세요', '#fff', Math.max(13, big * 0.18));
+      this.bigText(W / 2, H * 0.42, String(Math.max(1, Math.ceil(this.resumeCount / 0.5))), '#fff', big);
+      this.bigText(W / 2, H * 0.42 + big * 0.62, '준비하세요', '#fff', Math.max(13, big * 0.18));
     } else if (this.goT > 0) {
-      c.globalAlpha = Math.min(1, this.goT / 0.2); bigText(c, W / 2, H * 0.42, '출발!', '#ffd166', big * 0.7); c.globalAlpha = 1;
+      c.globalAlpha = Math.min(1, this.goT / 0.2); this.bigText(W / 2, H * 0.42, '출발!', '#ffd166', big * 0.7); c.globalAlpha = 1;
     }
     if (this.hint) this.drawHint(this.hint);
     else if (this.banner) {
       const b = this.banner; const k = b.t < 0.2 ? b.t / 0.2 : b.t > 1.5 ? (1.8 - b.t) / 0.3 : 1;
       c.globalAlpha = Math.max(0, k);
       const yy = H * 0.26; const fs = Math.min(40, Math.max(20, W * 0.045));
-      bigText(c, Math.min(W / 2, this.clearLine - W * 0.2), yy, b.text, b.color, fs);
-      if (b.sub) bigText(c, Math.min(W / 2, this.clearLine - W * 0.2), yy + fs * 0.95, b.sub, '#fff', Math.max(12, fs * 0.45));
+      this.bigText(Math.min(W / 2, this.clearLine - W * 0.2), yy, b.text, b.color, fs);
+      if (b.sub) this.bigText(Math.min(W / 2, this.clearLine - W * 0.2), yy + fs * 0.95, b.sub, '#fff', Math.max(12, fs * 0.45));
       c.globalAlpha = 1;
     }
   }
@@ -510,11 +637,11 @@ export class Renderer {
     c.globalAlpha = k;
     const fs = Math.min(40, Math.max(20, W * 0.05)) * pulse;
     const cx = W / 2, cy = H * 0.5;           // below the chunk signs (y 150), above the ground band
-    c.font = `900 ${Math.round(fs)}px ${FONT}`; const tw = c.measureText(h.text).width;
+    const tw = this.textW(BIG_FONT, h.text) * Math.round(fs) / 40;
     const pw = Math.min(W - 16, tw + 40), ph = fs * (h.sub ? 2.05 : 1.35);
-    c.fillStyle = 'rgba(20,12,40,0.55)'; rr(c, cx - pw / 2, cy - fs * 0.72, pw, ph, 14); c.fill();
-    bigText(c, cx, cy, h.text, '#ffe27a', fs);
-    if (h.sub) bigText(c, cx, cy + fs * 0.88, h.sub, '#fff', Math.max(12, fs * 0.42));
+    c.fillStyle = 'rgba(20,12,40,0.55)'; rrect(c, cx - pw / 2, cy - fs * 0.72, pw, ph, 14); c.fill();
+    this.bigText(cx, cy, h.text, '#ffe27a', fs);
+    if (h.sub) this.bigText(cx, cy + fs * 0.88, h.sub, '#fff', Math.max(12, fs * 0.42));
     c.globalAlpha = 1;
   }
 
@@ -534,7 +661,7 @@ export class Renderer {
     this.lanterns(s, L + 4 * u, ly, ls);
     let px = L + 4 * u + BONUS_WORD.length * (ls + 4 * u) + 8 * u;
     px = this.powerRings(s, px, ly + ls * 0.55, ls * 0.55, u);
-    if (s.shield > 0) { c.fillStyle = '#9be7ff'; c.font = `900 ${Math.round(14 * u)}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('◎', px + ls / 2, ly + ls * 0.55); }
+    if (s.shield > 0) { c.fillStyle = '#9be7ff'; c.font = fnt(900, Math.round(14 * u)); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('◎', px + ls / 2, ly + ls * 0.55); }
     // centre: flame ring + score, then progress + stage chips
     const cx = Math.min(W / 2, this.clearLine - 130 * u);
     this.scoreBlock(s, cx, T + 14 * u, u);
@@ -546,8 +673,7 @@ export class Renderer {
   private hudPortrait(s: RunState): void {
     const c = this.c; const W = this.cssW; const top = this.worldH; const bh = this.bandH;
     const u = Math.max(0.85, Math.min(1.15, W / 390)) * this.opts.uiScale;
-    const g = c.createLinearGradient(0, top, 0, top + bh); g.addColorStop(0, '#231a4e'); g.addColorStop(1, '#1b1440');
-    c.fillStyle = g; c.fillRect(0, top, W, bh);
+    c.fillStyle = this.grad('band', 0, top, 0, top + bh, '#231a4e', '#1b1440'); c.fillRect(0, top, W, bh);
     c.fillStyle = 'rgba(255,255,255,0.12)'; c.fillRect(0, top, W, 1);
     const L = this.insets.l + 12, R = W - this.insets.r - this.hud.pauseW - 8;
     // row 1: 따끈함 (full width) · row 2: lanterns + score/흐름 · row 3: progress + stage chips — rows scale with the band
@@ -571,17 +697,15 @@ export class Renderer {
     this.hpGhost = pct > this.hpGhost ? pct : this.hpGhost + (pct - this.hpGhost) * 0.04;
     const low = pct < LOW_HP_FRAC;
     const pulse = low && s.phase === 'run' && !this.opts.reduceMotion ? 0.5 + 0.5 * Math.sin(this.time * Math.PI * 1.6) : 0;   // 0.8 Hz
-    c.fillStyle = 'rgba(20,14,40,0.72)'; rr(c, bx - 3, by - 3, bw + 6, bh + 6, (bh + 6) / 2); c.fill();
-    c.fillStyle = 'rgba(255,255,255,0.28)'; if (this.hpGhost > 0.01) { rr(c, bx, by, Math.max(bh, bw * this.hpGhost), bh, bh / 2); c.fill(); }
-    const hg = c.createLinearGradient(bx, 0, bx + bw, 0);
-    if (low) { hg.addColorStop(0, '#9fd3ff'); hg.addColorStop(1, '#e8f6ff'); } else { hg.addColorStop(0, '#ff8a3d'); hg.addColorStop(1, '#ffd166'); }
-    c.fillStyle = hg; if (pct > 0) { rr(c, bx, by, Math.max(bh, bw * pct), bh, bh / 2); c.fill(); }
-    if (low && pulse > 0) { c.strokeStyle = `rgba(${FROST},${0.35 + 0.4 * pulse})`; c.lineWidth = 2; rr(c, bx - 2, by - 2, bw + 4, bh + 4, (bh + 4) / 2); c.stroke(); }
+    c.fillStyle = 'rgba(20,14,40,0.72)'; rrect(c, bx - 3, by - 3, bw + 6, bh + 6, (bh + 6) / 2); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.28)'; if (this.hpGhost > 0.01) { rrect(c, bx, by, Math.max(bh, bw * this.hpGhost), bh, bh / 2); c.fill(); }
+    c.fillStyle = low ? this.grad('cold', bx, 0, bx + bw, 0, '#9fd3ff', '#e8f6ff') : this.grad('warm', bx, 0, bx + bw, 0, '#ff8a3d', '#ffd166');
+    if (pct > 0) { rrect(c, bx, by, Math.max(bh, bw * pct), bh, bh / 2); c.fill(); }
+    if (low && pulse > 0) { c.strokeStyle = `rgba(${FROST},${0.35 + 0.4 * pulse})`; c.lineWidth = 2; rrect(c, bx - 2, by - 2, bw + 4, bh + 4, (bh + 4) / 2); c.stroke(); }
     c.fillStyle = 'rgba(20,14,40,0.3)'; for (let i = 1; i < 5; i++) c.fillRect(bx + bw * i / 5 - 1, by + 2, 2, bh - 4);
-    c.font = `800 ${labelPx(10.5, u)}px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.lineJoin = 'round';
-    const lab = `따끈함 ${Math.ceil(Math.max(0, s.hp))}`;
-    c.lineWidth = 3; c.strokeStyle = 'rgba(20,12,36,0.85)'; c.strokeText(lab, bx + 7 * u, by + bh / 2 + 0.5);
-    c.fillStyle = '#fff'; c.fillText(lab, bx + 7 * u, by + bh / 2 + 0.5);
+    const lpx = labelPx(10.5, u);
+    this.label('warmth', bx + 7 * u, by + bh / 2 + 0.5, `따끈함 ${Math.ceil(Math.max(0, s.hp))}`, fnt(800, lpx), lpx, '#fff', 'rgba(20,12,36,0.85)', 3, 'left');
+    c.lineJoin = 'round';        // (the state the text used to leave: later strokes — pouches, the next frame's finish gate — join round)
     // icon: steam when warm, a frost crystal when cold (slow 0.8 Hz pulse)
     const ix = bx - 11 * u, iy = by + bh / 2, ir = 9 * u * (1 + 0.12 * pulse);
     c.fillStyle = low ? '#dff2ff' : '#ffb35c'; c.beginPath(); c.arc(ix, iy, ir, 0, Math.PI * 2); c.fill();
@@ -589,19 +713,22 @@ export class Renderer {
     if (low) snowflake(c, ix, iy, ir * 0.7, '#3d7fb8'); else steam(c, ix, iy, ir * 0.7, this.opts.reduceMotion ? 0 : this.time);
   }
 
+  /** the 보·름·달·잔·치 lanterns: a static piece, repainted only when a letter is collected */
   private lanterns(s: RunState, x: number, y: number, ls: number): void {
-    const c = this.c;
-    for (let i = 0; i < BONUS_WORD.length; i++) {
-      const lx = x + i * (ls + ls * 0.2); const lit = s.letters[i];
-      const col = LETTER_COLORS[i];
-      c.fillStyle = lit ? col : 'rgba(20,14,40,0.62)';
-      c.strokeStyle = lit ? '#fff6e0' : 'rgba(255,255,255,0.28)'; c.lineWidth = 1.5;
-      rr(c, lx, y, ls, ls * 1.05, ls * 0.34); c.fill(); c.stroke();
-      c.fillStyle = lit ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.25)';
-      c.fillRect(lx + ls * 0.3, y - ls * 0.12, ls * 0.4, ls * 0.12); c.fillRect(lx + ls * 0.3, y + ls * 1.05, ls * 0.4, ls * 0.1);
-      c.font = `900 ${Math.round(ls * 0.58)}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillStyle = lit ? '#fff' : 'rgba(255,255,255,0.4)'; c.fillText(BONUS_WORD[i], lx + ls / 2, y + ls * 0.55);
-    }
+    let mask = 0; for (let i = 0; i < BONUS_WORD.length; i++) if (s.letters[i]) mask |= 1 << i;
+    this.slot('lanterns', mask, x - 2, y - ls * 0.12 - 2, BONUS_WORD.length * ls * 1.2 + 4, ls * 1.27 + 4, g => {
+      for (let i = 0; i < BONUS_WORD.length; i++) {
+        const lx = x + i * (ls + ls * 0.2); const lit = (mask >> i) & 1;
+        const col = LETTER_COLORS[i];
+        g.fillStyle = lit ? col : 'rgba(20,14,40,0.62)';
+        g.strokeStyle = lit ? '#fff6e0' : 'rgba(255,255,255,0.28)'; g.lineWidth = 1.5;
+        rr(g, lx, y, ls, ls * 1.05, ls * 0.34); g.fill(); g.stroke();
+        g.fillStyle = lit ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.25)';
+        g.fillRect(lx + ls * 0.3, y - ls * 0.12, ls * 0.4, ls * 0.12); g.fillRect(lx + ls * 0.3, y + ls * 1.05, ls * 0.4, ls * 0.1);
+        g.font = fnt(900, Math.round(ls * 0.58)); g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillStyle = lit ? '#fff' : 'rgba(255,255,255,0.4)'; g.fillText(BONUS_WORD[i], lx + ls / 2, y + ls * 0.55);
+      }
+    });
   }
 
   private powerRings(s: RunState, px: number, cy: number, r: number, u: number): number {
@@ -609,28 +736,30 @@ export class Renderer {
     for (const k of ['giant', 'dash', 'magnet'] as PowerKind[]) {
       const v = s.power[k]; if (v <= 0) continue;
       ring(c, px + r, cy, r, v / POWER_DUR[k], POWER_HUE[k]);
-      c.font = `900 ${Math.round(r * 1.05)}px ${FONT}`; c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(POWER_GLYPH[k], px + r, cy + 1);
+      c.font = fnt(900, Math.round(r * 1.05)); c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(POWER_GLYPH[k], px + r, cy + 1);
       px += r * 2 + 6 * u;
     }
     return px;
   }
 
   private scoreBlock(s: RunState, cx: number, cy: number, u: number, flowBelow = false, maxX = Infinity): void {
-    const c = this.c; const sc = totalScore(s).toLocaleString('ko-KR');
-    const fs = 22 * u; c.font = `900 ${Math.round(fs)}px ${FONT}`;
-    const tw = c.measureText(sc).width;
+    const sc = this.num(totalScore(s), 1);
+    const fs = 22 * u; const font = fnt(900, Math.round(fs));
+    const tw = this.textW(font, sc);
     const fr = 12 * u; const fx = cx - tw / 2 - fr - 6 * u;
     this.flameRing(s, fx, cy, fr);
-    bigText(c, cx, cy, sc, '#fff', fs);
+    const c = this.c;                 // (the score changes with most pickups: drawn live)
+    c.font = font; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineWidth = Math.max(3, fs * 0.18); c.strokeStyle = INK;
+    c.strokeText(sc, cx, cy); c.fillStyle = '#fff'; c.fillText(sc, cx, cy);
     const lv = flowLevel(s);
     if (lv > 0) {
       const t = `흐름 +${Math.round(lv * STREAK_BONUS * 100)}%`;
-      c.font = `800 ${labelPx(10, u)}px ${FONT}`; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineWidth = 3; c.strokeStyle = 'rgba(20,12,36,0.85)'; c.fillStyle = '#ffcf8a';
+      const lpx = labelPx(10, u); const lf = fnt(800, lpx);
       const short = `+${Math.round(lv * STREAK_BONUS * 100)}%`;     // big scores on narrow phones: the flame already says 흐름
       const lx = cx + tw / 2 + 6 * u;
-      const fit = flowBelow ? null : lx + c.measureText(t).width <= maxX ? t : lx + c.measureText(short).width <= maxX ? short : null;
-      if (fit) { c.textAlign = 'left'; c.strokeText(fit, lx, cy + 1); c.fillText(fit, lx, cy + 1); }
-      else { c.textAlign = 'center'; const lbl = flowBelow ? t : short; c.strokeText(lbl, fx, cy + fr + 8 * u); c.fillText(lbl, fx, cy + fr + 8 * u); }
+      const fit = flowBelow ? null : lx + this.textW(lf, t) <= maxX ? t : lx + this.textW(lf, short) <= maxX ? short : null;
+      if (fit) this.label('flow', lx, cy + 1, fit, lf, lpx, '#ffcf8a', 'rgba(20,12,36,0.85)', 3, 'left');
+      else this.label('flow', fx, cy + fr + 8 * u, flowBelow ? t : short, lf, lpx, '#ffcf8a', 'rgba(20,12,36,0.85)', 3, 'center');
     }
   }
 
@@ -653,18 +782,19 @@ export class Renderer {
     const c = this.c;
     let f = 0; let label = ''; let mark = -1;
     if (s.mode === 'stage' && s.level.stageLen > 0) { f = Math.min(1, s.dist / s.level.stageLen); label = `${Math.floor(f * 100)}%`; }
-    else if (this.hud.pbDist > 0 && !s.trial) { const span = Math.max(this.hud.pbDist * 1.15, s.dist + 1); f = s.dist / span; mark = this.hud.pbDist / span; label = s.dist >= this.hud.pbDist ? '최고 기록 넘었어요!' : `최고까지 ${Math.ceil(this.hud.pbDist - s.dist).toLocaleString('ko-KR')}m`; }
+    else if (this.hud.pbDist > 0 && !s.trial) { const span = Math.max(this.hud.pbDist * 1.15, s.dist + 1); f = s.dist / span; mark = this.hud.pbDist / span; label = s.dist >= this.hud.pbDist ? '최고 기록 넘었어요!' : `최고까지 ${this.num(Math.ceil(this.hud.pbDist - s.dist), 2)}m`; }
     else if (s.mode === 'tutorial' || s.trial) return;
-    else { label = `${Math.floor(s.dist).toLocaleString('ko-KR')}m`; f = 0; }
+    else { label = `${this.num(Math.floor(s.dist), 2)}m`; f = 0; }
     if (thin && label && labelRight) {
-      c.font = `700 ${labelPx(10, u)}px ${FONT}`; c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,255,255,0.8)';
-      c.fillText(label, labelRight, y + h / 2); w = Math.max(30, labelRight - c.measureText(label).width - 8 * u - x); label = '';
+      const lf = fnt(700, labelPx(10, u));
+      c.font = lf; c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,255,255,0.8)';
+      c.fillText(label, labelRight, y + h / 2); w = Math.max(30, labelRight - this.textW(lf, label) - 8 * u - x); label = '';
     }
-    c.fillStyle = 'rgba(20,14,40,0.6)'; rr(c, x, y, w, h, h / 2); c.fill();
-    if (f > 0) { c.fillStyle = s.mode === 'stage' ? '#80ed99' : '#8fd8ff'; rr(c, x, y, Math.max(h, w * f), h, h / 2); c.fill(); }
+    c.fillStyle = 'rgba(20,14,40,0.6)'; rrect(c, x, y, w, h, h / 2); c.fill();
+    if (f > 0) { c.fillStyle = s.mode === 'stage' ? '#80ed99' : '#8fd8ff'; rrect(c, x, y, Math.max(h, w * f), h, h / 2); c.fill(); }
     if (mark >= 0) { c.fillStyle = '#ff5d8f'; c.fillRect(x + w * mark - 1.5, y - 3, 3, h + 6); }
     if (s.mode === 'stage') { c.fillStyle = '#fff'; c.fillRect(x + w - 2, y - 3, 2, h + 6); }
-    if (!thin && label) { c.font = `700 ${labelPx(10, u)}px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,255,255,0.88)'; c.fillText(label, x + w + 6 * u, y + h / 2); }
+    if (!thin && label) { c.font = fnt(700, labelPx(10, u)); c.textAlign = 'left'; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineWidth = 3; c.strokeStyle = 'rgba(20,12,36,0.85)'; c.strokeText(label, x + w + 6 * u, y + h / 2); c.fillStyle = 'rgba(255,255,255,0.92)'; c.fillText(label, x + w + 6 * u, y + h / 2); }   // outlined: stays legible over the bonus moon
 
   }
 
@@ -674,12 +804,12 @@ export class Renderer {
     const pct = jellyPct(s); const ok = goal > 0 && pct >= goal;
     const txt = goal > 0 ? `별사탕 ${pct}% / ${goal}%` : `별사탕 ${pct}%`;
     const fs = labelPx(10.5, u); const ku = fs / 10.5;          // the pill grows with its (floored) label
-    c.font = `800 ${fs}px ${FONT}`;
-    const tw = c.measureText(txt).width; const ps = 9 * u; const pw = 3 * (ps * 2 + 3 * u);
+    const cf = fnt(800, fs); c.font = cf;
+    const tw = this.textW(cf, txt); const ps = 9 * u; const pw = 3 * (ps * 2 + 3 * u);
     const total = tw + 14 * ku + 8 * u + pw;
     let x0 = align === 'center' ? x - total / 2 : x - total;
     const h = 17 * ku;
-    c.fillStyle = ok ? 'rgba(46,160,90,0.85)' : 'rgba(20,14,40,0.66)'; rr(c, x0, y - h / 2, tw + 14 * ku, h, h / 2); c.fill();
+    c.fillStyle = ok ? 'rgba(46,160,90,0.85)' : 'rgba(20,14,40,0.66)'; rrect(c, x0, y - h / 2, tw + 14 * ku, h, h / 2); c.fill();
     c.fillStyle = '#fff'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(txt, x0 + 7 * ku, y + 0.5);
     x0 += tw + 14 * ku + 8 * u + ps;
     for (let i = 0; i < 3; i++) {
@@ -691,6 +821,36 @@ export class Renderer {
 }
 
 // ---------------------------------------------------------------- helpers
+const HAS_ROUND_RECT = typeof CanvasRenderingContext2D !== 'undefined' && typeof CanvasRenderingContext2D.prototype.roundRect === 'function';
+/** rounded-rect path: one native call where there is one (the same pixels as characters.rr's four arcTo, 2 calls not 7) */
+function rrect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  if (HAS_ROUND_RECT && w >= 2 * r && h >= 2 * r) { c.beginPath(); c.roundRect(x, y, w, h, r); } else rr(c, x, y, w, h, r);
+}
+/** one cached HUD piece (see Renderer.slot) */
+class Slot {
+  key: unknown = undefined; x = NaN; y = NaN; w = NaN; h = NaN; d = 0; X = 0; Y = 0; W = 0; H = 0; cv: HTMLCanvasElement | null = null; g: CanvasRenderingContext2D | null = null;
+  t = ''; f = ''; fill = ''; ax = NaN; ay = NaN;          // (labels: what the piece shows, for the cheap unchanged check)
+}
+const fonts = new Map<number, string>();
+/** the HUD font string for weight × px (one string per font: per-frame template strings would be new objects to hash
+ *  and compare every frame) */
+function fnt(weight: number, px: number): string {
+  const k = weight * 1024 + px; let f = fonts.get(k);
+  if (!f) { f = `${weight} ${px}px ${FONT}`; fonts.set(k, f); }
+  return f;
+}
+/** a non-negative integer grouped like toLocaleString('ko-KR') (1,234,567) without the Intl call */
+function grouped(n: number): string {
+  const s = String(n); let out = '';
+  for (let i = 0; i < s.length; i++) { if (i && (s.length - i) % 3 === 0) out += ','; out += s[i]; }
+  return out;
+}
+/** only digits and commas (a formatted number) */
+function isNumeric(t: string): boolean {
+  for (let i = 0; i < t.length; i++) { const k = t.charCodeAt(i); if ((k < 48 || k > 57) && k !== 44) return false; }
+  return true;
+}
+function litCount(letters: boolean[]): number { let n = 0; for (const l of letters) if (l) n++; return n; }
 /** chunk sign copy with the screen sides swapped (좌우 바꾸기 puts jump on the right, slide on the left) */
 export function swapSides(t: string): string { return t.replace(/왼쪽|오른쪽/g, m => m === '왼쪽' ? '오른쪽' : '왼쪽'); }
 export function shapeOf(ch: CharacterDef): Shape { return ch.shape; }
@@ -727,11 +887,6 @@ export function drawHazardIcon(c: CanvasRenderingContext2D, kind: string, biomeI
   c.restore();
 }
 
-function bigText(c: CanvasRenderingContext2D, x: number, y: number, t: string, color: string, size: number, align: CanvasTextAlign = 'center'): void {
-  c.font = `900 ${Math.round(size)}px ${FONT}`; c.textAlign = align; c.textBaseline = 'middle';
-  c.lineJoin = 'round'; c.lineWidth = Math.max(3, size * 0.18); c.strokeStyle = 'rgba(20,10,35,0.85)';
-  c.strokeText(t, x, y); c.fillStyle = color; c.fillText(t, x, y);
-}
 function ring(c: CanvasRenderingContext2D, x: number, y: number, r: number, k: number, col: string): void {
   c.fillStyle = 'rgba(20,14,40,0.66)'; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
   c.strokeStyle = col; c.lineWidth = Math.max(2.5, r * 0.24); c.beginPath(); c.arc(x, y, r - 1.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(1, k))); c.stroke();

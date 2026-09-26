@@ -1,4 +1,4 @@
 # 프레임 비용 (App.frame 안의 JS+캔버스 시간, 헤드리스 Chromium, 소프트웨어 렌더)
-portrait-390x844 (CPU ×4): frames=281 p50=2.90ms p95=9.40ms max=15.70ms
-landscape-844x390 (CPU ×4): frames=119 p50=4.20ms p95=9.30ms max=15.90ms
-landscape-844x390-nothrottle (CPU ×1): frames=561 p50=0.50ms p95=1.00ms max=5.90ms
+portrait-390x844 (CPU ×4): frames=679 p50=2.20ms p95=4.70ms max=19.00ms
+landscape-844x390 (CPU ×4): frames=325 p50=3.40ms p95=6.50ms max=32.10ms
+landscape-844x390-nothrottle (CPU ×1): frames=720 p50=0.60ms p95=0.90ms max=3.40ms

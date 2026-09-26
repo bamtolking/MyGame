@@ -11,7 +11,7 @@
 import type { Hazard } from '../sim/types';
 import { BIOMES, BIOME_BY_ID, type BiomeDef } from '../data/biomes';
 import { SPIKE_H, SPIKE_W, SPIKE_TIP_W, TALL_H, TALL_W } from '../data/physics';
-import { makeCanvas, worldRes, SpriteCache, mix, rgba, lighten, darken } from './backdrops';
+import { makeCanvas, worldRes, quantRes, SpriteCache, mix, rgba, lighten, darken } from './backdrops';
 
 export type HazardStyle = BiomeDef['style'];
 export const OUTLINE_OUT = '#140c1c';
@@ -29,6 +29,9 @@ let OUT_K = 1;
 /** Outline thickness multiplier (e.g. 1.5 in portrait, where the world is drawn at ≈0.45 scale). Cheaper and
  *  cleaner than stamping the hazard several times: sprites are simply re-rendered with the thicker outline. */
 export function setHazardOutlineScale(k: number): void { OUT_K = Math.max(1, Math.min(2.5, k)); }
+let STILL = false;
+/** Reduced motion: decorative flicker / smoke / sparks are drawn at rest. */
+export function setHazardReduceMotion(on: boolean): void { STILL = on; }
 const outerW = () => 7.5 * OUT_K;               // stroke centred on the edge: 3·k px visible outside the inner line
 const innerW = () => 1.5 * OUT_K;
 /** fill + double outline + clipped decoration for a closed path */
@@ -96,14 +99,14 @@ function paintSpike(g: CanvasRenderingContext2D, st: HazardStyle, col: string): 
   });
 }
 
-export function drawSpike(c: CanvasRenderingContext2D, h: Hazard, col: string, hc: boolean, style?: HazardStyle): void {
-  const st = styleOf(style, h.biome, col); const res = worldRes(c);
+export function drawSpike(c: CanvasRenderingContext2D, h: Hazard, col: string, hc: boolean, style?: HazardStyle, res = worldRes(c)): void {
+  const st = styleOf(style, h.biome, col);
   const spr = sprites.get(`s|${st}|${col}|${hc ? 1 : 0}|${res}|${OUT_K}`, () => { const [cv, g] = makeCanvas(SP_L * 2, SP_UP + SP_DN, res); g.translate(SP_L, SP_UP); paintSpike(g, st, col); return cv; });
   const cx = (h.x0 + h.x1) / 2;
   c.drawImage(spr, cx - SP_L, h.y1 - SP_UP, spr.width / res, spr.height / res);
   if (st === 'bridge') {
     // lit fuse spark on the middle rocket (decorative, above the hitbox)
-    const t = performance.now() / 1000; const k = 0.6 + 0.4 * Math.sin(t * 22 + cx);
+    const t = performance.now() / 1000; const k = STILL ? 1 : 0.6 + 0.4 * Math.sin(t * 22 + cx);
     c.fillStyle = `rgba(255,214,110,${0.75 * k})`; c.fillRect(cx - 1.5, h.y0 - 21, 3, 3);
     c.fillStyle = `rgba(255,255,220,${k})`; c.fillRect(cx - 1, h.y0 - 23 - k * 2, 2, 2);
   }
@@ -156,8 +159,9 @@ function paintTall(g: CanvasRenderingContext2D, st: HazardStyle, col: string): v
   });
 }
 
-export function drawTall(c: CanvasRenderingContext2D, h: Hazard, col: string, hc: boolean, t: number, style?: HazardStyle): void {
-  const st = styleOf(style, h.biome, col); const res = worldRes(c);
+export function drawTall(c: CanvasRenderingContext2D, h: Hazard, col: string, hc: boolean, t: number, style?: HazardStyle, res = worldRes(c)): void {
+  if (STILL) t = 0;
+  const st = styleOf(style, h.biome, col);
   const spr = sprites.get(`t|${st}|${col}|${hc ? 1 : 0}|${res}|${OUT_K}`, () => { const [cv, g] = makeCanvas(TL_L * 2, TL_UP + TL_DN, res); g.translate(TL_L, TL_UP); paintTall(g, st, col); return cv; });
   const cx = (h.x0 + h.x1) / 2; const top = h.y1 - TALL_H - 12;
   // decorative wisps above the top (soft, translucent, never inside the play box of the hazard)
@@ -170,16 +174,33 @@ export function drawTall(c: CanvasRenderingContext2D, h: Hazard, col: string, hc
   c.drawImage(spr, cx - TL_L, h.y1 - TL_UP, spr.width / res, spr.height / res);
 }
 
+let flushG: CanvasRenderingContext2D | null = null;
+/** paint (and rasterise) the spike and tower sprites of `biomes` at world resolution `res` now (run start / resize) —
+ *  not on the frame the first one of a kind scrolls in */
+export function prewarmHazards(biomes: BiomeDef[], res: number, hc: boolean): void {
+  if (!flushG) { const f = document.createElement('canvas'); f.width = f.height = 1; flushG = f.getContext('2d'); }
+  const r = quantRes(res);
+  for (const bi of biomes) {
+    const st = bi.style;
+    const sc = hc ? '#ff1744' : bi.hazard.spike, tc = hc ? '#ff1744' : bi.hazard.tall;
+    const a = sprites.get(`s|${st}|${sc}|${hc ? 1 : 0}|${r}|${OUT_K}`, () => { const [cv, g] = makeCanvas(SP_L * 2, SP_UP + SP_DN, r); g.translate(SP_L, SP_UP); paintSpike(g, st, sc); return cv; });
+    const b = sprites.get(`t|${st}|${tc}|${hc ? 1 : 0}|${r}|${OUT_K}`, () => { const [cv, g] = makeCanvas(TL_L * 2, TL_UP + TL_DN, r); g.translate(TL_L, TL_UP); paintTall(g, st, tc); return cv; });
+    if (flushG) { flushG.drawImage(a, 0, 0, 1, 1); flushG.drawImage(b, 0, 0, 1, 1); flushG.clearRect(0, 0, 1, 1); }
+  }
+}
+
 // ---------------------------------------------------------------- hang ▼ (one merged slab x0..x1, from off-screen to `bot`)
 // Hazards never move in world space, so each slab's paths are built once (Path2D, batched per colour) and cached;
 // a frame costs ~8 fill/stroke calls and no allocations. All decoration stays inside [x0-2, x1+2] × [.., bot], so no
 // clip is needed; the teeth below `bot` are decorative (the hitbox ends at `bot`, the art covers all of it).
 const HANG_TOP = -1400;                          // far above any view (portrait shows well above y = 0)
-const HANG_DECO = 1150;                          // decorated height above `bot` (plain body beyond)
+const HANG_DECO = 1150;                          // most decorated height above `bot` (plain body beyond)
+const BURST = [0, 1, 2, 3, 4, 5, 6, 7].map(a => { const an = (a / 8) * Math.PI * 2; return [Math.cos(an - 0.12) * 12, Math.sin(an - 0.12) * 12, Math.cos(an + 0.12) * 12, Math.sin(an + 0.12) * 12]; });
 interface HangArt { outline: Path2D; fills: [string, Path2D][]; strokes: [string, number, Path2D, number[] | null][] }
 const hangCache = new SpriteCache<HangArt>(24);
 
-function buildHang(st: HazardStyle, x0: number, x1: number, bot: number, col: string): HangArt {
+function buildHang(st: HazardStyle, x0: number, x1: number, bot: number, col: string, deco: number): HangArt {
+  const HANG_DECO = deco;
   const L = x0 - 2, R = x1 + 2, w = R - L; const units = Math.max(1, Math.round((x1 - x0) / 40)); const uw = (x1 - x0) / units;
   const teeth = units * 2; const tw = w / teeth; const TOOTH = 8;
   const outline = new Path2D(); outline.moveTo(L, HANG_TOP); outline.lineTo(L, bot);
@@ -214,7 +235,7 @@ function buildHang(st: HazardStyle, x0: number, x1: number, bot: number, col: st
     const bursts = F(hi);
     for (let i = 0; i < units; i++) for (let y = bot - 58, k = 0; y > top; y -= 58, k++) {
       const cx = x0 + uw * (i + 0.5) + (k % 2 ? 6 : -6);
-      for (let a = 0; a < 8; a++) { const an = (a / 8) * Math.PI * 2; bursts.moveTo(cx, y); bursts.lineTo(cx + Math.cos(an - 0.12) * 12, y + Math.sin(an - 0.12) * 12); bursts.lineTo(cx + Math.cos(an + 0.12) * 12, y + Math.sin(an + 0.12) * 12); bursts.closePath(); }
+      for (const [ax, ay, bx, by] of BURST) { bursts.moveTo(cx, y); bursts.lineTo(cx + ax, y + ay); bursts.lineTo(cx + bx, y + by); bursts.closePath(); }
     }
     const stitch = new Path2D(); stitch.moveTo(L + 8, top); stitch.lineTo(L + 8, bot - 16); stitch.lineTo(R - 8, bot - 16); stitch.lineTo(R - 8, top);
     strokes.push([rgba(cream, 0.7), 1.2, stitch, [4, 3]]);
@@ -237,9 +258,20 @@ function buildHang(st: HazardStyle, x0: number, x1: number, bot: number, col: st
   return { outline, fills, strokes };
 }
 
-export function drawHang(c: CanvasRenderingContext2D, x0: number, x1: number, bot: number, col: string, hc: boolean, t: number, style?: HazardStyle): void {
+/** `viewTop`: the highest world y the view can show (the renderer knows; decoration stops a little above it — building
+ *  a slab's paths is 2–8 ms at 4× throttle, most of it for decoration no view reaches). Omitted: the full height. */
+function hangArt(st: HazardStyle, x0: number, x1: number, bot: number, col: string, viewTop?: number): HangArt {
+  const deco = viewTop === undefined ? HANG_DECO : Math.max(240, Math.min(HANG_DECO, Math.ceil((bot - viewTop) / 50) * 50));
+  return hangCache.get(`${st}|${col}|${x0}|${x1}|${bot}|${deco}`, () => buildHang(st, x0, x1, bot, col, deco));
+}
+/** build a slab's paths ahead of its first frame on screen (the renderer calls this for the next slab to come in) */
+export function prepareHang(x0: number, x1: number, bot: number, col: string, style?: HazardStyle, viewTop?: number): void {
+  hangArt(styleOf(style, null, col), x0, x1, bot, col, viewTop);
+}
+export function drawHang(c: CanvasRenderingContext2D, x0: number, x1: number, bot: number, col: string, hc: boolean, t: number, style?: HazardStyle, viewTop?: number): void {
+  if (STILL) t = 0;
   const st = styleOf(style, null, col); void hc; void t;
-  const art = hangCache.get(`${st}|${col}|${x0}|${x1}|${bot}`, () => buildHang(st, x0, x1, bot, col));
+  const art = hangArt(st, x0, x1, bot, col, viewTop);
   c.lineJoin = 'miter'; c.miterLimit = 3;
   c.strokeStyle = OUTLINE_OUT; c.lineWidth = outerW(); c.stroke(art.outline);
   c.fillStyle = col; c.fill(art.outline);

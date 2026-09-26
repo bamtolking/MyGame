@@ -4,7 +4,7 @@
 // Pickups are drawn inside their pickup box (never bigger than ≈40 px, the reach of player box + PICK_PAD).
 import type { Pickup, PowerKind } from '../sim/types';
 import { BONUS_WORD } from '../data/tuning';
-import { makeCanvas, worldRes, SpriteCache, mix, rgba, lighten, darken } from './backdrops';
+import { makeCanvas, worldRes, quantRes, mix, rgba, lighten, darken } from './backdrops';
 
 /** 보·름·달·잔·치 paper lanterns — one colour each */
 export const LETTER_COLORS = ['#ff5d8f', '#ff9a3c', '#3fb8e8', '#4fc47e', '#a77bff'];
@@ -182,47 +182,76 @@ function paintLetter(g: CanvasRenderingContext2D, i: number): void {
 }
 
 const SPRITE_R: Record<string, number> = { jelly: 14, bonusJelly: 14, big: 22, coin: 13, potion: 21, bigPotion: 25, miniPotion: 14, moonCake: 25, pouch: 23, power: 22, letter: 25 };
-const sprites = new SpriteCache(40);
-function sprite(key: string, R: number, res: number, paint: (g: CanvasRenderingContext2D) => void): HTMLCanvasElement {
-  return sprites.get(`${key}|${res}`, () => { const [cv, g] = makeCanvas(R * 2, R * 2, res); g.translate(R, R); paint(g); return cv; });
+type Paint = (g: CanvasRenderingContext2D) => void;
+/** sprite key → [radius, painter] */
+const KINDS = new Map<string, [number, Paint]>([
+  ['jelly', [SPRITE_R.jelly, g => paintJelly(g, false)]], ['bonusJelly', [SPRITE_R.jelly, g => paintJelly(g, true)]], ['big', [SPRITE_R.big, paintBig]],
+  ['coin', [SPRITE_R.coin, paintCoin]], ['potion', [SPRITE_R.potion, paintPotion]], ['bigPotion', [SPRITE_R.bigPotion, paintBigPotion]],
+  ['miniPotion', [SPRITE_R.miniPotion, paintMiniPotion]], ['moonCake', [SPRITE_R.moonCake, paintMoonCake]], ['pouch', [SPRITE_R.pouch, paintPouch]],
+  ...(['giant', 'dash', 'magnet'] as PowerKind[]).map((k): [string, [number, Paint]] => [`pw-${k}`, [SPRITE_R.power, g => paintPower(g, k)]]),
+  ...BONUS_WORD.map((_, i): [string, [number, Paint]] => [`lt-${i}`, [SPRITE_R.letter, g => paintLetter(g, i)]]),
+]);
+const PW_KEY: Record<PowerKind, string> = { giant: 'pw-giant', dash: 'pw-dash', magnet: 'pw-magnet' };
+const LT_KEY = BONUS_WORD.map((_, i) => `lt-${i}`);
+/** sprites by resolution, then key (no per-draw key strings: every visible pickup is looked up every frame) */
+const byRes = new Map<number, Map<string, HTMLCanvasElement>>();
+function sprite(key: string, res: number): HTMLCanvasElement {
+  let m = byRes.get(res); if (!m) { if (byRes.size > 3) byRes.clear(); m = new Map(); byRes.set(res, m); }
+  let cv = m.get(key);
+  if (!cv) { const [R, paint] = KINDS.get(key)!; const [c2, g] = makeCanvas(R * 2, R * 2, res); g.translate(R, R); paint(g); cv = c2; m.set(key, cv); }
+  return cv;
+}
+let flushG: CanvasRenderingContext2D | null = null;
+/** paint (and rasterise) every pickup sprite for world scales `scales` (device px per logical px) now — at a run start /
+ *  resize, not on the frame each kind first shows up (a sprite with text costs a Hangul font lookup, 5–20 ms at 4×) */
+export function prewarmPickups(scales: number[]): void {
+  if (!flushG) { const f = document.createElement('canvas'); f.width = f.height = 1; flushG = f.getContext('2d'); }
+  for (const r of new Set(scales.map(quantRes))) for (const key of KINDS.keys()) {
+    if (byRes.get(r)?.has(key)) continue;
+    const cv = sprite(key, r);
+    if (flushG) { flushG.drawImage(cv, 0, 0, 1, 1); flushG.clearRect(0, 0, 1, 1); }
+  }
 }
 
-export function drawPickup(c: CanvasRenderingContext2D, p: Pickup, x: number, y: number, t: number): void {
-  const res = worldRes(c);
+/** draw a pickup centred at (x, y); `res` = worldRes(c) when the caller already knows it. Star candies may be drawn
+ *  `k`× bigger (portrait): `res` is then the resolution at that size, and `ph` the x their wobble phase uses. */
+const still0 = (_: number): number => 0;
+export function drawPickup(c: CanvasRenderingContext2D, p: Pickup, x: number, y: number, t: number, res = worldRes(c), k = 1, ph = x, still = false): void {
+  const sn = still ? still0 : Math.sin;   // reduced motion: no sway / pulse / coin flip (drawn at rest, face-on)
   switch (p.type) {
     case 'jelly': case 'bonusJelly': {
-      const R = SPRITE_R.jelly; const spr = sprite(p.type, R, res, g => paintJelly(g, p.type === 'bonusJelly'));
-      c.drawImage(spr, x - R, y - R, R * 2, R * 2); break;
+      const R = SPRITE_R.jelly * k; const spr = sprite(p.type, res);
+      c.drawImage(spr, x - R, y - R, R * 2, R * 2); break;       // (no save/translate/scale: the most numerous thing drawn)
     }
     case 'big': {
-      const R = SPRITE_R.big; const spr = sprite('big', R, res, paintBig);
-      c.save(); c.translate(x, y); c.rotate(Math.sin(t * 2.4 + x * 0.01) * 0.18); c.drawImage(spr, -R, -R, R * 2, R * 2); c.restore(); break;
+      const R = SPRITE_R.big; const spr = sprite('big', res);
+      c.save(); c.translate(x, y); if (k !== 1) c.scale(k, k); c.rotate(sn(t * 2.4 + ph * 0.01) * 0.18); c.drawImage(spr, -R, -R, R * 2, R * 2); c.restore(); break;
     }
     case 'coin': {
-      const R = SPRITE_R.coin; const spr = sprite('coin', R, res, paintCoin);
-      const k = Math.cos(t * 4 + x * 0.02); const w = Math.max(0.14, Math.abs(k)) * R;
+      const R = SPRITE_R.coin; const spr = sprite('coin', res);
+      const k = still ? 1 : Math.cos(t * 4 + x * 0.02); const w = Math.max(0.14, Math.abs(k)) * R;
       if (Math.abs(k) < 0.5) { c.fillStyle = '#b07d0a'; c.fillRect(x - Math.max(1.5, w * 0.35), y - 11, Math.max(3, w * 0.7), 22); }
       c.drawImage(spr, x - w, y - R, w * 2, R * 2); break;
     }
     case 'potion': case 'bigPotion': case 'miniPotion': {
-      const R = SPRITE_R[p.type]; const spr = sprite(p.type, R, res, p.type === 'potion' ? paintPotion : p.type === 'bigPotion' ? paintBigPotion : paintMiniPotion);
+      const R = SPRITE_R[p.type]; const spr = sprite(p.type, res);
       c.drawImage(spr, x - R, y - R, R * 2, R * 2); break;
     }
     case 'moonCake': {
-      const R = SPRITE_R.moonCake; const spr = sprite('moonCake', R, res, paintMoonCake);
-      const s = 1 + Math.sin(t * 4) * 0.04; c.drawImage(spr, x - R * s, y - R * s, R * 2 * s, R * 2 * s); break;
+      const R = SPRITE_R.moonCake; const spr = sprite('moonCake', res);
+      const s = 1 + sn(t * 4) * 0.04; c.drawImage(spr, x - R * s, y - R * s, R * 2 * s, R * 2 * s); break;
     }
     case 'pouch': {
-      const R = SPRITE_R.pouch; const spr = sprite('pouch', R, res, paintPouch);
-      c.save(); c.translate(x, y - 12); c.rotate(Math.sin(t * 2.2 + x * 0.01) * 0.1); c.drawImage(spr, -R, -R + 12, R * 2, R * 2); c.restore(); break;
+      const R = SPRITE_R.pouch; const spr = sprite('pouch', res);
+      c.save(); c.translate(x, y - 12); c.rotate(sn(t * 2.2 + x * 0.01) * 0.1); c.drawImage(spr, -R, -R + 12, R * 2, R * 2); c.restore(); break;
     }
     case 'power': {
-      const k = p.power ?? 'giant'; const R = SPRITE_R.power; const spr = sprite(`pw-${k}`, R, res, g => paintPower(g, k));
-      const s = 1 + Math.sin(t * 6) * 0.05; c.drawImage(spr, x - R * s, y - R * s, R * 2 * s, R * 2 * s); break;
+      const R = SPRITE_R.power; const spr = sprite(PW_KEY[p.power ?? 'giant'] ?? PW_KEY.giant, res);
+      const s = 1 + sn(t * 6) * 0.05; c.drawImage(spr, x - R * s, y - R * s, R * 2 * s, R * 2 * s); break;
     }
     case 'letter': {
-      const i = p.letter ?? 0; const R = SPRITE_R.letter; const spr = sprite(`lt-${i}`, R, res, g => paintLetter(g, i));
-      c.save(); c.translate(x, y - 20); c.rotate(Math.sin(t * 2 + x * 0.013) * 0.1); c.drawImage(spr, -R, -R + 20, R * 2, R * 2); c.restore(); break;
+      const R = SPRITE_R.letter; const spr = sprite(LT_KEY[p.letter ?? 0] ?? LT_KEY[0], res);
+      c.save(); c.translate(x, y - 20); c.rotate(sn(t * 2 + x * 0.013) * 0.1); c.drawImage(spr, -R, -R + 20, R * 2, R * 2); c.restore(); break;
     }
   }
 }
