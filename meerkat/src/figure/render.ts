@@ -1,3 +1,4 @@
+import type { Text } from '../i18n';
 import { DIM, mirrorPose, solve, lerpPose, type JointName, type Pose, type Skeleton, type V3 } from './rig';
 import { drawArm, drawHead, drawLeg, drawNeck, drawTorso, type Palette, type TorsoShape } from './paint';
 
@@ -5,7 +6,7 @@ import { drawArm, drawHead, drawLeg, drawNeck, drawTorso, type Palette, type Tor
 // 애니메이션 사양
 // ─────────────────────────────────────────────
 
-export type PropKind = 'floor' | 'mat' | 'wall' | 'chair' | 'roller' | 'ball' | 'band' | 'towel' | 'door';
+export type PropKind = 'floor' | 'mat' | 'wall' | 'chair' | 'roller' | 'ball' | 'band' | 'towel' | 'door' | 'step' | 'table';
 
 export interface PropSpec {
   kind: PropKind;
@@ -17,6 +18,25 @@ export interface PropSpec {
   /** 벽 위치: 몸 뒤(back)/앞(front)/왼쪽(left)/오른쪽(right) 과 거리 */
   wall?: 'back' | 'front' | 'left' | 'right';
   dist?: number;
+  /** step·table: at 관절 위치를 잡을 키 번호(기본 0). 윗면이 그 관절 높이에 맞춰짐 */
+  key?: number;
+  /** step·table 크기 [좌우 폭, (무시), 앞뒤 깊이] (몸 단위, 키 100 기준) */
+  size?: V3;
+}
+
+/** 근육 강조(늘어나는 곳·힘 주는 곳) — 두 관절 사이를 따라 빛나는 띠로 표시 */
+export interface FocusSpec {
+  a: JointName;
+  b: JointName;
+  /** a→b 사이 구간 비율(기본 0.12 ~ 0.88) */
+  from?: number;
+  to?: number;
+  /** 몸 기준 방향으로 살짝 옮김: 앞(front)·뒤(back)·안쪽(in)·바깥쪽(out) */
+  side?: 'front' | 'back' | 'in' | 'out';
+  /** stretch: 늘어나는 곳(빨강) · work: 힘 주는 곳(파랑) */
+  kind: 'stretch' | 'work';
+  /** 띠 반지름(몸 단위, 기본 3.2) */
+  r?: number;
 }
 
 export interface AnimSpec {
@@ -36,6 +56,16 @@ export interface AnimSpec {
   anchor?: JointName[];
   /** 화면 확대 배율 보정 */
   zoom?: number;
+  /** 키마다 자세 이름(단계 자막). keys 와 개수가 같아야 함 */
+  labels?: Text[];
+  /** 근육 강조 */
+  focus?: FocusSpec[];
+  /** 움직임 경로(점선 화살표)를 보여 줄 관절 */
+  trace?: JointName[];
+  /** 바닥 대신 이 관절들을 높이 y 에 맞춤 (계단·박스 위 발 등) */
+  ground?: { joints: JointName[]; y: number };
+  /** 버티기(hold) 운동에서 멈춰 있을 키 번호 (기본: 1, 키가 하나면 0) */
+  holdKey?: number;
 }
 
 // ─────────────────────────────────────────────
@@ -97,11 +127,14 @@ export interface Placed {
 }
 
 /** 바닥(y=0)에 붙이고 기준점을 원점에 고정 */
-export function place(pose: Pose, spec: Pick<AnimSpec, 'level' | 'anchor'>): Placed {
+export function place(pose: Pose, spec: Pick<AnimSpec, 'level' | 'anchor' | 'ground'>): Placed {
   const p = spec.level ? levelPose(pose, spec.level) : pose;
   const sk = solve(p);
   let minY = Infinity;
-  for (const [n, r] of CONTACTS) minY = Math.min(minY, sk.p[n][1] - r);
+  if (spec.ground) {
+    for (const n of spec.ground.joints) minY = Math.min(minY, sk.p[n][1] - (RADIUS.get(n) ?? 0));
+    minY -= spec.ground.y;
+  } else for (const [n, r] of CONTACTS) minY = Math.min(minY, sk.p[n][1] - r);
   const anchor = spec.anchor ?? ['heelL', 'heelR', 'toeL', 'toeR'];
   const ax = anchor.reduce((s, n) => s + sk.p[n][0], 0) / anchor.length;
   const az = anchor.reduce((s, n) => s + sk.p[n][2], 0) / anchor.length;
@@ -152,6 +185,63 @@ export function poseAt(spec: AnimSpec, t: number, mirror = false): Pose {
     }
   }
   return mirror ? mirrorPose(pose) : pose;
+}
+
+/** 시각 t 에 해당하는 단계(키) — 멈춰 있으면 그 키, 움직이는 중이면 향하는 키 */
+export function keyAt(spec: AnimSpec, t: number): { key: number; moving: boolean } {
+  const n = spec.keys.length;
+  if (n < 2) return { key: 0, moving: false };
+  const len = cycleLength(spec);
+  let x = ((t % len) + len) % len;
+  for (let i = 0; i < n; i++) {
+    const pause = spec.pauses?.[i] ?? 0;
+    if (x < pause) return { key: i, moving: false };
+    x -= pause;
+    const d = spec.durations?.[i] ?? 1.2;
+    if (x < d) return { key: (i + 1) % n, moving: true };
+    x -= d;
+  }
+  return { key: 0, moving: false };
+}
+
+/** 키 k 에 도착하는 시각(초) */
+export function arriveTime(spec: AnimSpec, k: number): number {
+  let t = 0;
+  for (let i = 0; i < k; i++) t += (spec.pauses?.[i] ?? 0) + (spec.durations?.[i] ?? 1.2);
+  return t;
+}
+
+/** 키 k 를 대표하는 시각 (정지 구간 가운데) */
+export function keyTime(spec: AnimSpec, k: number): number {
+  return arriveTime(spec, k) + Math.max(0.02, (spec.pauses?.[k] ?? 0) * 0.5);
+}
+
+/** 버티기 운동에서 멈출 키 */
+export function holdKeyOf(spec: AnimSpec): number {
+  return Math.min(spec.keys.length - 1, spec.holdKey ?? (spec.keys.length > 1 ? 1 : 0));
+}
+
+const SWAP: Record<string, string> = { L: 'R', R: 'L' };
+const mirrorName = <T extends string>(n: T): T => (/[LR]$/.test(n) ? ((n.slice(0, -1) + SWAP[n.slice(-1)]) as T) : n);
+
+/** 좌우 반전 시범용: 관절 이름이 들어간 설정도 반대쪽으로 */
+export function mirrorSpec(spec: AnimSpec): AnimSpec {
+  const names = (a?: JointName[]) => a?.map(mirrorName);
+  return {
+    ...spec,
+    level: spec.level ? { ...spec.level, a: names(spec.level.a)!, b: names(spec.level.b)! } : undefined,
+    anchor: names(spec.anchor),
+    trace: names(spec.trace),
+    ground: spec.ground ? { ...spec.ground, joints: names(spec.ground.joints)! } : undefined,
+    focus: spec.focus?.map((f) => ({ ...f, a: mirrorName(f.a), b: mirrorName(f.b) })),
+    props: spec.props?.map((p) => ({
+      ...p,
+      at: p.at ? mirrorName(p.at) : undefined,
+      to: p.to ? mirrorName(p.to) : undefined,
+      off: p.off ? ([-p.off[0], p.off[1], p.off[2]] as V3) : undefined,
+      wall: p.wall === 'left' ? 'right' : p.wall === 'right' ? 'left' : p.wall,
+    })),
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -233,7 +323,15 @@ function toCamera(cam: Cam): V3 {
   return [-Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e)];
 }
 
-export function drawScene(g: CanvasRenderingContext2D, placed: Placed, cam: Cam, vp: Viewport, spec: AnimSpec, pal: Palette, chairSk?: Skeleton) {
+export interface DrawOpts {
+  /** 근육 강조·움직임 경로 표시 */
+  overlays?: boolean;
+  /** 강조 깜빡임용 실제 시각(초) */
+  now?: number;
+}
+
+export function drawScene(g: CanvasRenderingContext2D, placed: Placed, prep: Prepared, pal: Palette, opts: DrawOpts = {}) {
+  const { cam, vp, spec, chairSk } = prep;
   const { sk, pose } = placed;
   const P = (v: V3) => {
     const p = project(v, cam);
@@ -247,10 +345,12 @@ export function drawScene(g: CanvasRenderingContext2D, placed: Placed, cam: Cam,
 
   // ── 배경 소품 ──
   drawFloor(g, P, S, pal, props, sk, cam);
-  for (const pr of props) {
+  props.forEach((pr, i) => {
     if (pr.kind === 'wall' || pr.kind === 'door') drawWall(g, P, S, pal, pr, sk, cam);
     if (pr.kind === 'chair') drawChair(g, P, S, pal, chairSk ?? sk, cam);
-  }
+    const at = prep.propAt[i];
+    if ((pr.kind === 'step' || pr.kind === 'table') && at) drawPlatform(g, P, S, pal, pr, at, cam);
+  });
 
   // ── 몸 ──
   const list: Draw[] = [];
@@ -331,6 +431,145 @@ export function drawScene(g: CanvasRenderingContext2D, placed: Placed, cam: Cam,
   }
   list.sort((a, b) => a.d - b.d);
   for (const it of list) it.fn(g);
+
+  if (opts.overlays) {
+    drawTraces(g, P, S, prep.traces);
+    drawFocus(g, P, S, sk, spec.focus ?? [], opts.now ?? 0);
+  }
+}
+
+const FOCUS_COLOR = { stretch: '255, 64, 102', work: '41, 121, 255' };
+
+/** 팔다리 마디 위의 근육이면 그 마디의 회전(앞쪽 = z) */
+function frameFor(sk: Skeleton, a: JointName, b: JointName): number[] | undefined {
+  const pair = (x: string, y: string) => (a.startsWith(x) && b.startsWith(y)) || (a.startsWith(y) && b.startsWith(x));
+  const s = (a.endsWith('L') || b.endsWith('L') ? 'L' : 'R') as 'L' | 'R';
+  if (pair('hip', 'kn')) return sk.limbs[`thigh${s}`];
+  if (pair('kn', 'an') || pair('kn', 'heel') || pair('kn', 'toe')) return sk.limbs[`shank${s}`];
+  if (pair('sh', 'el')) return sk.limbs[`upper${s}`];
+  if (pair('el', 'wr') || pair('el', 'ha')) return sk.limbs[`fore${s}`];
+  return undefined;
+}
+
+/** 근육 강조: 두 관절 사이를 따라 은은하게 빛나는 띠 */
+function drawFocus(g: CanvasRenderingContext2D, P: ToScreen, S: number, sk: Skeleton, focus: FocusSpec[], now: number) {
+  if (!focus.length) return;
+  const legJoint = /^(hip|kn|an|heel|toe|sit)/;
+  const pulse = 0.5 + 0.5 * Math.sin((now * Math.PI * 2) / 1.6);
+  for (const f of focus) {
+    const A = sk.p[f.a], B = sk.p[f.b];
+    const t0 = f.from ?? 0.12, t1 = f.to ?? 0.88;
+    const lerp = (t: number): V3 => [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t];
+    let p0 = lerp(t0), p1 = lerp(t1);
+    const r = f.r ?? 3.2;
+    if (f.side) {
+      const M = frameFor(sk, f.a, f.b) ?? (legJoint.test(f.a) || legJoint.test(f.b) ? sk.axes.pelvis : sk.axes.chest);
+      const fwd: V3 = [M[2], M[5], M[8]], lat: V3 = [M[0], M[3], M[6]];
+      const sideSign = /L$/.test(f.a) ? 1 : /R$/.test(f.a) ? -1 : 1;
+      let d: V3 = f.side === 'front' ? fwd : f.side === 'back' ? [-fwd[0], -fwd[1], -fwd[2]] : f.side === 'out' ? [lat[0] * sideSign, lat[1] * sideSign, lat[2] * sideSign] : [-lat[0] * sideSign, -lat[1] * sideSign, -lat[2] * sideSign];
+      const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]];
+      const ul = Math.hypot(u[0], u[1], u[2]) || 1;
+      const ud = (d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) / ul;
+      d = [d[0] - (ud * u[0]) / ul, d[1] - (ud * u[1]) / ul, d[2] - (ud * u[2]) / ul];
+      const dl = Math.hypot(d[0], d[1], d[2]) || 1;
+      const k = (r * 0.55) / dl;
+      p0 = [p0[0] + d[0] * k, p0[1] + d[1] * k, p0[2] + d[2] * k];
+      p1 = [p1[0] + d[0] * k, p1[1] + d[1] * k, p1[2] + d[2] * k];
+    }
+    const a = P(p0), b = P(p1);
+    const rgb = FOCUS_COLOR[f.kind];
+    g.save();
+    g.lineCap = 'round';
+    g.shadowColor = `rgba(${rgb}, 0.9)`;
+    g.shadowBlur = 5 * S;
+    g.strokeStyle = `rgba(${rgb}, ${0.32 + 0.18 * pulse})`;
+    g.lineWidth = r * 2 * S;
+    g.beginPath();
+    g.moveTo(a.x, a.y);
+    g.lineTo(b.x + 0.01, b.y + 0.01);
+    g.stroke();
+    g.shadowBlur = 0;
+    g.strokeStyle = `rgba(${rgb}, ${0.55 + 0.3 * pulse})`;
+    g.lineWidth = Math.max(1, r * 0.55 * S);
+    g.setLineDash([r * 0.9 * S, r * 0.7 * S]);
+    g.stroke();
+    g.restore();
+  }
+}
+
+/** 움직임 경로: 점선 + 끝 화살표 */
+function drawTraces(g: CanvasRenderingContext2D, P: ToScreen, S: number, traces: V3[][]) {
+  for (const path of traces) {
+    if (path.length < 2) continue;
+    const pts = path.map(P);
+    // 너무 짧은 이동은 생략
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    if (len < 6 * S) continue;
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.strokeStyle = 'rgba(255, 107, 44, 0.85)';
+    g.lineWidth = 1.1 * S;
+    g.setLineDash([2.2 * S, 2 * S]);
+    g.beginPath();
+    g.moveTo(pts[0].x, pts[0].y);
+    for (const q of pts.slice(1)) g.lineTo(q.x, q.y);
+    g.stroke();
+    g.setLineDash([]);
+    // 화살촉
+    const e = pts[pts.length - 1];
+    let k = pts.length - 2;
+    while (k > 0 && Math.hypot(e.x - pts[k].x, e.y - pts[k].y) < 2.5 * S) k--;
+    const ang = Math.atan2(e.y - pts[k].y, e.x - pts[k].x);
+    const h = 3.2 * S;
+    g.fillStyle = 'rgba(255, 107, 44, 0.95)';
+    g.beginPath();
+    g.moveTo(e.x + Math.cos(ang) * h * 0.4, e.y + Math.sin(ang) * h * 0.4);
+    g.lineTo(e.x - Math.cos(ang - 0.5) * h, e.y - Math.sin(ang - 0.5) * h);
+    g.lineTo(e.x - Math.cos(ang + 0.5) * h, e.y - Math.sin(ang + 0.5) * h);
+    g.closePath();
+    g.fill();
+    g.restore();
+  }
+}
+
+/** 계단(step)·탁자(table): at 관절 높이에 윗면을 맞춘 받침 */
+function drawPlatform(g: CanvasRenderingContext2D, P: ToScreen, S: number, pal: Palette, pr: PropSpec, at: V3, cam: Cam) {
+  const size = pr.size ?? (pr.kind === 'step' ? [30, 0, 26] : [60, 0, 34]);
+  const off = pr.off ?? [0, 0, 0];
+  const r = pr.at ? RADIUS.get(pr.at) ?? 1 : 1;
+  const top = Math.max(2, at[1] - r);
+  const cx = at[0] + off[0], cz = at[2] + off[2];
+  const lw = pal.line * S;
+  if (pr.kind === 'step') {
+    drawBox(g, P, cam, [cx, top / 2, cz], [size[0] / 2, top / 2, size[2] / 2], pal.seat.f, pal.seatSide, pal.seat.l, lw);
+    return;
+  }
+  const TH = 3;
+  const toCam = toCamera(cam);
+  const legs: [number, number][] = [
+    [cx - size[0] / 2 + 3, cz - size[2] / 2 + 3],
+    [cx + size[0] / 2 - 3, cz - size[2] / 2 + 3],
+    [cx - size[0] / 2 + 3, cz + size[2] / 2 - 3],
+    [cx + size[0] / 2 - 3, cz + size[2] / 2 - 3],
+  ];
+  legs.sort((a, b) => a[0] * toCam[0] + a[1] * toCam[2] - (b[0] * toCam[0] + b[1] * toCam[2]));
+  const leg = ([x, z]: [number, number]) => {
+    const a = P([x, top - TH, z]), b = P([x, 0, z]);
+    g.lineCap = 'round';
+    g.strokeStyle = pal.frame;
+    g.lineWidth = 2.3 * S;
+    g.beginPath();
+    g.moveTo(a.x, a.y);
+    g.lineTo(b.x, b.y);
+    g.stroke();
+  };
+  leg(legs[0]);
+  leg(legs[1]);
+  drawBox(g, P, cam, [cx, top - TH / 2, cz], [size[0] / 2, TH / 2, size[2] / 2], pal.seat.f, pal.seatSide, pal.seat.l, lw);
+  leg(legs[2]);
+  leg(legs[3]);
 }
 
 /** 척추 단면을 이어 몸통 윤곽 만들기 */
@@ -652,27 +891,62 @@ function drawRoller(g: CanvasRenderingContext2D, P: ToScreen, c: V3, S: number, 
 // ─────────────────────────────────────────────
 
 export interface Prepared {
+  /** 좌우 반전이면 반전된 설정 */
   spec: AnimSpec;
   cam: Cam;
   vp: Viewport;
   mirror: boolean;
   /** 의자는 첫 자세 기준으로 고정 (앉았다 일어서기 등) */
   chairSk?: Skeleton;
+  /** 계단·탁자 기준점 (props 순서) */
+  propAt: (V3 | undefined)[];
+  /** 움직임 경로(월드 좌표) */
+  traces: V3[][];
 }
 
-export function prepare(spec: AnimSpec, w: number, h: number, mirror = false): Prepared {
-  const cam = { yaw: spec.view, elev: spec.elev ?? 8 };
+export function prepare(spec0: AnimSpec, w: number, h: number, mirror = false, yaw = 0): Prepared {
+  const spec = mirror ? mirrorSpec(spec0) : spec0;
+  const cam = { yaw: spec.view + yaw, elev: spec.elev ?? 8 };
   const len = cycleLength(spec);
   const frames: Placed[] = [];
   const N = Math.max(8, spec.keys.length * 6);
-  for (let i = 0; i < N; i++) frames.push(place(poseAt(spec, (i / N) * len, mirror), spec));
+  for (let i = 0; i < N; i++) frames.push(place(poseAt(spec0, (i / N) * len, mirror), spec));
   const b = boundsOf(frames, cam, spec.props);
-  const vp = fitViewport(b, w, h, 0.08, spec.zoom ?? 1);
   const chairSk = spec.props?.some((p) => p.kind === 'chair') ? frames[0].sk : undefined;
-  return { spec, cam, vp, mirror, chairSk };
+  const propAt = (spec.props ?? []).map((p) => {
+    if ((p.kind !== 'step' && p.kind !== 'table') || !p.at) return undefined;
+    const sk = place(poseAt(spec0, keyTime(spec, p.key ?? 0), mirror), spec).sk;
+    return sk.p[p.at];
+  });
+  // 받침대도 화면 안에 들어오게
+  for (const [i, at] of propAt.entries()) {
+    if (!at) continue;
+    const pr = spec.props![i];
+    const size = pr.size ?? (pr.kind === 'step' ? [30, 0, 26] : [60, 0, 34]);
+    const off = pr.off ?? [0, 0, 0];
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        const p = project([at[0] + off[0] + (sx * size[0]) / 2, at[1], at[2] + off[2] + (sz * size[2]) / 2], cam);
+        b.minX = Math.min(b.minX, p.x);
+        b.maxX = Math.max(b.maxX, p.x);
+        b.maxY = Math.max(b.maxY, p.y);
+      }
+  }
+  const vp = fitViewport(b, w, h, 0.08, spec.zoom ?? 1);
+  // 움직임 경로: 처음 키에서 마지막 키까지(돌아오는 구간 제외)
+  const traces: V3[][] = [];
+  if (spec.trace?.length && spec.keys.length > 1) {
+    const t0 = arriveTime(spec, 0) + (spec.pauses?.[0] ?? 0);
+    const t1 = arriveTime(spec, spec.keys.length - 1);
+    const M = 28;
+    const samples: Placed[] = [];
+    for (let i = 0; i <= M; i++) samples.push(place(poseAt(spec0, t0 + ((t1 - t0) * i) / M, mirror), spec));
+    for (const j of spec.trace) traces.push(samples.map((f) => f.sk.p[j]));
+  }
+  return { spec, cam, vp, mirror, chairSk, propAt, traces };
 }
 
-export function renderAt(g: CanvasRenderingContext2D, prep: Prepared, t: number, pal: Palette) {
+export function renderAt(g: CanvasRenderingContext2D, prep: Prepared, t: number, pal: Palette, opts: DrawOpts = {}) {
   const placed = place(poseAt(prep.spec, t, prep.mirror), prep.spec);
-  drawScene(g, placed, prep.cam, prep.vp, prep.spec, pal, prep.chairSk);
+  drawScene(g, placed, prep, pal, opts);
 }

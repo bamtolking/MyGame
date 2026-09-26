@@ -1548,3 +1548,309 @@ input[type='range'].slider {
   border-radius: 50%;
   flex: none;
 }
+
+/* ── 운동 시범 무대 ───────────────────────── */
+.demo-stage {
+  position: relative;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.demo-step {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  max-width: calc(100% - 130px);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: var(--shadow-1);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.demo-step b {
+  color: var(--brand);
+  margin-right: 2px;
+}
+
+.demo-tools {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.demo-bottom {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.demo-btn {
+  height: 34px;
+  min-width: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.demo-btn.on {
+  background: var(--brand);
+  color: #fff;
+}
+
+.demo-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.demo-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.demo-keys {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 10px 2px 2px;
+  scrollbar-width: none;
+}
+
+.demo-keys::-webkit-scrollbar {
+  display: none;
+}
+
+.demo-keys button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px 7px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.demo-keys button .n {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  font-size: 12px;
+}
+
+.demo-keys button.on {
+  border-color: var(--brand);
+  color: var(--text);
+  background: var(--brand-soft);
+}
+
+.demo-keys button.on .n {
+  background: var(--brand);
+  color: #fff;
+}
+
+/* ── 따라 하기 안내 ───────────────────────── */
+.ex-guide {
+  display: grid;
+  gap: 16px;
+}
+
+.ex-guide section {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-1);
+}
+
+.ex-guide.compact section {
+  box-shadow: none;
+  background: var(--surface-2);
+  padding: 14px;
+}
+
+.eg-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  font-size: 15.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.eg-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.eg-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.eg-steps li {
+  display: flex;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.eg-steps .n {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.eg-steps li.on .n {
+  background: var(--brand);
+  color: #fff;
+}
+
+.eg-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.eg-card p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.eg-card.feel .eg-title {
+  color: rgb(214, 40, 79);
+}
+
+:root[data-theme='dark'] .eg-card.feel .eg-title {
+  color: rgb(255, 120, 150);
+}
+
+.eg-card.easy .eg-title {
+  color: var(--good);
+}
+
+.eg-card.hard .eg-title {
+  color: var(--brand);
+}
+
+.eg-cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.eg-cue {
+  padding: 7px 12px;
+  border-radius: 12px;
+  background: var(--good-soft);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.eg-mistakes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.eg-mistakes li {
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 10px 12px;
+}
+
+.eg-mistakes .bad {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.eg-mistakes .bad::before {
+  content: '✕ ';
+  color: var(--severe);
+}
+
+.eg-mistakes .fix {
+  margin-top: 3px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.eg-mistakes .fix::before {
+  content: '→ ';
+  color: var(--good);
+  font-weight: 800;
+}
+
+.player-setup {
+  margin: 12px auto 0;
+  padding: 12px 14px 12px 30px;
+  max-width: 420px;
+  text-align: left;
+  border-radius: 14px;
+  background: var(--surface-2);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2);
+  display: grid;
+  gap: 4px;
+}

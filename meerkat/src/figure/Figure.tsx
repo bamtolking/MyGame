@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'preact/hooks';
-import { DARK, LIGHT, prepare, renderAt, type AnimSpec, type Prepared } from './render';
+import { DARK, holdKeyOf, keyTime, LIGHT, prepare, renderAt, type AnimSpec, type Prepared } from './render';
 
 interface Props {
   spec: AnimSpec;
@@ -12,6 +12,14 @@ interface Props {
   height?: number | string;
   class?: string;
   label?: string;
+  /** 카메라를 기본 방향에서 더 돌린 각도(도) */
+  yaw?: number;
+  /** 근육 강조·움직임 경로 표시 */
+  overlays?: boolean;
+  /** 매 프레임 현재 시각 알림(내부 시계) */
+  onTime?: (t: number) => void;
+  /** 이 시각으로 이동 (id 가 바뀔 때마다 적용) */
+  seek?: { t: number; id: number };
 }
 
 function palette() {
@@ -19,11 +27,15 @@ function palette() {
 }
 
 /** 운동 시범 애니메이션 캔버스 */
-export function Figure({ spec, mirror = false, playing = true, speed = 1, time, height = 260, class: cls, label }: Props) {
+export function Figure({ spec, mirror = false, playing = true, speed = 1, time, height = 260, class: cls, label, yaw = 0, overlays = false, onTime, seek }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const state = useRef<{ prep: Prepared | null; w: number; h: number; t: number; last: number }>({ prep: null, w: 0, h: 0, t: 0, last: 0 });
-  const live = useRef({ playing, speed, time });
-  live.current = { playing, speed, time };
+  const state = useRef<{ prep: Prepared | null; w: number; h: number; t: number; last: number; seekId: number }>({ prep: null, w: 0, h: 0, t: 0, last: 0, seekId: -1 });
+  const live = useRef({ playing, speed, time, overlays, onTime });
+  live.current = { playing, speed, time, overlays, onTime };
+  if (seek && seek.id !== state.current.seekId) {
+    state.current.seekId = seek.id;
+    state.current.t = seek.t;
+  }
 
   useEffect(() => {
     const cv = ref.current!;
@@ -36,7 +48,7 @@ export function Figure({ spec, mirror = false, playing = true, speed = 1, time, 
       cv.height = Math.max(1, Math.round(r.height * dpr));
       st.w = cv.width;
       st.h = cv.height;
-      st.prep = prepare(spec, st.w, st.h, mirror);
+      st.prep = prepare(spec, st.w, st.h, mirror, yaw);
     };
     resize();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
@@ -49,8 +61,9 @@ export function Figure({ spec, mirror = false, playing = true, speed = 1, time, 
       const lv = live.current;
       if (lv.time === undefined && lv.playing) st.t += dt * lv.speed;
       const t = lv.time ?? st.t;
+      lv.onTime?.(t);
       g.clearRect(0, 0, st.w, st.h);
-      if (st.prep) renderAt(g, st.prep, t, palette());
+      if (st.prep) renderAt(g, st.prep, t, palette(), { overlays: lv.overlays, now: now / 1000 });
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
@@ -58,7 +71,7 @@ export function Figure({ spec, mirror = false, playing = true, speed = 1, time, 
       cancelAnimationFrame(raf);
       ro?.disconnect();
     };
-  }, [spec, mirror]);
+  }, [spec, mirror, yaw]);
 
   return <canvas ref={ref} class={cls} role="img" aria-label={label} style={{ width: '100%', height, display: 'block' }} />;
 }
@@ -74,8 +87,8 @@ export function thumbnail(key: string, spec: AnimSpec, size = 160, t?: number): 
   cv.width = cv.height = size;
   const g = cv.getContext('2d')!;
   const prep = prepare({ ...spec, zoom: (spec.zoom ?? 1) * 1.05 }, size, size);
-  // 대표 프레임: 두 번째 키(동작의 끝 자세)
-  const at = t ?? (spec.keys.length > 1 ? (spec.durations?.[0] ?? 1.2) + (spec.pauses?.[0] ?? 0) + (spec.pauses?.[1] ?? 0) * 0.5 : 0);
+  // 대표 프레임: 버티는 자세(기본은 두 번째 키)
+  const at = t ?? keyTime(spec, holdKeyOf(spec));
   renderAt(g, prep, at, palette());
   const url = cv.toDataURL('image/png');
   thumbCache.set(k, url);

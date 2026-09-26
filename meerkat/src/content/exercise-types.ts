@@ -78,9 +78,21 @@ export interface Exercise {
   dose: Dose;
   /** 사무실(의자·서서)에서 가능 */
   desk?: boolean;
+  /** 시작 자세 만들기: 발·무릎·골반·손·시선 위치를 구체적으로 (2~4줄) */
+  setup?: { ko: string[]; en: string[] };
+  /** 동작 순서 (한 줄에 한 동작, 4~6줄) */
   steps: { ko: string[]; en: string[] };
+  /** 호흡법: 언제 들이마시고 내쉬는지 */
+  breathing?: Text;
+  /** 어디가 느껴지면 정답인지 (늘어나는 곳/힘이 들어가는 곳) */
+  feel?: Text;
+  /** 더 쉽게: 아프거나 버거울 때 대체 방법 */
+  easier?: Text;
+  /** 더 어렵게: 익숙해졌을 때 진행 방법 */
+  harder?: Text;
   /** 운동 중 음성 코칭 */
   cues: { ko: string[]; en: string[] };
+  /** 흔한 실수 → 고치는 법 ("실수 → 이렇게 고쳐요" 형식) */
   mistakes: { ko: string[]; en: string[] };
   why: Text;
   muscles: Text;

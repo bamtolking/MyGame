@@ -48,3 +48,12 @@ export const HALF_KNEEL: Pose = merge({ hipL: { flex: 90 }, knL: 90, anL: 0, hip
 
 /** 벽에 등을 기대고 선 자세 */
 export const WALL: Pose = merge(STAND, { head: { flex: 2 } });
+
+/** 양손 깍지 끼고 뒤통수에 */
+export const HANDS_BEHIND_HEAD: Pose = both({ sh: { flex: 150, abd: 42, rot: 10 }, el: 142 });
+
+/** 양손 허리에 */
+export const HANDS_ON_HIPS: Pose = both({ sh: { abd: 38, flex: -10, rot: -20 }, el: 105 });
+
+/** 팔짱(가슴 앞에서 교차) */
+export const ARMS_CROSSED: Pose = merge(both({ sh: { flex: 42, abd: -12 }, el: 128 }));

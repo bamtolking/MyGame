@@ -6,7 +6,8 @@ import { Animal } from '../components/animals';
 import { ask, Sheet, toast } from '../components/ui';
 import { estimateSeconds, PHASE_LABEL, type Dose } from '../content/exercises';
 import { Figure } from '../figure/Figure';
-import { cycleLength } from '../figure/render';
+import { arriveTime, cycleLength, holdKeyOf, keyAt } from '../figure/render';
+import { ExerciseGuide } from '../components/ExerciseGuide';
 import { L, LA, tr } from '../i18n';
 import { haptic } from '../lib/haptics';
 import { replace } from '../lib/router';
@@ -86,7 +87,7 @@ export function Player() {
   const ex = item.exercise;
   const dose = item.dose;
   const firstOfItem = idx === 0 || steps[idx - 1].item !== step.item;
-  const readyLen = firstOfItem ? 6 : 4;
+  const readyLen = firstOfItem ? 8 : 4;
   const nextStep = steps[idx + 1];
   const restLen = !nextStep ? 0 : nextStep.item === step.item ? dose.rest ?? 10 : 7;
   const coachable = !!ex.coach && settings.value.coachCamera;
@@ -137,7 +138,7 @@ export function Player() {
   useEffect(() => {
     if (paused) return;
     if (phase === 'ready') {
-      if (firstOfItem) say(`r${idx}`, `${L(ex.name)}. ${LA(ex.steps)[0] ?? ''}`, true);
+      if (firstOfItem) say(`r${idx}`, `${L(ex.name)}. ${(ex.setup ? LA(ex.setup)[0] : LA(ex.steps)[0]) ?? ''}`, true);
       else if (step.side === 1) say(`r${idx}`, tr('반대쪽으로 바꿔 주세요', 'Switch sides'), true);
       else say(`r${idx}`, tr(`${step.set}세트 시작할게요`, `Set ${step.set}`), true);
       const left = Math.ceil(readyLen - elapsed);
@@ -270,7 +271,7 @@ export function Player() {
 
   // 애니메이션 시간
   const anim = ex.anim;
-  const into = (anim.pauses?.[0] ?? 0) + (anim.durations?.[0] ?? 1.2);
+  const into = arriveTime(anim, holdKeyOf(anim));
   let figTime: number | undefined;
   let figSpeed = 1;
   if (phase === 'work') {
@@ -279,6 +280,9 @@ export function Player() {
   } else if (phase === 'rest') figTime = 0;
   if (dose.kind === 'reps' && useCoach) figSpeed = cycleLength(anim) / period;
 
+  const labels = anim.labels ?? [];
+  const curKey = figTime !== undefined ? keyAt(anim, figTime).key : phase === 'ready' || phase === 'rest' ? 0 : -1;
+  const stepLabel = labels.length > 1 && curKey >= 0 && !useCoach ? `${curKey + 1}/${labels.length} · ${L(labels[curKey])}` : '';
   const progressFrac = (idx + (phase === 'work' ? Math.min(1, dose.kind === 'reps' ? reps / dose.value : held / dose.value) : phase === 'rest' ? 1 : 0)) / steps.length;
   const nextEx = nextStep ? routine.items[nextStep.item].exercise : null;
 
@@ -335,7 +339,12 @@ export function Player() {
             </div>
           </>
         ) : (
-          <Figure spec={anim} mirror={step.side === 1} playing={!paused} time={figTime} height="100%" label={L(ex.name)} />
+          <Figure spec={anim} mirror={step.side === 1} playing={!paused} time={figTime} height="100%" label={L(ex.name)} overlays />
+        )}
+        {stepLabel && phase === 'work' && (
+          <div class="demo-step" style={{ maxWidth: 'calc(100% - 24px)' }} aria-live="polite">
+            {stepLabel}
+          </div>
         )}
         {phase === 'rest' && nextEx && nextStep!.item !== step.item && (
           <div class="card fade-up" style={{ position: 'absolute', left: 12, right: 12, bottom: 12, padding: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -366,6 +375,15 @@ export function Player() {
         <div class="body" style={{ minHeight: 24, marginTop: 4, fontWeight: 600, color: coach?.cue === 'good' ? 'var(--good)' : 'var(--text-2)' }}>
           {cueText}
         </div>
+        {phase === 'ready' && firstOfItem && ex.setup && (
+          <ul class="player-setup fade-up">
+            {LA(ex.setup)
+              .slice(0, 3)
+              .map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+          </ul>
+        )}
         {item.note && phase !== 'rest' && (
           <div class="notice brand" style={{ marginTop: 10, textAlign: 'left', fontSize: 13.5 }}>
             {L(item.note)}
@@ -419,19 +437,10 @@ export function Player() {
         </div>
       </div>
       <Sheet open={showSteps} onClose={() => setShowSteps(false)} label={L(ex.name)}>
-        <h2 class="h2">{L(ex.name)}</h2>
-        <ol style={{ paddingLeft: 20, margin: '12px 0', lineHeight: 1.7 }}>
-          {LA(ex.steps).map((s, i) => (
-            <li key={i}>{s}</li>
-          ))}
-        </ol>
-        <div class="h3">{tr('이것만 조심해요', 'Watch out for')}</div>
-        <ul style={{ paddingLeft: 20, margin: '8px 0', color: 'var(--text-2)' }}>
-          {LA(ex.mistakes).map((s, i) => (
-            <li key={i}>{s}</li>
-          ))}
-        </ul>
-        {ex.caution && <div class="notice warn">{L(ex.caution)}</div>}
+        <h2 class="h2" style={{ marginBottom: 12 }}>
+          {L(ex.name)}
+        </h2>
+        <ExerciseGuide ex={ex} compact />
         <button class="btn primary block" style={{ marginTop: 16 }} onClick={() => setShowSteps(false)}>
           {tr('확인', 'Got it')}
         </button>

@@ -126,6 +126,8 @@ export interface Skeleton {
   p: Record<JointName, V3>;
   /** 각 몸통 구간의 좌우축(x)·앞축(z) 방향 — 몸통 폭 그리기용 */
   axes: { pelvis: M3; waist: M3; chest: M3; head: M3 };
+  /** 팔다리 마디의 회전(앞쪽 = z축) — 근육 강조 위치용 */
+  limbs: Record<'thighL' | 'thighR' | 'shankL' | 'shankR' | 'upperL' | 'upperR' | 'foreL' | 'foreR', M3>;
 }
 
 /** 자세 → 관절 위치 (root는 원점 기준, 이후 grounding 으로 바닥에 맞춤) */
@@ -157,7 +159,7 @@ export function solve(pose: Pose): Skeleton {
     const wr = add(el, apply(Rf, [0, -DIM.forearm, 0]));
     const Rw = mul(Rf, Rx(-((s === 1 ? pose.wrL : pose.wrR) ?? 0)));
     const ha = add(wr, apply(Rw, [0, -DIM.hand, 0]));
-    return { sh, el, wr, ha };
+    return { sh, el, wr, ha, Ra, Rf };
   };
   const L = arm(1), R = arm(-1);
 
@@ -173,7 +175,7 @@ export function solve(pose: Pose): Skeleton {
     const toe = add(an, apply(Ra, [0, -DIM.ankleH, DIM.toeFront]));
     // 좌골(앉을 때 닿는 점)
     const sit = add(pelvis, apply(Rroot, [DIM.hipOff[0] * s * 0.8, -6, -4]));
-    return { hip, kn, an, heel, toe, sit };
+    return { hip, kn, an, heel, toe, sit, Rhip, Rk };
   };
   const LL = leg(1), RL = leg(-1);
 
@@ -190,6 +192,7 @@ export function solve(pose: Pose): Skeleton {
       sitL: LL.sit, sitR: RL.sit, backMid, backTop,
     },
     axes: { pelvis: Rroot, waist: Rl, chest: Rt, head: Rh },
+    limbs: { thighL: LL.Rhip, thighR: RL.Rhip, shankL: LL.Rk, shankR: RL.Rk, upperL: L.Ra, upperR: R.Ra, foreL: L.Rf, foreR: R.Rf },
   };
 }
 
