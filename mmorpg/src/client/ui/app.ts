@@ -78,7 +78,7 @@ export class App implements AppApi {
     const t = h('div', { id: 'title' },
       h('div', { class: 'sky' }, h('div', { class: 'hills' }), ...Array.from({ length: 14 }, (_, i) => h('i', { class: 'firefly', style: { left: `${(i * 37) % 100}%`, top: `${40 + (i * 23) % 50}%`, animationDelay: `${(i * 0.7) % 5}s` } }))),
       h('div', { class: 'brand' }, h('div', { class: 'moon' }), h('div', { class: 'logo' }, h('small', {}, '한 손으로 즐기는 요괴 퇴마 MMORPG'), h('h1', {}, '달빛 퇴마단'), h('div', { class: 'eng' }, 'MOONLIT EXORCISTS')),
-        h('div', { class: 'foot' }, '이동만 하세요. 공격·부적은 자동입니다. · v0.2 알파', h('br'), store.storageOk ? '' : '⚠ 브라우저 저장소를 쓸 수 없어 진행이 저장되지 않습니다')),
+        h('div', { class: 'foot' }, '이동만 하세요. 공격·부적은 자동입니다. · v0.3 알파', h('br'), store.storageOk ? '' : '⚠ 브라우저 저장소를 쓸 수 없어 진행이 저장되지 않습니다')),
       h('div', { class: 'menu' },
         off ? h('button', { class: 'primary big', onclick: () => this.start('offline', null) }, h('span', {}, `이어하기`), h('small', {}, `${off.name} · Lv${off.level} ${CLASSES[off.cls].name}`)) : null,
         h('button', { class: off ? '' : 'primary big', onclick: () => this.showCreate('offline') }, off ? '새 캐릭터 (오프라인)' : h('span', {}, '모험 시작', h('small', { class: 'block' }, 'AI 동료들과 함께하는 체험 월드'))),
