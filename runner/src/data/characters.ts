@@ -69,7 +69,7 @@ export const CHARACTERS: CharacterDef[] = [
   },
   {
     id: 'dalgona', name: '달콩', title: '달고나 끌림', shape: 'star',
-    desc: '가까운 별사탕과 엽전이 저절로 끌려와요. 대신 조금 빨리 식어요.',
+    desc: '가까운 별사탕과 엽전이 저절로 끌려와요.',
     skillName: '달콤 자석', skillDesc: '늘 켜진 작은 자석 (반경 150)',
     maxHp: 100, drainMul: 0.97, maxJumps: 2, glide: 0, magnetR: 150, revive: 0,
     skill: { kind: 'none' }, unlock: { kind: 'coins', cost: 2500 },

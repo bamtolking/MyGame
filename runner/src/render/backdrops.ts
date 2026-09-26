@@ -44,6 +44,7 @@ export class SpriteCache<T = HTMLCanvasElement> {
     if (this.map.size > this.max) this.map.delete(this.map.keys().next().value as string);
     return v;
   }
+  has(key: string): boolean { return this.map.has(key); }
   clear(): void { this.map.clear(); }
 }
 const FONT = 'system-ui, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif';
@@ -719,6 +720,7 @@ export class Backdrop {
   cssW = 1; cssH = 1; dpr = 1; scale = 1;
   lowFx = false; reduceMotion = false;
   private layers = new Map<string, (HTMLCanvasElement | null)[]>();   // biome id → 4 lazily painted layer canvases
+  private jobs = new Map<string, { cv: HTMLCanvasElement; g: CanvasRenderingContext2D; i: number }>();   // layers being pre-warmed
   private skyCache = new Map<string, HTMLCanvasElement>();
   private sprites = new SpriteCache(40);
   private tileW = 1440;                  // logical width of one parallax tile (≈1.5× the view)
@@ -729,7 +731,7 @@ export class Backdrop {
   resize(cssW: number, cssH: number, dpr: number, scale: number): void {
     this.cssW = cssW; this.cssH = cssH; this.dpr = dpr; this.scale = scale;
     this.tileW = Math.max(1440, Math.ceil((1.5 * cssW) / scale / 40) * 40);
-    this.layers.clear(); this.skyCache.clear(); this.sprites.clear();
+    this.layers.clear(); this.jobs.clear(); this.skyCache.clear(); this.sprites.clear();
   }
 
   /** screen y (css px) of the ground line */
@@ -749,15 +751,38 @@ export class Backdrop {
     if (arr[li]) return arr[li];
     if (!force && this.budget <= 0) return null;
     this.budget--;
-    const spec = LAYERS[bi.style][li]; const W = this.tileW;
-    const res = Math.min(2.5, this.scale * Math.min(this.dpr, spec.k));
-    // the canvas is a whole number of px wide and the content period is exactly that width (seamless tiling)
-    const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(W * res)); cv.height = Math.max(1, Math.ceil((spec.top + BELOW) * res));
-    const g = cv.getContext('2d')!; g.setTransform(cv.width / W, 0, 0, res, 0, 0);
-    g.translate(0, spec.top);
+    const spec = LAYERS[bi.style][li]; const W = this.tileW; const key = bi.id + '|' + li;
+    let job = this.jobs.get(key);
+    if (!job) {
+      const res = Math.min(2.5, this.scale * Math.min(this.dpr, spec.k));
+      // the canvas is a whole number of px wide and the content period is exactly that width (seamless tiling)
+      const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(W * res)); cv.height = Math.max(1, Math.ceil((spec.top + BELOW) * res));
+      const g = cv.getContext('2d')!; g.setTransform(cv.width / W, 0, 0, res, 0, 0);
+      g.translate(0, spec.top);
+      job = { cv, g, i: 0 }; this.jobs.set(key, job);
+    }
+    // three copies (−W, 0, +W) make the tile seamless: a pre-warm paints one copy per frame (no 10–20 ms spike on a
+    // slow phone), a forced paint (biome switch, resize) whatever is left
     const P = pal(bi);
-    for (const ox of [-W, 0, W]) { g.save(); g.translate(ox, 0); spec.paint(g, W, srng(1000 + li * 97 + bi.id.length * 13 + bi.id.charCodeAt(0)), P); g.restore(); }
-    arr[li] = cv; return cv;
+    do { const g = job.g; g.save(); g.translate((job.i - 1) * W, 0); spec.paint(g, W, srng(1000 + li * 97 + bi.id.length * 13 + bi.id.charCodeAt(0)), P); g.restore(); job.i++; }
+    while (force && job.i < 3);
+    if (job.i < 3) return null;
+    this.jobs.delete(key);
+    arr[li] = job.cv; return job.cv;
+  }
+
+  /** paint the 보름달 잔치 sky's pieces ahead of time, one per frame (from the 4th letter on) — its first frame used
+   *  to paint them all at once (≈ 90 ms at 4× CPU throttle) */
+  prewarmBonus(): void {
+    if (this.budget <= 0) return;
+    const res = Math.min(2.5, this.scale * this.dpr); const has = (k: string) => this.sprites.has(`${k}|${res}`);
+    const job = !this.skyCache.has('__bonus') ? () => this.skyCanvas(null)
+      : !has('bonusMoon') ? () => this.sprite('bonusMoon', r => moonSprite(118, r, false, true))
+      : !has('sparkle') ? () => this.sprite('sparkle', r => sparkleSprite(r))
+      : !has('skyLantern') ? () => this.sprite('skyLantern', r => skyLanternSprite(r))
+      : !has(`bonusClouds0|${this.tileW}`) ? () => this.bonusCloudLayer(0)
+      : !has(`bonusClouds1|${this.tileW}`) ? () => this.bonusCloudLayer(1) : null;
+    if (job) { this.budget--; job(); }
   }
 
   private skyCanvas(bi: BiomeDef | null): HTMLCanvasElement {

@@ -1,6 +1,6 @@
 // One run: fixed-step, deterministic (seed + config + input stream → identical result). No DOM.
 // Only exact arithmetic here (+ − × ÷, sqrt, floor/round/min/max/abs) — see tests/determinism.test.ts.
-import { DT, TILE, GROUND_Y, PX_PER_M, PICK_PAD, GIANT_SCALE, SPEED_TIERS, JUMP_BUFFER_T } from '../data/physics';
+import { DT, TILE, GROUND_Y, PX_PER_M, PICK_PAD, GIANT_SCALE, SPEED_TIERS, FOOT_W } from '../data/physics';
 import {
   DRAIN_BY_TIER, LATE_DRAIN_START, LATE_DRAIN_PER_S, HIT_DAMAGE, FALL_DAMAGE, HIT_IFRAMES, FALL_IFRAMES,
   RESCUE_BOUNCE_V, RESCUE_BRIDGE_T, LOW_HP_FRAC, POTION_HEAL, BIG_POTION_HEAL, MINI_POTION_HEAL, POWER_DUR, POWER_AFTER_IFRAMES,
@@ -14,10 +14,10 @@ import { STAGE_BY_ID } from '../data/stages';
 import { BIOME_ORDER } from '../data/biomes';
 import { seedRng } from './rng';
 import { newBody, stepBody, hurtbox, hazardOverlap } from './body';
-import { newLevel, ensureLevel, chunkAt, restartStreamAt, placeChunk, PARSED_BY_ID } from './level';
+import { newLevel, ensureLevel, chunkAt, restartStreamAt, placeChunk, pickSky, PARSED_BY_ID } from './level';
 import type { RunState, RunInput, PowerKind, Pickup, Hazard, Mode, SimEvent, AssistOpts } from './types';
 
-export const RUN_VERSION = 2;
+export const RUN_VERSION = 3;          // bump on any rule change in run.ts / body.ts / level.ts (ghost validity)
 export const NEAR_PAD = 14;          // passing within this many px of a hazard (without touching) = near miss
 export const HITSTOP_STEPS = 4;      // 67 ms freeze when damaged
 export const TRIAL_T = 60;
@@ -46,6 +46,7 @@ export function newRun(cfg: RunConfig): RunState {
     version: RUN_VERSION, seed, rng: seedRng(seed), mode: cfg.mode, stageId: stage?.id ?? null, charId: ch.id, mainId: ch.id,
     partnerId: cfg.partnerId && cfg.partnerId !== ch.id && CHAR_BY_ID[cfg.partnerId] && cfg.mode !== 'stage' ? cfg.partnerId : null,
     relayUsed: false, companionId: comp, assistOpts: assist, assist: !!(assist.noHitDamage || assist.halfDrain || assist.autoSlide), trial: !!cfg.trial,
+    noCountdown: !!cfg.noCountdown,
     phase: cfg.noCountdown ? 'run' : 'countdown', t: 0, countdown: cfg.noCountdown ? 0 : COUNTDOWN_T, steps: 0,
     body: newBody(TILE * 2, GROUND_Y), speed: SPEED_TIERS[0], baseSpeed: SPEED_TIERS[0], tier: stage ? stage.tiers[0] : 0,
     biome: stage ? stage.biome : BIOME_ORDER[0],
@@ -60,9 +61,9 @@ export function newRun(cfg: RunConfig): RunState {
       jellies: 0, bigJellies: 0, coins: 0, potions: 0, powers: 0, letters: 0, hits: 0, hitsBy: {}, falls: 0, smashed: 0,
       bonusTimes: 0, bestStreak: 0, skillUses: 0, jumps: 0, airJumps: 0, slides: 0, jelliesSeen: 0, hpFromPotions: 0,
       drained: 0, nearMisses: 0, maxTier: 0, bonusJellies: 0, lines: 0, moonCakes: 0, pouches: 0, fastFalls: 0, maxFlow: 0,
-      superBonus: 0, relayDist: 0, miniPotions: 0, pitsGuarded: 0, shieldsUsed: 0,
+      superBonus: 0, relayDist: 0, miniPotions: 0, pitsGuarded: 0, shieldsUsed: 0, jellyPct500: -1,
     },
-    deathCause: null, lastHit: null, events: [], inputJumpHeld: false, prevSlide: false, lowHpWarned: false, hitstop: 0,
+    deathCause: null, lastHit: null, events: [], inputJumpHeld: false, pendingJump: false, prevSlide: false, lowHpWarned: false, hitstop: 0,
     log: [], lastBits: 0, dyingT: 0, freeze: 0, pouchesGot: 0, compT: 0,
     pitGuardLeft: comp && COMPANION_BY_ID[comp].effect.kind === 'pitGuard' ? (COMPANION_BY_ID[comp].effect as { count: number }).count : 0,
     relayStartDist: 0, rewinds: 0,
@@ -101,15 +102,17 @@ export function stepRun(s: RunState, inp: RunInput): void {
   }
   if (s.phase === 'dying') { s.dyingT += DT; if (s.dyingT >= DYING_T) s.phase = 'over'; return; }
   if (s.phase !== 'run') return;
-  if (s.freeze > 0 || s.hitstop > 0) {  // relay hand-over / damage hitstop: the world holds, presses stay buffered
+  if (s.freeze > 0 || s.hitstop > 0) {  // relay hand-over / damage hitstop: the world holds, presses queue up
     if (s.freeze > 0) s.freeze--; else s.hitstop--;
-    if (inp.jump) s.body.buffer = JUMP_BUFFER_T;
+    if (inp.jump) s.pendingJump = true;
     return;
   }
 
   const ch = charOf(s);
   s.t += DT;
   s.inputJumpHeld = !!inp.jumpHeld;
+  const jump = inp.jump || s.pendingJump;   // a queued press is a fresh press (it may still become the air jump)
+  s.pendingJump = false;
 
   // ---- pace: speed/tier/biome switch at chunk boundaries (x − TILE), matching the validator ----
   if (s.bonusStage === 'none') {
@@ -131,14 +134,14 @@ export function stepRun(s: RunState, inp: RunInput): void {
     s.bonusT -= DT;
     if (s.bonusT <= 0) enterSky(s);
   } else if (s.bonusStage === 'sky') {
-    flyStep(s, !!inp.jumpHeld || inp.jump, dx);
+    flyStep(s, !!inp.jumpHeld || jump, dx);
     s.bonusT -= DT;
     if (s.bonusT <= 0) exitSky(s);
   } else {
     const bridge = s.rescue > 0 || s.power.giant > 0 || s.power.dash > 0;
     const wasSliding = s.body.sliding; const wasAir = !s.body.onGround;
     const slide = inp.slide || (!!s.assistOpts.autoSlide && hangAhead(s));
-    const r = stepBody(s.body, { jump: inp.jump, slide }, dx, DT, () => s.level.solids, { maxJumps: ch.maxJumps, glide: ch.glide }, bridge, !!inp.jumpHeld);
+    const r = stepBody(s.body, { jump, slide }, dx, DT, () => s.level.solids, { maxJumps: ch.maxJumps, glide: ch.glide }, bridge, !!inp.jumpHeld);
     if (r.jumped) { emit(s, { t: 'jump', n: r.jumped }); s.stats.jumps++; if (r.jumped === 2) s.stats.airJumps++; }
     if (r.landed) emit(s, { t: 'land' });
     if (s.body.sliding && !wasSliding) { emit(s, { t: 'slide' }); s.stats.slides++; }
@@ -151,6 +154,8 @@ export function stepRun(s: RunState, inp: RunInput): void {
   }
 
   collectPickups(s, ch);
+  if (s.bonusStage === 'none' && s.letters.every(Boolean) && !pouchAtRisk(s)) startBonus(s);
+  if (s.stats.jellyPct500 < 0 && s.dist >= 500) s.stats.jellyPct500 = jellyPct(s);
   checkLines(s);
   tickTimers(s, ch);
   ensureLevel(s);
@@ -189,7 +194,7 @@ function fall(s: RunState): void {
   s.hp -= dmg; s.stats.falls++;
   s.lastHit = { kind: 'pit', biome: s.biome, x: s.body.x }; s.hurtT = 0;
   s.body.vy = -RESCUE_BOUNCE_V; s.body.onGround = false; s.body.jumps = 1; s.body.sliding = false;
-  s.rescue = RESCUE_BRIDGE_T; s.iframes = Math.max(s.iframes, FALL_IFRAMES);
+  s.rescue = Math.max(RESCUE_BRIDGE_T, bridgeNeed(s)); s.iframes = Math.max(s.iframes, FALL_IFRAMES);
   s.streak = 0;
   emit(s, { t: 'fall', dmg });
 }
@@ -299,7 +304,8 @@ function take(s: RunState, p: Pickup, mul: number): void {
       value = SCORE.letter; s.letters[p.letter!] = true; s.stats.letters++;
       s.score += value;
       emit(s, { t: 'pickup', type: p.type, x: p.x, y: p.y, value, letter: p.letter });
-      if (s.letters.every(Boolean) && s.bonusStage === 'none') startBonus(s);
+      // the word is complete: the feast starts right after this step's pickups (see stepRun); 왕보름달 is decided now
+      if (s.letters.every(Boolean) && s.bonusStage === 'none') s.bonusSuper = s.hp < s.maxHp * LOW_HP_FRAC;
       return;
     }
   }
@@ -329,7 +335,21 @@ function startPower(s: RunState, k: PowerKind): void {
 function endPower(s: RunState, k: PowerKind): void {
   if (k === 'giant') s.body.scale = 1;
   if (k !== 'magnet') s.iframes = Math.max(s.iframes, POWER_AFTER_IFRAMES);
+  // the power's pit bridge never vanishes under the feet: the rescue bridge takes over until real ground
+  if (k !== 'magnet' && s.power.giant <= 0 && s.power.dash <= 0) s.rescue = Math.max(s.rescue, bridgeNeed(s));
   emit(s, { t: 'powerEnd', kind: k });
+}
+
+/** Seconds of pit bridge that carry the feet from here onto real ground at the current pace (0 = over ground). */
+function bridgeNeed(s: RunState): number {
+  const f0 = s.body.x - FOOT_W / 2, f1 = s.body.x + FOOT_W / 2;
+  let next = Infinity;
+  for (const o of s.level.solids) {
+    if (!o.ground || o.x1 <= f0) continue;
+    if (o.x0 < f1) return 0;
+    next = Math.min(next, o.x0);
+  }
+  return next === Infinity ? RESCUE_BRIDGE_T : (next + FOOT_W / 2 - s.body.x) / s.baseSpeed + 0.15;
 }
 
 function tickTimers(s: RunState, ch: CharacterDef): void {
@@ -363,22 +383,26 @@ function tickTimers(s: RunState, ch: CharacterDef): void {
   const eff = s.companionId ? COMPANION_BY_ID[s.companionId]?.effect : null;
   if (eff && eff.kind === 'honeyDrop' && !inBonus && s.mode !== 'tutorial') {
     s.compT += DT;
-    if (s.compT >= eff.every) { s.compT = 0; dropHoney(s); }
+    if (s.compT >= eff.every && dropHoney(s)) s.compT = 0;   // no safe cell yet → try again next step
   }
 }
 
-function dropHoney(s: RunState): void {
-  const lv = s.level;
-  for (let k = 0; k < 12; k++) {
-    const x = Math.floor((s.body.x + HONEY_DROP_AHEAD) / TILE) * TILE + TILE / 2 + k * TILE;
-    const onGround = lv.solids.some(o => o.ground && o.x0 <= x - 20 && o.x1 >= x + 20);
-    const clear = !lv.hazards.some(h => h.x1 > x - 2 * TILE && h.x0 < x + 2 * TILE);
+/** The drop turns a running-line (row 10) star candy ahead into honey: every glyph pickup is proven collectible
+ *  hit-free by the chunk validator, so the drop is too. Also no hazard within 2 columns and no pit under it. */
+function dropHoney(s: RunState): boolean {
+  const lv = s.level; const x0 = s.body.x + HONEY_DROP_AHEAD, x1 = x0 + 12 * TILE;
+  for (const p of lv.pickups) {
+    if (p.x >= x1) break;
+    if (p.x < x0 || p.taken || p.pulled || p.type !== 'jelly' || p.y !== GROUND_Y - TILE / 2) continue;
+    const onGround = lv.solids.some(o => o.ground && o.x0 <= p.x - 20 && o.x1 >= p.x + 20);
+    const clear = !lv.hazards.some(h => h.x1 > p.x - 2 * TILE && h.x0 < p.x + 2 * TILE);
     if (!onGround || !clear) continue;
-    const p: Pickup = { id: lv.nextId++, type: 'miniPotion', x, y: GROUND_Y - TILE / 2, taken: false, pulled: false };
-    insertPickup(s, p);
-    emit(s, { t: 'drop', x, y: p.y });
-    return;
+    p.type = 'miniPotion';
+    const pc = lv.chunks.find(c => c.serial === p.chunk); if (pc) pc.jellyTotal--;   // 한 줄 완성 still counts the rest
+    emit(s, { t: 'drop', x: p.x, y: p.y });
+    return true;
   }
+  return false;
 }
 function insertPickup(s: RunState, p: Pickup): void {
   const arr = s.level.pickups; let i = arr.length;
@@ -404,7 +428,6 @@ function fireSkill(s: RunState, ch: CharacterDef): void {
 
 // ---- bonus time (보름달 잔치) ----
 function startBonus(s: RunState): void {
-  s.bonusSuper = s.hp < s.maxHp * LOW_HP_FRAC;
   if (s.bonusSuper) s.stats.superBonus++;
   s.bonusStage = 'lift'; s.bonusT = BONUS_LIFT_T; s.stats.bonusTimes++; s.level.skyPlaced = 0;
   s.iframes = Math.max(s.iframes, BONUS_LIFT_T + 0.2);
@@ -417,9 +440,23 @@ function enterSky(s: RunState): void {
   s.bonusStage = 'sky'; s.bonusT = BONUS_T * (s.bonusSuper ? SUPER_BONUS_MUL : 1);
   s.body.x = x; s.body.y = 200; s.body.vy = 0; s.body.onGround = false; s.body.sliding = false; s.body.jumps = 2;
   ensureLevel(s);
-  // the jackpot: one 보름달 떡 on the middle line near the end of the feast
+  // the jackpot: one 보름달 떡 on the middle line near the end of the feast. The sky is generated past it first,
+  // so pickups stay in x order (collectPickups stops at the first one out of reach).
   const mx = x + s.baseSpeed * (s.bonusT - 0.9);
+  while (s.level.genX <= mx + 200) placeChunk(s, pickSky(s), s.tier, s.biome, { sky: true });
   insertPickup(s, { id: s.level.nextId++, type: 'moonCake', x: mx, y: 270, taken: false, pulled: false });
+}
+
+/** Stage: a golden pouch still ahead in the stretch a feast would abandon — the chunks enterSky keeps (they start
+ *  before where the lift ends) are never re-placed. The feast waits until the pouch is taken or passed, so a
+ *  letter never costs a pouch; pouches in chunks that are dropped come again after the landing. */
+function pouchAtRisk(s: RunState): boolean {
+  if (s.mode !== 'stage') return false;
+  const lv = s.level; const pb = hurtbox(s.body, pickPad(s));
+  const cut = s.body.x + s.baseSpeed * (BONUS_LIFT_T + 2 * DT) - 50;   // ≥ restartStreamAt's keep line at enterSky
+  let end = -Infinity;
+  for (const c of lv.chunks) if (c.x < cut) end = Math.max(end, c.x + c.width);
+  return lv.pickups.some(p => p.type === 'pouch' && !p.taken && p.x >= pb.x0 && p.x < end);
 }
 
 function exitSky(s: RunState): void {
@@ -462,7 +499,8 @@ function onZeroHp(s: RunState): void {
       s.reviveLeft = p.revive > 0 ? 1 : 0;
       for (const k of ['giant', 'dash', 'magnet'] as PowerKind[]) if (s.power[k] > 0) { s.power[k] = 0; endPower(s, k); }
       s.iframes = 2; s.freeze = RELAY_FREEZE_STEPS; s.relayStartDist = s.dist;
-      if (s.body.y > GROUND_Y) { s.body.y = GROUND_Y - 200; s.body.vy = 0; s.rescue = RESCUE_BRIDGE_T; }
+      if (s.body.y > GROUND_Y) { s.body.y = GROUND_Y - 200; s.body.vy = 0; s.rescue = Math.max(s.rescue, RESCUE_BRIDGE_T); }
+      s.rescue = Math.max(s.rescue, bridgeNeed(s));   // the partner never drops into a pit it took over above
       emit(s, { t: 'relay', id: p.id }); return;
     }
   }

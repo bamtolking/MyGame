@@ -1,5 +1,5 @@
 // Determinism: replays, identical courses regardless of input, and no implementation-approximated math in the sim.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { newRun, stepRun, stateHash, type RunConfig } from '../src/sim/run';
@@ -52,6 +52,26 @@ describe('determinism', () => {
     let compared = 0;
     for (const [i, id] of a) { if (b.has(i)) { expect(b.get(i), `main #${i}`).toBe(id); compared++; } if (lazy.has(i)) expect(lazy.get(i), `main #${i}`).toBe(id); }
     expect(compared).toBeGreaterThan(20);
+  });
+
+  // ghosts and daily seeds are keyed by CONTENT_HASH: a balance patch to a character or companion, or a rules change
+  // in the sim code (RUN_VERSION), must invalidate them — else an old input log replays against different rules
+  it('CONTENT_HASH covers characters, companions and the sim rules version', async () => {
+    const hashWith = async (mocks: [string, (m: Record<string, unknown>) => Record<string, unknown>][]): Promise<number> => {
+      vi.resetModules();
+      for (const [path, f] of mocks) vi.doMock(path, async (orig: () => Promise<Record<string, unknown>>) => f(await orig()));
+      const h = (await import('../src/sim/content')).CONTENT_HASH;
+      for (const [path] of mocks) vi.doUnmock(path);
+      vi.resetModules();
+      return h;
+    };
+    type Rec = Record<string, unknown>;
+    const base = await hashWith([]);
+    expect(await hashWith([])).toBe(base);
+    const hp = await hashWith([['../src/data/characters', m => ({ ...m, CHARACTERS: (m.CHARACTERS as Rec[]).map((c, i) => (i === 3 ? { ...c, maxHp: (c.maxHp as number) - 5 } : c)) })]]);
+    const comp = await hashWith([['../src/data/companions', m => ({ ...m, COMPANIONS: (m.COMPANIONS as Rec[]).map((c, i) => (i === 1 ? { ...c, effect: { kind: 'honeyDrop', every: 20 } } : c)) })]]);
+    const rules = await hashWith([['../src/sim/run', m => ({ ...m, RUN_VERSION: (m.RUN_VERSION as number) + 1 })]]);
+    expect(new Set([base, hp, comp, rules]).size).toBe(4);
   });
 
   it('src/sim and src/data use only exactly-specified math (no sin/cos/pow/exp/log/hypot, **, random, Date)', () => {

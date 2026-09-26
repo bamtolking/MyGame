@@ -3,10 +3,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { newRun, stepRun } from '../src/sim/run';
+import { newRun, stepRun, jellyPct } from '../src/sim/run';
+import { Autopilot } from '../src/sim/autopilot';
 import {
   defaultProgress, normalize, applyRun, unlockState, buyCharacter, autoUnlock, stageUnlocked, totalStars, reroll, dailySeed, dailyChar, todayKey,
-  MIGRATIONS, stageStarCount, fillMissions, takeLegacyGhosts, featureOpen, SAVE_VERSION, type Progress,
+  MIGRATIONS, stageStarCount, fillMissions, takeLegacyGhosts, featureOpen, recordCode, mergeProgress, SAVE_VERSION, type Progress,
 } from '../src/meta/progress';
 import {
   MISSIONS, MISSION_BY_ID, drawMission, applyRunToMissions, RANK_XP, RANK_MAX, RANK_REWARD, RANK_TITLES, MISSION_REWARD, rankRewardPreview, rankXpTotal,
@@ -61,8 +62,41 @@ describe('progress', () => {
     expect(p.version).toBe(2); expect(p.coins).toBe(777);
     expect(p.unlocked).toContain('bungeo'); expect(p.loadout.main).toBe('bungeo'); expect(p.loadout.partner).toBe('hotteok');
     expect(p.starMask['1-1']).toBe(7); expect(p.starMask['1-2']).toBe(1);
+    // a v1 ★3 keeps its three golden pouches (the ★3 condition) — not ★3 next to "0/3"; the starter companion is equipped
+    expect(p.pouches).toEqual({ '1-1': 7 });
+    expect(p.loadout.companion).toBe(defaultProgress().loadout.companion); expect(p.loadout.companion).not.toBeNull();
     expect(p.settings.sfx).toBe(0.3); expect(p.settings.assistHalfDrain).toBe(true);
     expect(typeof MIGRATIONS[1]).toBe('function');
+  });
+  it('normalize: an edited backup code (prototype-name ids, wrong types) cannot break a run — only real ids, typed values', () => {
+    const p = normalize({
+      version: 2, coins: 'lots', rank: null, lastDay: 5, tutorialDone: 'yes',
+      missions: [{ id: 'constructor', level: 0, progress: 0, target: 5, runsWithout: 0 }, { id: '__proto__', target: 5 }, { id: 'toString', target: 5 }],
+      unlocked: ['hotteok', 'constructor', 'toString'], companions: ['constructor'], loadout: { main: 'constructor', partner: 'toString', companion: 'hasOwnProperty' },
+      hall: [null, 5, { score: 'x', mode: 'endless', charId: 'hotteok' }], daily: { '2026-09-01': null, '2026-09-02': { best: 'x' }, '2026-09-03': { best: 10, bestDist: 'far', assist: 1 } },
+      settings: { gameSpeed: 'fast', sfx: 7, bgm: -1, uiScale: 3, swapSides: 'yes' }, totals: { dist: '100', runs: 'x', jellies: Infinity },
+      achievements: { constructor: 1, near_20: 'x' }, starMask: { '1-1': 'x', '1-2': 99 }, stageBest: { '1-1': '5000' }, bestEndless: { score: 'x' },
+      cosmetics: { owned: ['constructor', 3], equipped: { hotteok: 'hat' } },
+    });
+    const d = defaultProgress();
+    expect(p.missions.length).toBe(3);
+    for (const m of p.missions) expect(Object.prototype.hasOwnProperty.call(MISSION_BY_ID, m.id), m.id).toBe(true);
+    for (const id of ['constructor', '__proto__', 'toString']) expect(MISSION_BY_ID[id as string]).toBeUndefined();
+    expect(COSMETIC_BY_ID['constructor' as string]).toBeUndefined();
+    expect(p.unlocked).toEqual(d.unlocked); expect(p.companions).toEqual(d.companions);
+    expect(p.loadout).toEqual({ main: d.loadout.main, partner: null, companion: d.loadout.companion });
+    expect(p.coins).toBe(0); expect(p.rank).toBe(0); expect(p.lastDay).toBe(''); expect(p.tutorialDone).toBe(false);
+    expect(p.hall).toEqual([]); expect(Object.keys(p.daily)).toEqual(['2026-09-03']); expect(p.daily['2026-09-03']).toEqual({ best: 10, dist: 0, tries: 0, charId: d.loadout.main, medal: 0 });
+    expect(p.settings).toMatchObject({ gameSpeed: d.settings.gameSpeed, sfx: 1, bgm: 0, uiScale: 1, swapSides: false });
+    expect(p.totals).toMatchObject({ dist: 0, runs: 0, jellies: 0 });
+    expect(p.achievements).toEqual({ constructor: 1 }); expect(p.starMask).toEqual({ '1-2': 99 & 7 }); expect(p.stageBest).toEqual({}); expect(p.bestEndless).toBeNull();
+    expect(p.cosmetics).toEqual({ owned: ['constructor'], equipped: {} });
+    // it round-trips, and runs start and book on it (before: newRun "reading 'kind'", applyRun "measure is not a function" / "reading 'mode'")
+    const q = normalize(clone(p)); expect(q).toEqual(p);
+    q.totals.runs = 3;
+    expect(() => newRun({ mode: 'endless', seed: 1, charId: q.loadout.main, partnerId: q.loadout.partner, companionId: q.loadout.companion })).not.toThrow();
+    const r = applyRun(q, finished('endless', s => { s.dist = 600; }));
+    expect(r.score).toBeGreaterThan(0); expect(q.totals.runs).toBe(4); expect(q.totals.dist).toBe(600);
   });
   it('endless run books coins from pickups + distance, updates best once', () => {
     const p = defaultProgress();
@@ -73,6 +107,15 @@ describe('progress', () => {
     expect(r.newBest).toBe(true); expect(p.bestEndless!.score).toBe(1000 + 345);
     const s2 = finished('endless', s => { s.dist = 10; s.score = 5; });
     expect(applyRun(p, s2).newBest).toBe(false);
+  });
+  it('a best-run ghost records whether its run had the 3-2-1 (the log counts steps from that first step)', () => {
+    const p = defaultProgress();
+    const a = applyRun(p, finished('endless', s => { s.score = 100; }));
+    expect(a.ghost!.noCountdown).toBe(false); expect(a.ghostKey).toBe('endless');
+    const s = newRun({ mode: 'endless', seed: 5, charId: 'hotteok', noCountdown: true });
+    for (let i = 0; i < 120; i++) stepRun(s, { jump: false, slide: false });
+    s.score = 99999; s.phase = 'over';
+    expect(applyRun(p, s).ghost!.noCountdown).toBe(true);
   });
   it('trial runs never pay out or touch records', () => {
     const p = defaultProgress();
@@ -103,6 +146,40 @@ describe('progress', () => {
       expect(stageUnlocked(p, regular[1].id)).toBe(true);
     }
     expect(totalStars(p)).toBe(regular.length > 1 ? 1 : 0);
+  });
+  it('참여한 날 counts real calendar days: an archive daily books into its own day but never adds a day', () => {
+    const p = defaultProgress();
+    applyRun(p, finished('endless'), '2026-09-26', '2026-09-26');
+    for (let i = 0; i < 5; i++) { applyRun(p, finished('daily'), '2026-09-23', '2026-09-26'); applyRun(p, finished('endless'), '2026-09-26', '2026-09-26'); }
+    expect(p.daysPlayed).toBe(1); expect(p.lastDay).toBe('2026-09-26'); expect(p.daily['2026-09-23'].tries).toBe(5);
+    applyRun(p, finished('daily'), '2026-09-21', '2026-09-27'); expect(p.daysPlayed).toBe(2);
+  });
+  it('daily record: the share code is one real try (best score + ITS distance), an assisted best is marked; medals follow the longest try', () => {
+    const p = defaultProgress(); const k = '2026-09-20';
+    applyRun(p, finished('daily', s => { s.dist = 2100; s.score = 30000; }), k);
+    applyRun(p, finished('daily', s => { s.dist = 1500; s.score = 32000; s.assist = true; }), k);
+    const d = p.daily[k];
+    expect(d.dist).toBe(2100); expect(d.medal).toBe(2);
+    expect(d.best).toBe(32000 + 1500); expect(d.bestDist).toBe(1500); expect(d.assist).toBe(true);
+    expect(recordCode(k, d.best, d.bestDist!, d.assist)).toMatch(/^260920-33500-1500-[0-9A-Z]{2}-도움$/);
+    expect(recordCode(k, d.best, d.bestDist!)).toMatch(/^260920-33500-1500-[0-9A-Z]{2}$/);
+    applyRun(p, finished('daily', s => { s.dist = 3000; s.score = 100; }), k);   // longer but lower: medal only
+    expect(p.daily[k]).toMatchObject({ best: 33500, bestDist: 1500, assist: true, dist: 3000, medal: 2 });
+  });
+  it('hall of fame keeps ONE record per day for 오늘의 골목 (that day\'s best); older saves are pruned on load', () => {
+    const p = defaultProgress();
+    for (const [k, score] of [['2026-09-20', 500], ['2026-09-20', 900], ['2026-09-20', 700], ['2026-09-21', 300]] as const) applyRun(p, finished('daily', s => { s.score = score; }), k);
+    const days = p.hall.filter(h => h.mode === 'daily');
+    expect(days.map(h => [h.key, h.score])).toEqual([['2026-09-20', p.daily['2026-09-20'].best], ['2026-09-21', p.daily['2026-09-21'].best]]);
+    for (let i = 0; i < 12; i++) applyRun(p, finished('endless', s => { s.score = i * 100; }));
+    expect(p.hall.filter(h => h.mode === 'endless').length).toBe(10);   // endless: still the top 10 per character
+    const old = clone(p); for (let i = 0; i < 10; i++) old.hall.push({ ...days[0], score: i, date: i });   // a save from before: every try kept
+    const q = normalize(old);
+    expect(q.hall.filter(h => h.mode === 'daily')).toEqual(days);
+    // a year of dailies, 10 tries a day: the hall grows by one record a day (it was ten)
+    const y = defaultProgress();
+    for (let d = 0; d < 60; d++) for (let t = 0; t < 10; t++) applyRun(y, finished('daily', s => { s.score = t; }), `2026-${String(1 + Math.floor(d / 28)).padStart(2, '0')}-${String(1 + (d % 28)).padStart(2, '0')}`);
+    expect(y.hall.length).toBe(60);
   });
 });
 
@@ -291,6 +368,23 @@ describe('missions', () => {
     expect(live.map(l => l.done)).toEqual([true, true, false]); expect(live[1].progress).toBe(60);
     expect(active).toEqual(before);
     expect(liveMissionProgress([{ id: 'daily_dist', level: 0, progress: 0, target: 800, runsWithout: 0 }], Object.assign(s, { dist: 900 }))[0].done).toBe(false);
+  });
+  it('jellypct reads the 별사탕 rate AT 500 m (frozen): a "미션 완료!" toast is always booked', () => {
+    const t = MISSION_BY_ID.jellypct;
+    const s = newRun({ mode: 'endless', seed: 5308, charId: 'hotteok', companionId: 'firefly' }); const ap = new Autopilot({ jitter: 9, pad: 2, seed: 5308 });
+    let at500 = -1;
+    while (s.phase !== 'over' && s.t < 900) {
+      stepRun(s, ap.next(s)); s.events.length = 0;
+      if (s.dist < 500) expect(t.measure(s)).toBe(0);
+      else if (at500 < 0) { at500 = jellyPct(s); expect(t.measure(s)).toBe(at500); }
+    }
+    expect(at500).toBeGreaterThan(0);
+    expect(jellyPct(s)).not.toBe(at500);           // the whole-run rate moved on after 500 m…
+    expect(t.measure(s)).toBe(at500);               // …the mission still reads the 500 m value
+    const a = [{ id: 'jellypct', level: 2, progress: 0, target: at500, runsWithout: 0 }];
+    expect(liveMissionProgress(a, s)[0].done).toBe(true); expect(applyRunToMissions(a, s)).toEqual([0]);
+    const b = [{ id: 'jellypct', level: 2, progress: 0, target: at500 + 1, runsWithout: 0 }];
+    expect(liveMissionProgress(b, s)[0].done).toBe(false); expect(applyRunToMissions(b, s)).toEqual([]);
   });
   it('backup code / home-screen hint opens after 5 runs or the first unlock', () => {
     const p = defaultProgress(); expect(featureOpen(p, 'backup')).toBe(false);
@@ -504,6 +598,17 @@ describe('storage', () => {
     expect(r.ok).toBe(false); expect(r.error).toContain('이번 접속');
     expect(store.load().p.coins).toBe(p.coins);
   });
+  it('quota with no ghost left to drop → the backup copy goes and the new save IS written (it used to rewrite _bak first)', () => {
+    const fs = install(new FakeStorage())!;
+    const p = richSave(); store.save(p); p.coins += 1; store.save(p);   // main + _bak
+    let used = 0; for (const [k, v] of fs.data) used += k.length + v.length;
+    fs.quota = used + 100; p.seen.push('x'.repeat(400));                  // fits only without _bak
+    const r = store.save(p);
+    expect(r.ok).toBe(true); expect(r.error).toContain('백업');
+    expect(fs.getItem(store.BAK_KEY)).toBeNull();
+    expect(JSON.parse(fs.getItem(store.SAVE_KEY)!).seen).toContain('x'.repeat(400));
+    expect(store.load().p).toEqual(p);
+  });
   it('ghosts stay under the 250 KB budget by dropping old non-best daily ghosts', () => {
     install(new FakeStorage());
     for (let d = 1; d <= 9; d++) store.saveGhost(`daily:2026-09-${String(d).padStart(2, '0')}`, ghost(d, CONTENT_HASH, 8000));
@@ -519,6 +624,69 @@ describe('storage', () => {
     expect(l.recovered).toBe('newer'); expect(l.p.coins).toBe(4321);
     expect(fs.getItem(`${store.SAVE_KEY}_v${SAVE_VERSION + 1}`)).toBe(JSON.stringify(future));
     expect((l.p as unknown as { futureField: unknown }).futureField).toEqual({ x: 1 });
+  });
+  // another tab / the installed app on the same save: `fs` writes stand for the other instance
+  const otherWrites = (fs: FakeStorage, f: (o: Progress) => void) => { const o = JSON.parse(fs.getItem(store.SAVE_KEY)!); f(o); o.rev++; fs.setItem(store.SAVE_KEY, JSON.stringify(o)); };
+  it('two instances: a stale one hiding (nothing changed) writes nothing and takes in the newer save', () => {
+    const fs = install(new FakeStorage())!;
+    store.save(richSave());
+    const mine = store.load().p; const settings = mine.settings; const missions = mine.missions;
+    otherWrites(fs, o => { o.coins += 5000; o.totals.runs += 2; o.starMask['1-2'] = 1; });
+    const stored = fs.getItem(store.SAVE_KEY); const writes = fs.writes;
+    const r = store.save(mine);                                            // pagehide / visibilitychange in the stale tab
+    expect(fs.writes).toBe(writes); expect(fs.getItem(store.SAVE_KEY)).toBe(stored);   // no rollback
+    expect(r).toEqual({ ok: true, merged: true });
+    expect(mine.coins).toBe(4321 + 5000); expect(mine.starMask['1-2']).toBe(1);
+    expect(mine.settings).toBe(settings); expect(mine.missions).toBe(missions);        // same objects: screens hold on to them
+    // storage event: refresh() pulls the next write in; nothing new → false
+    otherWrites(fs, o => { o.coins += 1; o.settings.sfx = 0.9; });
+    expect(store.refresh(mine)).toBe(true); expect(mine.coins).toBe(9322); expect(settings.sfx).toBe(0.9);
+    expect(store.refresh(mine)).toBe(false);
+    expect(store.save(mine).ok).toBe(true); expect(fs.writes).toBe(writes + 1);         // (the other instance's write only)
+  });
+  it('two instances: a change made in a stale one is merged with the newer save, never written over it', () => {
+    const fs = install(new FakeStorage())!;
+    store.save(richSave());
+    const mine = store.load().p; const rev = mine.rev;
+    otherWrites(fs, o => { o.coins += 500; o.totals.runs += 1; o.totals.dist += 900; o.starMask['1-2'] = 3; o.stageBest['1-2'] = 7000; o.unlocked.push('bungeo'); o.hall.push({ ...o.hall[0], score: 99 }); });
+    mine.coins -= 300; mine.seen.push('shop'); mine.settings.sfx = 0.1; mine.starMask[STAGES[0].id] = 7; mine.totals.runs += 1; mine.stageBest['1-2'] = 6000;
+    const r = store.save(mine);
+    expect(r.ok).toBe(true); expect(r.merged).toBe(true);
+    const got = JSON.parse(fs.getItem(store.SAVE_KEY)!) as Progress;
+    expect(got.coins).toBe(4321 + 500 - 300); expect(got.totals.runs).toBe(2); expect(got.totals.dist).toBe(900);
+    expect(got.starMask).toMatchObject({ [STAGES[0].id]: 7, '1-2': 3 }); expect(got.stageBest['1-2']).toBe(7000);
+    expect(got.unlocked).toContain('bungeo'); expect(got.seen).toContain('shop'); expect(got.settings.sfx).toBe(0.1);
+    expect(got.hall.map(h => h.score)).toEqual(expect.arrayContaining([1, 99]));
+    expect(got.rev).toBeGreaterThan(rev + 1); expect(got).toEqual(mine);
+    expect(JSON.parse(fs.getItem(store.BAK_KEY)!).coins).toBe(4321 + 500);             // the other instance's save is the backup
+  });
+  it('mergeProgress: one-sided changes win; both-sided: counters add, records max, masks OR, sets unite, daily keeps its best try', () => {
+    const b = richSave(); b.daily['2026-09-20'] = { best: 30000, dist: 1500, tries: 2, charId: 'bungeo', medal: 1, bestDist: 1500 };
+    const l = clone(b), r = clone(b);
+    l.coins += 10; r.coins += 20; l.totals.jellies += 5; r.totals.jellies += 7; l.totals.bestStreak = 30; r.totals.bestStreak = 20;
+    l.daily['2026-09-20'] = { ...b.daily['2026-09-20'], best: 40000, bestDist: 1200, tries: 3, charId: 'hotteok' };
+    r.daily['2026-09-20'] = { ...b.daily['2026-09-20'], dist: 2600, medal: 2, tries: 4 };
+    l.rank = 8; l.xp = 0; r.rank = 7; r.xp = 3; l.loadout.main = CHARACTERS[1].id; r.missions = [];
+    l.bestEndless = { score: 5, dist: 1, charId: 'hotteok', date: 1, assist: false, relay: false, scoreVersion: 1 };
+    r.bestEndless = { ...l.bestEndless, score: 9 };
+    const m = mergeProgress(b, l, r);
+    expect(m.coins).toBe(b.coins + 30); expect(m.totals.jellies).toBe(b.totals.jellies + 12); expect(m.totals.bestStreak).toBe(30);
+    expect(m.daily['2026-09-20']).toMatchObject({ best: 40000, bestDist: 1200, charId: 'hotteok', dist: 2600, medal: 2, tries: 5 });
+    expect([m.rank, m.xp]).toEqual([8, 0]); expect(m.bestEndless!.score).toBe(9);
+    expect(m.loadout.main).toBe(CHARACTERS[1].id); expect(m.missions.length).toBe(3);
+    expect(mergeProgress(b, clone(b), r)).toEqual(normalize(clone(r)));                  // nothing changed here → the stored save
+  });
+  it('가져오기 (save with replace): the code replaces the stored save; ghosts that are not its own records go', () => {
+    const fs = install(new FakeStorage())!;
+    const cur = richSave(); cur.stageBest = { '1-1': 90000 }; cur.bestEndless = { score: 80000, dist: 3000, charId: 'hotteok', date: 1, assist: false, relay: false, scoreVersion: 1 };
+    store.save(cur); store.load();
+    for (const [k, sc] of [['stage:1-1', 90000], ['endless', 80000], ['daily:2026-09-20', 30000], ['stage:1-2', 5000]] as const) store.saveGhost(k, ghost(sc));
+    const imported = normalize(clone(richSave())); imported.stageBest = { '1-1': 90000, '1-2': 4000 };   // an older backup
+    expect(store.save(imported, { replace: true })).toEqual({ ok: true, merged: false });
+    expect(JSON.parse(fs.getItem(store.SAVE_KEY)!)).toEqual(imported);
+    expect(store.listGhosts().sort()).toEqual(['daily:2026-09-20', 'stage:1-1']);       // its own records' ghosts stay
+    const reset = defaultProgress(); store.save(reset, { replace: true });
+    expect(store.listGhosts()).toEqual([]);
   });
   it('backup code: export → import round-trips exactly (also from the .txt file and line-wrapped)', () => {
     install(new FakeStorage());
@@ -575,6 +743,7 @@ describe('save migration fixtures', () => {
     expect(p.unlocked).toEqual(['hotteok', 'bungeo']); expect(p.loadout.main).toBe('bungeo'); expect(p.loadout.partner).toBe('hotteok');
     // stars (count → mask), stage and endless bests, per-character bests
     expect(p.starMask).toEqual({ '1-1': 7, '1-2': 3, '1-3': 1, '1-4': 0 });
+    expect(p.pouches).toEqual({ '1-1': 7 }); expect(p.loadout.companion).toBe(defaultProgress().loadout.companion);   // ★3 ⇔ 3 pouches; starter companion on
     expect(p.stageBest).toEqual(v1.stageBest); expect(p.bestByChar).toEqual(v1.bestByChar);
     expect(p.bestEndless).toMatchObject({ score: 48210, dist: 1874, charId: 'bungeo', date: 1758000000000, assist: false, scoreVersion: 0 });
     // daily records (+ days played), and every record also in the hall of fame

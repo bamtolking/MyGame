@@ -16,7 +16,7 @@ import { stageUnlocked, DAILY_MEDALS, type Progress, type RunReward } from '../m
 import { missionText } from '../meta/missions';
 import { drawHazardIcon } from '../render/renderer';
 import { keyZone } from './input';
-import { h } from './dom';
+import { h, onTap } from './dom';
 
 export const RESULTS_INPUT_GUARD = 0.35;   // s
 export const HOLD_RETRY_T = 0.4;           // s of holding jump that also retries
@@ -210,7 +210,7 @@ export function mountResults(host: HTMLElement, o: ResultsOpts): { el: HTMLEleme
     const cv = document.createElement('canvas'); const W = 58, H = 42; const dpr = Math.min(2, window.devicePixelRatio || 1);
     cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
     const g = cv.getContext('2d'); if (g) { g.scale(dpr, dpr); try { drawHazardIcon(g, why.kind === 'low' ? 'hang' : why.kind, why.biome, W, H, why.kind === 'low'); } catch { /* ignore */ } }
-    koEl = h('div', { class: 'res-ko k-' + why.kind }, cv, h('div', {}, h('b', {}, why.kind === 'drain' || why.kind === 'cap' ? why.line : `${why.name} — ${why.verb}`), h('small', {}, why.kind === 'drain' ? '시간이 지나면 조금씩 식어요' : why.kind === 'cap' ? '더 달릴 길이 없어요' : '마지막으로 부딪힌 것')));
+    koEl = h('div', { class: 'res-ko k-' + why.kind }, cv, h('div', {}, h('b', {}, why.kind === 'drain' || why.kind === 'cap' ? why.line : `${why.name} — ${why.verb}`), h('small', {}, why.kind === 'drain' ? '시간이 지나면 조금씩 식어요' : why.kind === 'cap' ? '더 달릴 길이 없어요' : why.kind === 'pit' ? '마지막으로 빠진 곳' : '마지막으로 부딪힌 것')));
   }
 
   // ---- 따끈함 장부
@@ -297,9 +297,11 @@ export function mountResults(host: HTMLElement, o: ResultsOpts): { el: HTMLEleme
   const onUp = (e: PointerEvent) => endHold(e.pointerId);
   el.addEventListener('pointerdown', onDown, true);
   el.addEventListener('pointerup', onUp); el.addEventListener('pointercancel', onUp);
+  // a tap = a fresh pointerdown (armed above) + its pointerup on the button — never `click`, which the browser drops
+  // while the other thumb still rests on the glass (slide held through the KO)
   const wire = (b: HTMLElement | null, fn: (() => void) | null) => {
     if (!b || !fn) return;
-    b.addEventListener('click', (e: Event) => { e.preventDefault(); if (!ready() || !armed.has(b)) return; armed.delete(b); o.play('click'); act(fn); });
+    onTap(b, () => { if (!ready() || !armed.has(b)) return; armed.delete(b); o.play('click'); act(fn); });
   };
   wire(retryBtn, o.onRetry); wire(homeBtn, o.onHome); wire(nextBtn, o.onNext);
   const onKey = (e: KeyboardEvent) => {

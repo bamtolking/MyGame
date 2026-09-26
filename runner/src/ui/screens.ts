@@ -24,6 +24,7 @@ import {
   charPortrait, companionPortrait, paceText, MEDAL_NAMES, cosmeticPreview, lookFor,
 } from './panels';
 import { josa } from './josa';
+import { ghostUsable } from './ghost';
 import { VERSION, type App, type Screen } from './app';
 
 // ---------------------------------------------------------------- shared helpers
@@ -247,7 +248,9 @@ export function showAdventure(app: App): void {
     for (const st of stages) {
       const ok = stageUnlocked(p, st.id); const stars = stageStarCount(p, st.id); const remix = isRemix(st);
       const cur = st.id === next;
-      const need = remix && !ok ? h('small', { class: 'node-need' }, icon('star'), `${Math.min(ws, REMIX_GATE)}/${REMIX_GATE}`) : null;
+      // a locked remix shows what it still waits for: the world's stars, or (stars enough) its first un-reached stage
+      const blocker = remix && !ok && ws >= REMIX_GATE ? stages.find(x => !isRemix(x) && !stageCleared(p, x.id)) : null;
+      const need = remix && !ok ? h('small', { class: 'node-need' }, ...(blocker ? [icon('runner'), `${blocker.id} 도착`] : [icon('star'), `${Math.min(ws, REMIX_GATE)}/${REMIX_GATE}`])) : null;
       grid.append(h('button', {
         class: 'stage node' + (ok ? '' : ' locked') + (remix ? ' remix' : '') + (cur ? ' cur' : '') + (stars === 3 ? ' full' : ''),
         'data-stage': st.id, 'aria-label': `${st.id} ${st.name}${ok ? ` 별 ${stars}개` : ' 잠김'}`,
@@ -269,7 +272,7 @@ export function openStageCard(app: App, id: string): void {
   const p = app.p; const ok = stageUnlocked(p, id);
   const mask = p.starMask[id] ?? 0; const pouches = p.pouches[id] ?? 0;
   const pn = [0, 1, 2].filter(i => (pouches >> i) & 1).length;
-  const ghost = store.loadGhost<GhostRec>('stage:' + id);
+  const ghost = ghostUsable(store.loadGhost<GhostRec>('stage:' + id), st.seed);   // the same test startRun races it by
   const bi = BIOME_BY_ID[st.biome];
   const cond = (on: boolean, title: string, detail: Node | string | null) =>
     h('li', { class: 'cond' + (on ? ' on' : '') }, icon(on ? 'star' : 'starO'), h('div', {}, h('b', {}, title), detail ? h('small', {}, detail) : null));

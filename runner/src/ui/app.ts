@@ -11,7 +11,7 @@ import { LOW_HP_FRAC } from '../data/tuning';
 import { STAGES, STAGE_BY_ID } from '../data/stages';
 import { BIOME_BY_ID } from '../data/biomes';
 import { newRun, stepRun, totalScore, type RunConfig } from '../sim/run';
-import type { RunState, SimEvent, Mode } from '../sim/types';
+import type { RunState, SimEvent } from '../sim/types';
 import { Renderer, type GhostView } from '../render/renderer';
 import { hatIdOf } from '../render/characters';
 import { trailIdOf } from '../render/fx';
@@ -21,8 +21,9 @@ import * as store from '../platform/storage';
 import { applyRun, dailySeed, dailyChar, dailyCompanion, dailyArchive, todayKey, featureOpen, ghostKeyFor, type Progress, type RunReward, type GhostRec } from '../meta/progress';
 import { MISSION_BY_ID, missionText, liveMissionProgress } from '../meta/missions';
 import { InputState, keyZone, bindSurface, evTime, type Zone } from './input';
-import { CONTENT_HASH } from '../sim/content';
-import { h, clear } from './dom';
+import { ghostUsable, makeGhost, stepGhost, type Ghost } from './ghost';
+import { h, clear, onTap } from './dom';
+import { josa } from './josa';
 import { mountResults, nextStageAfter, HINT_VERB, fmtNum } from './results';
 import * as screens from './screens';
 
@@ -39,12 +40,14 @@ export interface StartOpts { noCountdown?: boolean }
 
 interface RunCtx {
   s: RunState; cfg: RunConfig; dateKey: string;
-  ghost: RunState | null; ghostLog: number[]; ghostIdx: number; ghostBits: number;
+  ghost: Ghost | null;                      // best run on this course, lined up with the player on "GO" (./ghost.ts)
   acc: number; lastT: number; frames: number; prevX: number; prevY: number;
+  pace: number; rafT: number;               // render-cap budget (ms) · last rAF time (ms)
   paused: boolean; ended: boolean; reward: RunReward | null;
   resumeT: number;
   slow: { t: number; untilX: number } | null;
   slideTaught: boolean;                     // tutorial: before the slide beat the whole landscape screen is "jump"
+  tutReplay: boolean;                       // 첫 달리기 replayed from 설정: it ends back in 설정, not in 1-1
   warned50: boolean; lowT: number; missionT: number; toasted: Set<string>;
   results: { dispose: () => void; readyAt: number } | null;
   timers: number[];
@@ -76,9 +79,13 @@ export class App {
     this.applySettings();
     window.addEventListener('resize', () => this.onResize());
     window.addEventListener('orientationchange', () => { this.autoPause(); setTimeout(() => this.layout(), 250); });
-    document.addEventListener('visibilitychange', () => { if (document.hidden) { this.autoPause(); this.persist(); } });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { this.autoPause(); this.persist(); } else this.syncSave(); });
     window.addEventListener('blur', () => this.autoPause());
     window.addEventListener('pagehide', () => { this.autoPause(); this.persist(); });
+    // the same save open twice (another tab, the installed app next to a browser tab): take in what the other one saved
+    this.savedP = this.p;
+    window.addEventListener('storage', e => { if (e.key === store.SAVE_KEY) this.syncSave(); });
+    window.addEventListener('pageshow', e => { if (e.persisted) this.syncSave(); });
     window.addEventListener('keydown', e => this.onKey(e, true));
     window.addEventListener('keyup', e => this.onKey(e, false));
     // browser gestures must never eat game input (menus scroll; text fields keep selection)
@@ -87,12 +94,11 @@ export class App {
     document.addEventListener('selectstart', e => { if (!inField(e)) e.preventDefault(); });
     document.addEventListener('gesturestart', e => e.preventDefault());
     // WebAudio may only start from a gesture: Chrome counts pointerup/touchend for touch, iOS touchend
-    const unlock = () => {
-      if (!this.audio.ctx) this.graceUntil = Math.max(this.graceUntil, performance.now() + 1000);   // the first gesture builds the audio graph
-      this.audio.unlock();
-    };
-    for (const t of ['pointerdown', 'pointerup', 'touchend', 'keydown']) document.addEventListener(t, unlock, { capture: true, passive: true });
-    this.input.onPress = () => { unlock(); document.getElementById('title-ov')?.classList.add('gone'); };
+    // (a gesture is also when the back guard may be pushed: see syncBack)
+    const gesture = () => { this.unlockAudio(); this.syncBack(); };
+    for (const t of ['pointerdown', 'pointerup', 'touchend', 'keydown']) document.addEventListener(t, gesture, { capture: true, passive: true });
+    window.addEventListener('popstate', () => this.onBack());
+    this.input.onPress = () => { gesture(); document.getElementById('title-ov')?.classList.add('gone'); };
     this.input.onChange = () => this.padsLit();
     try { const as = (navigator as any).audioSession; if (as) as.type = 'ambient'; } catch { /* ignore */ }
     if (!this.p.tutorialDone) this.startTutorial(); else this.showHome();
@@ -100,16 +106,35 @@ export class App {
   }
 
   // ------------------------------------------------------------------ persistence & settings
+  private savedP: Progress | null = null;   // the object last loaded / saved: app.p is edited in place, except by 가져오기 / 처음부터 다시
   persist(): void {
-    const r = store.save(this.p);
+    // a new object in app.p (가져오기 / 처음부터 다시) replaces the stored save outright (and the old save's ghosts go);
+    // otherwise a save another tab / the installed app stored meanwhile is merged in, never overwritten (storage.ts)
+    const replace = this.p !== this.savedP; this.savedP = this.p;
+    const r = store.save(this.p, { replace });
+    if (r.merged) { this.afterSync(); this.toast('다른 창에서 저장한 기록과 합쳤어요', 'info', 3); }
     const msg = r.ok ? (r.error ?? '') : (r.error ?? '저장하지 못했어요');
     if ((!r.ok || r.error) && msg !== this.saveMsg) this.toast(msg, 'warn', 4);
     this.saveMsg = msg;
   }
+  /** Another tab / the installed app saved (storage event, or this page back in front): take that save in. */
+  private syncSave(): void {
+    if (this.p === this.savedP && store.refresh(this.p)) this.afterSync();
+  }
+  /** app.p changed under the UI: re-apply settings and redraw a menu screen (a live run books onto it at its end). */
+  private afterSync(): void {
+    this.applySettings();
+    const redraw: Record<string, () => void> = {
+      home: () => this.showHome(), chars: () => this.showChars(), adventure: () => this.showAdventure(), daily: () => this.showDaily(),
+      missions: () => this.showMissions(), settings: () => this.showSettings(), hall: () => screens.showHall(this),
+    };
+    const typing = document.activeElement?.closest?.('input,textarea,select,[contenteditable]');
+    if (!document.getElementById('modal') && !typing) redraw[this.screen]?.();
+  }
   applySettings(): void {
     const st = this.p.settings;
     this.audio.setVolumes(st.sfx, st.musicOff ? 0 : st.bgm);
-    if (this.renderer) this.renderer.opts = { reduceMotion: st.reduceMotion, highContrast: st.highContrast, lowFx: st.lowFx, showHitbox: st.showHitbox, shake: st.reduceMotion ? 0 : (st.shake ?? 1), uiScale: st.uiScale || 1 };
+    if (this.renderer) this.renderer.opts = { reduceMotion: st.reduceMotion, highContrast: st.highContrast, lowFx: st.lowFx, showHitbox: st.showHitbox, shake: st.reduceMotion ? 0 : (st.shake ?? 1), uiScale: st.uiScale || 1, swapSides: !!st.swapSides };
     this.input.slideToggle = !!st.slideToggle;
     const de = document.documentElement;
     de.classList.toggle('reduce-motion', st.reduceMotion);
@@ -132,6 +157,33 @@ export class App {
     this.closeModal(); clear(this.root);
     this.duck(false);
     if (screen !== 'run') this.music('menu');
+    this.syncBack();
+  }
+
+  // ------------------------------------------------------------------ back button / edge swipe
+  // ONE guard history entry sits on top while anything but a bare 홈 is shown, so Android back (or an edge swipe) steps
+  // back inside the game instead of leaving it: a live run pauses, the pause sheet stays, a sheet closes, results and
+  // menu screens go 홈; on 홈 back leaves. The guard is pushed only once the page has had a gesture (Chrome skips
+  // entries pushed without one) and dropped again (history.back) when the app comes home by itself.
+  private backPending = false;             // our own history.back() is on its way (its popstate is ours)
+  private syncBack(): void {
+    if (this.backPending) return;
+    try {
+      const top = !!(history.state as { yasik?: number } | null)?.yasik;
+      const want = !!this.run || this.screen !== 'home' || !!document.getElementById('modal');
+      const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+      if (want && !top && (ua ? ua.hasBeenActive : true)) history.pushState({ yasik: 1 }, '');
+      else if (!want && top) { this.backPending = true; history.back(); }
+    } catch { /* history unavailable (sandboxed frame) */ }
+  }
+  private onBack(): void {
+    if (this.backPending) { this.backPending = false; this.syncBack(); return; }
+    try { if ((history.state as { yasik?: number } | null)?.yasik) return; } catch { /* ignore */ }   // forward onto a guard
+    const rc = this.run;
+    if (rc && this.screen === 'run') { if (!rc.ended) this.setPaused(true); }        // live run → pause; the sheet stays
+    else if (document.getElementById('modal')) { document.getElementById('modal')!.click(); this.closeModal(); }   // as a backdrop tap (its onClose runs)
+    else if (this.screen !== 'home') { this.showHome(); return; }                    // results / a menu screen → 홈
+    this.syncBack();
   }
   topbar(title: string, back: () => void = () => this.showHome()): HTMLElement {
     return h('header', { class: 'topbar' },
@@ -140,7 +192,13 @@ export class App {
       h('div', { class: 'wallet' }, h('span', { class: 'coin' }, '엽전'), ` ${fmtNum(this.p.coins)}`),
     );
   }
-  click(fn: () => void): () => void { return () => { this.audio.unlock(); this.audio.play('click'); fn(); }; }
+  click(fn: () => void): () => void { return () => { this.unlockAudio(); this.audio.play('click'); fn(); }; }
+  /** Start / wake WebAudio from a gesture — except under the pause sheet, which holds the sound until 계속 (resume()). */
+  unlockAudio(): void {
+    const rc = this.run; if (rc?.paused && !rc.ended) return;
+    if (!this.audio.ctx) this.graceUntil = Math.max(this.graceUntil, performance.now() + 1000);   // the first gesture builds the audio graph
+    this.audio.unlock();
+  }
 
   // ------------------------------------------------------------------ menu screens (src/ui/screens.ts)
   showHome(): void { screens.showHome(this); }
@@ -152,11 +210,12 @@ export class App {
 
   // ------------------------------------------------------------------ modal helpers
   modal(content: HTMLElement, dismissable = true): void {
-    this.closeModal();
+    document.getElementById('modal')?.remove();
     const m = h('div', { id: 'modal', onclick: (e: Event) => { if (dismissable && e.target === m) this.closeModal(); } }, content);
     document.body.append(m);
+    this.syncBack();
   }
-  closeModal(): void { document.getElementById('modal')?.remove(); }
+  closeModal(): void { const m = document.getElementById('modal'); if (m) { m.remove(); this.syncBack(); } }
   confirm(text: string, yes: () => void): void {
     this.modal(h('div', { class: 'sheet' }, h('p', {}, text),
       h('div', { class: 'row' }, h('button', { class: 'ghost', onclick: this.click(() => this.closeModal()) }, '취소'), h('button', { class: 'danger', onclick: this.click(() => { this.closeModal(); yes(); }) }, '확인'))));
@@ -194,16 +253,13 @@ export class App {
     const dateKey = o.dateKey ?? (cfg.mode === 'daily' ? dailyArchive().find(k => dailySeed(k) === (cfg.seed >>> 0)) : undefined) ?? todayKey();
     const s = newRun(cfg);
     // ghost of the best run on this exact course (stages, dailies)
-    let ghost: RunState | null = null; let log: number[] = [];
     const gkey = cfg.trial ? null : cfg.mode === 'stage' || cfg.mode === 'daily' ? ghostKeyFor(cfg.mode, cfg.stageId ?? null, dateKey) : null;
-    const g: GhostRec | null = gkey ? store.loadGhost<GhostRec>(gkey) : null;
-    if (g && this.p.settings.ghost && g.seed === s.seed && g.content === CONTENT_HASH && Array.isArray(g.log)) {
-      try { ghost = newRun({ mode: g.mode as Mode, seed: g.seed, charId: g.charId, partnerId: g.partnerId, companionId: g.companionId, stageId: g.stageId, assist: g.assistOpts, noCountdown: cfg.noCountdown }); log = g.log; } catch { ghost = null; }
-    }
+    const g = gkey && this.p.settings.ghost ? store.loadGhost<GhostRec>(gkey) : null;
+    const ghost = ghostUsable(g, s.seed) ? makeGhost(g, s.phase !== 'countdown') : null;
     this.run = {
-      s, cfg, dateKey, ghost, ghostLog: log, ghostIdx: 0, ghostBits: 0,
-      acc: 0, lastT: 0, frames: 0, prevX: s.body.x, prevY: s.body.y,
-      paused: false, ended: false, reward: null, resumeT: 0, slow: null, slideTaught: false,
+      s, cfg, dateKey, ghost,
+      acc: 0, lastT: 0, frames: 0, prevX: s.body.x, prevY: s.body.y, pace: 0, rafT: 0,
+      paused: false, ended: false, reward: null, resumeT: 0, slow: null, slideTaught: false, tutReplay: cfg.mode === 'tutorial' && this.p.tutorialDone,
       warned50: false, lowT: 0, missionT: 1, toasted: new Set(), results: null, timers: [], unbind: null,
     };
     this.buildRunDom(this.run);
@@ -222,17 +278,19 @@ export class App {
     const st = this.p.settings; const swap = st.swapSides; const s = rc.s;
     const pad = (zone: Exclude<Zone, null>) => h('div', { class: `pad ${zone}`, 'data-zone': zone },
       h('div', { class: 'pad-in' }, h('span', { class: 'ic' }, zone === 'jump' ? '▲' : '▼'), h('b', {}, zone === 'jump' ? '점프' : '슬라이드'), h('small', {}, zone === 'jump' ? '탭 · 공중에서 한 번 더' : '누르고 있기')));
-    const pauseBtn = h('button', { id: 'btn-pause', type: 'button', 'aria-label': '일시정지', onclick: () => { this.audio.play('click'); this.setPaused(true); } }, h('i'), h('i'));
+    // ⏸ pauses on the touch itself: a tap with the other thumb resting on a pad never becomes a click (./dom.ts onTap)
+    const pauseBtn = onTap(h('button', { id: 'btn-pause', type: 'button', 'aria-label': '일시정지' }, h('i'), h('i')), () => { this.audio.play('click'); this.setPaused(true); }, { down: true });
     const stage = h('div', { id: 'stage' }, h('canvas', { id: 'cv' }), pauseBtn);
     const showHints = st.showPads || this.p.totals.runs < 3 || s.mode === 'tutorial';
-    const hints = h('div', { id: 'lhints', class: (swap ? 'swap' : '') + (showHints ? ' show' : '') },
+    // (tutorial, landscape: until the slide beat the whole screen jumps, so the 슬라이드 circle stays hidden)
+    const hints = h('div', { id: 'lhints', class: (swap ? 'swap' : '') + (showHints ? ' show' : '') + (s.mode === 'tutorial' ? ' jump-only' : '') },
       h('div', { class: 'lh jump' }, h('span', {}, '▲'), h('b', {}, '점프')), h('div', { class: 'lh slide' }, h('span', {}, '▼'), h('b', {}, '슬라이드')));
     const pads = h('div', { id: 'pads', class: swap ? 'swap' : '' }, pad('jump'), pad('slide'));
     const runEl = h('div', { id: 'run', class: 'screen run' }, stage, hints, pads);
     if (s.mode === 'tutorial') {
       runEl.append(
         h('div', { id: 'title-ov', 'aria-hidden': 'true' }, h('h1', {}, '야식 대질주'), h('p', { class: 't-sub' }, '보름달까지 달려라!'), h('p', { class: 't-how' }, this.isPortrait() ? '점프 버튼을 누르면 점프!' : '화면을 누르면 점프!')),
-        h('button', { id: 'btn-skip', type: 'button', onclick: () => { this.audio.play('click'); this.skipTutorial(); } }, '건너뛰기'),
+        onTap(h('button', { id: 'btn-skip', type: 'button' }, '건너뛰기'), () => { this.audio.play('click'); this.skipTutorial(); }),
       );
     }
     this.root.append(runEl);
@@ -255,7 +313,7 @@ export class App {
     this.applySettings();
     rc.unbind = bindSurface(runEl, this.input, {
       zoneAt: e => this.zoneAt(e),
-      gesture: () => this.audio.unlock(),
+      gesture: () => this.unlockAudio(),
     });
     this.layout();
   }
@@ -306,9 +364,12 @@ export class App {
     const rect = stage.getBoundingClientRect();
     if (rect.width > 10 && rect.height > 10) r.resize(rect.width, rect.height, { dprCap: st.fps30 ? 1.5 : 2, bandH, insets: portrait ? { l: ins.l, r: ins.r, t: 0, b: 0 } : ins });
     r.hud.pauseW = 52;
-    // landscape thumb hints sit in the letterbox when there is one
+    // landscape thumb hints sit in the letterbox when there is one, else down in the ground band (never over the
+    // play band, where hazards come in on the right — GDD §10.2)
     const lb = r.offL * r.scale;
     runEl.style.setProperty('--lb', Math.max(0, lb) + 'px');
+    runEl.style.setProperty('--gb', Math.round((VIEW_H - GROUND_Y) * r.scale) + 'px');
+    document.getElementById('lhints')?.classList.toggle('inband', lb < 70);
     const res = document.getElementById('results');
     if (res) { res.classList.toggle('portrait', portrait); res.classList.toggle('landscape', !portrait); }
     const rc = this.run;
@@ -357,17 +418,21 @@ export class App {
   private pauseSheet(rc: RunCtx): void {
     const st = this.p.settings; const s = rc.s; const tut = s.mode === 'tutorial';
     const save = () => { this.applySettings(); this.persist(); };
-    const qset = (label: string, on: boolean, set: (v: boolean) => void) => h('label', { class: 'qset' }, h('span', {}, label),
-      h('input', { type: 'checkbox', checked: on, onchange: (e: Event) => { set((e.target as HTMLInputElement).checked); save(); } }));
+    // every control here can be reached with the other thumb still on the glass → onTap, not click (./dom.ts)
+    const qset = (label: string, on: boolean, set: (v: boolean) => void) => {
+      const cb = h('input', { type: 'checkbox', checked: on, onchange: (e: Event) => { set((e.target as HTMLInputElement).checked); save(); } });
+      return onTap(h('label', { class: 'qset' }, h('span', {}, label), cb), () => { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }, { native: true });
+    };
+    const btn = (id: string, cls: string, label: string, fn: () => void) => onTap(h('button', { class: cls, id, type: 'button' }, label), this.click(() => { this.closeModal(); fn(); }));
     this.modal(h('div', { class: 'sheet pause', role: 'dialog', 'aria-label': '일시정지' },
       h('h3', {}, '잠깐 쉬어요'),
       h('p', { class: 'muted' }, tut ? '첫 달리기' : `${fmtNum(totalScore(s))}점 · ${fmtNum(Math.floor(s.dist))}m`),
-      h('button', { class: 'primary big', id: 'btn-resume', type: 'button', onclick: this.click(() => { this.closeModal(); this.resume(); }) }, '계속'),
+      btn('btn-resume', 'primary big', '계속', () => this.resume()),
       h('div', { class: 'row' },
-        h('button', { id: 'btn-restart', type: 'button', onclick: this.click(() => { this.closeModal(); this.restart(rc); }) }, '처음부터'),
-        tut
-          ? h('button', { class: 'ghost', id: 'btn-quit', type: 'button', onclick: this.click(() => { this.closeModal(); this.skipTutorial(); }) }, '건너뛰기')
-          : h('button', { class: 'ghost', id: 'btn-quit', type: 'button', onclick: this.click(() => { this.closeModal(); this.showHome(); }) }, '그만하기')),
+        btn('btn-restart', '', '처음부터', () => this.restart(rc)),
+        tut && !rc.tutReplay
+          ? btn('btn-quit', 'ghost', '건너뛰기', () => this.skipTutorial())
+          : btn('btn-quit', 'ghost', '그만하기', () => tut ? this.showSettings() : this.showHome())),   // a 첫 달리기 replay came from 설정
       tut ? null : h('p', { class: 'pause-note' }, '여기까지 할까요? 기록은 저장돼요', h('small', {}, '그만하면 이번 판만 세지 않아요')),
       h('div', { class: 'qsets' },
         qset('음악', !st.musicOff && st.bgm > 0, v => { st.musicOff = !v; if (v && st.bgm <= 0) st.bgm = 0.5; }),
@@ -380,7 +445,7 @@ export class App {
   private resume(): void {
     const rc = this.run; if (!rc || !rc.paused || rc.ended) return;
     rc.paused = false;
-    this.audio.resume();
+    this.audio.resume(); if (!this.audio.ctx) this.unlockAudio();   // (paused before the first gesture ever built it)
     this.input.reset(); this.input.enabled = true;
     rc.resumeT = rc.s.phase === 'run' || rc.s.phase === 'countdown' || rc.s.phase === 'dying' ? RESUME_COUNT_T : 0;
     if (rc.resumeT > 0) this.audio.play('count');
@@ -405,8 +470,14 @@ export class App {
   frame(now: number): void {
     const rc = this.run; const r = this.renderer; if (!rc || !r) { this.stopLoop(); return; }
     const st = this.p.settings;
-    const minGap = st.fps30 ? 1000 / 30 - 4 : 1000 / 60 - 4;      // 120 Hz → 60 fps, 배터리 절약 → 30 fps
-    if (rc.lastT && now - rc.lastT < minGap) return;
+    // render cap (60 fps, 배터리 절약 30): a budget of vsync time, spent one frame interval per render — 90 Hz renders
+    // 2 of 3 vsyncs, 120 Hz every other one, 75 Hz 4 of 5 (a plain "skip if < interval" gap halves 90 Hz to 45)
+    const iv = st.fps30 ? 1000 / 30 : 1000 / 60;
+    if (rc.lastT) {
+      rc.pace = Math.min(rc.pace + now - rc.rafT, 2 * iv); rc.rafT = now;
+      if (rc.pace < iv * 0.85) return;
+      rc.pace = Math.max(-iv * 0.5, Math.min(rc.pace - iv, iv * 0.5));
+    } else { rc.pace = 0; rc.rafT = now; }
     let real = rc.lastT ? (now - rc.lastT) / 1000 : 0; rc.lastT = now; rc.frames++;
     const s = rc.s;
     // a hitch (> 250 ms) pauses a live run so it can never cost a hit; the tutorial has nothing to lose, so it just drops the time
@@ -430,7 +501,7 @@ export class App {
       if ((rc.slow.t >= TUTORIAL_SLOW_MIN && s.body.x > rc.slow.untilX) || rc.slow.t >= TUTORIAL_SLOW_MAX) this.endSlow(rc);
       else speed *= TUTORIAL_SLOW;
     }
-    if (s.mode === 'tutorial' && !rc.slideTaught && s.level.chunks.some(c => c.id === 'tut_3_slide' && c.x < s.body.x + 700)) rc.slideTaught = true;
+    if (s.mode === 'tutorial' && !rc.slideTaught && s.level.chunks.some(c => c.id === 'tut_3_slide' && c.x < s.body.x + 700)) { rc.slideTaught = true; document.getElementById('lhints')?.classList.remove('jump-only'); }
 
     if (!rc.paused && rc.resumeT <= 0 && !rc.ended) {
       rc.acc += real * speed;
@@ -438,11 +509,11 @@ export class App {
       while (rc.acc >= DT && n < MAX_CATCHUP_STEPS) {
         const stepT = now - ((rc.acc - DT) / speed) * 1000;     // real time this step stands for
         rc.prevX = s.body.x; rc.prevY = s.body.y;
-        const cd = s.phase === 'countdown' ? Math.ceil(s.countdown / 0.5) : -1;
+        const counting = s.phase === 'countdown'; const cd = counting ? Math.ceil(s.countdown / 0.5) : -1;
         stepRun(s, this.input.take(stepT));
         if (s.phase === 'countdown') { const c2 = Math.ceil(s.countdown / 0.5); if (c2 !== cd) this.audio.play('count'); }
         else if (cd > 0) this.audio.play('go');
-        if (rc.ghost) this.stepGhost(rc);
+        if (rc.ghost) stepGhost(rc.ghost, counting);
         rc.acc -= DT; n++;
       }
       if (rc.acc >= DT) rc.acc = 0;                               // drop the rest: no catch-up burst
@@ -462,20 +533,12 @@ export class App {
     const ix = tele ? s.body.x : rc.prevX + (s.body.x - rc.prevX) * a;
     const iy = tele ? s.body.y : rc.prevY + (s.body.y - rc.prevY) * a;
     let gv: GhostView | null = null;
-    const g = rc.ghost;
+    const g = rc.ghost?.s;
     if (g && g.phase !== 'over' && g.phase !== 'dying' && s.bonusStage === 'none' && g.bonusStage === 'none') gv = { x: g.body.x, y: g.body.y, sliding: g.body.sliding, onGround: g.body.onGround, charId: g.charId, scale: g.body.scale };
     r.draw(s, ix, iy, real, gv);
   }
   /** one frame without advancing anything (pause / resize / results) */
   private redraw(): void { const rc = this.run; if (rc && this.renderer) this.draw(rc, 0); }
-
-  private stepGhost(rc: RunCtx): void {
-    const g = rc.ghost!; const log = rc.ghostLog; const i = g.steps;
-    let jump = false;
-    while (rc.ghostIdx < log.length && log[rc.ghostIdx] === i) { rc.ghostBits = log[rc.ghostIdx + 1]; jump = (rc.ghostBits & 1) === 1; rc.ghostIdx += 2; }
-    stepRun(g, { jump, slide: (rc.ghostBits & 2) === 2, jumpHeld: (rc.ghostBits & 4) === 4 });
-    g.events.length = 0;
-  }
 
   /** per-frame run checks: low-warmth cues, live mission ticks */
   private watchRun(rc: RunCtx, real: number): void {
@@ -576,14 +639,14 @@ export class App {
     if (rc) { rc.ended = true; this.input.reset(); this.input.enabled = false; }
     this.cheer(true);
   }
-  /** tiny 「잘했어요!」 card, then stage 1-1 right away */
+  /** tiny 「잘했어요!」 card, then stage 1-1 right away (a replay from 설정 goes back there instead) */
   private cheer(skipped: boolean): void {
-    const rc = this.run; const first = STAGES[0]?.id ?? '1-1'; const st = STAGE_BY_ID[first];
+    const rc = this.run; const first = STAGES[0]?.id ?? '1-1'; const st = STAGE_BY_ID[first]; const replay = !!rc?.tutReplay;
     document.getElementById('btn-skip')?.remove(); document.getElementById('title-ov')?.remove();
     const host = document.getElementById('run') ?? this.root;
-    host.append(h('div', { id: 'cheer' }, h('b', {}, skipped ? '좋아요!' : '잘했어요!'), h('small', {}, `이제 ${first} 「${st?.name ?? '첫걸음'}」 달려요`)));
+    host.append(h('div', { id: 'cheer' }, h('b', {}, skipped ? '좋아요!' : '잘했어요!'), h('small', {}, replay ? '설정으로 돌아가요' : `이제 ${first} ${josa(`「${st?.name ?? '첫걸음'}」`, '을/를')} 달려요`)));
     this.audio.play(skipped ? 'click' : 'reward');
-    const go = () => { if (this.run === rc) this.startStage(first, { noCountdown: true }); };
+    const go = () => { if (this.run !== rc) return; if (replay) this.showSettings(); else this.startStage(first, { noCountdown: true }); };
     const t = window.setTimeout(go, skipped ? 700 : 1100);
     if (rc) rc.timers.push(t);
   }
@@ -635,6 +698,7 @@ export class App {
     this.stopLoop();
     const rc = this.run;
     if (rc) { rc.results?.dispose(); rc.unbind?.(); for (const t of rc.timers) clearTimeout(t); rc.timers.length = 0; }
+    if (rc?.paused && !rc.ended) this.audio.resume();        // left from the pause sheet (처음부터 · 그만하기 · 건너뛰기)
     this.run = null; this.renderer = null;
   }
 

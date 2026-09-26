@@ -82,6 +82,10 @@ select { font: inherit; font-weight: 800; background: var(--panel2); color: #fff
 .lh.jump { left: calc(8px + var(--sal)); } .lh.slide { right: calc(8px + var(--sar)); }
 #lhints.swap .lh.jump { left: auto; right: calc(8px + var(--sar)); } #lhints.swap .lh.slide { right: auto; left: calc(8px + var(--sal)); }
 .lh.on { opacity: 0.5; }
+/* no letterbox to hold them (16:9 and taller screens): smaller, down in the ground band */
+#lhints.inband .lh { bottom: calc(5px + var(--sab)); width: clamp(40px, calc(var(--gb, 60px) - 10px), 58px); }
+#lhints.inband .lh span { font-size: 17px; } #lhints.inband .lh b { font-size: 11px; }
+#lhints.jump-only .lh.slide { display: none; }
 .lh.flash { animation: hintflash 0.45s ease-in-out infinite alternate; }
 @keyframes hintflash { from { opacity: 0.25; transform: scale(1); } to { opacity: 0.85; transform: scale(1.08); background: #ffe27a; } }
 
@@ -161,9 +165,10 @@ select { font: inherit; font-weight: 800; background: var(--panel2); color: #fff
 .sg-time { background: #8fb4e3; } .sg-hit { background: #5b79cf; } .sg-pit { background: #45538f; } .sg-honey { background: #ffc46b; }
 .res-ledger small { grid-column: 1 / -1; color: #d7e9ff; font-size: 11.5px; }
 .res-break { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 4px; }
-.res-break span { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 3px 7px; font-size: 12px; min-width: 0; }
+.res-break span { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 4px; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 3px 7px; font-size: 12px; min-width: 0; }
 .res-break small { color: var(--muted); font-size: 11px; white-space: nowrap; }
-.res-break b { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+/* a number never breaks (body has overflow-wrap: anywhere): a chip too narrow for both stacks the label over the value */
+.res-break b { font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: auto; }
 .res-break .chip-flow b { color: #ffb347; }
 .res-almost { display: flex; flex-wrap: wrap; gap: 5px; }
 .res-almost span { background: rgba(255,209,102,0.15); border: 1px solid rgba(255,209,102,0.5); color: #ffe08a; font-weight: 800; font-size: 12px; border-radius: 999px; padding: 2px 9px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

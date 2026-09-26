@@ -3,7 +3,8 @@
 //   a corrupted main save loads from `_bak`; a save from a NEWER build is copied aside before anything is written
 //   storage blocked → memory (this session only); QuotaExceeded → drop the oldest non-best ghosts, then retry
 //   ghosts live in their own keys (≤ 250 KB together) so the main save stays small
-import { normalize, defaultProgress, takeLegacyGhosts, totalStars, SAVE_VERSION, type Progress } from '../meta/progress';
+//   two instances on one save (another tab, the installed app next to a browser tab) never roll each other back: see `base`
+import { normalize, defaultProgress, takeLegacyGhosts, totalStars, mergeProgress, SAVE_VERSION, type Progress } from '../meta/progress';
 import { CONTENT_HASH } from '../sim/content';
 
 export const SAVE_KEY = 'jelly_runner_v1';
@@ -17,6 +18,8 @@ export const GHOST_BUDGET = 250_000;
 function ls(): Storage | null { try { return (globalThis as { localStorage?: Storage }).localStorage ?? null; } catch { return null; } }
 
 const mem = new Map<string, string>();   // fallback for every key while storage is unavailable
+/** the main save as this instance last read / wrote it (see "one save, two instances" below) */
+let base: { seen: string | null; json: string; mustWrite: boolean } | null = null;
 export const storageInfo = { available: false, reason: '' };
 /** (Re)check whether localStorage works. Runs once at import; tests and a "다시 시도" button may call it again. */
 export function probeStorage(): boolean {
@@ -25,6 +28,7 @@ export function probeStorage(): boolean {
     const k = '__jr_probe__'; st.setItem(k, '1'); const ok = st.getItem(k) === '1'; st.removeItem(k);
     storageInfo.available = ok; storageInfo.reason = ok ? '' : '읽기 검증 실패';
   } catch (e) { storageInfo.available = false; storageInfo.reason = (e as Error)?.message || '접근 불가'; }
+  base = null;   // (another backend: nothing known about what it holds)
   return storageInfo.available;
 }
 probeStorage();
@@ -61,6 +65,41 @@ export async function requestPersist(): Promise<boolean> {
   } catch { return false; }
 }
 
+// ---------------------------------------------------------------- one save, two instances
+// Another tab — or the installed app next to a browser tab (same origin, same storage) — may write the save while this
+// one runs. `base.seen`: the stored text as this instance last read or wrote it; `base.json`: this instance's save at that moment.
+//   · nothing changed here (e.g. the save on hide / pagehide) → nothing is written: a stale copy never lands on a newer save
+//   · the stored text is no longer `seen` → someone else wrote: refresh() / save() merge that save with whatever changed
+//     here (meta mergeProgress) INTO the same object — screens keep references to app.p and its parts
+function storedSave(): string | null { try { return storageInfo.available ? ls()!.getItem(SAVE_KEY) : null; } catch { return null; } }
+/** Copies `src` into `dst` keeping every nested object / array `dst` already has (their identity). */
+function assignInPlace(dst: Record<string, any>, src: Record<string, any>): void {
+  for (const k of Object.keys(dst)) if (!Object.prototype.hasOwnProperty.call(src, k)) delete dst[k];
+  for (const k of Object.keys(src)) {
+    const a = dst[k]; const b = src[k];
+    if (Array.isArray(a) && Array.isArray(b)) a.splice(0, a.length, ...b);
+    else if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) assignInPlace(a, b);
+    else dst[k] = b;
+  }
+}
+/** Merges a save another instance stored since this one last looked into `p` (in place). True when `p` changed. */
+function pullNewer(p: Progress): boolean {
+  const stored = storedSave();
+  if (!base || stored === null || stored === base.seen) return false;
+  let remote: Progress;
+  try { remote = parseSave(stored); } catch { return false; }   // unreadable: ours is written over it (it is kept as _bak)
+  const before = JSON.stringify(p);
+  assignInPlace(p as unknown as Record<string, any>, mergeProgress(JSON.parse(base.json), JSON.parse(before), remote));
+  base = { seen: stored, json: JSON.stringify(remote), mustWrite: false };
+  return JSON.stringify(p) !== before;
+}
+/**
+ * Takes in a save written by another tab / the installed app (call on the window 'storage' event, and when the page
+ * comes back to the front). Anything changed here and not saved yet is kept (merged). True when `p` changed.
+ */
+export function refresh(p: Progress): boolean { return pullNewer(p); }
+const revOf = (raw: string | null) => Number(/^\{"version":\d+,"rev":(\d+)/.exec(raw ?? '')?.[1] ?? 0);
+
 // ---------------------------------------------------------------- main save
 export interface LoadResult { p: Progress; error: string | null; recovered?: 'bak' | 'newer' | 'reset' }
 function parseSave(raw: string): Progress {
@@ -70,6 +109,13 @@ function parseSave(raw: string): Progress {
   return normalize(o);
 }
 export function load(): LoadResult {
+  const r = loadSave();
+  const stored = storedSave(); const json = JSON.stringify(r.p);
+  // what is stored is not this save (recovered, migrated, fresh) → the next save() writes even with no change
+  base = { seen: stored, json, mustWrite: r.recovered !== 'newer' && stored !== json };
+  return r;
+}
+function loadSave(): LoadResult {
   const raw = readRaw(SAVE_KEY);
   if (!raw) {
     const bk = readRaw(BAK_KEY);   // main missing but a backup exists (e.g. main removed by a failed write) → use it
@@ -94,31 +140,55 @@ export function load(): LoadResult {
   }
 }
 
-/** Writes, then reads back to verify. Keeps the previous save as a backup. */
-export function save(p: Progress): { ok: boolean; error?: string } {
-  const raw = JSON.stringify(p);
-  if (!storageInfo.available) { mem.set(SAVE_KEY, raw); return { ok: false, error: '브라우저 저장소를 쓸 수 없어 이번 접속 동안만 기억해요 (내보내기 권장)' }; }
+export interface SaveResult { ok: boolean; error?: string; merged?: boolean }
+/**
+ * Writes, then reads back to verify. Keeps the previous save as a backup. A save another tab / the installed app stored
+ * in the meantime is merged into `p` first (`merged`: `p` changed — redraw); with nothing changed here nothing is written.
+ * `replace` (가져오기 / 처음부터 다시): `p` replaces the stored save outright, and ghosts that are not this save's own
+ * records are dropped (they are not part of the backup code: the old save's best runs must not race the new one).
+ */
+export function save(p: Progress, opts: { replace?: boolean } = {}): SaveResult {
+  if (!storageInfo.available) { mem.set(SAVE_KEY, JSON.stringify(p)); return { ok: false, error: '브라우저 저장소를 쓸 수 없어 이번 접속 동안만 기억해요 (내보내기 권장)' }; }
   const st = ls()!;
-  const attempt = (): { ok: boolean; error?: string } => {
+  const merged = !opts.replace && pullNewer(p);
+  const stored = storedSave();
+  if (!opts.replace && base && !base.mustWrite && stored === base.seen && JSON.stringify(p) === base.json) return { ok: true, merged };
+  p.rev = Math.max(p.rev || 0, revOf(stored), base ? revOf(base.seen) : 0) + 1;
+  const raw = JSON.stringify(p);
+  const attempt = (skipBak = false): { ok: boolean; error?: string } => {
     const prev = st.getItem(SAVE_KEY);
-    if (prev && prev !== raw) st.setItem(BAK_KEY, prev);
+    if (!skipBak && prev && prev !== raw) st.setItem(BAK_KEY, prev);
     st.setItem(SAVE_KEY, raw);
     if (st.getItem(SAVE_KEY) !== raw) return { ok: false, error: '저장 검증 실패' };
-    mem.delete(SAVE_KEY); return { ok: true };
+    mem.delete(SAVE_KEY); base = { seen: raw, json: raw, mustWrite: false };
+    if (opts.replace) dropForeignGhosts(p);
+    return { ok: true };
   };
-  try { const r = attempt(); if (r.ok) return r; mem.set(SAVE_KEY, raw); return r; }
+  const done = (r: { ok: boolean; error?: string }): SaveResult => ({ ...r, merged });
+  try { const r = attempt(); if (r.ok) return done(r); mem.set(SAVE_KEY, raw); return done(r); }
   catch (e) {
     if (isQuotaError(e)) {
       // free space: stale / old non-best ghosts first (one at a time), then the backup copy
       let dropped = 0;
       for (const k of evictableGhosts(p)) {
         removeRaw(GHOST_PREFIX + k); dropped++;
-        try { const r = attempt(); if (r.ok) return { ok: true, error: `저장 공간이 부족해 지난 유령 ${dropped}개를 비웠어요` }; } catch { /* keep freeing */ }
+        try { const r = attempt(); if (r.ok) return done({ ok: true, error: `저장 공간이 부족해 지난 유령 ${dropped}개를 비웠어요` }); } catch { /* keep freeing */ }
       }
-      try { st.removeItem(BAK_KEY); const r = attempt(); if (r.ok) return { ok: true, error: '저장 공간이 부족해 백업 사본을 비웠어요' }; } catch { /* ignore */ }
+      // last resort: without the backup (attempt() must not write it straight back into the space just freed)
+      try { st.removeItem(BAK_KEY); const r = attempt(true); if (r.ok) return done({ ok: true, error: '저장 공간이 부족해 백업 사본을 비웠어요' }); } catch { /* ignore */ }
     }
     mem.set(SAVE_KEY, raw);
-    return { ok: false, error: '저장 실패: ' + ((e as Error)?.message || '알 수 없음') + ' (이번 접속 동안만 기억해요)' };
+    return done({ ok: false, error: '저장 실패: ' + ((e as Error)?.message || '알 수 없음') + ' (이번 접속 동안만 기억해요)' });
+  }
+}
+/** Drops every ghost that is not one of `p`'s own records (its score must be that stage / day / endless best). */
+function dropForeignGhosts(p: Progress): void {
+  for (const k of listGhosts()) {
+    const g = loadGhost<{ score?: unknown }>(k);
+    const rec = k === 'endless' ? p.bestEndless?.score
+      : k.startsWith('stage:') ? p.stageBest[k.slice(6)]
+      : k.startsWith('daily:') ? p.daily[k.slice(6)]?.best : undefined;
+    if (!g || typeof rec !== 'number' || g.score !== rec) removeRaw(GHOST_PREFIX + k);
   }
 }
 

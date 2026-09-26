@@ -3,11 +3,52 @@
 import { describe, it, expect } from 'vitest';
 import { STAGES } from '../src/data/stages';
 import { BIOME_ORDER } from '../src/data/biomes';
-import { SPEED_TIERS, TILE, PX_PER_M } from '../src/data/physics';
+import { SPEED_TIERS, TILE, PX_PER_M, GROUND_Y, VALIDATE_INPUT_STEP } from '../src/data/physics';
 import { PARSED_BY_ID, resolveCourse, ensureLevel } from '../src/sim/level';
-import { validateChunk, tierCaps } from '../src/sim/validate';
-import { newRun, stepRun } from '../src/sim/run';
+import { validateChunk, tierCaps, solve, type Decision } from '../src/sim/validate';
+import { newRun, stepRun, charOf } from '../src/sim/run';
 import { Autopilot } from '../src/sim/autopilot';
+import type { RunState, RunInput, Pickup } from '../src/sim/types';
+
+/** Complete the bonus word right now (the 5th letter is dropped onto the runner). */
+function completeWord(s: RunState): void {
+  for (let i = 0; i < s.letters.length; i++) s.letters[i] = i !== 0;
+  const p: Pickup = { id: s.level.nextId++, type: 'letter', letter: 0, x: s.body.x + 10, y: s.body.y - 30, taken: false, pulled: false };
+  s.level.pickups.push(p); s.level.pickups.sort((a, b) => a.x - b.x);
+}
+
+/** A completionist: every 4 frames it re-plans with the real solver so the next letter or golden pouch in view is
+ *  on its path (a legitimate hit-free player who takes every letter and every pouch it can). */
+class Collector {
+  private cur: Decision = { jump: false, slide: false }; private hold = 0; private skip = new Set<number>();
+  next(s: RunState): RunInput {
+    if (s.phase !== 'run' || s.bonusStage !== 'none') return { jump: false, slide: false, jumpHeld: s.bonusStage === 'sky' && s.body.y > 300 };
+    if (this.hold > 0) { this.hold--; return { jump: false, slide: this.cur.slide }; }
+    this.cur = this.plan(s); if (this.cur.jump) this.hold = VALIDATE_INPUT_STEP - 1;
+    return { jump: this.cur.jump, slide: this.cur.slide };
+  }
+  private plan(s: RunState): Decision {
+    const b = s.body; const ch = charOf(s); const caps = { maxJumps: ch.maxJumps, glide: ch.glide };
+    const x0 = b.x - 100, look = 14 * TILE, x1 = b.x + look + 400;
+    const solids = s.level.solids.filter(o => o.x1 > x0 && o.x0 < x1);
+    const powered = s.power.giant > 0 || s.power.dash > 0;
+    const hazards = s.iframes > 0.25 || powered ? [] : s.level.hazards.filter(h => !h.broken && !h.passed && !h.touched && h.x1 > x0 && h.x0 < x1);
+    if (powered || s.rescue > 0) solids.push({ x0, x1, top: GROUND_Y, ground: true });
+    const endX = b.x + look;
+    for (const t of s.level.pickups.filter(p => !p.taken && !this.skip.has(p.id) && (p.type === 'letter' || p.type === 'pouch') && p.x > b.x - 10 && p.x < endX - 40)) {
+      for (const endGrounded of [true, false]) {
+        const r = solve(solids, hazards, b, s.speed, Math.max(endX, t.x + 6 * TILE), { pad: 3, caps, budget: 200000, mustCollect: { x: t.x, y: t.y }, endGrounded });
+        if (r.ok && r.path.length) return r.path[0];
+      }
+      if (t.x < b.x + 3 * TILE) this.skip.add(t.id);
+    }
+    for (const o of [{}, { endGrounded: false }, { endGrounded: false, pad: 0 }]) {
+      const r = solve(solids, hazards, b, s.speed, endX, { pad: 3, caps, budget: 200000, ...o });
+      if (r.ok && r.path.length) return r.path[0];
+    }
+    return { jump: false, slide: false };
+  }
+}
 
 describe('stages', () => {
   it('ids are unique, worlds/indices consistent, biomes valid', () => {
@@ -134,6 +175,50 @@ describe('stages', () => {
       }
       expect([...new Set(bits.values())].sort(), `${st.id} pouch bits`).toEqual([0, 1, 2]);
     }
+  });
+
+  // GDD §7.5: a bonus teleport re-places the main chunks it abandoned "from the same index" — the finish included.
+  for (const when of ['finish just generated', 'finish line just crossed'] as const) {
+    it(`a feast that starts when the ${when} re-places the rest of the course and a fresh finish; the clear comes on the ground`, () => {
+      for (const st of STAGES) {
+        const s = newRun({ mode: 'stage', seed: st.seed, charId: 'hotteok', stageId: st.id, noCountdown: true });
+        const ap = new Autopilot({ jitter: 0, seed: 1 });
+        const reached = new Set<number>(); let forced = false; let endStep = -1; let finishAfter = false; let n = 0;
+        while (s.phase === 'run' && n++ < 60 * 150) {
+          if (!forced && s.bonusStage === 'none' && s.level.finishX !== Infinity && (when === 'finish just generated' || s.body.x >= s.level.finishX + 60)) { forced = true; completeWord(s); }
+          stepRun(s, ap.next(s));
+          for (const c of s.level.chunks) if (c.main && c.x <= s.body.x) reached.add(c.index);
+          if (s.events.some(e => e.t === 'bonusEnd')) endStep = s.steps;
+          if (endStep > 0 && s.level.chunks.some(c => c.finish && c.x > s.body.x - 2000)) finishAfter = true;
+          s.events.length = 0;
+        }
+        expect(forced, st.id).toBe(true);
+        expect(s.phase, `${st.id} (cause ${s.deathCause})`).toBe('clear');
+        expect(s.steps, `${st.id}: cleared on the bonusEnd step`).toBeGreaterThan(endStep + 30);
+        expect(s.body.onGround, `${st.id}: cleared in the air`).toBe(true);
+        expect(finishAfter, `${st.id}: no finish line after the feast`).toBe(true);
+        expect(reached.size, `${st.id}: course slots reached`).toBe(resolveCourse(st)!.length);
+      }
+    });
+  }
+
+  it('a feast never costs a golden pouch: a completionist taking every letter still gets all three in 2-3', () => {
+    const st = STAGES.find(x => x.id === '2-3')!;
+    const s = newRun({ mode: 'stage', seed: st.seed, charId: 'hotteok', stageId: st.id, noCountdown: true });
+    const bot = new Collector(); let n = 0;
+    let atStart: string[] = [];
+    while (s.phase === 'run' && n++ < 60 * 150) {
+      stepRun(s, bot.next(s));
+      if (s.events.some(e => e.t === 'bonusStart')) {   // untaken pouches still ahead inside the chunk being left
+        const c = s.level.chunks.find(c => c.x <= s.body.x && s.body.x < c.x + c.width)!;
+        atStart = s.level.pickups.filter(p => p.type === 'pouch' && !p.taken && p.x > s.body.x - 40 && p.x < c.x + c.width).map(p => `#${p.pouch} +${Math.round(p.x - s.body.x)}`);
+      }
+      s.events.length = 0;
+    }
+    expect(s.phase).toBe('clear');
+    expect(s.stats.bonusTimes, 'the word was completed next to a pouch (set_river_benches L → B)').toBeGreaterThanOrEqual(1);
+    expect(atStart, 'pouches right ahead when the feast started').toEqual([]);
+    expect(s.pouchesGot).toBe(0b111);
   });
 
   it('every stage can be finished: a good bot clears each one', () => {

@@ -1,7 +1,7 @@
-e2e (2026-09-26T10:47:48.356Z) — play/index.html in headless Chromium
+e2e (2026-09-26T15:13:11.431Z) — play/index.html in headless Chromium
 
 ## phone-portrait 390×844
-  ✓ boots into the run (232 ms)
+  ✓ boots into the run (259 ms)
   ✓ first launch is the tutorial run (no menu first)
   ✓ translucent title overlay over the live run
   ✓ a small '건너뛰기' button
@@ -18,6 +18,7 @@ e2e (2026-09-26T10:47:48.356Z) — play/index.html in headless Chromium
   ✓ rewind replays at ~40 % game speed
   ✓ pause freezes the sim
   ✓ pause sheet: 계속 · 처음부터 · quick settings
+  ✓ touching the pause sheet does not bring the sound back
   ✓ still held during the 3-2-1
   ✓ runs again after the countdown
   ✓ the tutorial clears by playing it (rewinds: 2)
@@ -25,23 +26,30 @@ e2e (2026-09-26T10:47:48.356Z) — play/index.html in headless Chromium
   ✓ tutorial completion is saved
   ✓ holding the slide zone slides
   ✓ multi-touch: slide held + jump tap → jumps, slide stays held
+  ✓ multi-touch: ⏸ pauses while the other thumb holds slide
+  ✓ multi-touch: 계속 resumes with a finger resting on the sheet
   ✓ hiding the page auto-pauses; coming back does not resume by itself
   ✓ countdown after 계속
   ✓ resumes after the countdown
   ✓ a 420 ms stall auto-pauses (1 steps ran)
-  stage 1-1: {"phase":"clear","dist":313,"hits":1,"jellies":291,"fps":60}
+  stage 1-1: {"phase":"clear","dist":313,"hits":1,"jellies":286,"fps":60}
   ✓ stage 1-1 played to the finish flag
   ✓ ★1 booked for 1-1
   ✓ stage clear shows the stars
   ✓ 다시 달리기 → the stage again, no countdown
+  ✓ the 1-1 clear races along as a ghost
+  ghost: countdown {"phase":"countdown","ghost":true,"gx":80,"x":80} · after GO {"t":0.41666666666666663,"gt":0.41666666666666663,"x":255,"gx":255}
+  ✓ the ghost waits out the 3-2-1 and leaves with the player on GO
   ✓ mashing at the KO does not skip the results ({"res":true,"phase":"over"})
-  ✓ results fit one screen without scrolling ({"sh":262,"ch":262,"docH":844,"vh":844,"bottom":844})
+  ✓ results fit one screen without scrolling ({"sh":366,"ch":366,"docH":844,"vh":844,"bottom":844})
   ✓ 쓰러짐 card names the hazard + its verb ("석쇠 꼬챙이 — 한 번 점프마지막으로 부딪힌 것")
   ✓ 따끈함 장부 + 점수 내역 shown
+  ✓ 점수 내역: no number breaks mid-value, no label is cut
   ✓ 다시 달리기 is the biggest button
   ✓ 다시 달리기 sits where the jump pad was
-  ✓ death → retry → jump in 1394 ms (≤ 2500)
+  ✓ death → retry → jump in 1433 ms (≤ 2500)
   ✓ holding the jump zone 0.4 s on the results retries
+  ✓ multi-touch: 다시 달리기 works while the slide thumb is still down
   ✓ 홈 leaves the run (rAF stopped, menus shown)
   network requests: 0
   ✓ no network requests (fully offline)
@@ -49,7 +57,7 @@ e2e (2026-09-26T10:47:48.356Z) — play/index.html in headless Chromium
   ✓ no console errors
 
 ## small-portrait 360×640
-  ✓ boots into the run (220 ms)
+  ✓ boots into the run (240 ms)
   ✓ first launch is the tutorial run (no menu first)
   ✓ translucent title overlay over the live run
   ✓ a small '건너뛰기' button
@@ -66,24 +74,29 @@ e2e (2026-09-26T10:47:48.356Z) — play/index.html in headless Chromium
   ✓ rewind replays at ~40 % game speed
   ✓ pause freezes the sim
   ✓ pause sheet: 계속 · 처음부터 · quick settings
+  ✓ touching the pause sheet does not bring the sound back
   ✓ still held during the 3-2-1
   ✓ runs again after the countdown
   ✓ then stage 1-1 starts right away
   ✓ tutorial completion is saved
   ✓ holding the slide zone slides
   ✓ multi-touch: slide held + jump tap → jumps, slide stays held
+  ✓ multi-touch: ⏸ pauses while the other thumb holds slide
+  ✓ multi-touch: 계속 resumes with a finger resting on the sheet
   ✓ hiding the page auto-pauses; coming back does not resume by itself
   ✓ countdown after 계속
   ✓ resumes after the countdown
   ✓ a 420 ms stall auto-pauses (1 steps ran)
   ✓ mashing at the KO does not skip the results ({"res":true,"phase":"over"})
-  ✓ results fit one screen without scrolling ({"sh":262,"ch":262,"docH":640,"vh":640,"bottom":640})
+  ✓ results fit one screen without scrolling ({"sh":380,"ch":380,"docH":640,"vh":640,"bottom":640})
   ✓ 쓰러짐 card names the hazard + its verb ("석쇠 꼬챙이 — 한 번 점프마지막으로 부딪힌 것")
   ✓ 따끈함 장부 + 점수 내역 shown
+  ✓ 점수 내역: no number breaks mid-value, no label is cut
   ✓ 다시 달리기 is the biggest button
   ✓ 다시 달리기 sits where the jump pad was
-  ✓ death → retry → jump in 1406 ms (≤ 2500)
+  ✓ death → retry → jump in 1441 ms (≤ 2500)
   ✓ holding the jump zone 0.4 s on the results retries
+  ✓ multi-touch: 다시 달리기 works while the slide thumb is still down
   ✓ 홈 leaves the run (rAF stopped, menus shown)
   network requests: 0
   ✓ no network requests (fully offline)
@@ -91,7 +104,7 @@ e2e (2026-09-26T10:47:48.356Z) — play/index.html in headless Chromium
   ✓ no console errors
 
 ## phone-landscape 844×390
-  ✓ boots into the run (379 ms)
+  ✓ boots into the run (324 ms)
   ✓ first launch is the tutorial run (no menu first)
   ✓ translucent title overlay over the live run
   ✓ a small '건너뛰기' button
@@ -100,34 +113,42 @@ e2e (2026-09-26T10:47:48.356Z) — play/index.html in headless Chromium
   ✓ title overlay fades on the first press
   ✓ double-tap-hold: no text selection / context menu / zoom ({"sel":"","cm":0,"zoom":1})
   ✓ a tutorial miss shows a verb hint
-  hint "점프!" · flashing 2 · 12 steps in 0.5 s
+  hint "점프!" · flashing 2 · 13 steps in 0.5 s
   ✓ the matching pad / thumb hint flashes
   ✓ rewind replays at ~40 % game speed
   ✓ pause freezes the sim
   ✓ pause sheet: 계속 · 처음부터 · quick settings
+  ✓ touching the pause sheet does not bring the sound back
   ✓ still held during the 3-2-1
   ✓ runs again after the countdown
   ✓ then stage 1-1 starts right away
   ✓ tutorial completion is saved
   ✓ holding the slide zone slides
   ✓ multi-touch: slide held + jump tap → jumps, slide stays held
+  ✓ multi-touch: ⏸ pauses while the other thumb holds slide
+  ✓ multi-touch: 계속 resumes with a finger resting on the sheet
   ✓ hiding the page auto-pauses; coming back does not resume by itself
   ✓ countdown after 계속
   ✓ resumes after the countdown
   ✓ a 420 ms stall auto-pauses (1 steps ran)
-  stage 1-1: {"phase":"clear","dist":313,"hits":1,"jellies":291,"fps":54}
+  stage 1-1: {"phase":"clear","dist":313,"hits":1,"jellies":286,"fps":59}
   ✓ stage 1-1 played to the finish flag
   ✓ ★1 booked for 1-1
   ✓ stage clear shows the stars
   ✓ 다시 달리기 → the stage again, no countdown
+  ✓ the 1-1 clear races along as a ghost
+  ghost: countdown {"phase":"countdown","ghost":true,"gx":80,"x":80} · after GO {"t":0.41666666666666663,"gt":0.41666666666666663,"x":255,"gx":255}
+  ✓ the ghost waits out the 3-2-1 and leaves with the player on GO
   ✓ mashing at the KO does not skip the results ({"res":true,"phase":"over"})
-  ✓ results fit one screen without scrolling ({"sh":236,"ch":236,"docH":390,"vh":390,"bottom":390})
+  ✓ results fit one screen without scrolling ({"sh":315,"ch":315,"docH":390,"vh":390,"bottom":390})
   ✓ 쓰러짐 card names the hazard + its verb ("석쇠 꼬챙이 — 한 번 점프마지막으로 부딪힌 것")
   ✓ 따끈함 장부 + 점수 내역 shown
+  ✓ 점수 내역: no number breaks mid-value, no label is cut
   ✓ 다시 달리기 is the biggest button
   ✓ 다시 달리기 sits under the right thumb
-  ✓ death → retry → jump in 1406 ms (≤ 2500)
+  ✓ death → retry → jump in 1572 ms (≤ 2500)
   ✓ holding the jump zone 0.4 s on the results retries
+  ✓ multi-touch: 다시 달리기 works while the slide thumb is still down
   ✓ 홈 leaves the run (rAF stopped, menus shown)
   network requests: 0
   ✓ no network requests (fully offline)
@@ -143,15 +164,17 @@ e2e (2026-09-26T10:47:48.356Z) — play/index.html in headless Chromium
   ✓ right-click context menu is blocked
   ✓ Esc pauses
   ✓ Esc resumes (after the countdown)
-  ✓ Enter during the input guard is ignored (305 ms before ready)
+  ✓ render cap: ~60 fps on 60–144 Hz panels ({"60Hz":60,"75Hz":60,"90Hz":60,"120Hz":60,"144Hz":60})
+  ✓ Enter during the input guard is ignored (295 ms before ready)
   ✓ Enter retries on the results
   fps 60
+  ✓ a locked remix with ★12 shows its real blocker ("1-6 도착")
   ✓ no network requests
   console/page errors: 0
   ✓ no console errors
 
 ## no-storage 390×844 (localStorage blocked)
-  ✓ boots into the run (183 ms)
+  ✓ boots into the run (260 ms)
   ✓ first launch is the tutorial run (no menu first)
   ✓ translucent title overlay over the live run
   ✓ a small '건너뛰기' button
@@ -168,28 +191,50 @@ e2e (2026-09-26T10:47:48.356Z) — play/index.html in headless Chromium
   ✓ rewind replays at ~40 % game speed
   ✓ pause freezes the sim
   ✓ pause sheet: 계속 · 처음부터 · quick settings
+  ✓ touching the pause sheet does not bring the sound back
   ✓ still held during the 3-2-1
   ✓ runs again after the countdown
   ✓ then stage 1-1 starts right away
   ✓ tutorial completion is saved
   ✓ holding the slide zone slides
   ✓ multi-touch: slide held + jump tap → jumps, slide stays held
+  ✓ multi-touch: ⏸ pauses while the other thumb holds slide
+  ✓ multi-touch: 계속 resumes with a finger resting on the sheet
   ✓ hiding the page auto-pauses; coming back does not resume by itself
   ✓ countdown after 계속
   ✓ resumes after the countdown
   ✓ a 420 ms stall auto-pauses (1 steps ran)
   ✓ mashing at the KO does not skip the results ({"res":true,"phase":"over"})
-  ✓ results fit one screen without scrolling ({"sh":259,"ch":259,"docH":844,"vh":844,"bottom":844})
+  ✓ results fit one screen without scrolling ({"sh":363,"ch":363,"docH":844,"vh":844,"bottom":844})
   ✓ 쓰러짐 card names the hazard + its verb ("석쇠 꼬챙이 — 한 번 점프마지막으로 부딪힌 것")
   ✓ 따끈함 장부 + 점수 내역 shown
+  ✓ 점수 내역: no number breaks mid-value, no label is cut
   ✓ 다시 달리기 is the biggest button
   ✓ 다시 달리기 sits where the jump pad was
-  ✓ death → retry → jump in 1407 ms (≤ 2500)
+  ✓ death → retry → jump in 1463 ms (≤ 2500)
   ✓ holding the jump zone 0.4 s on the results retries
+  ✓ multi-touch: 다시 달리기 works while the slide thumb is still down
   ✓ 홈 leaves the run (rAF stopped, menus shown)
   network requests: 0
   ✓ no network requests (fully offline)
   console/page errors: 0
   ✓ no console errors
+
+## back-button 390×844 (back button, 첫 달리기 replay)
+  ✓ back during the first run pauses it — the page stays
+  ✓ back again keeps the pause sheet
+  ✓ back on the results → 홈
+  ✓ back closes the stage card
+  ✓ back on 골목 지도 → 홈
+  ✓ a 첫 달리기 replay offers 그만하기 and ends back in 설정 (그만하기)
+  ✓ back on 설정 → 홈, no guard left
+  ✓ back on 홈 leaves the game
+  ✓ no console errors
+
+## landscape-16x9 640×360 (thumb hints, swapped tutorial)
+  {"signs":["점프! (오른쪽/스페이스)"],"gy":293,"lh":[{"s":".lh.jump","vis":true,"top":298,"left":575},{"s":".lh.slide","vis":false,"top":0,"left":0}],"inband":true}
+  ✓ no letterbox: the thumb hints sit in the ground band, off the play band
+  ✓ tutorial: before the slide beat only the (swapped, right) 점프 hint shows
+  ✓ tutorial signs follow 좌우 바꾸기 (「점프! (오른쪽/…)」)
 
 ✅ all checks passed

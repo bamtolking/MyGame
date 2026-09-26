@@ -87,6 +87,7 @@ export interface RunStats {
   nearMisses: number; maxTier: number; bonusJellies: number;
   lines: number; moonCakes: number; pouches: number; fastFalls: number; maxFlow: number; superBonus: number;
   relayDist: number; miniPotions: number; pitsGuarded: number; shieldsUsed: number;
+  jellyPct500: number;   // jellyPct at the moment the run first reached 500 m (frozen); −1 before that
 }
 
 export interface RunState {
@@ -103,6 +104,7 @@ export interface RunState {
   assistOpts: AssistOpts;
   assist: boolean;         // any assist option on (records are marked, never punished)
   trial: boolean;          // try-out run (no rewards/records); ends after TRIAL_T
+  noCountdown: boolean;    // started without the countdown (ghosts replay with the same setting)
   phase: Phase;
   t: number;             // run time (s), excludes countdown
   countdown: number;
@@ -134,6 +136,7 @@ export interface RunState {
   lastHit: { kind: string; biome: string; x: number } | null;
   events: SimEvent[];
   inputJumpHeld: boolean;
+  pendingJump: boolean;  // a press made during hitstop / relay freeze, fed as a fresh press on the next live step
   prevSlide: boolean;
   lowHpWarned: boolean;
   hitstop: number;       // steps of freeze left after taking damage

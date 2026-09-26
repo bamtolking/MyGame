@@ -5,7 +5,7 @@
 //   that were generated ahead, the generator state is rewound to the first abandoned one and they are re-placed.
 // - Item slots (potions / power-ups / letters / pouches) are filled on a metres schedule; power-up kinds use
 //   their own per-index RNG stream.
-import { TILE, GROUND_Y, PX_PER_M, VIEW_W, SPEED_TIERS, MAX_TIER } from '../data/physics';
+import { TILE, GROUND_Y, GROUND_ROW, PX_PER_M, VIEW_W, SPEED_TIERS, MAX_TIER } from '../data/physics';
 import {
   POTION_GAP_M, BIG_POTION_EVERY, POWER_GAP_M, LETTER_GAP_M, NO_REPEAT, TIER_EVERY_M, BIOME_EVERY_M, BONUS_WORD,
   POWER_WEIGHTS, LINE_MIN_JELLIES, COOLDOWN_CHUNKS, BREATHER_AFTER, BREATHER_T, SETPIECE_T, OPEN_COIN_EVERY,
@@ -81,6 +81,19 @@ export function paceAt(s: RunState): { tier: number; biome: string } {
 
 function primaryFamily(p: ParsedChunk): string { return p.def.tags?.find(t => FAMILIES.includes(t)) ?? 'other'; }
 
+/** The director's difficulty count: hazards plus pits (a pit is a hazard too, GDD §5.3) — a pit counts once per
+ *  4 columns of gap, so a long pit gauntlet is never an "easy" acclimation chunk. 0 = a true breather. */
+const DANGER = new WeakMap<ParsedChunk, number>();
+export function dangerOf(p: ParsedChunk): number {
+  let d = DANGER.get(p);
+  if (d === undefined) {
+    d = p.hazards.length;
+    for (const gap of p.def.rows[GROUND_ROW].match(/[^=]+/g) ?? []) d += Math.ceil(gap.length / 4);
+    DANGER.set(p, d);
+  }
+  return d;
+}
+
 function pickMain(s: RunState, tier: number, biome: string): ParsedChunk {
   const g = s.level.gen;
   const fits = (p: ParsedChunk) => p.def.tiers[0] <= tier && p.def.tiers[1] >= tier && (!p.def.biomes || p.def.biomes.includes(biome));
@@ -95,14 +108,14 @@ function pickMain(s: RunState, tier: number, biome: string): ParsedChunk {
   if (!cands.length) cands = PARSED.filter(p => isGameplay(p) && fits(p));
   // director: a breather after BREATHER_AFTER hazard chunks in a row or ~BREATHER_T seconds without rest
   if (g.hazardRun >= BREATHER_AFTER || g.calmM >= BREATHER_T * speed / PX_PER_M) {
-    const rest = cands.filter(p => p.def.tags?.includes('rest') || p.hazards.length === 0);
+    const rest = cands.filter(p => p.def.tags?.includes('rest') || dangerOf(p) === 0);
     if (rest.length) cands = rest;
   } else {
     const nonRest = cands.filter(p => !p.def.tags?.includes('rest')); if (nonRest.length) cands = nonRest;
   }
   // acclimation: right after a speed-up, an easier chunk from the tier below that still covers this tier
   if (g.lastTier >= 0 && tier > g.lastTier) {
-    const easy = cands.filter(p => p.def.tiers[0] <= tier - 1 && p.hazards.length <= 3);
+    const easy = cands.filter(p => p.def.tiers[0] <= tier - 1 && dangerOf(p) <= 3);
     if (easy.length) cands = easy;
   }
   let total = 0;
@@ -173,7 +186,7 @@ export function placeChunk(s: RunState, p: ParsedChunk, tier: number, biome: str
         break;
       case 'slotL':
         if (!sky && g.letterDebt >= LETTER_GAP_M && s.mode !== 'tutorial' && s.bonusStage === 'none' && s.letters.some(v => !v)
-          && !lv.pickups.some(q => q.type === 'letter' && !q.taken)) {
+          && !lv.pickups.some(q => q.type === 'letter' && !q.taken && !q.seen)) {   // a letter run past (seen) is missed: offer it again
           g.letterDebt = 0;
           lv.pickups.push({ ...base, type: 'letter', letter: nextLetterIndex(s) });
         } else lv.pickups.push({ ...base, type: 'jelly' });
@@ -187,7 +200,7 @@ export function placeChunk(s: RunState, p: ParsedChunk, tier: number, biome: str
     g.mainIndex++; g.mainM += m; g.setpieceM += m;
     g.recent.push(p.def.id); if (g.recent.length > NO_REPEAT) g.recent.shift();
     g.lastUsed[p.def.id] = g.mainIndex - 1;
-    const hasHaz = p.hazards.length > 0;
+    const hasHaz = dangerOf(p) > 0;
     g.hazardRun = hasHaz ? g.hazardRun + 1 : 0;
     g.calmM = hasHaz ? g.calmM + m : 0;
     g.recentFam.push(primaryFamily(p)); if (g.recentFam.length > 4) g.recentFam.shift();
@@ -245,7 +258,7 @@ function placeStagePouches(s: RunState, pc: PlacedChunk, slot: number): void {
   pc.line = pc.jellyTotal >= LINE_MIN_JELLIES ? 1 : 0;
 }
 
-function pickSky(s: RunState): ParsedChunk {
+export function pickSky(s: RunState): ParsedChunk {
   const sky = PARSED.filter(p => p.def.tags?.includes('sky'));
   const rng = streamRng(s.seed, 0x3000 + s.stats.bonusTimes * 64 + s.level.skyPlaced++);
   return sky[Math.floor(rngNext(rng) * sky.length)];
@@ -259,6 +272,9 @@ export function restartStreamAt(s: RunState, x: number): void {
   const keep = (x0: number) => x0 < s.body.x - 50;
   const firstDropped = lv.chunks.find(c => !keep(c.x) && c.main && c.genBefore);
   if (firstDropped) lv.gen = cloneGen(firstDropped.genBefore!);
+  // a finish generated before the teleport is un-placed too: the rest of the course and a fresh finish line
+  // follow the landing (else the stale finishX would 'clear' the stage in mid-air and skip the course tail)
+  if (lv.finishX !== Infinity) { lv.finishX = Infinity; for (const c of lv.chunks) c.finish = false; }
   lv.chunks = lv.chunks.filter(c => keep(c.x));
   lv.solids = lv.solids.filter(o => keep(o.x0)).map(o => (o.x1 > cut ? { ...o, x1: cut } : o));
   lv.hazards = lv.hazards.filter(o => keep(o.x0));

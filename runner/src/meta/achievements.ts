@@ -74,7 +74,8 @@ export const COSMETICS: CosmeticDef[] = [
   { id: 'pal_dalgona_b', kind: 'palette', charId: 'dalgona', name: '딸기 달고나', price: PALETTE_PRICE, colors: pal('#f28aa0', '#c45a74', '#6a2a3a', '#ffd0d8') },
   { id: 'pal_goguma_b', kind: 'palette', charId: 'goguma', name: '호박 고구마', price: PALETTE_PRICE, colors: pal('#f0a040', '#c47420', '#6a3a0c', '#ffb08a') },
 ];
-export const COSMETIC_BY_ID: Record<string, CosmeticDef> = Object.fromEntries(COSMETICS.map(c => [c.id, c]));
+// (no prototype: ids come from saves / backup codes — 'constructor' must not "exist")
+export const COSMETIC_BY_ID: Record<string, CosmeticDef> = Object.assign(Object.create(null), Object.fromEntries(COSMETICS.map(c => [c.id, c])));
 
 // ---------------------------------------------------------------- per-run bests (stored in p.bests)
 function bests(p: Progress): Record<string, number> {
@@ -160,7 +161,7 @@ export const ACHIEVEMENTS: AchievementDef[] = DEFS.map(d => ({
   check: (p: Progress) => d.value(p) >= targetOf(d, p),
   progress: (p: Progress) => [d.value(p), targetOf(d, p)] as [number, number],
 }));
-export const ACHIEVEMENT_BY_ID: Record<string, AchievementDef> = Object.fromEntries(ACHIEVEMENTS.map(a => [a.id, a]));
+export const ACHIEVEMENT_BY_ID: Record<string, AchievementDef> = Object.assign(Object.create(null), Object.fromEntries(ACHIEVEMENTS.map(a => [a.id, a])));
 
 /** Judge achievements after a run was booked (applyRun calls this last). Each unlocks once and grants its cosmetic. */
 export function evaluateAchievements(p: Progress, s: RunState): AchievementUnlock[] {

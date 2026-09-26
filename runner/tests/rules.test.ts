@@ -1,13 +1,14 @@
 // Run rules: damage, i-frames, pits, potions, power-ups, bonus time, relay, streak/near-miss, determinism.
 import { describe, it, expect } from 'vitest';
 import { newRun, stepRun, stateHash, totalScore, HITSTOP_STEPS } from '../src/sim/run';
-import { restartStreamAt, placeChunk } from '../src/sim/level';
+import { restartStreamAt, placeChunk, ensureLevel, dangerOf, PARSED_BY_ID } from '../src/sim/level';
 import { parseChunk } from '../src/sim/chunk';
 import { DT, GROUND_Y, TILE, SPEED_TIERS } from '../src/data/physics';
 import {
   HIT_DAMAGE, FALL_DAMAGE, HIT_IFRAMES, POTION_HEAL, POWER_DUR, BONUS_T, BONUS_LIFT_T, DRAIN_BY_TIER, BASE_MAX_HP,
+  BREATHER_T, MINI_POTION_HEAL,
 } from '../src/data/tuning';
-import type { RunState, RunInput } from '../src/sim/types';
+import type { RunState, RunInput, Pickup } from '../src/sim/types';
 
 const E = (n: number) => '.'.repeat(n);
 const NONE: RunInput = { jump: false, slide: false };
@@ -36,6 +37,17 @@ function steps(s: RunState, n: number, inp: RunInput | ((i: number) => RunInput)
 function untilX(s: RunState, x: number, inp: RunInput = NONE, max = 2000): void {
   let n = 0; while (s.body.x < x && n++ < max && s.phase === 'run') stepRun(s, inp);
 }
+/** Insert a pickup keeping the stream's x order (collectPickups relies on it). */
+function addPickup(s: RunState, p: Omit<Pickup, 'id' | 'taken' | 'pulled'>): Pickup {
+  const q: Pickup = { id: s.level.nextId++, taken: false, pulled: false, ...p };
+  s.level.pickups.push(q); s.level.pickups.sort((a, b) => a.x - b.x); return q;
+}
+/** The word is one letter short; the missing letter lies just ahead of the runner. */
+function almostFeast(s: RunState): void {
+  for (let i = 0; i < s.letters.length; i++) s.letters[i] = i !== 0;
+  addPickup(s, { type: 'letter', letter: 0, x: s.body.x + 30, y: s.body.y - 30 });
+}
+const sortedByX = (ps: Pickup[]) => ps.every((p, i) => i === 0 || ps[i - 1].x <= p.x);
 
 describe('hazards & i-frames', () => {
   it('running into a spike costs HIT_DAMAGE once, grants i-frames, resets the streak', () => {
@@ -57,6 +69,19 @@ describe('hazards & i-frames', () => {
     expect(s.iframes).toBeGreaterThan(HIT_IFRAMES - 2 * DT);
     steps(s, Math.ceil(HIT_IFRAMES / DT) + 1);
     expect(s.iframes).toBe(0);
+  });
+  it('a jump pressed during the hitstop is queued: it becomes the air jump on the first live step', () => {
+    for (let at = 1; at <= HITSTOP_STEPS; at++) {
+      const s = runWith(flatRows('='.repeat(30), { 10: E(10) + 'A' + E(19) }));
+      untilX(s, s.level.hazards[0].x0 - 120);
+      stepRun(s, { jump: true, slide: false });                  // single jump into the tall fork
+      let n = 0; while (s.stats.hits === 0 && n++ < 200) stepRun(s, NONE);
+      expect(s.body.onGround).toBe(false);
+      const air0 = s.stats.airJumps;
+      steps(s, HITSTOP_STEPS + 1, i => ({ jump: i + 1 === at, slide: false }));
+      expect(s.stats.airJumps, `pressed on hitstop step ${at}`).toBe(air0 + 1);
+      expect(s.body.vy).toBeLessThan(-400);
+    }
   });
   it('a hanging hazard hits a standing runner but not a sliding one', () => {
     const rows = flatRows('='.repeat(20), { 9: E(8) + 'vvv' + E(9) });
@@ -87,6 +112,33 @@ describe('pits', () => {
     expect(hp0 - s.hp).toBeGreaterThanOrEqual(FALL_DAMAGE);
     expect(s.phase).toBe('run');
     expect(s.body.y).toBeLessThanOrEqual(GROUND_Y + 1);
+  });
+  it('the rescue bridge reaches the far edge of a wide pit: one fall, never a second one mid-gap', () => {
+    const s = runWith(flatRows('====' + '.'.repeat(28) + '='.repeat(12)));
+    untilX(s, s.body.x + 44 * TILE);
+    expect(s.stats.falls).toBe(1);
+    expect(s.body.onGround).toBe(true);
+  });
+  for (const k of ['dash', 'giant'] as const) {
+    it(`${k} ending over a pit hands over to the rescue bridge: no forced fall (GDD §5.6 grace)`, () => {
+      const s = runWith(flatRows('====' + '.'.repeat(28) + '='.repeat(12)));
+      s.power[k] = 1.0; if (k === 'giant') s.body.scale = 2.1;
+      let endX = 0; let n = 0;
+      while (n++ < 400) { stepRun(s, NONE); if (!endX && s.events.some(e => e.t === 'powerEnd')) endX = s.body.x; }
+      const pit = s.level.solids.filter(o => o.ground).map(o => o.x1).find(x1 => x1 < endX)!;
+      expect(endX).toBeGreaterThan(pit + 4 * TILE);               // it really ended over the gap
+      expect(s.stats.falls).toBe(0);
+      expect(s.body.onGround).toBe(true);
+    });
+  }
+  it('a relay while bridged over a pit: the partner is carried across, not dropped in', () => {
+    const s = runWith(flatRows('====' + '.'.repeat(28) + '='.repeat(12)), { partnerId: 'goguma' });
+    s.power.dash = 3;
+    untilX(s, s.body.x + 8 * TILE);                              // on the dash bridge over the gap
+    s.hp = 0.001; let n = 0;
+    while (n++ < 300) stepRun(s, NONE);
+    expect(s.relayUsed).toBe(true);
+    expect(s.stats.falls).toBe(0);
   });
 });
 
@@ -140,6 +192,82 @@ describe('bonus time', () => {
     expect(s.phase).toBe('run');
     expect(s.body.onGround).toBe(true);
     expect(s.level.chunks.find(c => c.x <= s.body.x && s.body.x < c.x + c.width)?.id).toBe('landing');
+  });
+});
+
+describe('bonus time: order & letters', () => {
+  for (const low of [false, true]) {
+    it(`pickups stay in x order through a ${low ? '왕보름달 ' : ''}feast, so the whole candy field and the moon cake are collectible`, () => {
+      const s = runWith(null); if (low) s.hp = 10;
+      almostFeast(s);
+      let n = 0, sky = 0;
+      while ((s.stats.bonusTimes === 0 || s.bonusStage !== 'none') && n++ < 2000) {
+        const b = s.body;   // bob through the candy field; rise to the moon cake's line near the end
+        stepRun(s, { jump: false, slide: false, jumpHeld: s.bonusStage === 'sky' && (s.bonusT < 1.6 ? b.y > 270 : (Math.floor(s.steps / 25) % 2 === 0 || b.y > 360)) });
+        if (s.bonusStage === 'sky') { sky++; expect(sortedByX(s.level.pickups), `step ${s.steps}`).toBe(true); }
+      }
+      expect(sky).toBeGreaterThan(Math.round(BONUS_T / DT) - 5);
+      expect(s.stats.moonCakes).toBe(1);
+      expect(s.stats.bonusJellies).toBeGreaterThan(60);
+    });
+  }
+  it('a letter run past is missed: the next L slot offers it again (GDD §5.5)', () => {
+    const s = runWith(null);
+    const old = addPickup(s, { type: 'letter', letter: 0, x: s.body.x + 60, y: 60 });   // out of reach overhead
+    untilX(s, s.body.x + 6 * TILE);
+    expect(old.taken).toBe(false);
+    restartStreamAt(s, s.body.x + TILE * 2); s.level.gen.letterDebt = 1000;
+    const pc = placeChunk(s, parseChunk({ id: 'test_L', tiers: [0, 0], rows: flatRows('='.repeat(16), { 10: E(8) + 'L' + E(7) }) }), 0, s.biome, { main: true });
+    const fresh = s.level.pickups.filter(p => p.chunk === pc.serial && p.type === 'letter');
+    expect(fresh.map(p => p.letter)).toEqual([0]);
+  });
+  it('…but while a letter is still ahead, no second one is placed', () => {
+    const s = runWith(null);
+    restartStreamAt(s, s.body.x + TILE * 6); s.level.gen.letterDebt = 1000;
+    addPickup(s, { type: 'letter', letter: 0, x: s.body.x + 3 * TILE, y: 60 });
+    const pc = placeChunk(s, parseChunk({ id: 'test_L2', tiers: [0, 0], rows: flatRows('='.repeat(16), { 10: E(8) + 'L' + E(7) }) }), 0, s.biome, { main: true });
+    expect(s.level.pickups.filter(p => p.chunk === pc.serial && p.type === 'letter')).toEqual([]);
+  });
+});
+
+describe('director (GDD §5.8): pits are hazards too', () => {
+  it('tension never runs past BREATHER_T without a true breather; acclimation chunks are easy (danger ≤ 3)', () => {
+    let worst = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const s = newRun({ mode: 'endless', seed, charId: 'hotteok', noCountdown: true });
+      const seen = new Map<number, { id: string; tier: number }>();
+      for (let x = 0; s.level.gen.mainM < 2500; x += 400) {
+        s.body.x = x; ensureLevel(s);
+        for (const c of s.level.chunks) if (c.main && !seen.has(c.index)) seen.set(c.index, { id: c.id, tier: c.tier });
+      }
+      let run = 0, prevTier = -1;
+      for (const [, c] of [...seen].sort((a, b) => a[0] - b[0])) {
+        const p = PARSED_BY_ID.get(c.id)!;
+        if (prevTier >= 0 && c.tier > prevTier) expect(dangerOf(p), `seed ${seed}: ${c.id} after a speed-up`).toBeLessThanOrEqual(3);
+        prevTier = c.tier;
+        run = dangerOf(p) === 0 ? 0 : run + p.width / SPEED_TIERS[c.tier];
+        worst = Math.max(worst, run);
+      }
+    }
+    expect(worst).toBeLessThanOrEqual(BREATHER_T);
+  });
+});
+
+describe('companions', () => {
+  it('깍순이: the honey drop turns a proven running-line star candy ahead into +8 honey; with no safe cell it waits, never skips', () => {
+    const s = runWith(flatRows('='.repeat(48), { 10: E(34) + 'oooooooo' + E(6) }), { companionId: 'magpie' });
+    const pc = s.level.chunks.find(c => c.id.startsWith('test_'))!; const total0 = pc.jellyTotal;
+    s.compT = 25 - DT;
+    steps(s, 30);                                               // no candy in the drop window yet
+    expect(s.events.some(e => e.t === 'drop')).toBe(false);
+    expect(s.compT).toBeGreaterThanOrEqual(25);                  // still due: it retries every step
+    let n = 0; while (!s.events.some(e => e.t === 'drop') && n++ < 400) stepRun(s, NONE);
+    expect(s.events.some(e => e.t === 'drop')).toBe(true); expect(s.compT).toBeLessThan(1);
+    const honey = s.level.pickups.find(p => p.type === 'miniPotion')!;
+    expect(honey.chunk).toBe(pc.serial); expect(honey.y).toBe(GROUND_Y - TILE / 2);
+    expect(pc.jellyTotal).toBe(total0 - 1);
+    s.hp = 50; untilX(s, honey.x + 2 * TILE);
+    expect(honey.taken).toBe(true); expect(s.stats.miniPotions).toBe(1); expect(s.hp).toBeGreaterThan(50 + MINI_POTION_HEAL - 3);
   });
 });
 
@@ -225,6 +353,21 @@ describe('pickups & scoring extras', () => {
     n = 0; while (!s.body.onGround && s.body.vy > 0 && n++ < 10) stepRun(s, NONE);
     expect(s.body.jumps).toBeLessThanOrEqual(1);         // it became a fresh ground jump
     expect(s.body.vy).toBeLessThan(0);
+  });
+  it('jellyPct500 stays −1 until 500 m, then freezes the star-candy % of that moment', () => {
+    const s = runWith(null);
+    steps(s, 120); expect(s.stats.jellyPct500).toBe(-1);
+    s.dist = 499.8; stepRun(s, NONE); expect(s.stats.jellyPct500).toBe(-1);
+    let n = 0; while (s.dist < 500 && n++ < 60) stepRun(s, NONE);
+    const pct = s.stats.jellyPct500;
+    expect(pct).toBeGreaterThanOrEqual(0);
+    expect(pct).toBe(Math.floor(100 * s.stats.jellies / s.stats.jelliesSeen));
+    s.stats.jellies = 0; steps(s, 60);
+    expect(s.stats.jellyPct500).toBe(pct);
+  });
+  it('the run records whether it started without the countdown (ghost alignment)', () => {
+    expect(newRun({ mode: 'endless', seed: 1, charId: 'hotteok', noCountdown: true }).noCountdown).toBe(true);
+    expect(newRun({ mode: 'endless', seed: 1, charId: 'hotteok' }).noCountdown).toBe(false);
   });
   it('score never exceeds 999,999', () => {
     const s = runWith(null); s.score = 2_000_000; expect(totalScore(s)).toBe(999999);

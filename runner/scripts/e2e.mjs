@@ -1,8 +1,10 @@
 // Real-browser test (GDD §13.7): headless Chromium with mobile viewports + touch, on the single-file build
 // (play/index.html). Boots straight into 첫 달리기, checks the first tap (jump + AudioContext), browser-gesture
-// blocking, multi-touch, the tutorial rewind hint, pause/auto-pause + 3-2-1 resume, a full stage 1-1 clear, the
-// results input guard, instant retry timing, pad sizes, zero network requests, blocked localStorage and zero
-// console errors. Screenshots → e2e-out/, log → docs/e2e-report.txt.
+// blocking, multi-touch (game zones AND ⏸ / 계속 / 다시 달리기 with the other thumb down), the tutorial rewind hint,
+// pause/auto-pause + 3-2-1 resume, a full stage 1-1 clear, the ghost lined up on GO, the results input guard and
+// unbroken score numbers, instant retry timing, pad sizes, the back button / edge swipe, 16:9 landscape thumb hints,
+// the render cap, zero network requests, blocked localStorage and zero console errors.
+// Screenshots → e2e-out/, log → docs/e2e-report.txt.
 import { chromium } from 'playwright-core';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -45,6 +47,12 @@ const BOT = () => {
   }, 12);
 };
 const BOT_STOP = () => { clearInterval(window.__bot); window.__app?.input?.keyUp('ArrowDown'); };
+const centerOf = (page, sel) => page.evaluate(s => { const r = document.querySelector(s).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, sel);
+/** 점수 내역 chips whose number wraps (e.g. "43,6 / 14") or whose label is cut */
+const BROKEN_CHIPS = () => Array.from(document.querySelectorAll('#results .res-break span')).filter(sp => sp.offsetParent).filter(sp => {
+  const b = sp.querySelector('b'), sm = sp.querySelector('small');
+  return b.getBoundingClientRect().height > parseFloat(getComputedStyle(b).fontSize) * 1.8 || sm.scrollWidth > sm.clientWidth + 1;
+}).map(sp => sp.textContent);
 
 async function zonePoints(page, portrait, vp) {
   if (portrait) return page.evaluate(() => { const c = el => { const r = document.querySelector(el).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }; return { jump: c('.pad.jump'), slide: c('.pad.slide') }; });
@@ -125,6 +133,8 @@ async function mobile(name, viewport, o = {}) {
   const sheet = await page.textContent('#modal .sheet');
   check(/계속/.test(sheet) && /처음부터/.test(sheet) && /음악/.test(sheet) && /효과음/.test(sheet) && /흔들림/.test(sheet), 'pause sheet: 계속 · 처음부터 · quick settings');
   await shot('04-pause');
+  await page.tap('#modal .sheet h3'); await sleep(250);
+  check(await app(() => window.__app.audio.ctx?.state) === 'suspended', 'touching the pause sheet does not bring the sound back');
   await page.tap('#btn-resume'); await sleep(700);
   check(await app(() => window.__app.run.s.steps) === ps, 'still held during the 3-2-1');
   await shot('05-resume-count');
@@ -160,6 +170,17 @@ async function mobile(name, viewport, o = {}) {
   await touch('touchEnd', []); await sleep(100);
   check(sl, 'holding the slide zone slides');
   check(await app(() => window.__app.run.s.stats.jumps) > mj && still, 'multi-touch: slide held + jump tap → jumps, slide stays held');
+  // ⏸ and 계속 with the other thumb still on the glass (a second finger makes the browser drop the click)
+  await touch('touchStart', [{ x: Z2.slide.x, y: Z2.slide.y, id: 13 }]); await sleep(150);
+  const PB = await centerOf(page, '#btn-pause');
+  await touch('touchStart', [{ x: Z2.slide.x, y: Z2.slide.y, id: 13 }, { ...PB, id: 14 }]); await sleep(60);
+  await touch('touchEnd', [{ ...PB, id: 14 }]); await sleep(200);
+  check(await app(() => window.__app.run.paused), 'multi-touch: ⏸ pauses while the other thumb holds slide');
+  const RB = await centerOf(page, '#btn-resume');
+  await touch('touchStart', [{ x: Z2.slide.x, y: Z2.slide.y, id: 13 }, { ...RB, id: 15 }]); await sleep(60);
+  await touch('touchEnd', [{ ...RB, id: 15 }]); await sleep(150);
+  check(await app(() => !window.__app.run.paused && window.__app.run.resumeT > 0), 'multi-touch: 계속 resumes with a finger resting on the sheet');
+  await touch('touchEnd', []); await sleep(1700);
 
   // ---------------------------------------------------------------- auto-pause on visibilitychange; resume only by 계속 + countdown
   await app(() => { Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
@@ -197,12 +218,27 @@ async function mobile(name, viewport, o = {}) {
     await sleep(100);
     await page.tap('#res-retry');
     check(await page.waitForFunction(() => window.__app.run?.s.stageId === '1-1' && window.__app.run.s.phase === 'run' && !document.getElementById('results'), null, { timeout: 3000 }).then(() => true, () => false), '다시 달리기 → the stage again, no countdown');
+    check(await app(() => !!window.__app.run.ghost), 'the 1-1 clear races along as a ghost');
+    // recorded on an instant retry (no 3-2-1), raced from the stage card (with one): the ghost waits for GO
+    await app(() => window.__app.startStage('1-1'));
+    await sleep(700);
+    const gc = await app(() => { const rc = window.__app.run; return { phase: rc.s.phase, ghost: !!rc.ghost, gx: rc.ghost?.s.body.x, x: rc.s.body.x }; });
+    await page.waitForFunction(() => window.__app.run.s.phase === 'run' && window.__app.run.s.t > 0.4, null, { timeout: 4000, polling: 16 });
+    const gr = await app(() => { const rc = window.__app.run; return { t: rc.s.t, gt: rc.ghost?.s.t, x: rc.s.body.x, gx: rc.ghost?.s.body.x }; });
+    log(`  ghost: countdown ${JSON.stringify(gc)} · after GO ${JSON.stringify(gr)}`);
+    check(gc.phase === 'countdown' && gc.ghost && gc.gx === gc.x && gr.gt === gr.t && gr.gx === gr.x, 'the ghost waits out the 3-2-1 and leaves with the player on GO');
+    await app(() => window.__app.retry());
+    await page.waitForFunction(() => window.__app.run?.s.phase === 'run', null, { timeout: 3000 });
   }
 
   // ---------------------------------------------------------------- KO: mashing does not skip the results; results fit, no scroll
   await sleep(600);
   const R = await zonePoints(page, portrait, viewport);
-  await app(() => { const s = window.__app.run.s; s.lastHit = { kind: 'spike', biome: s.biome, x: s.body.x + 10 }; s.hurtT = 0; s.stats.hits += 2; s.stats.hitsBy.spike = 2; s.hp = 0.001; });
+  await app(() => {
+    const s = window.__app.run.s; s.lastHit = { kind: 'spike', biome: s.biome, x: s.body.x + 10 }; s.hurtT = 0; s.stats.hits += 2; s.stats.hitsBy.spike = 2; s.hp = 0.001;
+    // a long run's breakdown: 5–6 digit values must never break mid-number
+    s.score += 120000; Object.assign(s.stats, { jellies: 1400, jelliesSeen: Math.max(s.stats.jelliesSeen, 1600), bigJellies: 62, lines: 20, nearMisses: 41, bonusJellies: 300, moonCakes: 5, letters: 10, smashed: 3 });
+  });
   let seen = 0; const m0 = Date.now();
   while (Date.now() - m0 < 3000) {
     await page.touchscreen.tap(portrait ? R.jump.x : viewport.width * 0.85, viewport.height - 60).catch(() => {});
@@ -218,6 +254,8 @@ async function mobile(name, viewport, o = {}) {
   const ko = await page.textContent('#results .res-ko');
   check(/—/.test(ko ?? ''), `쓰러짐 card names the hazard + its verb ("${(ko ?? '').trim().slice(0, 30)}")`);
   check(!!(await page.$('#results .res-ledger')) && !!(await page.$('#results .res-break')), '따끈함 장부 + 점수 내역 shown');
+  const broken = await app(BROKEN_CHIPS);
+  check(broken.length === 0, `점수 내역: no number breaks mid-value, no label is cut${broken.length ? ' (' + broken.join(' | ') + ')' : ''}`);
   await shot('08-results');
   const rb = await app(() => { const r = document.getElementById('res-retry').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height, area: r.width * r.height, home: (() => { const q = document.getElementById('res-home').getBoundingClientRect(); return q.width * q.height; })() }; });
   check(rb.area > rb.home, '다시 달리기 is the biggest button');
@@ -249,6 +287,17 @@ async function mobile(name, viewport, o = {}) {
   await touch('touchStart', [{ x: H.x, y: H.y, id: 21 }]); await sleep(600); await touch('touchEnd', []);
   await sleep(200);
   check(await app(r => !document.getElementById('results') && window.__app.run.s.phase === 'run' && (window.__app.run.s.seed + ':' + window.__app.run.s.steps) !== r, run0), 'holding the jump zone 0.4 s on the results retries');
+
+  // ---------------------------------------------------------------- 다시 달리기 while the slide thumb is still down from the run
+  await sleep(300);
+  await touch('touchStart', [{ x: T.slide.x, y: T.slide.y, id: 31 }]); await sleep(100);
+  await app(() => { window.__app.run.s.hp = 0.001; });
+  await page.waitForSelector('#results', { timeout: 4000 }); await sleep(450);
+  const RR = await centerOf(page, '#res-retry');
+  await touch('touchStart', [{ x: T.slide.x, y: T.slide.y, id: 31 }, { ...RR, id: 32 }]); await sleep(60);
+  await touch('touchEnd', [{ ...RR, id: 32 }]); await sleep(250);
+  check(await app(() => !document.getElementById('results') && window.__app.run?.s.phase === 'run'), 'multi-touch: 다시 달리기 works while the slide thumb is still down');
+  await touch('touchEnd', []); await sleep(200);
 
   // ---------------------------------------------------------------- 홈 leaves the run
   await app(() => { window.__app.run.s.hp = 0.001; });
@@ -300,6 +349,15 @@ async function desktop(name, viewport) {
   check(await app(() => window.__app.run.paused), 'Esc pauses');
   await page.keyboard.press('Escape'); await sleep(1900);
   check(await app(() => !window.__app.run.paused && window.__app.run.s.phase === 'run'), 'Esc resumes (after the countdown)');
+  // render cap: 60 fps whatever the panel's refresh (synthetic vsync timestamps into App.frame, sim held)
+  const pace = await app(() => {
+    const a = window.__app; const rc = a.run; const r = a.renderer; const draw = r.draw; let n = 0; const out = {};
+    a.stopLoop(); a.stallMs = 1e9; rc.paused = true; r.draw = function (...x) { n++; return draw.apply(this, x); };
+    for (const hz of [60, 75, 90, 120, 144]) { n = 0; rc.lastT = 0; const t0 = performance.now(); for (let i = 0; i < hz * 2; i++) a.frame(t0 + i * 1000 / hz); out[hz + 'Hz'] = Math.round(n / 2); }
+    r.draw = draw; rc.paused = false; rc.lastT = 0; a.startLoop(); return out;
+  });
+  await sleep(300); await app(() => { window.__app.stallMs = 250; });   // (that blocked the page ~2 s: no stall pause for it)
+  check(Object.values(pace).every(v => v >= 58 && v <= 62), `render cap: ~60 fps on 60–144 Hz panels (${JSON.stringify(pace)})`);
   await page.evaluate(BOT); await sleep(6000); await page.evaluate(BOT_STOP);
   await shot('02-stage');
   await app(() => { window.__app.run.s.hp = 0.001; });
@@ -313,9 +371,89 @@ async function desktop(name, viewport) {
   await page.keyboard.press('Enter'); await sleep(300);
   check(await app(() => !document.getElementById('results') && window.__app.run?.s.phase === 'run'), 'Enter retries on the results');
   log(`  fps ${await app(() => Math.round(window.__app.fps))}`);
+  // 골목 지도: a remix locked with enough stars names the stage still to reach
+  const remix = await app(() => { const a = window.__app; for (const id of ['1-1', '1-2', '1-3', '1-4', '1-5']) { a.p.starMask[id] = 7; a.p.pouches[id] = 7; } a.showAdventure(); return document.querySelector('[data-stage="1-R"] .node-need')?.textContent ?? ''; });
+  check(/1-6 도착/.test(remix), `a locked remix with ★12 shows its real blocker ("${remix}")`);
   check(requests.length === 0, 'no network requests');
   log(`  console/page errors: ${errors.length}${errors.length ? '\n    ' + errors.join('\n    ') : ''}`);
   check(errors.length === 0, 'no console errors');
+  await ctx.close();
+}
+
+/** Android back / edge swipe: one history guard keeps the player inside the game (and a 첫 달리기 replay ends in 설정) */
+async function backButton(name, viewport) {
+  log(`\n## ${name} ${viewport.width}×${viewport.height} (back button, 첫 달리기 replay)`);
+  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  const errors = []; page.on('pageerror', e => errors.push('pageerror: ' + e.message)); page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  const app = (fn, arg) => page.evaluate(fn, arg);
+  await page.goto('data:text/html,<title>before</title>before');
+  await page.goto(url); await page.waitForSelector('#run #cv'); await sleep(400);
+  const here = () => page.evaluate(() => location.protocol === 'file:' && !!window.__app).catch(() => false);
+  const back = async () => { await page.evaluate(() => history.back()); await sleep(450); };
+  const Z = await zonePoints(page, true, viewport);
+  await page.touchscreen.tap(Z.jump.x, Z.jump.y); await sleep(250);      // the first tap (a gesture) arms the guard
+  await back();
+  check(await here() && await app(() => window.__app.run?.paused === true), 'back during the first run pauses it — the page stays');
+  await back();
+  check(await here() && await app(() => window.__app.run?.paused === true && !!document.querySelector('#modal .pause')), 'back again keeps the pause sheet');
+  await page.tap('#btn-quit');                                          // 건너뛰기 → 1-1
+  await page.waitForFunction(() => window.__app.run?.s.mode === 'stage' && window.__app.run.s.phase === 'run', null, { timeout: 5000 });
+  await app(() => { window.__app.run.s.hp = 0.001; });
+  await page.waitForSelector('#results', { timeout: 4000 }); await sleep(500);
+  await back();
+  check(await here() && await app(() => window.__app.screen === 'home' && !window.__app.run), 'back on the results → 홈');
+  await page.tap('#btn-map'); await sleep(300);
+  await page.tap('[data-stage="1-1"]'); await sleep(300);
+  await back();
+  check(await here() && await app(() => window.__app.screen === 'adventure' && !document.getElementById('modal')), 'back closes the stage card');
+  await back();
+  check(await here() && await app(() => window.__app.screen === 'home'), 'back on 골목 지도 → 홈');
+  // 첫 달리기 replayed from 설정 comes back to 설정 (not into 1-1)
+  await page.tap('#nav-settings'); await sleep(300);
+  await page.tap('#set-tutorial');
+  await page.waitForFunction(() => window.__app.run?.s.mode === 'tutorial', null, { timeout: 3000 });
+  await sleep(300);
+  await page.tap('#btn-pause'); await sleep(200);
+  const quit = await page.textContent('#btn-quit');
+  await page.tap('#btn-resume'); await sleep(300);
+  await page.tap('#btn-skip');
+  const toSettings = await page.waitForFunction(() => window.__app.screen === 'settings' && !window.__app.run, null, { timeout: 4000 }).then(() => true, () => false);
+  check(quit === '그만하기' && toSettings, `a 첫 달리기 replay offers 그만하기 and ends back in 설정 (${quit})`);
+  await back();
+  check(await here() && await app(() => window.__app.screen === 'home' && !history.state?.yasik), 'back on 설정 → 홈, no guard left');
+  await page.evaluate(() => history.back());
+  const left = await page.waitForURL(/^data:/, { timeout: 3000 }).then(() => true, () => false);
+  check(left, 'back on 홈 leaves the game');
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
+  await ctx.close();
+}
+
+/** 16:9 landscape (no letterbox): thumb hints drop into the ground band; 좌우 바꾸기 turns the tutorial signs round */
+async function hints169(name, viewport) {
+  log(`\n## ${name} ${viewport.width}×${viewport.height} (thumb hints, swapped tutorial)`);
+  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  const app = (fn, arg) => page.evaluate(fn, arg);
+  await page.goto(url); await page.waitForSelector('#run #cv');
+  await app(() => { const a = window.__app; a.p.settings.swapSides = true; a.startTutorial(); });
+  await sleep(300);
+  const r = await app(() => new Promise(res => {
+    const a = window.__app; const c = document.getElementById('cv').getContext('2d'); const signs = new Set(); const f = c.fillText;
+    c.fillText = function (t, ...x) { if (/점프!|슬라이드!/.test(t)) signs.add(t); return f.call(this, t, ...x); };
+    setTimeout(() => {
+      c.fillText = f;
+      const gy = a.renderer.sy(440); const vis = el => getComputedStyle(el).display !== 'none';
+      const lh = ['.lh.jump', '.lh.slide'].map(s => { const el = document.querySelector(s); const b = el.getBoundingClientRect(); return { s, vis: vis(el), top: Math.round(b.top), left: Math.round(b.left) }; });
+      res({ signs: [...signs], gy: Math.round(gy), lh, inband: document.getElementById('lhints').classList.contains('inband') });
+    }, 1500);
+  }));
+  log(`  ${JSON.stringify(r)}`);
+  const [j, sl] = r.lh;
+  check(r.inband && j.vis && j.top >= r.gy - 1, 'no letterbox: the thumb hints sit in the ground band, off the play band');
+  check(!sl.vis && j.left > viewport.width / 2, 'tutorial: before the slide beat only the (swapped, right) 점프 hint shows');
+  check(r.signs.some(t => /점프! \(오른쪽/.test(t)), 'tutorial signs follow 좌우 바꾸기 (「점프! (오른쪽/…)」)');
+  await page.screenshot({ path: `e2e-out/${name}-01-hints.png` });
   await ctx.close();
 }
 
@@ -324,6 +462,8 @@ await mobile('small-portrait', { width: 360, height: 640 }, {});
 await mobile('phone-landscape', { width: 844, height: 390 }, { fullStage: true });
 await desktop('desktop', { width: 1280, height: 720 });
 await mobile('no-storage', { width: 390, height: 844 }, { blocked: true });
+await backButton('back-button', { width: 390, height: 844 });
+await hints169('landscape-16x9', { width: 640, height: 360 });
 await browser.close();
 log(`\n${failures ? '❌ ' + failures + ' check(s) failed' : '✅ all checks passed'}`);
 mkdirSync('docs', { recursive: true });

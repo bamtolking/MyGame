@@ -48,9 +48,9 @@ export class Autopilot {
   private world(s: RunState) {
     const b = s.body; const x0 = b.x - 100, x1 = b.x + this.look + 260;
     const solids = s.level.solids.filter(o => o.x1 > x0 && o.x0 < x1);
-    const powered = s.power.giant > 0 || s.power.dash > 0 || s.rescue > 0;
+    const powered = s.power.giant > 0 || s.power.dash > 0;
     const hazards = s.iframes > 0.25 || powered ? [] : s.level.hazards.filter(h => !h.broken && !h.passed && !h.touched && h.x1 > x0 && h.x0 < x1);
-    if (powered) solids.push({ x0, x1, top: GROUND_Y, ground: true });
+    if (powered || s.rescue > 0) solids.push({ x0, x1, top: GROUND_Y, ground: true });   // pits are bridged (a rescue bridge can outlast the i-frames)
     return { solids, hazards };
   }
 

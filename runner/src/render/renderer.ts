@@ -26,7 +26,7 @@ import { drawPickup, LETTER_COLORS } from './pickups';
 import { Backdrop } from './backdrops';
 export { POWER_NAME, POWER_DESC, POWER_COLOR, POWER_ICON } from './pickups';
 
-export interface RenderOpts { reduceMotion: boolean; highContrast: boolean; lowFx: boolean; showHitbox: boolean; shake: number; uiScale: number }
+export interface RenderOpts { reduceMotion: boolean; highContrast: boolean; lowFx: boolean; showHitbox: boolean; shake: number; uiScale: number; swapSides?: boolean }
 export interface GhostView { x: number; y: number; sliding: boolean; onGround: boolean; charId: string; scale: number }
 export interface Insets { l: number; r: number; t: number; b: number }
 export interface HudInfo {
@@ -46,6 +46,9 @@ const FONT = 'system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "
 const SPRITE_H = 84;                  // drawn runner height (logical px)
 const RING_H = 96;                    // skill ring height: clears the tallest tops (어묵이 steam, 꼬치 stick)
 const FROST = '190,225,255';
+/** HUD labels the player reads mid-run (따끈함, 별사탕 goal, progress, 흐름) never go below this (css px) */
+const MIN_LABEL_PX = 11;
+const labelPx = (base: number, u: number): number => Math.max(MIN_LABEL_PX, Math.round(base * u));
 
 export class Renderer {
   canvas: HTMLCanvasElement; c: CanvasRenderingContext2D;
@@ -78,6 +81,7 @@ export class Renderer {
   private speedWarn = 0;
   private banner: { text: string; sub: string; t: number; color: string } | null = null;
   private runPhase = 0; private lastX = 0; private bodyV = 0;
+  private vignettes = new Map<string, HTMLCanvasElement>();   // edge vignettes (frost, hit) per colour × size
   private skyMix = 0;
   private comp = { x: 0, y: 0, init: false };
   private hazBoxes: Box[] = [];
@@ -234,6 +238,7 @@ export class Renderer {
       else bd.drawBiome(c, biome, 1, this.camX, this.time);
     }
     if (this.skyMix > 0) bd.drawBonusSky(c, this.skyMix, this.camX, this.time);
+    else if (s.bonusStage === 'none' && s.letters.filter(Boolean).length >= BONUS_WORD.length - 1) bd.prewarmBonus();
     c.restore();
 
     // ---- world
@@ -290,11 +295,12 @@ export class Renderer {
       const def = PARSED_BY_ID.get(ch.id)?.def; if (!def?.signs) continue;
       for (const sg of def.signs) {
         const x = ch.x + sg.col * TILE; const y = 150;
+        const text = this.opts.swapSides ? swapSides(sg.text) : sg.text;      // 좌우 바꾸기: 「점프! (왼쪽/…)」 → 오른쪽
         c.font = `800 22px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle';
-        const w = c.measureText(sg.text).width + 28;
+        const w = c.measureText(text).width + 28;
         c.fillStyle = 'rgba(20,14,40,0.78)'; rr(c, x, y - 22, w, 44, 12); c.fill();
         c.strokeStyle = '#ffd166'; c.lineWidth = 3; rr(c, x, y - 22, w, 44, 12); c.stroke();
-        c.fillStyle = '#fff'; c.fillText(sg.text, x + 14, y + 1);
+        c.fillStyle = '#fff'; c.fillText(text, x + 14, y + 1);
         c.fillStyle = 'rgba(20,14,40,0.6)'; c.fillRect(x + 16, y + 22, 5, GROUND_Y - y - 22);
       }
     }
@@ -457,16 +463,10 @@ export class Renderer {
     this.frostK += ((low ? 1 : 0) - this.frostK) * Math.min(1, this.dt * 1.5);
     if (this.frostK > 0.02) {
       const pulse = this.opts.reduceMotion ? 1 : 0.8 + 0.2 * Math.sin(this.time * Math.PI);   // 0.5 Hz
-      const a = Math.min(0.35, 0.35 * this.frostK * pulse);
-      const g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.56);
-      g.addColorStop(0, `rgba(${FROST},0)`); g.addColorStop(1, `rgba(${FROST},${a})`); c.fillStyle = g; c.fillRect(0, 0, W, H);
+      c.globalAlpha = Math.min(0.35, 0.35 * this.frostK * pulse); c.drawImage(this.vignette(FROST, 0.42, 0.56), 0, 0, W, H); c.globalAlpha = 1;
     }
     // hit: a short cold vignette (150 ms, ≤ 0.35)
-    if (this.hitV > 0) {
-      const a = 0.35 * (this.hitV / 0.15);
-      const g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.hypot(W, H) * 0.55);
-      g.addColorStop(0, 'rgba(150,190,255,0)'); g.addColorStop(1, `rgba(150,190,255,${a})`); c.fillStyle = g; c.fillRect(0, 0, W, H);
-    }
+    if (this.hitV > 0) { c.globalAlpha = Math.min(0.35, 0.35 * (this.hitV / 0.15)); c.drawImage(this.vignette('150,190,255', 0.3, 0.55), 0, 0, W, H); c.globalAlpha = 1; }
     if (this.flash > 0) { c.fillStyle = `rgba(${this.flashColor},${Math.min(0.5, this.flash)})`; c.fillRect(0, 0, W, H); }
     if (this.dim > 0) { c.fillStyle = `rgba(10,6,30,${this.dim})`; c.fillRect(0, 0, W, H); }
     const big = Math.min(W * 0.18, H * 0.34);
@@ -489,6 +489,19 @@ export class Renderer {
       if (b.sub) bigText(c, Math.min(W / 2, this.clearLine - W * 0.2), yy + fs * 0.95, b.sub, '#fff', Math.max(12, fs * 0.45));
       c.globalAlpha = 1;
     }
+  }
+
+  /** an edge vignette (transparent centre → `rgb` at the corners), painted once per size at ¼ resolution: a full-screen
+   *  radial gradient every frame cost 10–20 ms on a throttled phone */
+  private vignette(rgb: string, r0: number, r1: number): HTMLCanvasElement {
+    const W = this.cssW, H = this.worldH; const key = `${rgb}|${r0}|${Math.round(W)}x${Math.round(H)}`;
+    let cv = this.vignettes.get(key); if (cv) return cv;
+    if (this.vignettes.size > 6) this.vignettes.clear();
+    const q = 0.25; cv = document.createElement('canvas'); cv.width = Math.max(2, Math.round(W * q)); cv.height = Math.max(2, Math.round(H * q));
+    const g = cv.getContext('2d')!; g.scale(cv.width / W, cv.height / H);
+    const gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * r0, W / 2, H / 2, Math.hypot(W, H) * r1);
+    gr.addColorStop(0, `rgba(${rgb},0)`); gr.addColorStop(1, `rgba(${rgb},1)`); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    this.vignettes.set(key, cv); return cv;
   }
 
   private drawHint(h: HintView): void {
@@ -565,7 +578,7 @@ export class Renderer {
     c.fillStyle = hg; if (pct > 0) { rr(c, bx, by, Math.max(bh, bw * pct), bh, bh / 2); c.fill(); }
     if (low && pulse > 0) { c.strokeStyle = `rgba(${FROST},${0.35 + 0.4 * pulse})`; c.lineWidth = 2; rr(c, bx - 2, by - 2, bw + 4, bh + 4, (bh + 4) / 2); c.stroke(); }
     c.fillStyle = 'rgba(20,14,40,0.3)'; for (let i = 1; i < 5; i++) c.fillRect(bx + bw * i / 5 - 1, by + 2, 2, bh - 4);
-    c.font = `800 ${Math.round(10.5 * u)}px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.lineJoin = 'round';
+    c.font = `800 ${labelPx(10.5, u)}px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.lineJoin = 'round';
     const lab = `따끈함 ${Math.ceil(Math.max(0, s.hp))}`;
     c.lineWidth = 3; c.strokeStyle = 'rgba(20,12,36,0.85)'; c.strokeText(lab, bx + 7 * u, by + bh / 2 + 0.5);
     c.fillStyle = '#fff'; c.fillText(lab, bx + 7 * u, by + bh / 2 + 0.5);
@@ -612,7 +625,7 @@ export class Renderer {
     const lv = flowLevel(s);
     if (lv > 0) {
       const t = `흐름 +${Math.round(lv * STREAK_BONUS * 100)}%`;
-      c.font = `800 ${Math.round(10 * u)}px ${FONT}`; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineWidth = 3; c.strokeStyle = 'rgba(20,12,36,0.85)'; c.fillStyle = '#ffcf8a';
+      c.font = `800 ${labelPx(10, u)}px ${FONT}`; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineWidth = 3; c.strokeStyle = 'rgba(20,12,36,0.85)'; c.fillStyle = '#ffcf8a';
       if (flowBelow) { c.textAlign = 'center'; c.strokeText(t, fx, cy + fr + 8 * u); c.fillText(t, fx, cy + fr + 8 * u); }
       else if (cx + tw / 2 + 6 * u + c.measureText(t).width <= maxX) { c.textAlign = 'left'; c.strokeText(t, cx + tw / 2 + 6 * u, cy + 1); c.fillText(t, cx + tw / 2 + 6 * u, cy + 1); }
     }
@@ -641,14 +654,14 @@ export class Renderer {
     else if (s.mode === 'tutorial' || s.trial) return;
     else { label = `${Math.floor(s.dist).toLocaleString('ko-KR')}m`; f = 0; }
     if (thin && label && labelRight) {
-      c.font = `700 ${Math.round(10 * u)}px ${FONT}`; c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,255,255,0.8)';
+      c.font = `700 ${labelPx(10, u)}px ${FONT}`; c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,255,255,0.8)';
       c.fillText(label, labelRight, y + h / 2); w = Math.max(30, labelRight - c.measureText(label).width - 8 * u - x); label = '';
     }
     c.fillStyle = 'rgba(20,14,40,0.6)'; rr(c, x, y, w, h, h / 2); c.fill();
     if (f > 0) { c.fillStyle = s.mode === 'stage' ? '#80ed99' : '#8fd8ff'; rr(c, x, y, Math.max(h, w * f), h, h / 2); c.fill(); }
     if (mark >= 0) { c.fillStyle = '#ff5d8f'; c.fillRect(x + w * mark - 1.5, y - 3, 3, h + 6); }
     if (s.mode === 'stage') { c.fillStyle = '#fff'; c.fillRect(x + w - 2, y - 3, 2, h + 6); }
-    if (!thin && label) { c.font = `700 ${Math.round(10 * u)}px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,255,255,0.88)'; c.fillText(label, x + w + 6 * u, y + h / 2); }
+    if (!thin && label) { c.font = `700 ${labelPx(10, u)}px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,255,255,0.88)'; c.fillText(label, x + w + 6 * u, y + h / 2); }
 
   }
 
@@ -657,14 +670,15 @@ export class Renderer {
     const c = this.c; const goal = this.hud.stageGoalPct;
     const pct = jellyPct(s); const ok = goal > 0 && pct >= goal;
     const txt = goal > 0 ? `별사탕 ${pct}% / ${goal}%` : `별사탕 ${pct}%`;
-    c.font = `800 ${Math.round(10.5 * u)}px ${FONT}`;
+    const fs = labelPx(10.5, u); const ku = fs / 10.5;          // the pill grows with its (floored) label
+    c.font = `800 ${fs}px ${FONT}`;
     const tw = c.measureText(txt).width; const ps = 9 * u; const pw = 3 * (ps * 2 + 3 * u);
-    const total = tw + 14 * u + 8 * u + pw;
+    const total = tw + 14 * ku + 8 * u + pw;
     let x0 = align === 'center' ? x - total / 2 : x - total;
-    const h = 17 * u;
-    c.fillStyle = ok ? 'rgba(46,160,90,0.85)' : 'rgba(20,14,40,0.66)'; rr(c, x0, y - h / 2, tw + 14 * u, h, h / 2); c.fill();
-    c.fillStyle = '#fff'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(txt, x0 + 7 * u, y + 0.5);
-    x0 += tw + 14 * u + 8 * u + ps;
+    const h = 17 * ku;
+    c.fillStyle = ok ? 'rgba(46,160,90,0.85)' : 'rgba(20,14,40,0.66)'; rr(c, x0, y - h / 2, tw + 14 * ku, h, h / 2); c.fill();
+    c.fillStyle = '#fff'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(txt, x0 + 7 * ku, y + 0.5);
+    x0 += tw + 14 * ku + 8 * u + ps;
     for (let i = 0; i < 3; i++) {
       const got = (s.pouchesGot >> i) & 1, before = (this.hud.pouchesBefore >> i) & 1;
       pouch(c, x0 + i * (ps * 2 + 3 * u), y, ps, got ? 2 : before ? 1 : 0);
@@ -674,6 +688,8 @@ export class Renderer {
 }
 
 // ---------------------------------------------------------------- helpers
+/** chunk sign copy with the screen sides swapped (좌우 바꾸기 puts jump on the right, slide on the left) */
+export function swapSides(t: string): string { return t.replace(/왼쪽|오른쪽/g, m => m === '왼쪽' ? '오른쪽' : '왼쪽'); }
 export function shapeOf(ch: CharacterDef): Shape { return ch.shape; }
 
 /** A hazard (or pit / "cooled down") icon for the results card, drawn with the in-game art. */
@@ -687,9 +703,9 @@ export function drawHazardIcon(c: CanvasRenderingContext2D, kind: string, biomeI
     c.restore(); return;
   }
   // world units → icon: ground line near the bottom
-  const k = kind === 'tall' ? h / 230 : kind === 'hang' ? h / 150 : h / 120;
+  const k = kind === 'tall' ? h / 230 : kind === 'hang' ? h / 150 : kind === 'pit' ? h / 80 : h / 120;
   c.beginPath(); c.rect(0, 0, w, h); c.clip();
-  c.translate(w / 2, h - 10); c.scale(k, k); c.translate(0, -GROUND_Y);
+  c.translate(w / 2, kind === 'pit' ? h * 0.42 : h - 10); c.scale(k, k); c.translate(0, -GROUND_Y);   // a pit: mostly the gap below the ground line
   const gw = w / k;
   c.fillStyle = bi.groundTop; c.fillRect(-gw, GROUND_Y, gw * 2, 8); c.fillStyle = bi.ground; c.fillRect(-gw, GROUND_Y + 8, gw * 2, 60);
   const fake = (x0: number, x1: number, y0: number, y1: number): Hazard => ({ id: 0, kind: kind as Hazard['kind'], x0, x1, y0, y1, biome: bi.id, broken: false, passed: false });
@@ -697,7 +713,13 @@ export function drawHazardIcon(c: CanvasRenderingContext2D, kind: string, biomeI
     if (kind === 'spike') drawSpike(c, fake(-15, 15, GROUND_Y - 36, GROUND_Y), bi.hazard.spike, false, bi.style);
     else if (kind === 'tall') drawTall(c, fake(-17, 17, GROUND_Y - 176, GROUND_Y), bi.hazard.tall, false, 0, bi.style);
     else if (kind === 'hang') drawHang(c, -40, 40, low ? GROUND_Y - 86 : GROUND_Y - 46, bi.hazard.hang, false, 0, bi.style);
-    else if (kind === 'pit') { c.fillStyle = bi.pit ?? '#150b17'; c.fillRect(-50, GROUND_Y, 100, 80); c.fillStyle = 'rgba(255,255,255,0.25)'; c.fillRect(-50, GROUND_Y, 3, 80); c.fillRect(47, GROUND_Y, 3, 80); }
+    else if (kind === 'pit') {
+      c.fillStyle = bi.pit ?? '#150b17'; c.fillRect(-26, GROUND_Y, 52, 90);
+      c.fillStyle = 'rgba(255,255,255,0.35)'; c.fillRect(-26, GROUND_Y, 3, 90); c.fillRect(23, GROUND_Y, 3, 90);
+      // a falling arrow: "you dropped in here"
+      c.strokeStyle = '#fff3d6'; c.lineWidth = 5; c.lineCap = 'round'; c.lineJoin = 'round';
+      c.beginPath(); c.moveTo(0, GROUND_Y - 28); c.lineTo(0, GROUND_Y + 26); c.moveTo(-12, GROUND_Y + 13); c.lineTo(0, GROUND_Y + 26); c.lineTo(12, GROUND_Y + 13); c.stroke();
+    }
   } catch { /* art not ready */ }
   c.restore();
 }

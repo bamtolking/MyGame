@@ -1,11 +1,24 @@
-// Installable web app ("앱처럼 설치"): registers the offline service worker when served over http(s).
-// The single-file build opened from disk (file://) skips this silently.
+// Installable web app ("앱처럼 설치"): registers the offline service worker (public/sw.js) when served over http(s).
+// Only the dist/ build links a manifest: the single-file play/index.html (opened from disk, or hosted as an artifact)
+// has none and never registers a worker.
+const UPDATE_EVERY_MS = 60 * 60 * 1000;
 export function registerPwa(): void {
   try {
     if (!('serviceWorker' in navigator)) return;
     if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;
     if ((import.meta as any).env?.DEV) return;
-    window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { /* offline install is optional */ }); });
+    if (!document.querySelector('link[rel="manifest"]')) return;
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').then(reg => {
+        // an installed app may stay open for days: look for a new build when it comes back to the front (≤ once an hour);
+        // a new worker precaches that build and takes over, and the next launch runs it (never swapped mid-run)
+        let last = Date.now();
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden || Date.now() - last < UPDATE_EVERY_MS) return;
+          last = Date.now(); reg.update().catch(() => { /* offline */ });
+        });
+      }).catch(() => { /* offline install is optional */ });
+    });
   } catch { /* ignore */ }
 }
 

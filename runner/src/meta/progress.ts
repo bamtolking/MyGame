@@ -27,13 +27,18 @@ export interface Settings {
   gameSpeed: number;        // 0.6–1.0: real-time rate of the fixed-step sim (the course itself is unchanged)
   assistNoHit: boolean; assistHalfDrain: boolean; assistAutoSlide: boolean;
 }
-export interface GhostRec { seed: number; content: number; charId: string; partnerId: string | null; companionId: string | null; mode: string; stageId: string | null; log: number[]; score: number; steps: number; assist: boolean; assistOpts?: { noHitDamage?: boolean; halfDrain?: boolean; autoSlide?: boolean } }
+// `noCountdown`: the run started without the 3-2-1 (its log counts from that first step); undefined = recorded before the
+// flag existed — the UI ignores such ghosts (their alignment is unknown)
+export interface GhostRec { seed: number; content: number; charId: string; partnerId: string | null; companionId: string | null; mode: string; stageId: string | null; log: number[]; score: number; steps: number; assist: boolean; assistOpts?: { noHitDamage?: boolean; halfDrain?: boolean; autoSlide?: boolean }; noCountdown?: boolean }
 export interface BestRec { score: number; dist: number; charId: string; date: number; assist: boolean; relay: boolean; scoreVersion: number }
 export interface HallRec extends BestRec { mode: string; key?: string }
-export interface DailyRec { best: number; dist: number; tries: number; charId: string; medal: number }   // medal 0 none · 1 동 · 2 은 · 3 금
+// medal 0 none · 1 동 · 2 은 · 3 금. `dist` / `medal` are the day's longest try (medals); `bestDist` / `assist` belong to the
+// best-SCORE try (the shared record code and share text describe that one run). Records from before these fields lack them.
+export interface DailyRec { best: number; dist: number; tries: number; charId: string; medal: number; bestDist?: number; assist?: boolean }
 
 export interface Progress {
   version: number;
+  rev: number;                            // +1 on every write (storage.ts): a newer save written by another tab is noticed, not overwritten
   settings: Settings;
   coins: number;
   unlocked: string[];                     // characters
@@ -77,7 +82,7 @@ export function defaultProgress(): Progress {
   const starters = CHARACTERS.filter(c => c.unlock.kind === 'start').map(c => c.id);
   const comps = COMPANIONS.filter(c => c.unlock.kind === 'start').map(c => c.id);
   const p: Progress = {
-    version: SAVE_VERSION, settings: defaultSettings(), coins: 0, unlocked: starters, companions: comps,
+    version: SAVE_VERSION, rev: 0, settings: defaultSettings(), coins: 0, unlocked: starters, companions: comps,
     loadout: { main: starters[0] ?? 'hotteok', partner: null, companion: comps[0] ?? null },
     starMask: {}, pouches: {}, stageBest: {}, bestEndless: null, bestByChar: {}, daily: {}, daysPlayed: 0, lastDay: '',
     rank: 0, xp: 0, missions: [], missionCounter: 0, missionsDone: 0,
@@ -95,7 +100,10 @@ export function fillMissions(p: Progress, avoid: string[] = []): void { fillMiss
 export const MIGRATIONS: Record<number, (o: any) => any> = {
   1: (o: any) => {
     const starMask: Record<string, number> = {};
+    const pouches: Record<string, number> = {};
     for (const [k, v] of Object.entries(o.stars ?? {})) starMask[k] = (v as number) >= 3 ? 7 : (v as number) >= 2 ? 3 : (v as number) >= 1 ? 1 : 0;
+    // a v1 ★3 stays ★3; v2 reads ★3 as "all three golden pouches", so the pouches go with it (else the card shows ★3 at 0/3)
+    for (const [k, m] of Object.entries(starMask)) if (m & 4) pouches[k] = 7;
     const set = o.settings ?? {};
     const daily: Record<string, DailyRec> = Object.fromEntries(Object.entries(o.daily ?? {}).map(([k, d]: [string, any]) => [k, { best: d?.best ?? 0, dist: 0, tries: d?.tries ?? 0, charId: d?.charId ?? 'hotteok', medal: 0 }]));
     // v1 records predate SCORE_VERSION: keep them, marked as version 0 (never silently re-scored)
@@ -105,7 +113,8 @@ export const MIGRATIONS: Record<number, (o: any) => any> = {
     for (const [k, d] of Object.entries(daily)) if (d.best > 0) hall.push({ score: d.best, dist: 0, charId: d.charId, date: 0, assist: false, relay: false, scoreVersion: 0, mode: 'daily', key: k });
     const seen = [...(Array.isArray(o.seen) ? o.seen : []), ...(Array.isArray(o.seenHints) ? o.seenHints.map((h: string) => 'hint:' + h) : [])];
     return {
-      ...o, version: 2, starMask, pouches: {}, companions: [], loadout: { main: o.main, partner: o.partner ?? null, companion: null },
+      // (no loadout.companion: v1 had none, so the fresh-save default — the starter companion, equipped — applies)
+      ...o, version: 2, starMask, pouches, companions: [], loadout: { main: o.main, partner: o.partner ?? null },
       settings: { ...set, assistHalfDrain: !!set.assist, assistNoHit: false, assistAutoSlide: false },
       achievements: {}, cosmetics: { owned: [], equipped: {} }, hall, seen, daysPlayed: Object.keys(o.daily ?? {}).length, lastDay: '',
       daily, bestEndless,
@@ -123,7 +132,24 @@ export function takeLegacyGhosts(raw: any): Record<string, GhostRec> {
   return out;
 }
 
-/** Migrate + merge a loaded (possibly older/partial) save onto defaults so new fields never crash old saves. */
+/** Own-key lookup: the *_BY_ID tables are plain objects, so 'constructor' / '__proto__' / 'toString' would "exist". */
+function hasId(table: object, id: unknown): id is string { return typeof id === 'string' && Object.prototype.hasOwnProperty.call(table, id); }
+const obj = (x: unknown): Record<string, any> => (x && typeof x === 'object' && !Array.isArray(x) ? x as Record<string, any> : {});
+const num = (x: unknown): x is number => typeof x === 'number' && isFinite(x);
+/** keeps only finite numbers ≥ 0 (masks: whole numbers 0–7) */
+function numMap(x: unknown, mask = false): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(obj(x))) if (num(v) && v >= 0) out[k] = mask ? Math.floor(v) & 7 : v;
+  return out;
+}
+const UI_SCALES = [1, 1.15, 1.3];
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/**
+ * Migrate + merge a loaded (possibly older/partial) save onto defaults so new fields never crash old saves. Also the gate
+ * for imported backup codes: every id must be a real one and every value the right type, so a hand-edited code can
+ * never break a run later (unknown fields are kept — a save from a newer build loses nothing).
+ */
 export function normalize(raw: any): Progress {
   const d = defaultProgress();
   if (!raw || typeof raw !== 'object') return d;
@@ -131,34 +157,102 @@ export function normalize(raw: any): Progress {
   while (v < SAVE_VERSION && MIGRATIONS[v]) { o = MIGRATIONS[v](o); v++; }
   const p: Progress = {
     ...d, ...o,
-    settings: { ...d.settings, ...(o.settings || {}) }, totals: { ...d.totals, ...(o.totals || {}) },
-    loadout: { ...d.loadout, ...(o.loadout || {}) }, cosmetics: { owned: [], equipped: {}, ...(o.cosmetics || {}) },
+    settings: { ...d.settings, ...obj(o.settings) }, totals: { ...d.totals, ...obj(o.totals) },
+    loadout: { ...d.loadout, ...obj(o.loadout) }, cosmetics: { owned: [], equipped: {}, ...obj(o.cosmetics) },
   };
-  p.unlocked = Array.from(new Set([...(Array.isArray(o.unlocked) ? o.unlocked : []), ...d.unlocked])).filter(id => CHAR_BY_ID[id]);
-  p.companions = Array.from(new Set([...(Array.isArray(o.companions) ? o.companions : []), ...d.companions])).filter(id => COMPANION_BY_ID[id]);
-  if (!CHAR_BY_ID[p.loadout.main] || !p.unlocked.includes(p.loadout.main)) p.loadout.main = p.unlocked[0];
-  const pa = p.loadout.partner; if (pa && (!CHAR_BY_ID[pa] || !p.unlocked.includes(pa) || pa === p.loadout.main)) p.loadout.partner = null;
-  const co = p.loadout.companion; if (co && !p.companions.includes(co)) p.loadout.companion = p.companions[0] ?? null;
+  // scalars: a value of the wrong type (or NaN / Infinity) falls back to the default
+  for (const k of Object.keys(d) as (keyof Progress)[]) {
+    const dv = d[k]; if (dv !== null && typeof dv !== 'object' && (typeof p[k] !== typeof dv || (typeof dv === 'number' && !num(p[k])))) (p as any)[k] = dv;
+  }
+  for (const k of Object.keys(d.totals) as (keyof Progress['totals'])[]) if (!num(p.totals[k])) p.totals[k] = d.totals[k];
+  const st = p.settings as unknown as Record<string, unknown>; const ds = d.settings as unknown as Record<string, unknown>;
+  for (const k of Object.keys(ds)) if (typeof st[k] !== typeof ds[k] || (typeof ds[k] === 'number' && !num(st[k]))) st[k] = ds[k];
+  const S = p.settings;
+  S.gameSpeed = clamp(S.gameSpeed, 0.6, 1); S.bgm = clamp(S.bgm, 0, 1); S.sfx = clamp(S.sfx, 0, 1); S.shake = clamp(S.shake, 0, 1);
+  if (!UI_SCALES.includes(S.uiScale)) S.uiScale = 1;
+
+  p.unlocked = Array.from(new Set([...(Array.isArray(o.unlocked) ? o.unlocked : []), ...d.unlocked])).filter(id => hasId(CHAR_BY_ID, id));
+  p.companions = Array.from(new Set([...(Array.isArray(o.companions) ? o.companions : []), ...d.companions])).filter(id => hasId(COMPANION_BY_ID, id));
+  if (!hasId(CHAR_BY_ID, p.loadout.main) || !p.unlocked.includes(p.loadout.main)) p.loadout.main = p.unlocked[0];
+  const pa = p.loadout.partner; if (pa !== null && (!hasId(CHAR_BY_ID, pa) || !p.unlocked.includes(pa) || pa === p.loadout.main)) p.loadout.partner = null;
+  const co = p.loadout.companion; if (co !== null && !p.companions.includes(co as string)) p.loadout.companion = p.companions[0] ?? null;
   if (!Array.isArray(p.missions)) p.missions = [];
   // keep only missions whose template still exists (an unknown one could never complete); repair numbers
-  p.missions = p.missions.filter(m => m && typeof m.id === 'string' && MISSION_BY_ID[m.id]).slice(0, 3).map(m => {
+  p.missions = p.missions.filter(m => m && hasId(MISSION_BY_ID, m.id)).slice(0, 3).map(m => {
     const level = Math.max(0, Math.min(2, Math.floor(Number(m.level) || 0)));
     return { id: m.id, level, progress: Math.max(0, Number(m.progress) || 0), target: Number(m.target) > 0 ? Number(m.target) : MISSION_BY_ID[m.id].targets[level], runsWithout: Math.max(0, Number(m.runsWithout) || 0) };
   });
-  for (const k of ['missionCounter', 'missionsDone', 'coins', 'rank', 'xp'] as const) if (typeof p[k] !== 'number' || !isFinite(p[k])) (p as any)[k] = 0;
-  for (const k of ['starMask', 'pouches', 'stageBest', 'bestByChar', 'daily', 'achievements', 'bests'] as const) if (!p[k] || typeof p[k] !== 'object' || Array.isArray(p[k])) (p as any)[k] = {};
+  p.starMask = numMap(p.starMask, true); p.pouches = numMap(p.pouches, true);
+  p.stageBest = numMap(p.stageBest); p.bestByChar = numMap(p.bestByChar); p.bests = numMap(p.bests); p.achievements = numMap(p.achievements);
+  const daily: Record<string, DailyRec> = {};
+  for (const [k, r] of Object.entries(obj(p.daily))) {
+    if (!r || typeof r !== 'object' || !num(r.best)) continue;
+    const e: DailyRec = daily[k] = { ...r, dist: num(r.dist) ? r.dist : 0, tries: num(r.tries) ? r.tries : 0, charId: typeof r.charId === 'string' ? r.charId : d.loadout.main, medal: num(r.medal) ? r.medal : 0 };
+    if (e.bestDist !== undefined && !num(e.bestDist)) delete e.bestDist;
+    if (e.assist !== undefined && typeof e.assist !== 'boolean') delete e.assist;
+  }
+  p.daily = daily;
+  const be = p.bestEndless as BestRec | null;
+  if (be !== null && (!be || typeof be !== 'object' || !num(be.score) || !num(be.dist) || typeof be.charId !== 'string')) p.bestEndless = null;
   if (!Array.isArray(p.cosmetics.owned)) p.cosmetics.owned = [];
   p.cosmetics.owned = Array.from(new Set(p.cosmetics.owned.filter(x => typeof x === 'string')));
-  if (!p.cosmetics.equipped || typeof p.cosmetics.equipped !== 'object') p.cosmetics.equipped = {};
+  p.cosmetics.equipped = Object.fromEntries(Object.entries(obj(p.cosmetics.equipped)).filter(([, e]) => e && typeof e === 'object' && !Array.isArray(e)));
   // achievement rewards are never lost: re-grant any cosmetic whose achievement is recorded
   const rewards = ACHIEVEMENT_REWARD();
-  for (const id of Object.keys(p.achievements)) { const rw = rewards[id]; if (rw && COSMETIC_BY_ID[rw] && !p.cosmetics.owned.includes(rw)) p.cosmetics.owned.push(rw); }
-  if (!Array.isArray(p.hall)) p.hall = [];
-  if (!Array.isArray(p.seen)) p.seen = [];
+  for (const id of Object.keys(p.achievements)) { const rw = hasId(rewards, id) ? rewards[id] : ''; if (hasId(COSMETIC_BY_ID, rw) && !p.cosmetics.owned.includes(rw)) p.cosmetics.owned.push(rw); }
+  p.hall = trimHall((Array.isArray(p.hall) ? p.hall : []).filter(h => h && typeof h === 'object' && num(h.score) && num(h.dist) && typeof h.mode === 'string' && typeof h.charId === 'string'));
+  p.seen = Array.isArray(p.seen) ? p.seen.filter(x => typeof x === 'string') : [];
+  if (p.titles !== undefined) p.titles = Array.isArray(p.titles) ? p.titles.filter(x => typeof x === 'string') : [];
   delete (p as any).ghosts; delete (p as any).stars; delete (p as any).main; delete (p as any).partner; delete (p as any).rerollDay; delete (p as any).seenHints;
   fillMissions(p);
   p.version = SAVE_VERSION;
   return p;
+}
+
+// ---------------------------------------------------------------- one save, two instances (tabs / the installed app)
+const ADDITIVE = /^(coins|missionCounter|missionsDone|totals\.(?!bestStreak$)[^.]+)$/;
+/**
+ * Three-way merge for a save changed in two places at once — another tab, or the installed app next to a browser tab,
+ * wrote it while this instance changed it too. `base`: the save as this instance last read or wrote it; `local`: its
+ * state now; `remote`: the newer stored save. What changed on one side only comes from that side. Where both changed:
+ * counters (엽전, totals, …) add both gains, records keep the higher (bests, ranks, days), star / pouch masks combine,
+ * id lists (unlocked, owned, seen …) and the hall unite, a day's daily record keeps its best try, missions follow the
+ * stored save (its rewards are already paid), settings and loadout follow this instance (its latest touch).
+ */
+export function mergeProgress(base: Progress, local: Progress, remote: Progress): Progress {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const isObj = (x: unknown): x is Record<string, any> => !!x && typeof x === 'object' && !Array.isArray(x);
+  const m = (b: any, l: any, r: any, path: string): any => {
+    if (same(l, b)) return r;
+    if (same(r, b)) return l;
+    if (path === 'missions') return r;
+    if (path === 'hall') { const seen = new Set<string>(); return [...r, ...l].filter(h => { const k = JSON.stringify(h); if (seen.has(k)) return false; seen.add(k); return true; }); }
+    if (path === 'bestEndless') return (l?.score ?? -1) >= (r?.score ?? -1) ? l : r;
+    if (/^daily\.[^.]+$/.test(path) && isObj(l) && isObj(r)) {
+      const hi = l.best >= r.best ? l : r;
+      return { ...hi, dist: Math.max(l.dist, r.dist), medal: Math.max(l.medal, r.medal), tries: l.tries + r.tries - (b?.tries ?? 0) };
+    }
+    if (Array.isArray(l) && Array.isArray(r)) return Array.from(new Set([...r, ...l]));
+    if (isObj(l) && isObj(r)) {
+      const out: Record<string, any> = {};
+      for (const k of new Set([...Object.keys(r), ...Object.keys(l)])) { const v = m(isObj(b) ? b[k] : undefined, l[k], r[k], path ? `${path}.${k}` : k); if (v !== undefined) out[k] = v; }
+      return out;
+    }
+    if (typeof l === 'number' && typeof r === 'number' && !/^(settings|loadout)\./.test(path)) {
+      if (/^(starMask|pouches)\./.test(path)) return l | r;
+      if (ADDITIVE.test(path)) return l + r - (typeof b === 'number' ? b : 0);
+      return Math.max(l, r);
+    }
+    if (path === 'lastDay' && typeof l === 'string' && typeof r === 'string') return l > r ? l : r;
+    return l;
+  };
+  const out = m(base, local, remote, '') as Progress;
+  // rank + XP are one bar: keep the pair that is further along
+  if (!same([local.rank, local.xp], [base.rank, base.xp]) && !same([remote.rank, remote.xp], [base.rank, base.xp])) {
+    const hi = local.rank > remote.rank || (local.rank === remote.rank && local.xp >= remote.xp) ? local : remote;
+    out.rank = hi.rank; out.xp = hi.xp;
+  }
+  return normalize(out);
 }
 
 // ---------------------------------------------------------------- stars, stages, unlocks
@@ -266,11 +360,14 @@ export function dailyArchive(today = todayKey()): string[] {
   for (let i = 0; i < 7; i++) { const t = new Date((base - i) * 86400000); out.push(`${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`); }
   return out;
 }
-/** A shareable record code: YYMMDD-score-dist-check (checksum only guards typos; there is no server). */
-export function recordCode(key: string, score: number, dist: number): string {
+/**
+ * A shareable record code: YYMMDD-score-dist-check (checksum only guards typos; there is no server). Score and distance
+ * must come from the same try (DailyRec.best + bestDist); an assisted record is always marked (`-도움`, in the checksum too).
+ */
+export function recordCode(key: string, score: number, dist: number, assist = false): string {
   const ymd = key.replace(/-/g, '').slice(2);
-  const ck = (hashString(`${ymd}|${score}|${dist}`) % 1296).toString(36).padStart(2, '0').toUpperCase();
-  return `${ymd}-${score}-${dist}-${ck}`;
+  const ck = (hashString(`${ymd}|${score}|${dist}${assist ? '|A' : ''}`) % 1296).toString(36).padStart(2, '0').toUpperCase();
+  return `${ymd}-${score}-${dist}-${ck}${assist ? '-도움' : ''}`;
 }
 
 // ---------------------------------------------------------------- run booking
@@ -288,8 +385,11 @@ export function ghostKeyFor(mode: string, stageId: string | null, dateKey: strin
   return mode === 'stage' && stageId ? 'stage:' + stageId : mode === 'daily' ? 'daily:' + dateKey : mode === 'endless' ? 'endless' : null;
 }
 
-/** Book a finished run into the save. Call exactly once per finished RunState. */
-export function applyRun(p: Progress, s: RunState, dateKey = todayKey()): RunReward {
+/**
+ * Book a finished run into the save. Call exactly once per finished RunState. `dateKey` is the run's course day (an
+ * archive daily books into that day's record); `now` is the real calendar day, which alone counts toward 참여한 날.
+ */
+export function applyRun(p: Progress, s: RunState, dateKey = todayKey(), now = todayKey()): RunReward {
   const score = totalScore(s);
   const coinsFromPickups = s.stats.coins; const coinsFromDist = Math.floor(s.dist / 100);
   const r: RunReward = {
@@ -304,11 +404,11 @@ export function applyRun(p: Progress, s: RunState, dateKey = todayKey()): RunRew
   T.nearMisses += st.nearMisses; T.airJumps += st.airJumps; T.smashed += st.smashed; T.potions += st.potions; T.bigJellies += st.bigJellies;
   T.letters += st.letters; T.lines += st.lines; T.superBonus += st.superBonus; T.bestStreak = Math.max(T.bestStreak, st.bestStreak);
   T.moonCakes = (T.moonCakes ?? 0) + st.moonCakes; T.fastFalls = (T.fastFalls ?? 0) + st.fastFalls; T.relayDist = (T.relayDist ?? 0) + Math.floor(st.relayDist);
-  if (p.lastDay !== dateKey) { p.lastDay = dateKey; p.daysPlayed++; }
+  if (p.lastDay !== now) { p.lastDay = now; p.daysPlayed++; }
   const main = s.mainId;
   const rec: BestRec = { score, dist: Math.floor(s.dist), charId: main, date: Date.now(), assist: s.assist, relay: s.relayUsed, scoreVersion: SCORE_VERSION };
   const gk = ghostKeyFor(s.mode, s.stageId, dateKey);
-  const ghost = (): GhostRec => ({ seed: s.seed, content: CONTENT_HASH, charId: main, partnerId: s.partnerId, companionId: s.companionId, mode: s.mode, stageId: s.stageId, log: s.log.slice(), score, steps: s.steps, assist: s.assist, assistOpts: { ...s.assistOpts } });
+  const ghost = (): GhostRec => ({ seed: s.seed, content: CONTENT_HASH, charId: main, partnerId: s.partnerId, companionId: s.companionId, mode: s.mode, stageId: s.stageId, log: s.log.slice(), score, steps: s.steps, assist: s.assist, assistOpts: { ...s.assistOpts }, noCountdown: s.noCountdown });
 
   if (s.mode === 'endless') {
     r.prevBest = p.bestEndless?.score ?? 0;
@@ -332,7 +432,7 @@ export function applyRun(p: Progress, s: RunState, dateKey = todayKey()): RunRew
   } else if (s.mode === 'daily') {
     const d = p.daily[dateKey] ?? { best: 0, dist: 0, tries: 0, charId: main, medal: 0 };
     d.tries++; r.prevBest = d.best; r.prevMedal = d.medal;
-    if (score > d.best) { d.best = score; d.charId = main; r.newBest = true; if (s.log.length < 80000) { r.ghost = ghost(); r.ghostKey = gk; } }
+    if (score > d.best) { d.best = score; d.charId = main; d.bestDist = Math.floor(s.dist); d.assist = s.assist; r.newBest = true; if (s.log.length < 80000) { r.ghost = ghost(); r.ghostKey = gk; } }
     d.dist = Math.max(d.dist, Math.floor(s.dist)); d.medal = Math.max(d.medal, medalFor(Math.floor(s.dist))); r.medal = d.medal;
     p.daily[dateKey] = d;
     addHall(p, { ...rec, mode: 'daily', key: dateKey });
@@ -368,12 +468,15 @@ function stageStarMaskOf(s: RunState, pouchesAll: number): number {
 /** ★ mask this run alone would earn (pouches from earlier completed runs count toward ★3). */
 export function stageStarMask(s: RunState, pouchesBefore = 0): number { return stageStarMaskOf(s, pouchesBefore | (s.pouchesGot & 7)); }
 
-function addHall(p: Progress, h: HallRec): void {
-  p.hall.push(h);
-  // keep the top 10 per (mode, key, character)
+function addHall(p: Progress, h: HallRec): void { p.hall.push(h); p.hall = trimHall(p.hall); }
+/**
+ * The top 10 per (mode, key, character) — but ONE per day for 오늘의 골목: the day's best, the only daily record the hall
+ * shows (every try kept would grow the save, written twice with its backup, by ~0.5 MB a year). Ties keep the earlier.
+ */
+function trimHall(hall: HallRec[]): HallRec[] {
   const groups = new Map<string, HallRec[]>();
-  for (const x of p.hall) { const k = `${x.mode}|${x.key ?? ''}|${x.charId}`; if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(x); }
-  p.hall = [...groups.values()].flatMap(g => g.sort((a, b) => b.score - a.score).slice(0, 10));
+  for (const x of hall) { const k = x.mode === 'daily' ? `daily|${x.key ?? ''}` : `${x.mode}|${x.key ?? ''}|${x.charId}`; if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(x); }
+  return [...groups.values()].flatMap(g => g.sort((a, b) => b.score - a.score).slice(0, g[0].mode === 'daily' ? 1 : 10));
 }
 
 /** Swapping a mission is always free (a swapped mission simply gives no stars). */

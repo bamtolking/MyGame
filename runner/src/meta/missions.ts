@@ -101,7 +101,7 @@ export const MISSIONS: MissionTemplate[] = [
   { id: 'big_tot', scope: 'total', verb: 'candy', text: n => `왕별사탕 ${n}개 먹기 (누적)`, targets: [30, 90, 200], measure: s => s.stats.bigJellies, quick: 2, stageLevels: 3, quickStage: 1 },
   { id: 'letters_tot', scope: 'total', verb: 'feast', text: n => `잔치 글자 ${n}개 모으기 (누적)`, targets: [10, 25, 50], measure: s => s.stats.letters, quick: 0, stageLevels: 1, quickStage: 0 },
   { id: 'score_run', scope: 'run', verb: 'score', text: n => `한 판에 ${fmt(n)}점`, targets: [8000, 20000, 40000], measure: s => s.score + dist(s), requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },
-  { id: 'jellypct', scope: 'run', verb: 'candy', text: n => `별사탕 ${n}% 이상 먹고 500 m 넘기기`, targets: [80, 86, 90], measure: s => (s.dist >= 500 && s.stats.jelliesSeen > 0 ? Math.floor(100 * s.stats.jellies / s.stats.jelliesSeen) : 0), requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },   // GDD→ [80, 88, 94]
+  { id: 'jellypct', scope: 'run', verb: 'candy', text: n => `별사탕 ${n}% 이상 먹고 500 m 넘기기`, targets: [80, 88, 93], measure: s => Math.max(0, s.stats.jellyPct500), requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },   // the rate AT 500 m (frozen by the sim): the mid-run toast and the booking read the same number · GDD→ [80, 88, 94] (bot at 500 m: 87–95 %, 94+ in 1 of 10)
 
   // ---- the 25 new templates (GDD §9.3 table) ----
   { id: 'line_run', scope: 'run', verb: 'candy', text: n => `한 판에 한 줄 완성 ${n}번`, targets: [2, 5, 9], measure: s => s.stats.lines, quick: 3, stageLevels: 3, quickStage: 2 },
@@ -131,7 +131,8 @@ export const MISSIONS: MissionTemplate[] = [
   { id: 'clear_tot', scope: 'total', verb: 'stage', text: n => `골목 지도 스테이지 ${n}번 완주`, targets: [2, 4, 8], measure: (s, c) => (c ? (c.cleared ? 1 : 0) : (s.phase === 'clear' ? 1 : 0)), requires: 'stage', modes: ['stage'], quick: 0, stageLevels: 3, quickStage: 0, available: p => STAGES.some(st => stageUnlocked(p, st.id)) },
   { id: 'daily_dist', scope: 'run', verb: 'run', text: n => `오늘의 골목에서 ${m(n)} 달리기`, targets: [800, 1500, 2500], measure: dist, requires: 'daily', modes: ['daily'], quick: 0, stageLevels: 0, quickStage: 0 },
 ];
-export const MISSION_BY_ID: Record<string, MissionTemplate> = Object.fromEntries(MISSIONS.map(t => [t.id, t]));
+// (no prototype: an id like 'constructor' from an edited backup code must not "exist")
+export const MISSION_BY_ID: Record<string, MissionTemplate> = Object.assign(Object.create(null), Object.fromEntries(MISSIONS.map(t => [t.id, t])));
 
 export interface ActiveMission { id: string; level: number; progress: number; target: number; runsWithout: number }
 
