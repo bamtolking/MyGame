@@ -1,11 +1,12 @@
 // Frame-cost check (GDD §13.7-10): headless Chromium, phone viewport, CPU throttled 4×, autopilot playing endless.
 // Measures JS + canvas time spent inside App.frame per frame (p50/p95/max) and writes docs/perf-report.txt.
+// Usage: node scripts/perf.mjs [page.html]  — another build (e.g. a saved baseline) is measured without writing the report.
 import { chromium } from 'playwright-core';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const exe = process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const url = 'file://' + resolve('play/index.html');
+const page0 = process.argv[2]; const url = 'file://' + resolve(page0 || 'play/index.html');
 const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--use-gl=swiftshader'] });
 const lines = [];
 for (const [name, vp, throttle] of [['portrait-390x844', { width: 390, height: 844 }, 4], ['landscape-844x390', { width: 844, height: 390 }, 4], ['landscape-844x390-nothrottle', { width: 844, height: 390 }, 1]]) {
@@ -45,5 +46,6 @@ for (const [name, vp, throttle] of [['portrait-390x844', { width: 390, height: 8
   await ctx.close();
 }
 await browser.close();
+if (page0) process.exit(0);
 mkdirSync('docs', { recursive: true });
 writeFileSync('docs/perf-report.txt', `# 프레임 비용 (App.frame 안의 JS+캔버스 시간, 헤드리스 Chromium, 소프트웨어 렌더)\n${lines.join('\n')}\n`);
