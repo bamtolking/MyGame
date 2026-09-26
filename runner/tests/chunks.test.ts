@@ -31,8 +31,10 @@ describe('chunk library', () => {
 
   it('every tier has enough distinct chunks for the no-repeat window', () => {
     for (let t = 0; t <= MAX_TIER; t++) {
-      const n = normal.filter(p => p.def.tiers[0] <= t && p.def.tiers[1] >= t && !p.def.tags?.includes('tutorial')).length;
-      expect(n, `tier ${t} pool`).toBeGreaterThanOrEqual(12);
+      // gameplay chunks only (GDD §7.2): tutorial, tutorial extras, rest breathers, setpieces and stage-only chunks do not count
+      const n = normal.filter(p => p.def.tiers[0] <= t && p.def.tiers[1] >= t
+        && !['tutorial', 'tutorial-extra', 'rest', 'setpiece', 'stageonly'].some(tag => p.def.tags?.includes(tag))).length;
+      expect(n, `tier ${t} pool`).toBeGreaterThanOrEqual(28);
     }
   });
 

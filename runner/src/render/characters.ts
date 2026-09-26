@@ -58,16 +58,19 @@ export function drawCharacter(c: Ctx, shape: Shape, pal: Palette, p: Pose, hat?:
   if (p.state === 'run') {
     const a = TAU * p.runPhase; bob = Math.abs(Math.sin(a)) * 2.6;
     const cs = Math.cos(RUN_LEAN), sn = Math.sin(RUN_LEAN);
-    for (const side of [-1, 1]) {
-      const ph = side > 0 ? a : a + Math.PI;
+    for (let i = 0; i < 2; i++) {
+      const side = i ? 1 : -1, ph = side > 0 ? a : a + Math.PI;
       const hx = side * sp.hipX, hy = sp.hipY;
-      const fx = side * sp.hipX * 0.5 + Math.cos(ph) * 11;
-      const fy = -Math.max(0, -Math.sin(ph)) * 8;
-      leg(c, k, hx * cs - hy * sn, hx * sn + hy * cs - bob, fx, fy);
+      const L = LEGS[i]; L[0] = hx * cs - hy * sn; L[1] = hx * sn + hy * cs - bob;
+      L[2] = side * sp.hipX * 0.5 + Math.cos(ph) * 11; L[3] = -Math.max(0, -Math.sin(ph)) * 8;
     }
+    legs(c, k);
   }
   enterBody(c, sp, p, bob);
-  if (p.state !== 'run') for (const side of [-1, 1]) { const f = footFor(p, sp, side); leg(c, k, side * sp.hipX, sp.hipY, f[0], f[1]); }
+  if (p.state !== 'run') {
+    for (let i = 0; i < 2; i++) { const side = i ? 1 : -1, f = footFor(p, sp, side), L = LEGS[i]; L[0] = side * sp.hipX; L[1] = sp.hipY; L[2] = f[0]; L[3] = f[1]; }
+    legs(c, k);
+  }
 
   const [ab, af] = armAngles(p, !!sp.fins);
   limb(c, k, sp, sp.armB[0], sp.armB[1], ab);
@@ -210,7 +213,7 @@ function enterBody(c: Ctx, sp: Spec, p: Pose, bob: number): void {
   switch (p.state) {
     case 'run': c.translate(0, -bob); c.rotate(RUN_LEAN); break;
     case 'idle': { const b = Math.sin(p.t * 2.6) * 0.022; c.scale(1 - b * 0.6, 1 + b); break; }
-    case 'jump': c.scale(0.94, 1.07); break;
+    case 'jump': c.scale(0.97, 1.035); break;
     case 'air2': c.translate(0, sp.cy); c.rotate(p.spin); c.scale(0.96, 0.96); c.translate(0, -sp.cy); break;
     case 'fall': c.translate(0, sp.cy); c.rotate(Math.sin(p.t * 5) * 0.06); c.translate(0, -sp.cy); break;
     case 'fly': c.translate(0, sp.cy + Math.sin(p.t * 4) * 2); c.rotate(0.26); c.translate(0, -sp.cy); break;
@@ -237,7 +240,7 @@ function armAngles(p: Pose, fins: boolean): [number, number] {
     case 'jump': return [2.5, -2.55];
     case 'air2': return [0.9, -1.1];
     case 'fall': {
-      if (fins) { const fl = Math.sin(p.t * 22) * 0.28; return [1.6 + fl, -1.6 - fl]; }
+      if (fins) { const fl = Math.sin(p.t * 20) * 0.3; return [1.75 + fl, -1.85 - fl]; }       // fins spread like wings: floaty glide
       return [2.0 + Math.sin(p.t * 15) * 0.25, -2.15 - Math.sin(p.t * 15 + 1) * 0.25];
     }
     case 'fly': return [1.5, -2.05];
@@ -267,13 +270,14 @@ function moodFor(p: Pose): [EyeMode, MouthMode, number, number] {
 
 // ------------------------------------------------------------------ limbs
 
-/** rubber-hose leg from hip to foot + a round shoe pointing forward */
-function leg(c: Ctx, k: Ink, hx: number, hy: number, fx: number, fy: number): void {
-  c.beginPath(); c.moveTo(hx, hy); c.lineTo(fx, fy - 3.4);
+/** both rubber-hose legs (hip → foot, [hx, hy, fx, fy] in LEGS) with round shoes pointing forward; 4 draw calls */
+const LEGS: [number, number, number, number][] = [[0, 0, 0, 0], [0, 0, 0, 0]];
+function legs(c: Ctx, k: Ink): void {
+  c.beginPath(); for (const L of LEGS) { c.moveTo(L[0], L[1]); c.lineTo(L[2], L[3] - 3.4); }
   c.strokeStyle = k.line; c.lineWidth = 9.4; c.stroke();
   c.strokeStyle = k.limb; c.lineWidth = 6.6; c.stroke();
-  c.fillStyle = k.shoe; ell(c, fx + 2, fy - 3.6, 6.6, 4.2); c.fill();
-  c.strokeStyle = k.line; c.lineWidth = 1.7; c.stroke();
+  c.beginPath(); for (const L of LEGS) ellSub(c, L[2] + 2, L[3] - 3.6, 6.6, 4.2);
+  c.fillStyle = k.shoe; c.fill(); c.strokeStyle = k.line; c.lineWidth = 1.7; c.stroke();
 }
 
 function limb(c: Ctx, k: Ink, sp: Spec, x: number, y: number, ang: number): void {
@@ -402,9 +406,10 @@ function drawSlide(c: Ctx, shape: Shape, sp: Spec, pal: Palette, k: Ink, p: Pose
   for (let i = 0; i < 3; i++) { const y = -7 - i * 9, o = ((t * 7 + i * 0.37) % 1) * 12; c.moveTo(-38 - o, y); c.lineTo(-50 - o - i * 3, y); }
   c.stroke();
   // little feet kicking out behind
-  const kick = Math.sin(TAU * p.runPhase) * 1.6;
-  leg(c, k, S.feet[0] + 8, S.feet[1] - 4, S.feet[0], S.feet[1] + kick);
-  leg(c, k, S.feet[0] + 12, S.feet[1] - 3, S.feet[0] + 5, S.feet[1] + 1.5 - kick);
+  const kick = Math.sin(TAU * p.runPhase) * 1.6, [fx, fy] = S.feet;
+  LEGS[0][0] = fx + 8; LEGS[0][1] = fy - 4; LEGS[0][2] = fx; LEGS[0][3] = fy + kick;
+  LEGS[1][0] = fx + 12; LEGS[1][1] = fy - 3; LEGS[1][2] = fx + 5; LEGS[1][3] = fy + 1.5 - kick;
+  legs(c, k);
   // the body, laid low
   c.save();
   if (S.mode === 'lie') { c.translate(S.cx, -18); c.rotate(Math.PI / 2); c.scale(S.sx, S.sy); c.translate(0, -sp.cy); }
@@ -472,37 +477,37 @@ interface Spec {
   front?(c: Ctx, k: Ink, p: Pose): void;                      // live, over the body (skipped when dead)
 }
 
-// 호떡이 — a puffy golden pancake seen face-on; the crispy back rim shows its thickness, sugar glints on the
-// rim and brown-sugar syrup oozes from a split at the top-back edge.
+// 호떡이 — a puffy golden pancake seen face-on, wider than tall; the crispy back rim shows its thickness, sugar
+// glints on the rim, and brown-sugar syrup leaks from a split at the lower-back edge and drips.
 function bodyDisc(g: Ctx, pal: Palette, k: Ink): void {
-  const cx = 0, cy = -45, rx = 32, ry = 29, R = rng(11);
+  const cx = 0, cy = -47, rx = 35, ry = 26, R = rng(11);
   g.lineWidth = k.lw; g.strokeStyle = k.line;
-  g.fillStyle = lit(pal.shade, -0.18); ell(g, cx - 3.4, cy + 2.4, rx, ry); g.fill(); g.stroke();
-  g.fillStyle = alpha(lit(pal.body, 0.2), 0.6); ell(g, cx - 3.4, cy + 2.4, rx - 3, ry - 3, 0); g.fill();
+  g.fillStyle = lit(pal.shade, -0.18); ell(g, cx - 3.4, cy + 2.6, rx, ry); g.fill(); g.stroke();
+  g.fillStyle = alpha(lit(pal.body, 0.2), 0.6); ell(g, cx - 3.4, cy + 2.6, rx - 3, ry - 3, 0); g.fill();
   const gr = g.createRadialGradient(cx + 3, cy - 6, 2, cx, cy, rx + 1);
   gr.addColorStop(0, lit(pal.body, 0.42)); gr.addColorStop(0.45, lit(pal.body, 0.12)); gr.addColorStop(0.78, pal.body); gr.addColorStop(1, pal.shade);
   g.fillStyle = gr; ell(g, cx, cy, rx, ry); g.fill(); g.stroke();
   // crispy toasted ring just inside the edge + browned spots
   g.strokeStyle = alpha(pal.shade, 0.6); g.lineWidth = 3.2; ell(g, cx, cy, rx - 3.4, ry - 3.4); g.stroke();
   g.fillStyle = alpha(pal.shade, 0.3); g.beginPath();
-  for (let i = 0; i < 6; i++) { const a = R() * TAU, d = 8 + R() * 14; ellSub(g, cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.9, 2.5 + R() * 3, 1.6 + R() * 2, R() * 3); }
+  for (let i = 0; i < 6; i++) { const a = R() * TAU, d = 8 + R() * 14; ellSub(g, cx + Math.cos(a) * d * 1.2, cy + Math.sin(a) * d * 0.8, 2.5 + R() * 3, 1.6 + R() * 2, R() * 3); }
   g.fill();
   // sugary glaze on the rim
   g.strokeStyle = 'rgba(255,248,228,0.8)'; g.lineWidth = 2.4;
-  g.beginPath(); g.ellipse(cx, cy, rx - 2.3, ry - 2.3, 0, Math.PI * 1.08, Math.PI * 1.5); g.stroke();
-  g.beginPath(); g.ellipse(cx, cy, rx - 2.3, ry - 2.3, 0, Math.PI * 1.6, Math.PI * 1.7); g.stroke();
-  g.beginPath(); g.ellipse(cx, cy, rx - 2.3, ry - 2.3, 0, Math.PI * 0.1, Math.PI * 0.22); g.stroke();
+  g.beginPath(); g.ellipse(cx, cy, rx - 2.3, ry - 2.3, 0, Math.PI * 1.1, Math.PI * 1.5); g.stroke();
+  g.beginPath(); g.ellipse(cx, cy, rx - 2.3, ry - 2.3, 0, Math.PI * 1.6, Math.PI * 1.72); g.stroke();
+  g.beginPath(); g.ellipse(cx, cy, rx - 2.3, ry - 2.3, 0, Math.PI * 0.08, Math.PI * 0.2); g.stroke();
   g.fillStyle = 'rgba(255,252,240,0.95)'; g.beginPath();
-  for (let i = 0; i < 20; i++) { const a = R() * TAU, d = 1.2 + R() * 4, s = 0.9 + R() * 0.9; const x = cx + Math.cos(a) * (rx - d), y = cy + Math.sin(a) * (ry - d); g.moveTo(x, y - s); g.lineTo(x + s * 0.75, y); g.lineTo(x, y + s); g.lineTo(x - s * 0.75, y); g.closePath(); }
+  for (let i = 0; i < 22; i++) { const a = R() * TAU, d = 1.2 + R() * 4, s = 0.9 + R() * 0.9; const x = cx + Math.cos(a) * (rx - d), y = cy + Math.sin(a) * (ry - d); g.moveTo(x, y - s); g.lineTo(x + s * 0.75, y); g.lineTo(x, y + s); g.lineTo(x - s * 0.75, y); g.closePath(); }
   g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.3)'; ell(g, cx - 10, cy - 14, 9, 4.2, -0.45); g.fill();
-  // brown-sugar syrup oozing out of a split at the top-back edge, one drip running down the side
-  g.beginPath(); ellSub(g, -23.5, -63, 10, 5, -0.85); rrSub(g, -35.2, -58, 5.4, 16, 2.7); ellSub(g, -32.4, -41.5, 3.6, 4.3);
+  g.fillStyle = 'rgba(255,255,255,0.3)'; ell(g, cx - 12, cy - 13, 10, 4, -0.35); g.fill();
+  // brown-sugar syrup leaking from a split at the lower-back edge, one fat drip hanging off it
+  g.beginPath(); ellSub(g, -19.5, -26.6, 9.5, 4.4, 0.5); rrSub(g, -24.6, -28, 5.6, 13, 2.8); ellSub(g, -21.8, -14.6, 3.9, 4.6);
   g.lineWidth = k.lw * 2; g.strokeStyle = k.line; g.stroke();
-  const sg = g.createLinearGradient(0, -70, 0, -37); sg.addColorStop(0, '#b4561c'); sg.addColorStop(1, '#6c2a0c');
+  const sg = g.createLinearGradient(-26, -32, -16, -10); sg.addColorStop(0, '#d0701f'); sg.addColorStop(1, '#6c2a0c');
   g.fillStyle = sg; g.fill();
-  g.fillStyle = 'rgba(255,214,150,0.85)'; g.beginPath(); ellSub(g, -26, -66, 3.4, 1.4, -0.85); ellSub(g, -33.6, -43.2, 1.1, 1.6); g.fill();
-  g.fillStyle = '#f3e2b8'; g.beginPath(); ellSub(g, -21, -61.6, 1.9, 1, -0.4); ellSub(g, -18.2, -65.4, 1.6, 0.9, 0.5); g.fill();
+  g.fillStyle = 'rgba(255,224,165,0.9)'; g.beginPath(); ellSub(g, -17, -28.4, 3.8, 1.3, 0.5); ellSub(g, -23, -16.6, 1.2, 1.8); g.fill();
+  g.fillStyle = '#f3e2b8'; g.beginPath(); ellSub(g, -23.4, -24.8, 1.9, 1, 0.9); ellSub(g, -14.5, -25.5, 1.6, 0.9, 0.3); g.fill();
 }
 
 // 붕이 — fish-shaped bread: plump fish facing right, scales on the body, gill line, toasted mould rim,
@@ -584,30 +589,61 @@ function stick(g: Ctx, k: Ink, top: number, bottom: number): void {
   g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-1, top + 8); g.lineTo(-1, bottom); g.stroke();
 }
 
-// 어묵이 — a fish-cake sheet folded like an accordion on a skewer; soft pale folds, fried edges, steam.
+// 어묵이 — a fish-cake sheet folded like an accordion on a skewer: seen from the side the ribbon snakes left
+// and right (the silhouette zig-zags), folds alternate light / shadowed, fried edges, steam rising from the top.
+const FC_W2 = 23.5, FC_Y0 = -74, FC_Y1 = -22, FC_WAVE0 = -66, FC_P = 30;
+function fcShift(y: number): number {                     // sideways shift of the ribbon at height y
+  const u = (y - FC_WAVE0) / FC_P; if (u <= 0) return 0;
+  return 5.8 * Math.min(1, u * 2.5) * Math.sin(u * TAU);
+}
+function fishcakePath(g: Ctx): void {
+  g.beginPath();
+  g.moveTo(-FC_W2, FC_Y0);
+  g.ellipse(0, FC_Y0, FC_W2, 14, 0, Math.PI, TAU);
+  for (let y = FC_Y0; y <= FC_Y1; y += 1.5) g.lineTo(FC_W2 + fcShift(y), y);
+  const sb = fcShift(FC_Y1);
+  g.ellipse(sb, FC_Y1, FC_W2, 7, 0, 0, Math.PI);
+  for (let y = FC_Y1; y >= FC_Y0; y -= 1.5) g.lineTo(-FC_W2 + fcShift(y), y);
+  g.closePath();
+}
 function bodyFishcake(g: Ctx, pal: Palette, k: Ink): void {
   const R = rng(3);
   stick(g, k, -100, -20);
-  const folds: [number, number, number, number][] = [[-21, -41, 46, 26], [-25, -63, 47, 26], [-23, -88, 48, 30]];
-  for (const [x, y, w, h] of folds) {
-    const path = (): void => { g.beginPath(); rrSub(g, x, y, w, h, h * 0.46); };
-    const gr = g.createLinearGradient(0, y, 0, y + h);
-    gr.addColorStop(0, lit(pal.body, 0.3)); gr.addColorStop(0.55, pal.body); gr.addColorStop(1, pal.shade);
-    path(); g.fillStyle = gr; g.fill();
-    g.save(); path(); g.clip(); g.lineWidth = 6; g.strokeStyle = 'rgba(196,112,40,0.3)'; path(); g.stroke(); g.restore();
-    path(); g.lineWidth = k.lw; g.strokeStyle = k.line; g.stroke();
-    g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + 9, y + 5.5); g.quadraticCurveTo(x + w / 2, y + 2, x + w - 9, y + 5.5); g.stroke();
-    g.fillStyle = alpha(pal.shade, 0.5); g.beginPath();
-    for (let i = 0; i < 6; i++) circSub(g, x + 6 + R() * (w - 12), y + 7 + R() * (h - 12), 0.7 + R() * 0.6);
-    g.fill();
-  }
+  const gr = g.createLinearGradient(0, -88, 0, -15);
+  gr.addColorStop(0, lit(pal.body, 0.3)); gr.addColorStop(0.5, pal.body); gr.addColorStop(1, lit(pal.body, -0.05));
+  fishcakePath(g); g.fillStyle = gr; g.fill();
+  g.save(); fishcakePath(g); g.clip();
+  // folds: each band lit on one face and shadowed toward the next crease
+  const creases = [FC_WAVE0 + FC_P * 0.25, FC_WAVE0 + FC_P * 0.75, FC_WAVE0 + FC_P * 1.25];
+  let prev = FC_WAVE0 - 4;
+  [...creases, -12].forEach((yc, i) => {
+    const lg = g.createLinearGradient(0, prev, 0, yc);
+    if (i % 2 === 0) { lg.addColorStop(0, 'rgba(255,255,255,0.22)'); lg.addColorStop(1, alpha(pal.shade, 0.6)); }
+    else { lg.addColorStop(0, alpha(pal.shade, 0.35)); lg.addColorStop(0.6, 'rgba(255,255,255,0.12)'); lg.addColorStop(1, alpha(pal.shade, 0.4)); }
+    g.fillStyle = lg; g.fillRect(-40, prev, 80, yc - prev); prev = yc;
+  });
+  g.lineWidth = 6; g.strokeStyle = 'rgba(196,112,40,0.32)'; fishcakePath(g); g.stroke();       // fried edges
+  g.fillStyle = alpha(pal.shade, 0.55); g.beginPath();
+  for (let i = 0; i < 16; i++) { const y = -84 + R() * 64; circSub(g, fcShift(y) - 17 + R() * 34, y, 0.7 + R() * 0.6); }
+  g.fill();
+  g.restore();
+  fishcakePath(g); g.lineWidth = k.lw; g.strokeStyle = k.line; g.stroke();
+  // crease lines bow toward the side the fold turns
+  g.strokeStyle = alpha(lit(pal.shade, -0.3), 0.7); g.lineWidth = 1.5; g.beginPath();
+  creases.forEach((yc, i) => { const sft = fcShift(yc), d = i % 2 ? -3.5 : 3.5; g.moveTo(-FC_W2 + sft + 2, yc - d * 0.3); g.quadraticCurveTo(sft, yc + d, FC_W2 + sft - 2, yc - d * 0.3); });
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 2.2; g.beginPath(); g.ellipse(0, FC_Y0 + 1, FC_W2 - 6, 10, 0, Math.PI * 1.15, Math.PI * 1.55); g.stroke();
 }
 
 // 달콩 — a round dalgona disc: caramel edge, porous honeycomb, big embossed star imprint (face sits on it).
 function bodyStar(g: Ctx, pal: Palette, k: Ink): void {
   const cx = 0, cy = -48, r = 30, R = rng(7), n = 26;
   const pts: [number, number][] = [];
-  for (let i = 0; i < n; i++) { const a = i / n * TAU, d = r * (1 + (R() - 0.5) * 0.06); pts.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d]); }
+  for (let i = 0; i < n; i++) {
+    const a = i / n * TAU; let d = r * (1 + (R() - 0.5) * 0.06);
+    const da = Math.abs(a - Math.PI * 1.24); if (da < 0.3) d -= 7 * (1 - da / 0.3);     // a chip broken off the top-back edge (뽑기!)
+    pts.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d]);
+  }
   const edge = (): void => {
     g.beginPath(); const m0 = mid(pts[n - 1], pts[0]); g.moveTo(m0[0], m0[1]);
     for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n], m = mid(a, b); g.quadraticCurveTo(a[0], a[1], m[0], m[1]); }
@@ -615,19 +651,27 @@ function bodyStar(g: Ctx, pal: Palette, k: Ink): void {
   };
   const gr = g.createRadialGradient(cx - 4, cy - 6, 2, cx, cy, r + 1);
   gr.addColorStop(0, lit(pal.body, 0.45)); gr.addColorStop(0.55, lit(pal.body, 0.18)); gr.addColorStop(0.85, pal.body); gr.addColorStop(1, pal.shade);
-  edge(); g.fillStyle = gr; g.fill(); g.lineWidth = k.lw; g.strokeStyle = k.line; g.stroke();
-  g.strokeStyle = alpha(pal.shade, 0.55); g.lineWidth = 3.6; g.beginPath(); g.arc(cx, cy, r - 3.6, 0, TAU); g.stroke();
+  edge(); g.fillStyle = gr; g.fill();
+  g.save(); edge(); g.clip();
+  g.lineWidth = 7; g.strokeStyle = alpha(pal.shade, 0.5); edge(); g.stroke();              // caramelised edge
   // honeycomb pores
   const holes: [number, number, number][] = [];
   for (let i = 0; i < 40; i++) { const a = R() * TAU, d = 5 + R() * 21; holes.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d, 0.8 + R() * 1.5]); }
   g.fillStyle = alpha(lit(pal.shade, -0.1), 0.5); g.beginPath(); for (const [x, y, s] of holes) circSub(g, x, y, s); g.fill();
   g.fillStyle = 'rgba(255,244,210,0.7)'; g.beginPath(); for (const [x, y, s] of holes) { g.moveTo(x - s * 0.9, y - s * 0.2); g.arc(x - s * 0.25, y - s * 0.35, s * 0.62, Math.PI, Math.PI * 1.9); } g.fill();
+  g.restore();
+  edge(); g.lineWidth = k.lw; g.strokeStyle = k.line; g.stroke();
   // embossed star imprint
   const sx = 1.5, sy = -46.5;
   starPath(g, sx + 1.2, sy + 1.6, 22, 9.5); g.fillStyle = alpha(lit(pal.shade, -0.3), 0.45); g.fill();
   starPath(g, sx, sy, 22, 9.5); g.fillStyle = lit(pal.body, 0.55); g.fill(); g.lineWidth = 1.8; g.strokeStyle = pal.shade; g.stroke();
   g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,0.75)'; starPath(g, sx - 0.5, sy - 0.6, 19.8, 8.4); g.stroke();
-  g.fillStyle = 'rgba(255,255,255,0.3)'; ell(g, cx - 14, cy - 15, 6, 3, -0.7); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.3)'; ell(g, cx - 9, cy - 19, 6, 2.6, -0.4); g.fill();
+  // hairline cracks running in from the chip
+  g.strokeStyle = alpha(lit(pal.shade, -0.35), 0.8); g.lineWidth = 1.1; g.beginPath();
+  g.moveTo(-16.5, -66.5); g.lineTo(-13, -62); g.lineTo(-13.8, -58); g.lineTo(-10.5, -55);
+  g.moveTo(-13, -62); g.lineTo(-9, -63.5);
+  g.stroke();
 }
 function mid(a: [number, number], b: [number, number]): [number, number] { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; }
 function starTwinkle(c: Ctx, _k: Ink, p: Pose): void {
@@ -683,13 +727,13 @@ function bodyPotato(g: Ctx, pal: Palette, k: Ink): void {
 
 const SPECS: Record<Shape, Spec> = {
   disc: {
-    cy: -45, top: -74, bottom: -16, hipX: 9, hipY: -17, armB: [-30, -41], armF: [30, -39],
-    face: { x: 5, y: -47, gap: 16, k: 1.05 }, hat: { x: 0, y: -73, w: 48, rot: 0 },
-    slide: { mode: 'squash', sx: 1.02, sy: 0.56, lean: -0.2, rot: 0, cx: 0, face: { x: 13, y: -16, gap: 15, k: 0.92 }, arm: [-8, -27], feet: [-36, -2], hat: { x: 6, y: -33, w: 40, rot: 0.12 } },
+    cy: -47, top: -73, bottom: -21, hipX: 10, hipY: -22, armB: [-33, -44], armF: [33, -42],
+    face: { x: 5, y: -49, gap: 16, k: 1.05 }, hat: { x: 0, y: -72, w: 50, rot: 0 },
+    slide: { mode: 'squash', sx: 0.95, sy: 0.64, lean: -0.2, rot: 0, cx: 0, face: { x: 13, y: -17, gap: 15, k: 0.92 }, arm: [-8, -28], feet: [-36, -2], hat: { x: 6, y: -34, w: 40, rot: 0.12 } },
     body: bodyDisc,
   },
   fish: {
-    cy: -45, top: -86, bottom: -17, hipX: 8, hipY: -19, armB: [-6, -35], armF: [8, -31], fins: true,
+    cy: -45, top: -86, bottom: -17, hipX: 8, hipY: -19, armB: [-12, -31], armF: [9, -30], fins: true,
     face: { x: 12, y: -50, gap: 13.5, k: 0.95 }, hat: { x: 4, y: -73, w: 36, rot: 0.08 },
     slide: { mode: 'squash', sx: 1.0, sy: 0.55, lean: -0.05, rot: 0.04, cx: 0, face: { x: 16, y: -16, gap: 13, k: 0.85 }, arm: [-4, -16], feet: [-40, -2], hat: { x: 8, y: -32, w: 32, rot: 0.1 } },
     body: bodyFish, behind: fishTail,

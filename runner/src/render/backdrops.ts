@@ -5,7 +5,8 @@
 import { BIOMES, BIOME_ORDER, type BiomeDef } from '../data/biomes';
 import type { RunState } from '../sim/types';
 import { VIEW_H, GROUND_Y, TILE, PLATFORM_THICK } from '../data/physics';
-import { rr } from './characters';
+import { rr, drawCharacter } from './characters';
+import { CHAR_BY_ID } from '../data/characters';
 
 // ================================================================ shared colour / canvas helpers
 export function hexRgb(h: string): [number, number, number] {
@@ -154,7 +155,7 @@ const marketLayers: LayerSpec[] = [
   } },
   { top: 205, k: 2, paint: (g, W, r, P) => {
     const body = P.near;
-    const aw0 = mix(P.a0, body, 0.28), aw1 = mix(P.a1, body, 0.5);
+    const aw0 = mix(P.a0, body, 0.42), aw1 = mix(P.a1, body, 0.62);
     const stalls = spread(r, W, 150, 230, 50, 130);
     // festival lantern string high over the alley (behind the stalls)
     const lc = [mix(P.a0, body, 0.15), mix('#ffb03b', body, 0.2), mix('#3e9fd1', body, 0.25)];
@@ -163,7 +164,7 @@ const marketLayers: LayerSpec[] = [
     for (const [x, w] of stalls) {
       const awBot = -142, awTop = -170, counter = -56;
       // warm lit interior
-      const gr = g.createLinearGradient(0, awBot, 0, counter); gr.addColorStop(0, rgba(P.light, 0.5)); gr.addColorStop(1, rgba(P.light, 0.16));
+      const gr = g.createLinearGradient(0, awBot, 0, counter); gr.addColorStop(0, rgba(P.light, 0.42)); gr.addColorStop(1, rgba(P.light, 0.12));
       g.fillStyle = gr; g.fillRect(x + 6, awBot, w - 12, counter - awBot);
       // shelves with jars
       g.fillStyle = rgba(darken(body, 0.3), 0.55); g.fillRect(x + 12, -112, w - 24, 3);
@@ -263,14 +264,14 @@ const riversideLayers: LayerSpec[] = [
       glowDot(g, x + w / 2, -10, w * 0.7, P.a0, 0.18);
       // tent body (orange tarp lit from inside)
       const gr = g.createLinearGradient(0, top, 0, 0);
-      gr.addColorStop(0, mix(P.a0, body, 0.3)); gr.addColorStop(0.35, mix(P.a1, P.a0, 0.45)); gr.addColorStop(0.75, mix(P.a0, body, 0.25)); gr.addColorStop(1, mix(P.a0, body, 0.55));
+      gr.addColorStop(0, mix(P.a0, body, 0.45)); gr.addColorStop(0.35, mix(mix(P.a1, P.a0, 0.5), body, 0.22)); gr.addColorStop(0.75, mix(P.a0, body, 0.42)); gr.addColorStop(1, mix(P.a0, body, 0.66));
       g.fillStyle = gr; g.beginPath(); g.moveTo(x, BELOW); g.lineTo(x, top + 28); g.quadraticCurveTo(x + 2, top + 2, x + 30, top); g.lineTo(x + w - 30, top); g.quadraticCurveTo(x + w - 2, top + 2, x + w, top + 28); g.lineTo(x + w, BELOW); g.closePath(); g.fill();
       // frame / seams
       g.strokeStyle = rgba(darken(P.a0, 0.55), 0.55); g.lineWidth = 2;
       for (let sx = x + 40; sx < x + w - 20; sx += 44) { g.beginPath(); g.moveTo(sx, top + 2); g.lineTo(sx, 0); g.stroke(); }
       // rolled-up window with customers inside
       const wy = top + 34, wh = 46;
-      g.fillStyle = rgba(lighten(P.light, 0.35), 0.55); g.fillRect(x + 12, wy, w - 24, wh);
+      g.fillStyle = rgba(lighten(P.light, 0.3), 0.42); g.fillRect(x + 12, wy, w - 24, wh);
       g.fillStyle = mix(P.a0, body, 0.1); rr(g, x + 8, wy - 8, w - 16, 9, 4); g.fill();
       g.fillStyle = rgba(darken(P.a0, 0.75), 0.75);
       for (let px = x + 26; px < x + w - 26; px += 30 + r() * 26) { const hr = 7 + r() * 2; g.beginPath(); g.arc(px, wy + wh - 20, hr, 0, Math.PI * 2); g.fill(); rr(g, px - 12, wy + wh - 12, 24, 14, 7); g.fill(); }
@@ -310,7 +311,6 @@ const bridgeLayers: LayerSpec[] = [
     }
     // generic tower on a hill
     const tx = W * 0.3; g.fillStyle = mix(col, P.near, 0.1);
-    ridge(g, W, -40, [[1, 0.001, 0]], 'rgba(0,0,0,0)');
     g.beginPath(); g.ellipse(tx, 10, 150, 70, 0, Math.PI, 0); g.fill();
     g.fillRect(tx - 4, -240, 8, 190); g.beginPath(); g.ellipse(tx, -200, 18, 8, 0, 0, Math.PI * 2); g.fill(); g.fillRect(tx - 12, -218, 24, 12); g.fillRect(tx - 1, -262, 2, 24);
     g.fillStyle = rgba(P.a0, 0.9); for (let k = 0; k < 7; k++) g.fillRect(tx - 15 + k * 5, -202, 2, 2);
@@ -367,17 +367,19 @@ const bridgeLayers: LayerSpec[] = [
 ];
 
 // ---------------------------------------------------------------- 새벽 지붕길 (dawn)
-/** hanok roof: curved (concave) with upturned eaves; x..x+w at eave height y, ridge height h */
-function hanokRoof(g: CanvasRenderingContext2D, x: number, w: number, y: number, h: number, col: string, ridge?: string): void {
-  g.fillStyle = col; g.beginPath();
-  g.moveTo(x - 12, y - 8);
-  g.quadraticCurveTo(x + w * 0.18, y + 2, x + w * 0.3, y - h * 0.55);
-  g.lineTo(x + w * 0.7, y - h * 0.55);
-  g.quadraticCurveTo(x + w * 0.82, y + 2, x + w + 12, y - 8);
-  g.lineTo(x + w + 6, y - 2); g.lineTo(x - 6, y - 2); g.closePath(); g.fill();
-  // upper roof (the ridge body)
-  g.beginPath(); g.moveTo(x + w * 0.24, y - h * 0.5); g.quadraticCurveTo(x + w * 0.5, y - h * 0.62, x + w * 0.76, y - h * 0.5); g.lineTo(x + w * 0.72, y - h); g.lineTo(x + w * 0.28, y - h); g.closePath(); g.fill();
-  if (ridge) { g.fillStyle = ridge; g.fillRect(x + w * 0.26, y - h - 3, w * 0.48, 4); }
+/** hanok roof (side view): upturned eaves, concave slopes, a ridge with raised ends; eave line at y, ridge h above */
+function hanokRoof(g: CanvasRenderingContext2D, x: number, w: number, y: number, h: number, col: string, ridge?: string, tiles?: string): void {
+  const path = () => {
+    g.beginPath(); g.moveTo(x - 14, y - 9);
+    g.quadraticCurveTo(x + w * 0.12, y + 1, x + w * 0.3, y); g.lineTo(x + w * 0.7, y);
+    g.quadraticCurveTo(x + w * 0.88, y + 1, x + w + 14, y - 9);
+    g.quadraticCurveTo(x + w * 0.84, y - h * 0.3, x + w * 0.78, y - h);
+    g.lineTo(x + w * 0.22, y - h);
+    g.quadraticCurveTo(x + w * 0.16, y - h * 0.3, x - 14, y - 9); g.closePath();
+  };
+  g.fillStyle = col; path(); g.fill();
+  if (tiles) { g.save(); path(); g.clip(); g.fillStyle = tiles; for (let tx = x - 10; tx < x + w + 10; tx += 7) g.fillRect(tx, y - h, 1.6, h); g.fillRect(x - 14, y - 4, w + 28, 3); g.restore(); }
+  g.fillStyle = ridge ?? col; g.beginPath(); g.moveTo(x + w * 0.17, y - h - 10); g.quadraticCurveTo(x + w * 0.5, y - h - 3, x + w * 0.83, y - h - 10); g.lineTo(x + w * 0.79, y - h + 1); g.lineTo(x + w * 0.21, y - h + 1); g.closePath(); g.fill();
 }
 const dawnLayers: LayerSpec[] = [
   { top: 260, k: 1, paint: (g, W, r, P) => {
@@ -407,18 +409,17 @@ const dawnLayers: LayerSpec[] = [
     for (let y = -40, row = 0; y < 0; y += 10, row++) for (let x = (row % 2) * 9; x < W; x += 16 + r() * 6) { g.beginPath(); g.ellipse(x, y + 5, 7, 4, 0, 0, Math.PI * 2); g.fill(); }
     hanokRoofRow(g, W, r, col, P, -42);
   } },
-  { top: 170, k: 2, paint: (g, W, r, P) => {
+  { top: 200, k: 2, paint: (g, W, r, P) => {
     const col = P.near;
     // near roof ridges (용마루) passing by
     for (const [x, w] of spread(r, W, 180, 280, 120, 260)) {
       const y = -54 - r() * 20;
       g.fillStyle = col; g.fillRect(x + 10, y, w - 20, -y + BELOW);
-      hanokRoof(g, x, w, y, 60, darken(col, 0.1), lighten(col, 0.25));
-      g.fillStyle = rgba(lighten(col, 0.35), 0.5); for (let tx = x + w * 0.3; tx < x + w * 0.7; tx += 8) g.fillRect(tx, y - 58, 2, 22);
+      hanokRoof(g, x, w, y, 58, darken(col, 0.1), lighten(col, 0.3), rgba(lighten(col, 0.25), 0.35));
     }
     // persimmon trees (감나무) — Chuseok season
     for (const [x] of spread(r, W, 10, 11, 380, 620, 200)) {
-      const tx = x, ty = -150;
+      const tx = x, ty = -128;
       g.strokeStyle = darken(col, 0.2); g.lineWidth = 5; g.beginPath(); g.moveTo(tx, BELOW); g.lineTo(tx + 4, ty + 40);
       g.moveTo(tx + 3, ty + 60); g.lineTo(tx - 40, ty + 10); g.moveTo(tx + 4, ty + 45); g.lineTo(tx + 50, ty); g.moveTo(tx + 4, ty + 40); g.lineTo(tx + 8, ty - 20); g.stroke();
       g.lineWidth = 2; for (let k = 0; k < 12; k++) { const a = -Math.PI * (0.1 + 0.8 * r()); const l = 25 + r() * 30; const bx = tx + 4 + Math.cos(a) * 30, by = ty + 20 + Math.sin(a) * 30; g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + Math.cos(a) * l, by + Math.sin(a) * l); g.stroke(); }
@@ -434,7 +435,7 @@ function hanokRoofRow(g: CanvasRenderingContext2D, W: number, r: () => number, c
     g.fillStyle = darken(col, 0.15); for (let bx = x + 8; bx <= x + w - 12; bx += (w - 20) / 3) g.fillRect(bx, eave, 4, base - eave);
     // 한지 windows still lit at dawn
     const ww = 16; for (let k = 0; k < 2; k++) { const wx = x + w * (0.3 + k * 0.3) - ww / 2; g.fillStyle = rgba(P.light, 0.55); g.fillRect(wx, eave + 8, ww, 18); g.fillStyle = rgba(darken(col, 0.3), 0.6); g.fillRect(wx + ww / 2 - 0.5, eave + 8, 1, 18); g.fillRect(wx, eave + 16, ww, 1); }
-    hanokRoof(g, x, w, eave, 44, col, lighten(col, 0.2));
+    hanokRoof(g, x, w, eave, 44, col, lighten(col, 0.2), rgba(lighten(col, 0.2), 0.3));
   }
 }
 
@@ -450,15 +451,19 @@ function moonSprite(rad: number, res: number, pale: boolean, rabbit = false): HT
   body.addColorStop(0, pale ? '#fffaf2' : '#fffbe8'); body.addColorStop(1, pale ? '#f2dccb' : '#ffe2a0');
   g.fillStyle = body; g.beginPath(); g.arc(R, R, rad, 0, Math.PI * 2); g.fill();
   g.fillStyle = pale ? 'rgba(170,140,160,0.16)' : 'rgba(210,160,90,0.2)';
-  for (const [dx, dy, s] of [[-0.35, -0.2, 0.22], [0.25, 0.3, 0.28], [0.35, -0.35, 0.14], [-0.1, 0.45, 0.12]]) { g.beginPath(); g.arc(R + dx * rad, R + dy * rad, s * rad, 0, Math.PI * 2); g.fill(); }
+  if (!rabbit) for (const [dx, dy, s] of [[-0.35, -0.2, 0.22], [0.25, 0.3, 0.28], [0.35, -0.35, 0.14], [-0.1, 0.45, 0.12]]) { g.beginPath(); g.arc(R + dx * rad, R + dy * rad, s * rad, 0, Math.PI * 2); g.fill(); }
   if (rabbit) {
-    // 옥토끼 pounding rice cake — a soft silhouette on the moon
-    g.fillStyle = 'rgba(214,160,120,0.35)'; const s = rad / 60; const bx = R - 8 * s, by = R + 14 * s;
-    g.beginPath(); g.ellipse(bx, by, 16 * s, 20 * s, 0, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.ellipse(bx + 6 * s, by - 24 * s, 11 * s, 10 * s, 0, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.ellipse(bx + 2 * s, by - 44 * s, 3.5 * s, 13 * s, -0.25, 0, Math.PI * 2); g.ellipse(bx + 11 * s, by - 43 * s, 3.5 * s, 13 * s, 0.25, 0, Math.PI * 2); g.fill();
-    g.fillRect(bx + 26 * s, by - 6 * s, 20 * s, 24 * s);                                       // mortar
-    g.save(); g.translate(bx + 14 * s, by - 16 * s); g.rotate(-0.6); g.fillRect(-2 * s, -26 * s, 4 * s, 30 * s); g.fillRect(-7 * s, -32 * s, 14 * s, 8 * s); g.restore();
+    // 옥토끼 pounding rice cake (절구 + 절굿공이) — a soft silhouette on the moon
+    g.fillStyle = 'rgba(206,150,96,0.3)'; const s = rad / 60; const bx = R - 14 * s, by = R + 12 * s;
+    g.beginPath(); g.ellipse(bx, by, 14 * s, 17 * s, -0.15, 0, Math.PI * 2); g.fill();                      // body
+    g.beginPath(); g.arc(bx - 13 * s, by + 10 * s, 4.5 * s, 0, Math.PI * 2); g.fill();                    // tail
+    g.beginPath(); g.ellipse(bx + 7 * s, by - 19 * s, 10 * s, 9 * s, 0.1, 0, Math.PI * 2); g.fill();      // head
+    g.beginPath(); g.ellipse(bx - 2 * s, by - 36 * s, 3.4 * s, 12 * s, -0.45, 0, Math.PI * 2); g.fill();  // ears
+    g.beginPath(); g.ellipse(bx + 5 * s, by - 38 * s, 3.4 * s, 12 * s, -0.15, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.moveTo(bx + 24 * s, by + 4 * s); g.lineTo(bx + 48 * s, by + 4 * s); g.lineTo(bx + 43 * s, by + 20 * s); g.lineTo(bx + 29 * s, by + 20 * s); g.closePath(); g.fill(); // mortar
+    g.fillRect(bx + 22 * s, by + 1 * s, 28 * s, 4 * s);
+    g.save(); g.translate(bx + 25 * s, by - 10 * s); g.rotate(0.55); g.fillRect(-2 * s, -4 * s, 4 * s, 30 * s); g.fillRect(-4.5 * s, 18 * s, 9 * s, 10 * s); g.restore(); // pestle
+    g.beginPath(); g.ellipse(bx + 12 * s, by - 4 * s, 6 * s, 3.5 * s, -0.5, 0, Math.PI * 2); g.fill();  // paws
   }
   return cv;
 }
@@ -493,16 +498,17 @@ function sparkleSprite(res: number): HTMLCanvasElement {
   g.fillStyle = '#ffffff'; g.beginPath(); g.moveTo(12, 1); g.quadraticCurveTo(13, 11, 23, 12); g.quadraticCurveTo(13, 13, 12, 23); g.quadraticCurveTo(11, 13, 1, 12); g.quadraticCurveTo(11, 11, 12, 1); g.fill();
   return cv;
 }
-/** puffy cloud blob made of circles */
+/** puffy cloud blob: circles + a flat base, each tone filled as ONE path (no alpha build-up inside a cloud) */
 function cloud(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, col: string, shadeCol: string, r: () => number): void {
-  const n = Math.max(3, Math.round(w / 34));
-  g.fillStyle = shadeCol; g.beginPath();
-  for (let i = 0; i < n; i++) { const t = (i + 0.5) / n; const cr = h * (0.45 + 0.4 * Math.sin(Math.PI * t)) * (0.85 + r() * 0.3); g.moveTo(x + w * t + cr, y + 4); g.arc(x + w * t, y + 4, cr, 0, Math.PI * 2); }
-  g.fill();
-  g.fillStyle = col; g.beginPath();
-  for (let i = 0; i < n; i++) { const t = (i + 0.5) / n; const cr = h * (0.45 + 0.4 * Math.sin(Math.PI * t)) * (0.8 + r() * 0.2); g.moveTo(x + w * t + cr, y - 2); g.arc(x + w * t, y - 2, cr, 0, Math.PI * 2); }
-  g.fill();
-  g.fillRect(x + h * 0.3, y - 2, w - h * 0.6, h * 0.45);
+  const n = Math.max(3, Math.round(w / 34)); const rs: number[] = [];
+  for (let i = 0; i < n; i++) rs.push(h * (0.45 + 0.4 * Math.sin(Math.PI * ((i + 0.5) / n))) * (0.85 + r() * 0.3));
+  const blob = (dy: number, k: number) => {
+    g.beginPath();
+    for (let i = 0; i < n; i++) { const cx = x + w * ((i + 0.5) / n); g.moveTo(cx + rs[i] * k, y + dy); g.arc(cx, y + dy, rs[i] * k, 0, Math.PI * 2); }
+    g.rect(x + h * 0.3, y + dy, w - h * 0.6, h * 0.45 * k); g.fill();
+  };
+  g.fillStyle = shadeCol; blob(4, 1);
+  g.fillStyle = col; blob(-2, 0.92);
 }
 
 // ================================================================ ground / platform textures
@@ -514,17 +520,15 @@ function paintGroundTile(g: CanvasRenderingContext2D, st: GroundStyle, P: Pal): 
   g.translate(0, GT_UP);                 // y = 0 is the walking surface
   const wrap = (fn: (ox: number) => void) => { fn(-W); fn(0); fn(W); };
   if (st === 'sky') {
-    const gr = g.createLinearGradient(0, 0, 0, D); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.4, '#ffe6f4'); gr.addColorStop(1, '#d9c6ff');
+    const gr = g.createLinearGradient(0, 0, 0, D); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.35, '#fff0f8'); gr.addColorStop(1, '#e2d2ff');
     g.fillStyle = gr; g.fillRect(0, 6, W, D);
-    // puffy top edge
-    g.fillStyle = '#ffffff';
-    wrap(ox => { for (let x = 0; x < W; x += 40) { g.beginPath(); g.arc(ox + x + 20, 8, 20, Math.PI, 0); g.fill(); } });
-    g.fillStyle = 'rgba(255,190,225,0.45)';
-    wrap(ox => { for (let x = 0; x < W; x += 40) { g.beginPath(); g.arc(ox + x + 20, 30, 16, 0, Math.PI * 2); g.fill(); } });
-    g.fillStyle = 'rgba(255,255,255,0.8)';
-    wrap(ox => { for (let x = 20; x < W; x += 80) { g.beginPath(); g.arc(ox + x + 20, 48, 14, 0, Math.PI * 2); g.fill(); } });
-    g.fillStyle = 'rgba(200,170,255,0.35)';
-    wrap(ox => { for (let x = 0; x < W; x += 53) { g.beginPath(); g.arc(ox + x + 10, 80 + (x % 3) * 8, 18, 0, Math.PI * 2); g.fill(); } });
+    // puffy top edge (irregular bumps, period = tile width)
+    const bumps: [number, number][] = []; for (let x = 0; x < W;) { const rad = 15 + r() * 10; bumps.push([x + rad, rad]); x += rad * 1.6; }
+    const k = W / (bumps[bumps.length - 1][0] + bumps[bumps.length - 1][1] * 0.6);
+    g.fillStyle = '#ffffff'; wrap(ox => { g.beginPath(); for (const [bx, rad] of bumps) { g.moveTo(ox + bx * k + rad, 10); g.arc(ox + bx * k, 10, rad, Math.PI, 0); } g.fill(); });
+    // soft inner puffs
+    for (let i = 0; i < 9; i++) { const x = r() * W, y = 30 + r() * (D - 40), rad = 10 + r() * 16; const col = i % 3 === 0 ? 'rgba(255,255,255,0.55)' : i % 3 === 1 ? 'rgba(255,196,228,0.22)' : 'rgba(196,170,255,0.2)'; g.fillStyle = col; wrap(ox => { g.beginPath(); g.arc(ox + x, y, rad, 0, Math.PI * 2); g.fill(); }); }
+    g.fillStyle = 'rgba(255,190,225,0.35)'; g.fillRect(0, 22, W, 2);
     return;
   }
   if (st === 'market') {
@@ -759,13 +763,10 @@ export class Backdrop {
     else if (bi.style === 'riverside') this.drawMoon(c, W * 0.7, gy - 330 * sc, 26, false, alpha);
     else if (bi.style === 'dawn') this.drawMoon(c, W * 0.66, gy - 205 * sc, 92, true, alpha * 0.9);
     else if (!this.lowFx) this.drawFireworks(c, camX, time, alpha);
-    const Wt = this.tileW * sc;
     for (let li = 0; li < 4; li++) {
       const L = this.layer(bi, li); if (!L) continue;
       const top = LAYERS[bi.style][li].top;
-      let off = -((camX * PARALLAX[li] * sc) % Wt); if (off > 0) off -= Wt;
-      const y = gy - top * sc, h = (top + BELOW) * sc;
-      for (let x = off; x < W; x += Wt) c.drawImage(L, x, y, Wt + 1 / this.dpr, h);
+      this.tiled(c, L, camX * PARALLAX[li], gy - top * sc, (top + BELOW) * sc);
       if (li === 1 && bi.style === 'riverside') this.drawMoonReflection(c, W * 0.7, gy + RIVER_TOP * sc, time, alpha);
       if (li === 1 && bi.style === 'dawn') this.drawBirds(c, time, alpha);
     }
@@ -775,6 +776,14 @@ export class Backdrop {
       const next = BIOMES[(BIOME_ORDER.indexOf(bi.id) + 1) % BIOMES.length];
       if (next && next.id !== bi.id) for (let li = 0; li < 4 && this.budget > 0; li++) this.layer(next, li);
     }
+  }
+
+  /** draw a periodic layer canvas across the screen; tiles abut on whole device pixels (no seams, no overlap) */
+  private tiled(c: CanvasRenderingContext2D, L: HTMLCanvasElement, scroll: number, y: number, h: number): void {
+    const dpr = this.dpr; const stepDev = Math.max(1, Math.round(this.tileW * this.scale * dpr)); const step = stepDev / dpr;
+    let off = -((scroll * this.scale) % step); if (off > 0) off -= step;
+    off = Math.round(off * dpr) / dpr;
+    for (let x = off; x < this.cssW; x += step) c.drawImage(L, x, y, step, h);
   }
 
   private drawStars(c: CanvasRenderingContext2D, bi: BiomeDef, time: number, alpha: number): void {
@@ -859,9 +868,8 @@ export class Backdrop {
     c.globalAlpha = alpha;
     // cloud banks (two tiled layers)
     for (let li = 0; li < 2; li++) {
-      const L = this.bonusCloudLayer(li); const Wt = this.tileW * sc; const top = li ? 150 : 230;
-      let off = -((camX * (li ? 0.3 : 0.12) * sc) % Wt); if (off > 0) off -= Wt;
-      for (let x = off; x < W; x += Wt) c.drawImage(L, x, gy - top * sc, Wt + 1 / this.dpr, (top + BELOW) * sc);
+      const L = this.bonusCloudLayer(li); const top = li ? 150 : 230;
+      this.tiled(c, L, camX * (li ? 0.3 : 0.12), gy - top * sc, (top + BELOW) * sc);
       if (li === 0) this.drawSkyLanterns(c, camX, time, alpha);
     }
     c.globalAlpha = 1;
@@ -928,7 +936,7 @@ export class Backdrop {
       }
       void tw;
       // pit edges: dark cliff face + a bright rounded lip so gaps read instantly
-      const adjR = i + 1 < solids.length && solids.slice(i + 1, i + 4).some(n => n.ground && Math.abs(n.x0 - so.x1) < 1);
+      let adjR = false; for (let j = i + 1; j < solids.length && solids[j].x0 <= so.x1 + 1; j++) if (solids[j].ground && Math.abs(solids[j].x0 - so.x1) < 1) { adjR = true; break; }
       if (!adjL && so.x0 > x0 - 20) this.drawEdge(c, st, P, so.x0, 1);
       if (!adjR && so.x1 < x1 + 20) this.drawEdge(c, st, P, so.x1, -1);
     }
@@ -965,14 +973,14 @@ export class Backdrop {
       c.fillStyle = 'rgba(255,220,180,0.06)'; for (let y = GROUND_Y + 26; y < bottom; y += 14) c.fillRect(L, y, R - L, 1.5);
       c.fillStyle = 'rgba(120,200,255,0.18)'; c.fillRect(L, GROUND_Y + 88, R - L, 2);
     } else {
-      // gap between roofs: a far-below lit window
-      const mx = (a + b) / 2; if (mx > L && mx < R && b - a > 60) { c.fillStyle = rgba(P.light, 0.22); c.fillRect(mx - 8, GROUND_Y + 60, 16, 20); }
+      // gap between roofs: a lane far below, faint wall courses
+      c.fillStyle = 'rgba(255,220,200,0.05)'; for (let y = GROUND_Y + 30; y < bottom; y += 18) c.fillRect(L, y, R - L, 1.5);
     }
     if (bridged) {
       // pits are bridged while rescue / giant / dash is active: a glowing plank bridge
-      c.fillStyle = 'rgba(255,214,110,0.25)'; c.fillRect(L, GROUND_Y - 8, R - L, 22);
-      c.fillStyle = 'rgba(255,236,170,0.85)'; c.fillRect(L, GROUND_Y - 2, R - L, 5);
-      c.fillStyle = 'rgba(255,200,90,0.8)'; for (let x = Math.floor(L / 20) * 20; x < R; x += 20) c.fillRect(x, GROUND_Y + 3, 12, 5);
+      c.fillStyle = 'rgba(255,214,110,0.22)'; c.fillRect(L, GROUND_Y - 16, R - L, 34);
+      c.fillStyle = 'rgba(255,200,90,0.95)'; for (let x = Math.floor(L / 20) * 20; x < R; x += 20) c.fillRect(Math.max(L, x + 2), GROUND_Y, Math.min(16, R - x - 2), 9);
+      c.fillStyle = '#fff0b8'; c.fillRect(L, GROUND_Y - 4, R - L, 4);
     }
   }
 
@@ -985,12 +993,7 @@ export class Backdrop {
     c.fillStyle = st === 'sky' ? 'rgba(150,110,220,0.7)' : 'rgba(0,0,0,0.55)'; c.fillRect(dir > 0 ? x : x - 3, GROUND_Y + 8, 3, bottom - GROUND_Y);
     // rounded lip of the walking surface
     const top = st === 'sky' ? '#ffffff' : P.top;
-    c.fillStyle = top; c.beginPath(); c.arc(x + dir * 2, GROUND_Y + 2, 7, 0, Math.PI * 2); c.fill();
-    if (st === 'bridge') {
-      // broken railing stub (끊어진 난간)
-      c.strokeStyle = darken(P.top, 0.35); c.lineWidth = 3; c.lineCap = 'round';
-      c.beginPath(); c.moveTo(x - dir * 14, GROUND_Y - 4); c.lineTo(x - dir * 14, GROUND_Y - 30); c.lineTo(x - dir * 4, GROUND_Y - 24); c.moveTo(x - dir * 14, GROUND_Y - 30); c.lineTo(x - dir * 30, GROUND_Y - 30); c.stroke(); c.lineCap = 'butt';
-    }
+    c.fillStyle = top; c.beginPath(); c.arc(x + dir * 6, GROUND_Y + 2, 6, 0, Math.PI * 2); c.fill();
   }
 
   private drawFinish(c: CanvasRenderingContext2D, fx: number, P: Pal, time: number): void {
@@ -1020,6 +1023,7 @@ export class Backdrop {
     c.fillStyle = 'rgba(255,120,140,0.5)'; c.beginPath(); c.arc(-11, -19, 3, 0, Math.PI * 2); c.arc(11, -19, 3, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#e8a33c'; c.fillRect(-15, -8, 30, 6);
     // raised 방망이 club
+    c.strokeStyle = '#4a9d8c'; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath(); c.moveTo(9, -22); c.lineTo(14, -30); c.stroke(); c.lineCap = 'butt';
     c.save(); c.translate(14, -30); c.rotate(-0.5 + (this.reduceMotion ? 0 : Math.sin(time * 5) * 0.3));
     c.fillStyle = '#8a5a3c'; c.fillRect(-2, -20, 4, 20); c.fillStyle = '#a86b4a'; rr(c, -6, -34, 12, 17, 5); c.fill();
     c.fillStyle = '#f7d774'; c.fillRect(-4, -30, 2, 2); c.fillRect(2, -24, 2, 2);
@@ -1027,4 +1031,4 @@ export class Backdrop {
   }
 }
 
-if (typeof window !== 'undefined') { const w = window as unknown as { __world?: Record<string, unknown> }; (w.__world ??= {}).Backdrop = Backdrop; }
+if (typeof window !== 'undefined') { const w = window as unknown as { __world?: Record<string, unknown> }; Object.assign((w.__world ??= {}), { Backdrop, BIOMES, drawCharacter, CHAR_BY_ID }); }

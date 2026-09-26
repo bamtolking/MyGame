@@ -24,7 +24,7 @@ const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 /** pentatonic index → semitones (5 = octave). Negative indexes go below the root. */
 const pent = (i: number) => 12 * Math.floor(i / 5) + PENTA[((i % 5) + 5) % 5];
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-const curveVol = (v: number) => v * v;   // perceptual slider curve
+const curveVol = (v: number) => Math.pow(v, 1.5);   // perceptual slider curve
 
 // ------------------------------------------------------------------------------------------------ pattern data
 interface Chord { r: number; q: number }             // root (semitones above the key), q = 1 for minor
@@ -201,7 +201,7 @@ const SFX: Record<string, [number, number]> = {
   moonCake: [3, 0.3], line: [2, 0.2], pouch: [2, 0.2],
   power: [2, 0.2], giant: [2, 0.2], dash: [2, 0.2], magnet: [2, 0.2], powerEnd: [1, 0.2],
   hit: [3, 0.15], shield: [2, 0.15], smash: [1, 0.06], fall: [3, 0.4], near: [0, 0.12],
-  bonus: [3, 0.5], bonusEnd: [2, 0.5], speed: [2, 0.8], lowhp: [2, 1.0], streak: [1, 0.3], relay: [2, 0.3], revive: [3, 0.5],
+  bonus: [3, 0.5], bonusEnd: [2, 0.5], speed: [2, 0.8], lowhp: [2, 1.25], streak: [1, 0.3], relay: [2, 0.3], revive: [3, 0.5],
   skill: [2, 0.3], rewind: [2, 0.3], death: [3, 0.8], clear: [3, 0.8],
   count: [1, 0.15], go: [2, 0.2], click: [0, 0.03], error: [1, 0.15], reward: [2, 0.3], unlock: [3, 0.5], star: [2, 0.12],
   warn: [3, 0.15],
@@ -431,7 +431,7 @@ export class Audio {
   private doStep(sg: Song, n: number, t: number): void {
     const st = sg.st; const s = n & 255; const bar = s >> 4; const sec = bar >> 3; const b8 = bar & 7; const i = s & 15;
     const ch = st.chords[sec][b8]; const T = sg.T; const sd = sg.stepDur; const bonus = sg.bonus;
-    const third = ch.q ? 3 : 4; const broot = ch.r > 6 ? ch.r - 12 : ch.r;
+    const third = ch.q ? 3 : 4; const broot = ch.r > 6 ? ch.r - 12 : ch.r; const BT = T > 50 ? T - 12 : T;   // bass tonic Eb2..D3
     // drums
     if (st.kick[sec][i] || (bonus && (i & 3) === 0)) this.kick(sg, t, st.kickVol);
     const fill = (st.fill || bonus) && i >= 12 && (b8 === 7 || (bonus && b8 === 3));
@@ -445,7 +445,7 @@ export class Audio {
     const bp = st.bass[sec]; const bc = bp.note[i];
     if (bc) {
       const semi = broot + (bc === 2 ? 7 : bc === 3 ? 12 : bc === 4 ? -5 : bc === 5 ? third : 0);
-      this.bassNote(sg, t, mtof(T + semi), bp.len[i] * sd * st.bassGate, st.bassVol);
+      this.bassNote(sg, t, mtof(BT + semi), bp.len[i] * sd * st.bassGate, st.bassVol);
     }
     // pad: one chord per bar, overlapping releases keep it smooth
     if (i === 0 && st.pad > 0) this.pad(sg, t, ch, third, 16 * sd, st.pad * (bonus ? 0.8 : 1));
@@ -498,13 +498,13 @@ export class Audio {
     vs.forEach((m, k) => this.osc(sg.padF, t, mtof(m), 'triangle', vol, len, { a: 0.15, d: 0.3, s: 0.75, r: 0.35, det: (k - 1) * 5 }));
   }
   private chordStab(sg: Song, t: number, ch: Chord, third: number, vol: number): void {
-    for (const m of this.voicing(sg.T, ch, third)) this.osc(sg.padF, t, mtof(m + 12), 'sine', vol, 0, { a: 0.004, d: 0.09 });
+    for (const m of this.voicing(sg.T, ch, third)) this.osc(sg.padF, t, mtof(m), 'sine', vol, 0, { a: 0.004, d: 0.09 });
   }
   private bassNote(sg: Song, t: number, f: number, len: number, vol: number): void {
     const e: Env = { a: 0.005, d: 0.12, s: 0.55, r: 0.06 };
     this.osc(sg.bassF, t, f, 'triangle', vol, len, e);
     this.osc(sg.bassF, t, f, 'sawtooth', vol * 0.3, len, e);
-    this.osc(sg.bus, t, f / 2, 'sine', vol * 0.45, len, e);
+    if (f >= 70) this.osc(sg.bus, t, f / 2, 'sine', vol * 0.45, len, e);   // sub octave (skipped when it would be < 35 Hz)
   }
   private sparkle(sg: Song, t: number, f: number, vol: number): void {
     this.osc(sg.bus, t, f, 'triangle', vol, 0, { a: 0.002, d: 0.06 });
@@ -544,7 +544,8 @@ export class Audio {
   /** gain envelope; returns the time the voice is silent */
   private env(p: AudioParam, t: number, vol: number, len: number, e: Env): number {
     const a = e.a ?? 0.004; const s = e.s ?? 0;
-    if (e.trem) { const dur = Math.max(0.05, len); p.value = 0; p.setValueCurveAtTime(tremCurve(vol, dur, e.trem), t, dur); return t + dur + 0.01; }
+    p.value = 0;   // a fresh GainNode is 1 until its first event: a source starting on that frame would click at full level
+    if (e.trem) { const dur = Math.max(0.05, len); p.setValueCurveAtTime(tremCurve(vol, dur, e.trem), t, dur); return t + dur + 0.01; }
     p.setValueAtTime(0, t); p.linearRampToValueAtTime(vol, t + a);
     if (s > 0) {
       const r = e.r ?? 0.08; const tr = Math.max(t + a, t + len);
@@ -666,7 +667,7 @@ export class Audio {
     switch (name) {
       // ---- movement
       case 'jump':
-        this.osc(v, t, 300, 'triangle', 0.26, 0.13, { f1: 620, g: 0.09 });
+        this.osc(v, t, 300, 'triangle', 0.21, 0.13, { f1: 620, g: 0.09 });
         this.osc(v, t + 0.012, 600, 'sine', 0.07, 0.08, { f1: 1000, g: 0.07 });
         break;
       case 'jump2':   // 휙
@@ -697,9 +698,10 @@ export class Audio {
         this.bell(v, t + 0.09, F(31), 0.05, 0.4);
         break;
       case 'coin':  // 엽전: two tones a fourth apart with a metallic edge
-        this.osc(v, t, F(19), 'square', 0.05, 0.06, { lp: 3000 });
-        this.osc(v, t + 0.055, F(24), 'square', 0.05, 0.16, { lp: 3000 });
-        this.bell(v, t + 0.055, F(24), 0.035, 0.2, 2.76, 0.6);
+        this.osc(v, t, F(19), 'triangle', 0.09, 0.06);
+        this.bell(v, t, F(19), 0.03, 0.08, 2.76, 0.5);
+        this.osc(v, t + 0.055, F(24), 'triangle', 0.09, 0.16);
+        this.bell(v, t + 0.055, F(24), 0.05, 0.2, 2.76, 0.6);
         break;
       case 'letter': {   // lantern letter: a bell, do-re-mi-sol-la by letter index
         const s = pent(((Math.round(arg) % 5) + 5) % 5);
@@ -755,8 +757,8 @@ export class Audio {
       // ---- hazards
       case 'hit': {    // 쿵: a soft round thump (arg: 0 spike, 1 tall, 2 hang → slightly different weight)
         const k = [1, 0.82, 1.18][Math.round(arg)] ?? 1;
-        this.osc(v, t, 130 * k, 'sine', 0.5, 0.3, { a: 0.003, f1: 48 * k, g: 0.18 });
-        this.osc(v, t, 240 * k, 'triangle', 0.12, 0.12, { f1: 120 * k });
+        this.osc(v, t, 130 * k, 'sine', 0.42, 0.3, { a: 0.003, f1: 48 * k, g: 0.18 });
+        this.osc(v, t, 240 * k, 'triangle', 0.14, 0.12, { f1: 120 * k });
         this.noise(v, t, 0.1, 0.16, 'lowpass', 600);
         break;
       }
@@ -785,8 +787,8 @@ export class Audio {
         break;
       // ---- run progress
       case 'bonus': {  // 보름달 잔치 (arg 1 = 왕보름달)
-        for (let k = 0; k < 8; k++) this.osc(v, t + k * 0.05, F(12 + pent(k)), 'triangle', 0.07, 0.22);
-        arp([24, 28, 31], 0.02, (f, at) => this.bell(v, at + 0.4, f, 0.05, 0.7));
+        for (let k = 0; k < 8; k++) this.osc(v, t + k * 0.05, F(12 + pent(k)), 'triangle', 0.09, 0.22);
+        arp([24, 28, 31], 0.02, (f, at) => this.bell(v, at + 0.4, f, 0.06, 0.7));
         if (arg) arp([36, 40, 43], 0.05, (f, at) => this.bell(v, at + 0.55, f, 0.035, 0.6));
         this.noise(v, t, 0.9, 0.04, 'highpass', 6000, { a: 0.3, s: 1, r: 0.3 });
         break;
@@ -796,14 +798,14 @@ export class Audio {
         this.osc(v, t + 0.36, F(16), 'sine', 0.035, 0.3, { a: 0.02, s: 0.6, r: 0.2 });
         break;
       case 'speed':    // tier-up riser (~1 s) ending in a bright ding
-        this.noise(v, t, 0.9, 0.09, 'bandpass', 350, { f1: 4200, q: 1.2, a: 0.8, s: 1, r: 0.1, g: 0.9 });
+        this.noise(v, t, 0.9, 0.11, 'bandpass', 350, { f1: 4200, q: 1.2, a: 0.8, s: 1, r: 0.1, g: 0.9 });
         this.osc(v, t, 220, 'sine', 0.05, 0.9, { f1: 880, g: 0.9, a: 0.6, s: 1, r: 0.1 });
-        this.bell(v, t + 0.92, F(24), 0.09, 0.35);
+        this.bell(v, t + 0.92, F(24), 0.11, 0.35);
         this.osc(v, t + 0.95, F(31), 'triangle', 0.05, 0.25);
         break;
       case 'lowhp':    // '덜덜' — a soft low shiver, never an alarm (≤ 1 Hz via the rate limit)
-        this.osc(v, t, F(7), 'triangle', 0.11, 0.38, { trem: 11, lp: 900 });
-        this.osc(v, t, F(14), 'sine', 0.04, 0.38, { trem: 11 });
+        this.osc(v, t, F(7), 'triangle', 0.09, 0.38, { trem: 11, lp: 900 });
+        this.osc(v, t, F(14), 'sine', 0.035, 0.38, { trem: 11 });
         break;
       case 'streak':
         arp([24, 28, 31], 0.05, (f, at) => this.osc(v, at, f, 'triangle', 0.07, 0.12));
