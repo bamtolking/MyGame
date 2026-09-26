@@ -8,6 +8,7 @@ export type PickupType = 'jelly' | 'big' | 'coin' | 'potion' | 'bigPotion' | 'mi
 export type Mode = 'endless' | 'stage' | 'daily' | 'tutorial';
 export type Phase = 'countdown' | 'run' | 'dying' | 'over' | 'clear';
 export type BonusStage = 'none' | 'lift' | 'sky';
+export interface AssistOpts { noHitDamage?: boolean; halfDrain?: boolean; autoSlide?: boolean }
 
 export interface Hazard {
   id: number;
@@ -30,6 +31,7 @@ export interface Pickup {
   taken: boolean;
   pulled: boolean;       // being magnet-pulled
   seen?: boolean;        // counted into jelliesSeen
+  chunk?: number;        // serial of the placed chunk it belongs to
 }
 
 export interface PlacedChunk {
@@ -41,6 +43,21 @@ export interface PlacedChunk {
   biome: string;
   sky: boolean;          // bonus-time sky chunk
   finish?: boolean;      // stage finish chunk
+  main: boolean;         // part of the course (landing / sky are inserted, not main)
+  serial: number;        // unique per placement
+  index: number;         // main-course index (−1 for inserted chunks)
+  genBefore: GenState | null; // generator state right before this main chunk (to re-place it after a teleport)
+  jellyTotal: number; jellyGot: number;
+  line: 0 | 1 | 2;       // 한 줄 완성: 0 not eligible · 1 pending · 2 evaluated
+}
+
+/** Everything that decides the next main chunk and slot fills — snapshot-able so the course is input-independent. */
+export interface GenState {
+  mainIndex: number; mainM: number;
+  potionDebt: number; powerDebt: number; letterDebt: number;
+  potionsPlaced: number; powersPlaced: number; lastPower: PowerKind | null; pouchesPlaced: number;
+  recent: string[]; lastUsed: Record<string, number>; recentFam: string[];
+  hazardRun: number; calmM: number; setpieceM: number; lastTier: number; courseIdx: number;
 }
 
 export interface Level {
@@ -49,18 +66,14 @@ export interface Level {
   hazards: Hazard[];
   pickups: Pickup[];
   genX: number;          // world x where the next chunk will be placed
-  recent: string[];      // recently used chunk ids (no-repeat window)
   nextId: number;
-  potionDebt: number;    // m since the last potion was placed
-  powerDebt: number;     // m since the last power-up was placed
-  letterDebt: number;    // m since the last letter was placed
-  chunksPlaced: number;
-  potionsPlaced: number;
-  pouchesPlaced: number;
-  retiredGroundM: number; // ground metres of chunks already pruned behind the player
+  serial: number;
+  gen: GenState;
   stageLen: number;      // m; 0 = endless
   finishX: number;       // world x of the finish line (stage), else Infinity
-  hazardRun: number;     // consecutive chunks with hazards (the director forces a breather)
+  course: string[] | null; // frozen course (stage / tutorial)
+  skyPlaced: number;
+  warnedSerial: number;  // last chunk for which a speed-up warning was emitted
 }
 
 export interface PowerState { giant: number; dash: number; magnet: number; after: number /* post-power grace i-frames */ }
@@ -72,6 +85,8 @@ export interface RunStats {
   jelliesSeen: number;   // jellies that scrolled past (for % collected)
   hpFromPotions: number; drained: number;
   nearMisses: number; maxTier: number; bonusJellies: number;
+  lines: number; moonCakes: number; pouches: number; fastFalls: number; maxFlow: number; superBonus: number;
+  relayDist: number; miniPotions: number; pitsGuarded: number; shieldsUsed: number;
 }
 
 export interface RunState {
@@ -84,7 +99,9 @@ export interface RunState {
   mainId: string;         // character that started the run
   partnerId: string | null;
   relayUsed: boolean;
-  assist: boolean;
+  companionId: string | null;
+  assistOpts: AssistOpts;
+  assist: boolean;         // any assist option on (records are marked, never punished)
   trial: boolean;          // try-out run (no rewards/records); ends after TRIAL_T
   phase: Phase;
   t: number;             // run time (s), excludes countdown
@@ -120,6 +137,12 @@ export interface RunState {
   prevSlide: boolean;
   lowHpWarned: boolean;
   hitstop: number;       // steps of freeze left after taking damage
+  freeze: number;        // steps of relay hand-over freeze
+  pouchesGot: number;    // bitmask of golden pouches collected this run
+  compT: number;         // companion timer
+  pitGuardLeft: number;  // 해돌이: pits that still cost nothing
+  relayStartDist: number;
+  rewinds: number;       // tutorial replays
   log: number[];         // input log: [step, bits, step, bits, …] (bits: 1 jump press, 2 slide held, 4 jump held)
   lastBits: number;
   dyingT: number;
@@ -131,12 +154,17 @@ export type SimEvent =
   | { t: 'jump'; n: 1 | 2 }
   | { t: 'land' }
   | { t: 'slide' }
-  | { t: 'pickup'; type: PickupType; x: number; y: number; value: number; power?: PowerKind; letter?: number }
+  | { t: 'pickup'; type: PickupType; x: number; y: number; value: number; power?: PowerKind; letter?: number; pouch?: number }
+  | { t: 'line'; x: number; y: number; value: number }
+  | { t: 'fastFall' }
+  | { t: 'speedUpSoon'; tier: number }
+  | { t: 'rewind'; kind: string }
+  | { t: 'drop'; x: number; y: number }
   | { t: 'hit'; kind: string; x: number; y: number; dmg: number; shielded: boolean }
   | { t: 'smash'; kind: string; x: number; y: number }
   | { t: 'power'; kind: PowerKind }
   | { t: 'powerEnd'; kind: PowerKind }
-  | { t: 'bonusStart' }
+  | { t: 'bonusStart'; super: boolean }
   | { t: 'bonusEnd' }
   | { t: 'fall'; dmg: number }
   | { t: 'speedUp'; tier: number }

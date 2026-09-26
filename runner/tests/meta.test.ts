@@ -1,7 +1,7 @@
 // Meta progression: rewards, missions, unlocks, saves. No energy/gacha/consumables anywhere.
 import { describe, it, expect } from 'vitest';
 import { newRun, stepRun } from '../src/sim/run';
-import { defaultProgress, normalize, applyRun, unlockState, buyCharacter, autoUnlock, stageUnlocked, totalStars, reroll, dailySeed, dailyChar, todayKey } from '../src/meta/progress';
+import { defaultProgress, normalize, applyRun, unlockState, buyCharacter, autoUnlock, stageUnlocked, totalStars, reroll, dailySeed, dailyChar, todayKey, MIGRATIONS, stageStarCount } from '../src/meta/progress';
 import { MISSIONS, drawMission, applyRunToMissions, RANK_XP } from '../src/meta/missions';
 import { CHARACTERS } from '../src/data/characters';
 import { STAGES } from '../src/data/stages';
@@ -30,7 +30,16 @@ describe('progress', () => {
     expect(p.settings.bgm).toBe(defaultProgress().settings.bgm);
     expect(p.unlocked.every(id => CHARACTERS.some(c => c.id === id))).toBe(true);
     expect(p.missions.length).toBe(3);
-    expect(CHARACTERS.some(c => c.id === p.main)).toBe(true);
+    expect(CHARACTERS.some(c => c.id === p.loadout.main)).toBe(true);
+  });
+  it('v1 saves migrate to v2 without losing coins, stars or unlocks', () => {
+    const v1 = { version: 1, coins: 777, unlocked: ['hotteok', 'bungeo'], main: 'bungeo', partner: 'hotteok', stars: { '1-1': 3, '1-2': 1 }, missions: [], settings: { sfx: 0.3, assist: true } };
+    const p = normalize(v1);
+    expect(p.version).toBe(2); expect(p.coins).toBe(777);
+    expect(p.unlocked).toContain('bungeo'); expect(p.loadout.main).toBe('bungeo'); expect(p.loadout.partner).toBe('hotteok');
+    expect(p.starMask['1-1']).toBe(7); expect(p.starMask['1-2']).toBe(1);
+    expect(p.settings.sfx).toBe(0.3); expect(p.settings.assistHalfDrain).toBe(true);
+    expect(typeof MIGRATIONS[1]).toBe('function');
   });
   it('endless run books coins from pickups + distance, updates best once', () => {
     const p = defaultProgress();
@@ -48,28 +57,28 @@ describe('progress', () => {
     const r = applyRun(p, s);
     expect(r.coins).toBe(0); expect(p.coins).toBe(0); expect(p.bestEndless).toBeNull(); expect(p.totals.runs).toBe(0);
   });
-  it('stage stars: 1 for finishing, +1 jelly goal, +1 HP goal; only improvements are kept', () => {
+  it('stage stars: ★1 finish, ★2 candy %, ★3 all three pouches (pouches add up across completed runs)', () => {
     if (!STAGES.length) return;
     const st = STAGES[0]; const p = defaultProgress();
-    const s = finished('stage', s => { s.phase = 'clear'; s.stats.jellies = 100; s.stats.jelliesSeen = 100; s.hp = s.maxHp; }, st.id);
-    s.phase = 'clear';
+    const s = finished('stage', s => { s.stats.jellies = 100; s.stats.jelliesSeen = 100; s.pouchesGot = 0b011; }, st.id); s.phase = 'clear';
     const r = applyRun(p, s);
-    expect(r.stars).toBe(3); expect(p.stars[st.id]).toBe(3);
-    const s2 = finished('stage', s => { s.phase = 'clear'; s.stats.jellies = 0; s.stats.jelliesSeen = 100; s.hp = 1; }, st.id);
-    s2.phase = 'clear';
-    applyRun(p, s2); expect(p.stars[st.id]).toBe(3);
-    const s3 = finished('stage', () => {}, st.id); // died → 0 stars
-    expect(applyRun(defaultProgress(), s3).stars).toBe(0);
+    expect(r.stars).toBe(2); expect(stageStarCount(p, st.id)).toBe(2); expect(p.pouches[st.id]).toBe(3);
+    const s2 = finished('stage', s => { s.stats.jellies = 0; s.stats.jelliesSeen = 100; s.pouchesGot = 0b100; }, st.id); s2.phase = 'clear';
+    const r2 = applyRun(p, s2);
+    expect(r2.stars).toBe(3); expect(stageStarCount(p, st.id)).toBe(3);   // ★2 kept, ★3 from pouches of two runs
+    const s3 = finished('stage', s => { s.pouchesGot = 7; }, st.id);        // died: pouches of an unfinished run don't count
+    const p3 = defaultProgress(); applyRun(p3, s3); expect(p3.pouches[st.id] ?? 0).toBe(0); expect(stageStarCount(p3, st.id)).toBe(0);
   });
-  it('stage unlock chain: next stage needs ★1 on the previous; new worlds need a star total', () => {
+  it('stage unlock chain: the next stage needs ★1 on the previous', () => {
     const p = defaultProgress();
     expect(stageUnlocked(p, STAGES[0].id)).toBe(true);
-    if (STAGES.length > 1) {
-      expect(stageUnlocked(p, STAGES[1].id)).toBe(false);
-      p.stars[STAGES[0].id] = 1;
-      if (STAGES[1].world === STAGES[0].world) expect(stageUnlocked(p, STAGES[1].id)).toBe(true);
+    const regular = STAGES.filter(s => !s.remix);
+    if (regular.length > 1) {
+      expect(stageUnlocked(p, regular[1].id)).toBe(false);
+      p.starMask[regular[0].id] = 1;
+      expect(stageUnlocked(p, regular[1].id)).toBe(true);
     }
-    expect(totalStars(p)).toBe(STAGES.length > 1 ? 1 : 0);
+    expect(totalStars(p)).toBe(regular.length > 1 ? 1 : 0);
   });
 });
 
@@ -87,9 +96,10 @@ describe('unlocks', () => {
     expect(buyCharacter(p, c.id).ok).toBe(false);
   });
   it('star / rank unlocks are granted automatically', () => {
-    const p = defaultProgress(); p.rank = 99; for (const st of STAGES) p.stars[st.id] = 3;
+    const p = defaultProgress(); p.rank = 99; for (const st of STAGES) p.starMask[st.id] = 7;
     autoUnlock(p);
-    for (const c of CHARACTERS) if (c.unlock.kind !== 'coins') expect(p.unlocked).toContain(c.id);
+    const maxStars = STAGES.length * 3;
+    for (const c of CHARACTERS) if (c.unlock.kind === 'rank' || (c.unlock.kind === 'stars' && c.unlock.n <= maxStars)) expect(p.unlocked).toContain(c.id);
   });
 });
 
@@ -101,7 +111,7 @@ describe('missions', () => {
     }
   });
   it('drawn missions never duplicate an active one', () => {
-    for (let c = 0; c < 60; c++) { const ex = [MISSIONS[c % MISSIONS.length].id, MISSIONS[(c + 3) % MISSIONS.length].id]; expect(ex).not.toContain(drawMission(ex, c % 7, c).id); }
+    const p = defaultProgress(); for (let c = 0; c < 60; c++) { p.rank = c % 7; const ex = [MISSIONS[c % MISSIONS.length].id, MISSIONS[(c + 3) % MISSIONS.length].id]; expect(ex).not.toContain(drawMission(ex, p, c).id); }
   });
   it('run-scope keeps the best single run; total-scope accumulates; completion pays and refills', () => {
     const p = defaultProgress();

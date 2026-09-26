@@ -9,7 +9,7 @@ import type { RunState, SimEvent, Mode } from '../sim/types';
 import { Renderer, type GhostView } from '../render/renderer';
 import { Audio } from '../platform/audio';
 import * as store from '../platform/storage';
-import { applyRun, defaultProgress, dailySeed, dailyChar, todayKey, stageUnlocked, worldGate, totalStars, unlockState, buyCharacter, canReroll, reroll, type Progress, type RunReward, type GhostRec } from '../meta/progress';
+import { applyRun, stageStarCount, defaultProgress, dailySeed, dailyChar, todayKey, stageUnlocked, totalStars, unlockState, buyCharacter, canReroll, reroll, type Progress, type RunReward, type GhostRec } from '../meta/progress';
 import { missionText, MISSION_REWARD, RANK_XP } from '../meta/missions';
 import { InputState, keyZone, type Zone } from './input';
 import { CONTENT_HASH } from '../sim/content';
@@ -99,8 +99,8 @@ export class App {
   // ------------------------------------------------------------------ home
   showHome(): void {
     this.nav('home');
-    const p = this.p; const ch = CHAR_BY_ID[p.main];
-    const partner = p.partner ? CHAR_BY_ID[p.partner] : null;
+    const p = this.p; const ch = CHAR_BY_ID[p.loadout.main];
+    const partner = p.loadout.partner ? CHAR_BY_ID[p.loadout.partner] : null;
     const first = !p.tutorialDone;
     const best = p.bestEndless;
     const dk = todayKey(); const daily = p.daily[dk];
@@ -114,7 +114,7 @@ export class App {
         h('b', {}, ch.name), h('small', {}, ch.title), partner ? h('div', { class: 'partner' }, charPortrait(partner, 40), h('small', {}, `이어달리기: ${partner.name}`)) : h('small', { class: 'muted' }, '이어달리기 파트너 없음'),
       )),
       h('div', { class: 'menu' },
-        h('button', { class: 'primary huge', id: 'btn-run', onclick: this.click(() => first ? this.startRun({ mode: 'tutorial', seed: 1, charId: p.main }) : this.startEndless()) }, first ? '튜토리얼로 시작!' : '달리기!', h('small', {}, first ? '1분이면 충분해요' : best ? `최고 ${fmtNum(best.score)}점 · ${fmtNum(best.dist)}m` : '무한 질주')),
+        h('button', { class: 'primary huge', id: 'btn-run', onclick: this.click(() => first ? this.startRun({ mode: 'tutorial', seed: 1, charId: p.loadout.main }) : this.startEndless()) }, first ? '튜토리얼로 시작!' : '달리기!', h('small', {}, first ? '1분이면 충분해요' : best ? `최고 ${fmtNum(best.score)}점 · ${fmtNum(best.dist)}m` : '무한 질주')),
         h('div', { class: 'row' },
           h('button', { onclick: this.click(() => this.showAdventure()) }, '모험', h('small', {}, `★ ${totalStars(p)}/${STAGES.length * 3}`)),
           h('button', { onclick: this.click(() => this.showDaily()) }, '오늘의 코스', h('small', {}, daily ? `오늘 최고 ${fmtNum(daily.best)}` : '매일 같은 코스')),
@@ -124,7 +124,7 @@ export class App {
           h('button', { onclick: this.click(() => this.showMissions()) }, '미션', h('small', {}, `${p.missions.filter(m => m.progress >= m.target * 0.5).length ? '거의 다 됐어요!' : '3개 진행 중'}`)),
           h('button', { onclick: this.click(() => this.showSettings()) }, '설정', h('small', {}, '조작·접근성')),
         ),
-        !first ? h('button', { class: 'ghost small', onclick: this.click(() => this.startRun({ mode: 'tutorial', seed: 1, charId: p.main })) }, '튜토리얼 다시 보기') : null,
+        !first ? h('button', { class: 'ghost small', onclick: this.click(() => this.startRun({ mode: 'tutorial', seed: 1, charId: p.loadout.main })) }, '튜토리얼 다시 보기') : null,
       ),
       h('div', { class: 'foot' }, `v${VERSION} · 오프라인 싱글 플레이 · 저장: ${store.storageInfo.available ? '이 브라우저' : '⚠ 저장 불가 — 설정에서 내보내기'}`),
     );
@@ -141,9 +141,9 @@ export class App {
       for (const c of CHARACTERS) {
         const us = unlockState(p, c.id);
         list.append(charCard(c, {
-          unlocked: us.ok, reason: us.ok ? '' : us.reason, main: p.main === c.id, partner: p.partner === c.id, coins: p.coins, best: p.bestByChar[c.id] ?? 0,
-          onMain: () => { this.audio.play('click'); if (p.partner === c.id) p.partner = p.main; p.main = c.id; this.persist(); render(); },
-          onPartner: () => { this.audio.play('click'); p.partner = p.partner === c.id ? null : c.id; if (p.partner === p.main) p.partner = null; this.persist(); render(); },
+          unlocked: us.ok, reason: us.ok ? '' : us.reason, main: p.loadout.main === c.id, partner: p.loadout.partner === c.id, coins: p.coins, best: p.bestByChar[c.id] ?? 0,
+          onMain: () => { this.audio.play('click'); if (p.loadout.partner === c.id) p.loadout.partner = p.loadout.main; p.loadout.main = c.id; this.persist(); render(); },
+          onPartner: () => { this.audio.play('click'); p.loadout.partner = p.loadout.partner === c.id ? null : c.id; if (p.loadout.partner === p.loadout.main) p.loadout.partner = null; this.persist(); render(); },
           onTrial: () => { this.audio.play('click'); this.startRun({ mode: 'endless', seed: (Math.random() * 2 ** 32) >>> 0, charId: c.id, trial: true }); },
           onBuy: () => { const r = buyCharacter(p, c.id); if (r.ok) { this.audio.play('reward'); this.toast(`${c.name} 합류!`, 'good'); this.persist(); } else { this.audio.play('error'); this.toast(r.error!, 'warn'); } render(); },
         }));
@@ -162,12 +162,12 @@ export class App {
     const body = h('div', { class: 'worlds' });
     for (const w of worlds) {
       const stages = STAGES.filter(s => s.world === w); const bi = BIOME_BY_ID[stages[0].biome];
-      const gate = worldGate(w); const locked = totalStars(p) < gate;
+      const locked = false; const gate = 0;
       const sec = h('section', { class: 'world', style: `--w1:${bi?.sky[0] ?? '#333'};--w2:${bi?.sky[1] ?? '#555'}` },
         h('h3', {}, `${w}. ${bi?.name ?? ''}`, locked ? h('small', {}, ` 🔒 별 ${gate}개 필요`) : null));
       const grid = h('div', { class: 'stages' });
       for (const st of stages) {
-        const ok = stageUnlocked(p, st.id); const stars = p.stars[st.id] ?? 0;
+        const ok = stageUnlocked(p, st.id); const stars = stageStarCount(p, st.id);
         grid.append(h('button', { class: 'stage' + (ok ? '' : ' locked'), disabled: !ok, onclick: this.click(() => this.stageSheet(st.id)) },
           h('b', {}, st.id), h('span', { class: 'stars' }, '★'.repeat(stars) + '☆'.repeat(3 - stars)), h('small', {}, ok ? st.name : '🔒')));
       }
@@ -176,16 +176,16 @@ export class App {
     this.root.append(h('div', { class: 'screen list' }, this.topbar('모험'), h('p', { class: 'hint' }, '스테이지는 매번 같은 코스예요. ★1 도착 · ★2 젤리 목표 · ★3 체력 목표. 최고 기록은 고스트로 함께 달려요.'), body));
   }
   private stageSheet(id: string): void {
-    const st = STAGES.find(s => s.id === id)!; const p = this.p; const stars = p.stars[id] ?? 0;
-    const ghost = p.ghosts['stage:' + id];
+    const st = STAGES.find(s => s.id === id)!; const p = this.p; const stars = stageStarCount(p, id);
+    const ghost = store.loadGhost<GhostRec>('stage:' + id);
     this.modal(h('div', { class: 'sheet' },
       h('h3', {}, `${st.id} ${st.name}`),
       h('div', { class: 'goals' },
         goal(stars >= 1, `도착하기 (${st.length}m)`),
         goal(stars >= 2, `젤리 ${st.stars.jellyPct}% 이상 먹고 도착`),
-        goal(stars >= 3, `체력 ${st.stars.hpPct}% 이상 남기고 도착`)),
+        goal(stars >= 3, `황금 복주머니 3개 (${[0,1,2].filter(i => ((p.pouches[id] ?? 0) >> i) & 1).length}/3)`)),
       h('p', { class: 'muted' }, p.stageBest[id] ? `최고 ${fmtNum(p.stageBest[id])}점${ghost ? ' · 고스트와 함께 달려요' : ''}` : '첫 도전!'),
-      h('button', { class: 'primary', onclick: this.click(() => { this.closeModal(); this.startRun({ mode: 'stage', seed: st.seed, charId: p.main, stageId: id, assist: p.settings.assist }); }) }, '출발!'),
+      h('button', { class: 'primary', onclick: this.click(() => { this.closeModal(); this.startRun({ mode: 'stage', seed: st.seed, charId: p.loadout.main, stageId: id, assist: this.assistOpts() }); }) }, '출발!'),
       h('button', { class: 'ghost', onclick: this.click(() => this.closeModal()) }, '닫기'),
     ));
   }
@@ -201,7 +201,7 @@ export class App {
         h('p', {}, '오늘은 모두가 같은 코스, 같은 캐릭터로 달려요. 몇 번이든 다시 도전할 수 있고, 놓친 날이 있어도 불이익은 없어요.'),
         h('div', { class: 'bigstat' }, d ? fmtNum(d.best) : '—', h('small', {}, d ? `오늘 최고 · ${d.tries}번 도전` : '아직 기록 없음')),
         h('div', { class: 'hero small' }, charPortrait(CHAR_BY_ID[dailyChar(dk)], 64), h('div', { class: 'hero-info' }, h('small', {}, '오늘의 캐릭터'), h('b', {}, CHAR_BY_ID[dailyChar(dk)].name), h('small', {}, p.unlocked.includes(dailyChar(dk)) ? '' : '아직 없는 캐릭터도 오늘은 달릴 수 있어요'))),
-        h('button', { class: 'primary huge', onclick: this.click(() => this.startRun({ mode: 'daily', seed: dailySeed(dk), charId: dailyChar(dk), assist: p.settings.assist })) }, '오늘의 코스 달리기'),
+        h('button', { class: 'primary huge', onclick: this.click(() => this.startRun({ mode: 'daily', seed: dailySeed(dk), charId: dailyChar(dk), assist: this.assistOpts() })) }, '오늘의 코스 달리기'),
         d ? h('button', { class: 'ghost', onclick: this.click(() => this.share(`말랑 대탈출 오늘의 코스 ${dk}: ${fmtNum(d.best)}점!`)) }, '기록 공유 (복사)') : null,
       ),
       hist.length ? h('div', { class: 'panel' }, h('h3', {}, '지난 기록'), ...hist.map(([k, v]) => h('div', { class: 'kv' }, h('span', {}, k), h('b', {}, `${fmtNum(v.best)}점 (${CHAR_BY_ID[v.charId]?.name ?? ''})`)))) : null,
@@ -258,7 +258,7 @@ export class App {
         h('p', { class: 'muted' }, '키보드: 점프 = 스페이스/↑/W/Z · 슬라이드 = ↓/S/X/Shift (누르고 있기) · 일시정지 = Esc/P'),
       ),
       h('div', { class: 'panel' }, h('h3', {}, '편의·접근성'),
-        toggle('assist', '느긋 모드', '부딪힘 피해와 체력 감소가 절반쯤으로 줄어요 (기록에 표시)'),
+        toggle('assistNoHit', '부딪혀도 따끈함 유지', '장애물에 부딪혀도 식지 않아요 (기록에 표시)'), toggle('assistHalfDrain', '식는 속도 절반', '시간에 따라 식는 속도가 절반 (기록에 표시)'), toggle('assistAutoSlide', '자동 슬라이드', '매달린 장애물 앞에서 저절로 슬라이드'),
         h('label', { class: 'set' }, h('span', {}, h('b', {}, '게임 속도'), h('small', {}, '느리게 하면 반응할 시간이 늘어요. 코스는 그대로예요.')),
           h('select', { onchange: (e: Event) => { st.gameSpeed = parseFloat((e.target as HTMLSelectElement).value); save(); } },
             ...[1, 0.9, 0.8, 0.7].map(v => h('option', { value: v, selected: Math.abs((st.gameSpeed || 1) - v) < 0.01 }, `${Math.round(v * 100)}%`)))),
@@ -292,8 +292,10 @@ export class App {
       h('div', { class: 'row' }, h('button', { class: 'ghost', onclick: this.click(() => this.closeModal()) }, '취소'), h('button', { class: 'danger', onclick: this.click(() => { this.closeModal(); yes(); }) }, '확인'))));
   }
 
+  assistOpts() { const st = this.p.settings; return { noHitDamage: st.assistNoHit, halfDrain: st.assistHalfDrain, autoSlide: st.assistAutoSlide }; }
+
   // ------------------------------------------------------------------ run lifecycle
-  startEndless(): void { const p = this.p; this.startRun({ mode: 'endless', seed: (Math.random() * 2 ** 32) >>> 0, charId: p.main, partnerId: p.partner, assist: p.settings.assist }); }
+  startEndless(): void { const p = this.p; this.startRun({ mode: 'endless', seed: (Math.random() * 2 ** 32) >>> 0, charId: p.loadout.main, partnerId: p.loadout.partner, assist: this.assistOpts() }); }
 
   startRun(cfg: RunConfig): void {
     this.audio.unlock();
@@ -301,9 +303,9 @@ export class App {
     const s = newRun(cfg);
     let ghost: RunState | null = null; let log: number[] = [];
     const gkey = cfg.mode === 'stage' ? 'stage:' + cfg.stageId : cfg.mode === 'daily' ? 'daily:' + todayKey() : '';
-    const g: GhostRec | undefined = gkey ? this.p.ghosts[gkey] : undefined;
+    const g: GhostRec | null = gkey ? store.loadGhost<GhostRec>(gkey) : null;
     if (g && this.p.settings.ghost && g.seed === s.seed && g.content === CONTENT_HASH) {
-      ghost = newRun({ mode: g.mode as Mode, seed: g.seed, charId: g.charId, partnerId: g.partnerId, stageId: g.stageId, assist: g.assist });
+      ghost = newRun({ mode: g.mode as Mode, seed: g.seed, charId: g.charId, partnerId: g.partnerId, companionId: g.companionId, stageId: g.stageId, assist: g.assistOpts });
       log = g.log;
     }
     this.run = { s, cfg, ghost, ghostLog: log, ghostIdx: 0, ghostBits: 0, acc: 0, lastT: performance.now(), prevX: s.body.x, prevY: s.body.y, paused: false, ended: false, endT: 0, reward: null, lastCount: -1, resumeT: 0 };
@@ -491,6 +493,7 @@ export class App {
     rc.ended = true; this.input.reset(); this.input.enabled = false;
     const s = rc.s;
     rc.reward = applyRun(this.p, s);
+    if (rc.reward.ghost && rc.reward.ghostKey) { store.saveGhost(rc.reward.ghostKey, rc.reward.ghost); store.pruneDailyGhosts(7); }
     this.persist();
     setTimeout(() => { if (this.run === rc) this.showResults(rc); }, 350);
   }
@@ -516,7 +519,7 @@ export class App {
       h('div', { class: 'bigscore', id: 'res-score' }, '0'),
       rw.newBest && s.mode !== 'tutorial' ? h('div', { class: 'newbest' }, rw.prevBest ? `이전 최고 ${fmtNum(rw.prevBest)}` : '첫 기록!') : rw.prevBest ? h('div', { class: 'muted' }, `최고 ${fmtNum(rw.prevBest)}`) : null,
       st ? h('div', { class: 'goals' },
-        goal(cleared, `도착 (${st.length}m)`), goal(cleared && jellyPct(s) >= st.stars.jellyPct, `젤리 ${st.stars.jellyPct}% (이번 ${jellyPct(s)}%)`), goal(cleared && s.hp / s.maxHp * 100 >= st.stars.hpPct, `체력 ${st.stars.hpPct}% (남은 ${Math.max(0, Math.round(100 * s.hp / s.maxHp))}%)`)) : null,
+        goal(cleared, `도착 (${st.length}m)`), goal(cleared && jellyPct(s) >= st.stars.jellyPct, `젤리 ${st.stars.jellyPct}% (이번 ${jellyPct(s)}%)`), goal(cleared && ((p.pouches[st.id] ?? 0) & 7) === 7, `황금 복주머니 3개 (이번 ${[0,1,2].filter(i => (s.pouchesGot >> i) & 1).length}개)`)) : null,
       !cleared && s.mode !== 'tutorial' ? h('div', { class: 'why' }, h('b', {}, why.title), h('small', {}, why.detail)) : null,
       ...hints.map(t => h('div', { class: 'almost' }, t)),
       h('div', { class: 'stats' },

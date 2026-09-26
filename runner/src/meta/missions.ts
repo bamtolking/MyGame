@@ -1,6 +1,7 @@
 // Missions: 3 active at a time (independent slots — one hard goal never blocks the others). Completing one
 // gives rank XP + coins and is replaced immediately. No timers, no streaks that break.
 import type { RunState } from '../sim/types';
+import type { Progress } from './progress';
 
 export type MissionScope = 'run' | 'total';
 export interface MissionTemplate {
@@ -36,21 +37,25 @@ export const MISSION_BY_ID: Record<string, MissionTemplate> = Object.fromEntries
 export interface ActiveMission { id: string; level: number; progress: number; target: number; runsWithout: number }
 
 export const MISSION_REWARD = [{ xp: 1, coins: 40 }, { xp: 2, coins: 90 }, { xp: 3, coins: 160 }];
-export const RANK_XP = (rank: number) => 3 + rank * 2;   // xp needed to go from rank → rank+1
-export const RANK_REWARD = (rank: number) => 100 + rank * 50;
+export const RANK_MAX = 30;
+export const RANK_XP = (rank: number) => Math.min(3 + Math.floor(rank / 3), 9);   // xp from rank → rank+1
+export const RANK_REWARD = (rank: number) => 100 + rank * 50;                      // coins on reaching rank+1
 
-/** Deterministic mission draw (so the same save always offers the same next mission). */
-export function drawMission(exclude: string[], rank: number, counter: number): ActiveMission {
+/** Deterministic mission draw (the same save always offers the same next mission). */
+export function drawMission(exclude: string[], p: Progress, counter: number): ActiveMission {
   const pool = MISSIONS.filter(m => !exclude.includes(m.id));
-  const m = pool[(counter * 7 + rank * 3) % pool.length];
-  const level = Math.min(2, Math.floor(rank / 3) + (counter % 3 === 2 ? 1 : 0));
+  const m = pool[(counter * 7 + p.rank * 3) % pool.length];
+  const level = Math.min(2, Math.floor(p.rank / 3) + (counter % 3 === 2 ? 1 : 0));
   return { id: m.id, level, progress: 0, target: m.targets[level], runsWithout: 0 };
+}
+export function fillMissionSlots(active: ActiveMission[], p: Progress, nextCounter: () => number): void {
+  while (active.length < 3) active.push(drawMission(active.map(m => m.id), p, nextCounter()));
 }
 
 export function missionText(a: ActiveMission): string { return MISSION_BY_ID[a.id]?.text(a.target) ?? a.id; }
 
 /** Apply a finished run. Returns indices of missions completed by this run. */
-export function applyRunToMissions(active: ActiveMission[], s: RunState): number[] {
+export function applyRunToMissions(active: ActiveMission[], s: RunState, _p?: Progress): number[] {
   const done: number[] = [];
   active.forEach((a, i) => {
     const t = MISSION_BY_ID[a.id]; if (!t) return;

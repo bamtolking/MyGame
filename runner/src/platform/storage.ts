@@ -45,18 +45,45 @@ export function save(p: Progress): { ok: boolean; error?: string } {
   };
   try { return attempt(); }
   catch (e) {
-    // quota: drop ghosts (the only large data) and retry once
+    // quota: drop old ghosts (the only large data) and the backup, then retry once
     try {
-      const slim = { ...p, ghosts: {} }; raw = JSON.stringify(slim);
+      for (const k of listGhosts().filter(k => k.startsWith('daily:'))) localStorage.removeItem(GHOST_PREFIX + k);
       localStorage.removeItem(SAVE_KEY + '_bak');
-      const r = attempt(); if (r.ok) return { ok: true, error: '저장 공간이 부족해 고스트 기록을 비웠어요' };
+      const r = attempt(); if (r.ok) return { ok: true, error: '저장 공간이 부족해 지난 오늘의 골목 유령을 비웠어요' };
     } catch { /* ignore */ }
     memory = raw; return { ok: false, error: '저장 실패: ' + ((e as Error)?.message || '알 수 없음') };
   }
 }
 
+// ---- ghosts live in their own keys (one per stage / day / endless) so the main save stays small ----
+const GHOST_PREFIX = 'jelly_runner_ghost_';
+const ghostMem = new Map<string, string>();
+export function saveGhost(key: string, g: unknown): boolean {
+  const raw = JSON.stringify(g);
+  try {
+    if (!storageInfo.available) { ghostMem.set(key, raw); return false; }
+    localStorage.setItem(GHOST_PREFIX + key, raw); return true;
+  } catch {
+    // quota: drop the oldest daily ghosts, then retry once
+    try { for (const k of listGhosts().filter(k => k.startsWith('daily:')).sort().slice(0, 3)) localStorage.removeItem(GHOST_PREFIX + k); localStorage.setItem(GHOST_PREFIX + key, raw); return true; } catch { ghostMem.set(key, raw); return false; }
+  }
+}
+export function loadGhost<T>(key: string): T | null {
+  try { const raw = storageInfo.available ? localStorage.getItem(GHOST_PREFIX + key) : ghostMem.get(key) ?? null; return raw ? JSON.parse(raw) as T : null; } catch { return null; }
+}
+export function listGhosts(): string[] {
+  const out: string[] = [];
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(GHOST_PREFIX)) out.push(k.slice(GHOST_PREFIX.length)); } } catch { /* ignore */ }
+  for (const k of ghostMem.keys()) if (!out.includes(k)) out.push(k);
+  return out;
+}
+/** keep at most `max` daily ghosts (newest first) */
+export function pruneDailyGhosts(max = 7): void {
+  try { const ks = listGhosts().filter(k => k.startsWith('daily:')).sort(); while (ks.length > max) localStorage.removeItem(GHOST_PREFIX + ks.shift()); } catch { /* ignore */ }
+}
+
 export function exportString(p: Progress): string {
-  const slim = { ...p, ghosts: {} };
+  const slim = { ...p };
   return EXPORT_PREFIX + btoa(unescape(encodeURIComponent(JSON.stringify(slim))));
 }
 export function importString(str: string): { p: Progress | null; error?: string } {

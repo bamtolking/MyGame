@@ -13,14 +13,14 @@ const E = (n: number) => '.'.repeat(n);
 const NONE: RunInput = { jump: false, slide: false };
 
 /** A run whose stream ahead is replaced by the given rows (repeated flat ground after). */
-function runWith(rows: string[] | null, opts: { charId?: string; partnerId?: string } = {}): RunState {
-  const s = newRun({ mode: 'endless', seed: 7, charId: opts.charId ?? 'hotteok', partnerId: opts.partnerId });
+function runWith(rows: string[] | null, opts: { charId?: string; partnerId?: string; companionId?: string; assist?: { noHitDamage?: boolean; halfDrain?: boolean; autoSlide?: boolean }; mode?: 'endless' | 'tutorial' } = {}): RunState {
+  const s = newRun({ mode: opts.mode ?? 'endless', seed: 7, charId: opts.charId ?? 'hotteok', partnerId: opts.partnerId, companionId: opts.companionId, assist: opts.assist });
   while (s.phase === 'countdown') stepRun(s, NONE);
   s.events.length = 0;
   if (rows) {
     restartStreamAt(s, s.body.x + TILE * 2);
     const c = parseChunk({ id: 'test_' + Math.random().toString(36).slice(2), tiers: [0, 0], rows });
-    placeChunk(s, c, 0, s.biome);
+    placeChunk(s, c, 0, s.biome, { main: true });
   }
   return s;
 }
@@ -148,11 +148,18 @@ describe('drain, relay, death', () => {
     const s = runWith(null); const hp0 = s.hp; steps(s, 60);
     expect(hp0 - s.hp).toBeCloseTo(DRAIN_BY_TIER[s.tier], 1);
   });
-  it('relay partner takes over once at 50 % HP, then the run ends', () => {
-    const s = runWith(null, { partnerId: 'hotteok2' });
-    if (!s.partnerId) return; // content may not define a second character yet
+  it('relay partner takes over once at 50 % of its own max (after a 1 s hand-over freeze), then the run ends', () => {
+    const s = runWith(null, { partnerId: 'goguma' });
+    expect(s.partnerId).toBe('goguma');
+    s.power.dash = 2;
     s.hp = 0.001; steps(s, 2);
-    expect(s.relayUsed).toBe(true); expect(s.phase).toBe('run'); expect(s.hp).toBeGreaterThan(s.maxHp * 0.45);
+    expect(s.relayUsed).toBe(true); expect(s.phase).toBe('run'); expect(s.charId).toBe('goguma');
+    expect(s.maxHp).toBe(85); expect(s.hp).toBeCloseTo(85 * 0.5, 0);
+    expect(s.power.dash).toBe(0);
+    const x0 = s.body.x; steps(s, 30); expect(s.body.x).toBe(x0);           // frozen hand-over
+    steps(s, 40); expect(s.body.x).toBeGreaterThan(x0);
+    // 고구미 revives once at 35 % before the run can end
+    s.hp = 0.001; steps(s, 2); expect(s.phase).toBe('run'); expect(s.hp).toBeCloseTo(85 * 0.35, 0);
     s.hp = 0.001; steps(s, 2);
     expect(s.phase === 'dying' || s.phase === 'over').toBe(true);
   });
@@ -160,6 +167,67 @@ describe('drain, relay, death', () => {
     const s = runWith(null); s.hp = 0.01; steps(s, 3);
     expect(s.phase).toBe('dying'); expect(s.deathCause).toBe('drain');
     steps(s, 100); expect(s.phase).toBe('over');
+  });
+});
+
+
+describe('second-chance & assist options', () => {
+  it('해돌이: the first two pits cost nothing (the bounce still happens)', () => {
+    const rows = flatRows('====' + '.'.repeat(8) + '='.repeat(12));
+    const s = runWith(rows, { companionId: 'haetae' });
+    const hp0 = s.hp; untilX(s, s.body.x + 24 * TILE);
+    expect(s.stats.falls).toBe(1); expect(s.stats.pitsGuarded).toBe(1); expect(hp0 - s.hp).toBeLessThan(5);
+  });
+  it('assist: no-hit-damage keeps warmth; half drain halves the drain; auto-slide ducks hanging hazards', () => {
+    const a = runWith(flatRows('='.repeat(20), { 10: E(8) + '^' + E(11) }), { assist: { noHitDamage: true } });
+    const hp0 = a.hp; untilX(a, a.body.x + 20 * TILE); expect(a.stats.hits).toBe(1); expect(hp0 - a.hp).toBeLessThan(3);
+    const b = runWith(null, { assist: { halfDrain: true } }); const hb = b.hp; steps(b, 60); expect(hb - b.hp).toBeCloseTo(DRAIN_BY_TIER[0] / 2, 1);
+    const c = runWith(flatRows('='.repeat(20), { 9: E(8) + 'vvv' + E(9) }), { assist: { autoSlide: true } });
+    untilX(c, c.body.x + 20 * TILE); expect(c.stats.hits).toBe(0);
+    expect(a.assist && b.assist && c.assist).toBe(true);
+  });
+  it('shield (어묵이) starts charged and absorbs one obstacle hit', () => {
+    const s = runWith(flatRows('='.repeat(24), { 10: E(8) + '^' + E(15) }), { charId: 'eomuk' });
+    expect(s.shield).toBe(1);
+    const hp0 = s.hp; untilX(s, s.body.x + 20 * TILE);
+    expect(s.shield).toBe(0); expect(s.stats.hits).toBe(0); expect(s.stats.shieldsUsed).toBe(1); expect(hp0 - s.hp).toBeLessThan(3);
+  });
+  it('tutorial: a mistake costs nothing and replays the chunk', () => {
+    const s = runWith(flatRows('='.repeat(20), { 10: E(8) + '^' + E(11) }), { mode: 'tutorial' });
+    const hp0 = s.hp; let n = 0; while (s.rewinds === 0 && n++ < 600) stepRun(s, NONE);
+    expect(s.rewinds).toBe(1); expect(s.hp).toBeGreaterThan(hp0 - 2); expect(s.stats.hits).toBe(0);
+    expect(s.events.some(e => e.t === 'rewind')).toBe(true);
+  });
+});
+
+describe('pickups & scoring extras', () => {
+  it('한 줄 완성: collecting every star candy of a ≥12-candy chunk pays a line bonus', () => {
+    const s = runWith(flatRows('='.repeat(20), { 10: 'oooooooooooooooooooo' }));
+    untilX(s, s.body.x + 24 * TILE);
+    expect(s.stats.lines).toBe(1);
+  });
+  it('golden pouches set their bit; a moon cake waits near the end of every feast', () => {
+    const s = newRun({ mode: 'endless', seed: 3, charId: 'hotteok', noCountdown: true });
+    s.level.pickups.push({ id: 991, type: 'pouch', pouch: 2, x: s.body.x + 40, y: GROUND_Y - 30, taken: false, pulled: false });
+    s.level.pickups.sort((a, b) => a.x - b.x);
+    steps(s, 10); expect(s.pouchesGot).toBe(4);
+    for (let i = 0; i < s.letters.length; i++) s.letters[i] = true; s.letters[0] = false;
+    s.level.pickups.push({ id: 992, type: 'letter', letter: 0, x: s.body.x + 40, y: GROUND_Y - 30, taken: false, pulled: false });
+    s.level.pickups.sort((a, b) => a.x - b.x);
+    let n = 0; while (s.bonusStage !== 'sky' && n++ < 200) stepRun(s, NONE);
+    expect(s.level.pickups.some(p => p.type === 'moonCake')).toBe(true);
+  });
+  it('press 1–4 steps before landing becomes a ground jump (the air jump is kept)', () => {
+    const s = runWith(null);
+    stepRun(s, { jump: true, slide: false });
+    let n = 0; while (!(s.body.vy > 0 && s.body.y > GROUND_Y - 25) && n++ < 200) stepRun(s, NONE);
+    stepRun(s, { jump: true, slide: false });            // just before touching down
+    n = 0; while (!s.body.onGround && s.body.vy > 0 && n++ < 10) stepRun(s, NONE);
+    expect(s.body.jumps).toBeLessThanOrEqual(1);         // it became a fresh ground jump
+    expect(s.body.vy).toBeLessThan(0);
+  });
+  it('score never exceeds 999,999', () => {
+    const s = runWith(null); s.score = 2_000_000; expect(totalScore(s)).toBe(999999);
   });
 });
 

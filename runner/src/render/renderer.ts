@@ -12,7 +12,7 @@ import { Fx, star } from './fx';
 import { drawCharacter, rr, shade, type Pose, type Shape } from './characters';
 import { drawSpike, drawTall, drawHang } from './hazards';
 import { drawPickup, heart, LETTER_COLORS, POWER_NAME, POWER_DESC, POWER_COLOR, POWER_ICON } from './pickups';
-import { paintLayer } from './backdrops';
+import { Backdrop } from './backdrops';
 export { POWER_NAME, POWER_DESC, POWER_COLOR, POWER_ICON } from './pickups';
 
 export const MIN_VIEW_W = 840;          // portrait keeps ≥ 720 px (≥ 1.1 s at top speed) of look-ahead
@@ -27,8 +27,7 @@ export class Renderer {
   fx = new Fx();
   opts: RenderOpts = { reduceMotion: false, highContrast: false, lowFx: false, showHitbox: false };
   time = 0;
-  private bgCache = new Map<string, HTMLCanvasElement[]>();
-  private skyCache = new Map<string, HTMLCanvasElement>();
+  backdrop = new Backdrop();
   private curBiome = ''; private prevBiome = ''; private biomeFade = 1;
   private landT = 9; private jumpT = 9; private spinT = 9; private lastHpPct = 1; private hpGhost = 1;
   private flash = 0; private flashColor = '255,255,255'; private redPulse = 0;
@@ -52,7 +51,7 @@ export class Renderer {
     this.viewW = this.cssW / this.scale; this.viewH = this.cssH / this.scale;
     this.portrait = this.viewW < 960;
     this.playerX = this.portrait ? 120 : 220;
-    this.bgCache.clear(); this.skyCache.clear();
+    this.backdrop.resize(this.cssW, this.cssH, this.dpr, this.scale);
   }
 
   /** world → css px */
@@ -125,11 +124,12 @@ export class Renderer {
     c.imageSmoothingEnabled = true;
 
     // --- background ---
+    const bd = this.backdrop; bd.lowFx = this.opts.lowFx; bd.reduceMotion = this.opts.reduceMotion;
     if (this.skyMix < 1) {
-      if (this.biomeFade < 1 && this.prevBiome) { this.drawBackdrop(BIOME_BY_ID[this.prevBiome], 1); this.drawBackdrop(biome, this.biomeFade); }
-      else this.drawBackdrop(biome, 1);
+      if (this.biomeFade < 1 && this.prevBiome) { bd.drawBiome(c, BIOME_BY_ID[this.prevBiome], 1, this.camX, this.time); bd.drawBiome(c, biome, this.biomeFade, this.camX, this.time); }
+      else bd.drawBiome(c, biome, 1, this.camX, this.time);
     }
-    if (this.skyMix > 0) this.drawBonusSky(this.skyMix);
+    if (this.skyMix > 0) bd.drawBonusSky(c, this.skyMix, this.camX, this.time);
 
     // --- world ---
     c.save();
@@ -138,7 +138,7 @@ export class Renderer {
     c.scale(this.scale, this.scale);
     const x0 = this.camX - 80, x1 = this.camX + this.viewW + 80;
     const sky = s.bonusStage === 'sky';
-    this.drawGround(s, biome, x0, x1, sky);
+    this.backdrop.drawGround(c, s, biome, x0, x1, sky, this.time);
     this.drawSigns(s, x0, x1);
     if (this.pbDist > 50 && s.bonusStage === 'none') this.drawPbFlag(s, bodyX, x0, x1);
     this.drawHazards(s, biome, x0, x1);
@@ -153,101 +153,6 @@ export class Renderer {
     this.drawOverlays(s);
     this.drawHud(s);
     this.fx.drawScreen(c);
-  }
-
-  // ------------------------------------------------------------------ backdrop
-  private drawBackdrop(bi: BiomeDef, alpha: number): void {
-    const c = this.c; c.globalAlpha = alpha;
-    c.drawImage(this.skyCanvas(bi), 0, 0, this.cssW, this.cssH);
-    const layers = this.layerCanvases(bi);
-    const factors = [0.08, 0.22, 0.5];
-    if (!this.opts.lowFx || true) {
-      for (let i = 0; i < layers.length; i++) {
-        const L = layers[i]; const w = L.width / this.dpr;
-        let off = -((this.camX * factors[i] * this.scale) % w); if (off > 0) off -= w;
-        for (let x = off; x < this.cssW; x += w) c.drawImage(L, x, 0, w, this.cssH);
-      }
-    }
-    c.globalAlpha = 1;
-  }
-
-  private skyCanvas(bi: BiomeDef): HTMLCanvasElement {
-    let cv = this.skyCache.get(bi.id); if (cv) return cv;
-    cv = document.createElement('canvas'); cv.width = 4; cv.height = Math.max(2, Math.round(this.cssH));
-    const g = cv.getContext('2d')!; const gr = g.createLinearGradient(0, 0, 0, cv.height);
-    gr.addColorStop(0, bi.sky[0]); gr.addColorStop(0.75, bi.sky[1]); gr.addColorStop(1, bi.sky[1]);
-    g.fillStyle = gr; g.fillRect(0, 0, 4, cv.height);
-    this.skyCache.set(bi.id, cv); return cv;
-  }
-
-  /** three tiled parallax silhouettes per biome, rendered once per size */
-  private layerCanvases(bi: BiomeDef): HTMLCanvasElement[] {
-    const hit = this.bgCache.get(bi.id); if (hit) return hit;
-    const out: HTMLCanvasElement[] = [];
-    const W = Math.round(1200 * this.scale), H = Math.round(this.cssH);
-    const cols = [bi.far, bi.mid, bi.near];
-    for (let li = 0; li < 3; li++) {
-      const cv = document.createElement('canvas'); cv.width = Math.round(W * this.dpr); cv.height = Math.round(H * this.dpr);
-      const g = cv.getContext('2d')!; g.scale(this.dpr, this.dpr);
-      const ground = this.sy(GROUND_Y);
-      paintLayer(g, bi, li, W, ground, this.scale, cols[li]);
-      out.push(cv);
-    }
-    this.bgCache.set(bi.id, out); return out;
-  }
-
-  private drawBonusSky(alpha: number): void {
-    const c = this.c; c.globalAlpha = alpha;
-    const g = c.createLinearGradient(0, 0, 0, this.cssH);
-    g.addColorStop(0, '#5b4bff'); g.addColorStop(0.6, '#ff8fd8'); g.addColorStop(1, '#ffd6a5');
-    c.fillStyle = g; c.fillRect(0, 0, this.cssW, this.cssH);
-    // drifting clouds + stars
-    for (let i = 0; i < 14; i++) {
-      const w = 1400; const x = ((i * 173 - this.camX * 0.3 * (0.4 + (i % 3) * 0.2)) % w + w) % w * this.scale;
-      const y = (40 + (i * 67) % 380) * this.scale + (this.cssH - VIEW_H * this.scale);
-      c.fillStyle = 'rgba(255,255,255,0.55)'; c.beginPath(); c.ellipse(x, y, 60 * this.scale, 18 * this.scale, 0, 0, Math.PI * 2); c.fill();
-    }
-    c.fillStyle = 'rgba(255,255,255,0.9)';
-    for (let i = 0; i < 30; i++) { const x = ((i * 97 - this.camX * 0.05) % 1000 + 1000) % 1000 * this.scale; const y = ((i * 53) % 300) * this.scale; star(c, x, y, 2 + (i % 3), this.time + i); }
-    c.globalAlpha = 1;
-  }
-
-  // ------------------------------------------------------------------ world
-  private drawGround(s: RunState, bi: BiomeDef, x0: number, x1: number, sky: boolean): void {
-    const c = this.c; const bottom = VIEW_H + 20;
-    const gFill = sky ? '#ffffff' : bi.ground; const gTop = sky ? '#ffe3f1' : bi.groundTop;
-    for (const so of s.level.solids) {
-      if (so.x1 < x0 || so.x0 > x1) continue;
-      if (so.ground) {
-        c.fillStyle = gFill; c.fillRect(so.x0, so.top, so.x1 - so.x0, bottom - so.top);
-        // texture: offset rows of rounded bricks / cloud puffs
-        c.fillStyle = sky ? 'rgba(255,200,230,0.35)' : shade(bi.ground, -0.12);
-        const startX = Math.floor(so.x0 / TILE) * TILE;
-        for (let x = startX; x < so.x1; x += TILE) {
-          if (x + TILE < x0 || x > x1) continue;
-          for (let r = 0; r < 3; r++) { const ox = (r % 2) * 20; const bx = x + ox + 4; if (bx + 30 > so.x1 || bx < so.x0) continue; rr(c, bx, so.top + 22 + r * 26, 30, 16, 6); c.fill(); }
-        }
-        c.fillStyle = gTop; rr(c, so.x0, so.top - 4, so.x1 - so.x0, 16, 6); c.fill();
-        c.fillStyle = 'rgba(255,255,255,0.25)'; c.fillRect(so.x0 + 6, so.top - 1, so.x1 - so.x0 - 12, 3);
-        // pit edges get a dark lip so gaps read instantly
-        c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillRect(so.x0, so.top + 10, 5, bottom - so.top); c.fillRect(so.x1 - 5, so.top + 10, 5, bottom - so.top);
-      } else {
-        const w = so.x1 - so.x0;
-        c.fillStyle = 'rgba(0,0,0,0.18)'; rr(c, so.x0 + 4, so.top + 8, w, PLATFORM_THICK, 8); c.fill();
-        c.fillStyle = sky ? '#ffffff' : bi.platform; rr(c, so.x0, so.top, w, PLATFORM_THICK, 8); c.fill();
-        c.fillStyle = sky ? '#ffe3f1' : shade(bi.platform, 0.3); rr(c, so.x0 + 3, so.top + 2, w - 6, 5, 3); c.fill();
-        c.strokeStyle = shade(sky ? '#ffd0e8' : bi.platform, -0.35); c.lineWidth = 2; rr(c, so.x0, so.top, w, PLATFORM_THICK, 8); c.stroke();
-      }
-    }
-    // finish flag
-    if (s.level.finishX !== Infinity && s.level.finishX > x0 - 200 && s.level.finishX < x1 + 200) {
-      const fx = s.level.finishX + 5 * TILE;
-      c.fillStyle = '#5b3a29'; c.fillRect(fx - 3, GROUND_Y - 150, 6, 150);
-      const wave = Math.sin(this.time * 6) * 4;
-      for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) { c.fillStyle = (i + j) % 2 ? '#fff' : '#222'; c.fillRect(fx + 3 + i * 14, GROUND_Y - 148 + j * 12 + (i * wave) / 4, 14, 12); }
-      c.font = '900 20px system-ui, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 4;
-      c.strokeText('도착', fx + 30, GROUND_Y - 165); c.fillText('도착', fx + 30, GROUND_Y - 165);
-    }
   }
 
   private drawPbFlag(s: RunState, bodyX: number, x0: number, x1: number): void {
