@@ -208,7 +208,7 @@ export class App {
     }
     if (n >= 4) this.demoAcc = 0;
     // 데모 이벤트: 시각 효과만(소리·토스트 없음)
-    for (const ev of w.events) juiceEvent(this.fx, ev, w, { vibrate: false, demo: true });
+    for (const ev of w.events) { juiceEvent(this.fx, ev, w, { vibrate: false, demo: true }); this.renderer.onEvent(ev, w); }
     w.events.length = 0;
     if (w.t > 420) this.idleWorld = this.makeIdleWorld();
     return n;
@@ -387,6 +387,7 @@ export class App {
     const set = this.profile.settings;
     for (const ev of w.events) {
       juiceEvent(this.fx, ev, w, { vibrate: set.vibrate });   // 시각 연출(render/juice.ts)
+      this.renderer.onEvent(ev, w);                             // 렌더러 쪽 동작 연출(공격 자세·시체 날리기 등)
       audio.event(ev, w);                                      // 효과음(platform/sfx.ts)
       // 아래는 UI(토스트·배너·힌트·콤보·음악 전환)
       switch (ev.t) {

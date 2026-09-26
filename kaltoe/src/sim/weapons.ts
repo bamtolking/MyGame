@@ -112,16 +112,19 @@ function newBullet(w: World, wi: WeaponInst, kind: Bullet['kind'], x: number, y:
 function fireOne(w: World, wi: WeaponInst, e: Eff) {
   const p = w.player;
   const a = wi.def.archetype;
+  let sa = Math.atan2(p.fy, p.fx);   // 연출용 발사 방향(nova는 바라보는 방향)
   if (a === 'shot' || a === 'homing' || a === 'bounce') {
     const ang = aimAngle(w, wi, 420) + randRange(w.rng, -0.06, 0.06);
     newBullet(w, wi, a, p.x, p.y, ang, e);
+    sa = ang;
   } else if (a === 'boomerang') {
     const ang = aimAngle(w, wi, e.range + 60) + randRange(w.rng, -0.25, 0.25);
     newBullet(w, wi, 'boomerang', p.x, p.y, ang, e);
+    sa = ang;
   } else if (a === 'nova') {
     w.rings.push({ slot: wi.slot, x: p.x, y: p.y, r: 4, maxR: e.range * w.d.areaMul, speed: e.speed, dmg: e.dmg, knock: e.knock, hits: new Set(), color: wi.def.color, dead: false, fx: wi.st, w: Math.max(10, e.area) });
   }
-  w.events.push({ t: 'shoot', w: wi.def.id });
+  w.events.push({ t: 'shoot', w: wi.def.id, x: p.x, y: p.y, ang: sa });
 }
 
 function fireVolley(w: World, wi: WeaponInst, e: Eff) {
@@ -136,7 +139,7 @@ function fireVolley(w: World, wi: WeaponInst, e: Eff) {
         const k = n === 1 ? 0 : i / (n - 1) - 0.5;
         newBullet(w, wi, 'shot', p.x, p.y, base + k * spr + randRange(w.rng, -0.03, 0.03), e);
       }
-      w.events.push({ t: 'shoot', w: def.id });
+      w.events.push({ t: 'shoot', w: def.id, x: p.x, y: p.y, ang: base });
       return;
     }
     case 'beam': {
@@ -149,11 +152,12 @@ function fireVolley(w: World, wi: WeaponInst, e: Eff) {
           color: def.color, fx: wi.st, dead: false, knock: e.knock,
         });
       }
-      w.events.push({ t: 'shoot', w: def.id });
+      w.events.push({ t: 'shoot', w: def.id, x: p.x, y: p.y, ang: base });
       return;
     }
     case 'chain': {
       const used = new Set<number>();
+      let sa = Math.atan2(p.fy, p.fx);
       for (let i = 0; i < e.amount; i++) {
         // 서로 다른 대상을 우선하되, 대상이 모자라면 같은 적을 다시 친다(보스전)
         let tgt = randomEnemy(w, e.range, used) ?? randomEnemy(w, e.range);
@@ -162,7 +166,9 @@ function fireVolley(w: World, wi: WeaponInst, e: Eff) {
         const struck = new Set<number>([tgt.uid]);   // 연쇄 안에서만 중복 제외
         const pts: number[] = [p.x, p.y - 20, tgt.x, tgt.y];
         let dmg = e.dmg;
-        damageEnemy(w, tgt, dmg, wi.slot, { fx: wi.st, knock: e.knock });
+        const a0 = Math.atan2(tgt.y - p.y, tgt.x - p.x);
+        if (i === 0) sa = a0;
+        damageEnemy(w, tgt, dmg, wi.slot, { fx: wi.st, knock: e.knock, ha: a0 });
         const chains = wi.st.chains ?? 2, cr = (wi.st.chainRange ?? 90) * Math.sqrt(w.d.areaMul), fall = wi.st.chainFalloff ?? 0.8;
         for (let c = 0; c < chains; c++) {
           const from: Enemy = tgt;
@@ -170,52 +176,58 @@ function fireVolley(w: World, wi: WeaponInst, e: Eff) {
           if (!nx) break;
           dmg *= fall;
           struck.add(nx.uid);
-          damageEnemy(w, nx, dmg, wi.slot, { fx: wi.st, knock: e.knock * 0.5 });
+          damageEnemy(w, nx, dmg, wi.slot, { fx: wi.st, knock: e.knock * 0.5, ha: Math.atan2(nx.y - from.y, nx.x - from.x) });
           pts.push(nx.x, nx.y);
           tgt = nx;
         }
         w.events.push({ t: 'chain', pts, color: def.color });
       }
-      w.events.push({ t: 'shoot', w: def.id });
+      w.events.push({ t: 'shoot', w: def.id, x: p.x, y: p.y, ang: sa });
       return;
     }
     case 'strike': {
       const used = new Set<number>();
+      let sa = Math.atan2(p.fy, p.fx);
       for (let i = 0; i < e.amount; i++) {
         const tgt = randomEnemy(w, 520, used) ?? randomEnemy(w, 520);
         let x: number, y: number;
         if (tgt) { used.add(tgt.uid); x = tgt.x; y = tgt.y; }
         else { x = p.x + randRange(w.rng, -w.viewW / 2, w.viewW / 2); y = p.y + randRange(w.rng, -w.viewH / 2, w.viewH / 2); }
+        if (i === 0) sa = Math.atan2(y - p.y, x - p.x);
         pushBlast(w, { kind: 'strike', slot: wi.slot, x, y, sx: x, sy: y, delay: (wi.st.delay ?? 0.5), r: e.area, dmg: e.dmg, knock: e.knock, sprite: def.projectile, color: def.color, fx: wi.st });
       }
-      w.events.push({ t: 'shoot', w: def.id });
+      w.events.push({ t: 'shoot', w: def.id, x: p.x, y: p.y, ang: sa });
       return;
     }
     case 'lob': {
       const used = new Set<number>();
+      let sa = Math.atan2(p.fy, p.fx);
       for (let i = 0; i < e.amount; i++) {
         const tgt = randomEnemy(w, e.range, used) ?? randomEnemy(w, e.range);
         let x: number, y: number;
         if (tgt) { used.add(tgt.uid); x = tgt.x; y = tgt.y; }
         else { const a = rand(w.rng) * TAU, d = randRange(w.rng, 60, e.range); x = p.x + Math.cos(a) * d; y = p.y + Math.sin(a) * d; }
+        if (i === 0) sa = Math.atan2(y - p.y, x - p.x);
         pushBlast(w, {
           kind: 'lob', slot: wi.slot, x, y, sx: p.x, sy: p.y, delay: wi.st.delay ?? 0.6, r: e.area, dmg: e.dmg, knock: e.knock,
           puddle: wi.st.puddle ?? 0, puddleDur: e.dur, hitCd: e.hitCd, sprite: def.projectile, color: def.color, fx: wi.st,
         });
       }
-      w.events.push({ t: 'shoot', w: def.id });
+      w.events.push({ t: 'shoot', w: def.id, x: p.x, y: p.y, ang: sa });
       return;
     }
     case 'mine': {
+      let sa = Math.atan2(p.fy, p.fx);
       for (let i = 0; i < e.amount; i++) {
         const a = rand(w.rng) * TAU, d = randRange(w.rng, 10, 50);
+        if (i === 0) sa = a;
         pushBlast(w, {
           kind: 'mine', slot: wi.slot, x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d, sx: p.x, sy: p.y, delay: 0.4,
           r: e.area, dmg: e.dmg, knock: e.knock, trigger: (wi.st.trigger ?? 30) * Math.sqrt(w.d.areaMul), life: e.dur,
           sprite: def.projectile, color: def.color, fx: wi.st,
         });
       }
-      w.events.push({ t: 'shoot', w: def.id });
+      w.events.push({ t: 'shoot', w: def.id, x: p.x, y: p.y, ang: sa });
       return;
     }
     default:
@@ -301,7 +313,7 @@ function updateOrbit(w: World, wi: WeaponInst, e: Eff, fireMul: number) {
   if (!always) {
     wi.cd -= DT * fireMul;
     if (wi.on > 0) wi.on -= DT;
-    if (wi.cd <= 0) { wi.on = e.dur; wi.cd = e.cd; w.events.push({ t: 'shoot', w: wi.def.id }); }
+    if (wi.cd <= 0) { wi.on = e.dur; wi.cd = e.cd; w.events.push({ t: 'shoot', w: wi.def.id, x: w.player.x, y: w.player.y, ang: Math.atan2(w.player.fy, w.player.fx) }); }
     if (wi.on <= 0) return;
   } else wi.on = 1;
   wi.angle += (e.speed * Math.PI / 180) * DT;
@@ -335,7 +347,7 @@ function updateDrones(w: World, wi: WeaponInst, e: Eff, fireMul: number) {
       d.cd = e.cd;
       const ang = Math.atan2(t.y - d.y, t.x - d.x);
       newBullet(w, wi, 'drone', d.x, d.y, ang, e);
-      w.events.push({ t: 'shoot', w: wi.def.id });
+      w.events.push({ t: 'shoot', w: wi.def.id, x: d.x, y: d.y, ang });
     }
   }
 }
@@ -417,7 +429,7 @@ function detonate(w: World, b: Blast) {
   b.dead = true;
   if (b.hostile) {
     const p = w.player;
-    if ((p.x - b.x) ** 2 + (p.y - b.y) ** 2 < (b.r + p.r) ** 2) hurtPlayer(w, b.dmg, '내리찍기');
+    if ((p.x - b.x) ** 2 + (p.y - b.y) ** 2 < (b.r + p.r) ** 2) hurtPlayer(w, b.dmg, '내리찍기', b.x, b.y);
     w.events.push({ t: 'explode', x: b.x, y: b.y, r: b.r, color: b.color, big: true });
     return;
   }
@@ -459,7 +471,7 @@ export function updateZones(w: World) {
     if (z.tick > 0) continue;
     z.tick = z.hitCd;
     if (z.hostile) {
-      if ((p.x - z.x) ** 2 + (p.y - z.y) ** 2 < (z.r + p.r * 0.5) ** 2) hurtPlayer(w, z.dps * z.hitCd, '위험 지대');
+      if ((p.x - z.x) ** 2 + (p.y - z.y) ** 2 < (z.r + p.r * 0.5) ** 2) hurtPlayer(w, z.dps * z.hitCd, '위험 지대', z.x, z.y);
     } else {
       w.grid.query(z.x, z.y, z.r, en => {
         if (en.dead) return;

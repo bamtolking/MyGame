@@ -1,7 +1,7 @@
 // 캔버스 렌더러(야근 네온): 바닥·소품 → fx.drawGround → 장판·오라·예고 → 그림자·픽업·적·플레이어·궤도체·투사체·광선·적 탄
 // → fx.drawWorld → 조명(어둠 오버레이 + fx.drawLights) → 블룸(fx.drawGlow) → fx.drawLabels(숫자·글자) → 월드 UI(말풍선·체력바·명판) → 화면 공간(fx.drawScreen·조이스틱)
 // 선명함·속도: 스프라이트는 실제 기기 픽셀 배율로 캐시돼 있고, 변형이 없을 때는 정수 픽셀 위치에 1:1로 찍는다.
-import type { World, Enemy, WeaponInst } from '../sim/types';
+import type { World, Enemy, WeaponInst, SimEvent } from '../sim/types';
 import { orbitPositions } from '../sim/weapons';
 import { ENEMY } from '../content';
 import type { EnemyDef, StageDef } from '../content/types';
@@ -81,8 +81,8 @@ export class Renderer {
   }
 
   resize() {
-    const r = this.canvas.getBoundingClientRect();
-    this.W = Math.max(1, r.width); this.H = Math.max(1, r.height);
+    // 레이아웃 크기(가로 모드 회전처럼 CSS transform이 걸려도 캔버스 자신의 가로·세로)
+    this.W = Math.max(1, this.canvas.clientWidth); this.H = Math.max(1, this.canvas.clientHeight);
     this.dpr = Math.min(this.dprCap, window.devicePixelRatio || 1);
     this.canvas.width = Math.round(this.W * this.dpr);
     this.canvas.height = Math.round(this.H * this.dpr);
@@ -167,6 +167,9 @@ export class Renderer {
       } else angry(d.sprite, Math.round(r * 2.1), d.tint ?? (d.elite ? '#ffb000' : '#ff3b5c'), envOf(st).rim, !!d.elite);
     }
   }
+
+  /** 시뮬레이션 이벤트(app이 매 프레임 이벤트마다 juiceEvent 다음에 부른다; 타이틀 데모에서도). 공격 자세·시체 날리기 등 렌더러 쪽 연출용 */
+  onEvent(_ev: SimEvent, _w: World) { /* 기본판: 없음 */ }
 
   /** steps = 이번 프레임에 진행된 시뮬레이션 스텝 수. 카메라도 스텝 단위로 움직여 90/120Hz 화면에서 월드와 어긋나지 않는다. */
   render(w: World, dt: number, joy: Joy | null, steps = 1) {

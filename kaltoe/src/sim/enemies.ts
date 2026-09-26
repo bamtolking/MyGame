@@ -57,7 +57,7 @@ export function spawnEnemy(w: World, def: EnemyDef, x: number, y: number, scale:
     slowT: 0, slowAmt: 0, freezeT: 0, stunT: 0, burnT: 0, burnDps: 0, burnTick: 0, burnSlot: 7, buffT: 0, buffAmt: 0,
     hitCd: new Float32Array(8), t: rand(w.rng) * 2, st: 0, stT: 0, dx: 0, dy: 0, seed: rand(w.fxRng) * TAU,
     abil: (def.abilities ?? []).map(a => a.cooldown * (0.5 + rand(w.rng) * 0.5)),
-    enraged: false, spdMul: 1, cdMul: 1, shout: '', shoutT: 0, face: 1, spawnT: 0.25, lastHitSlot: -1,
+    enraged: false, spdMul: 1, cdMul: 1, shout: '', shoutT: 0, face: 1, spawnT: 0.25, lastHitSlot: -1, hitAng: 0,
     chargeSpeed: 320, chargeDur: 0.8, straight: false, abLock: 0, pendAb: -1, pendT: 0,
   };
   w.enemies.push(e);
@@ -348,7 +348,7 @@ export function updateEnemies(w: World) {
               if (e.stT <= 0) {
                 const br = num(P, 'blastRadius', 60);
                 w.events.push({ t: 'explode', x: e.x, y: e.y, r: br, color: '#ff7a1a', big: false });
-                if (Math.hypot(p.x - e.x, p.y - e.y) < br + p.r) hurtPlayer(w, num(P, 'blastDamage', 15) * w.enemyDmgMul, e.def.name);
+                if (Math.hypot(p.x - e.x, p.y - e.y) < br + p.r) hurtPlayer(w, num(P, 'blastDamage', 15) * w.enemyDmgMul, e.def.name, e.x, e.y);
                 e.dead = true; // 자폭: 보상 없음
                 continue;
               }
@@ -392,7 +392,7 @@ export function updateEnemies(w: World) {
     if (!stopped || e.boss) {
       if (dxp * dxp + dyp * dyp < cr * cr && e.contactCd <= 0) {
         e.contactCd = BALANCE.contactCooldown;
-        hurtPlayer(w, e.damage, e.def.name);
+        hurtPlayer(w, e.damage, e.def.name, e.x, e.y);
       }
     }
 
@@ -443,7 +443,7 @@ export function updateEnemyBullets(w: World) {
     const rr = b.r + p.r * 0.7;
     if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < rr * rr) {
       b.dead = true;
-      hurtPlayer(w, b.dmg, '탄막');
+      hurtPlayer(w, b.dmg, '탄막', b.x, b.y);
     }
   }
 }

@@ -6,7 +6,8 @@ import { damageEnemy, SLOT_MISC } from './damage';
 
 const DT = 1 / 60;
 
-export function hurtPlayer(w: World, raw: number, source: string) {
+/** sx, sy = 피해를 준 쪽 위치(연출용, 없으면 플레이어 위치) */
+export function hurtPlayer(w: World, raw: number, source: string, sx?: number, sy?: number) {
   const p = w.player;
   if (w.phase !== 'play') return;
   if (p.invulnT > 0) return;
@@ -19,7 +20,7 @@ export function hurtPlayer(w: World, raw: number, source: string) {
   w.stats_.maxNoHit = Math.max(w.stats_.maxNoHit, p.noHitT);
   p.noHitT = 0;
   if (p.ultActiveT <= 0) p.ult = Math.min(p.ultMax, p.ult + dmg * 0.5 * w.d.ultMul);
-  w.events.push({ t: 'hurt', dmg });
+  w.events.push({ t: 'hurt', dmg, x: sx ?? p.x, y: sy ?? p.y });
   if (p.hp <= 0) {
     if (p.revivals > 0) {
       p.revivals--;

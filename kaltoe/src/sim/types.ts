@@ -42,6 +42,7 @@ export interface Enemy {
   elite: boolean; boss: boolean;
   dead: boolean;
   flash: number;                   // 피격 하양 번쩍임
+  hitAng: number;                  // 마지막 피격 방향(라디안, 때린 쪽 → 적). 렌더 연출 전용
   contactCd: number;
   slowT: number; slowAmt: number;
   freezeT: number; stunT: number;
@@ -178,10 +179,14 @@ export interface ChestResult {
 
 /** 시뮬레이션 → UI/사운드 이벤트 큐 (매 프레임 비움) */
 export type SimEvent =
-  | { t: 'kill'; x: number; y: number; elite: boolean; boss: boolean; id: string }
-  | { t: 'hit'; x: number; y: number; dmg: number; crit: boolean; uid: number }
-  | { t: 'hurt'; dmg: number }
-  | { t: 'shoot'; w: string }
+  /** ang = 마지막 타격 방향(라디안), r = 적 반지름, slot = 처치한 무기 슬롯(6 궁극기, 7 기타), face = 좌우 방향, uid = 적 uid */
+  | { t: 'kill'; x: number; y: number; elite: boolean; boss: boolean; id: string; ang: number; r: number; slot: number; face: number; uid: number }
+  /** ang = 타격 방향(라디안, 때린 쪽 → 적: 투사체 진행 방향·폭발 중심에서 바깥·플레이어에서 바깥), slot = 무기 슬롯(0..5, 6 궁극기, 7 기타) */
+  | { t: 'hit'; x: number; y: number; dmg: number; crit: boolean; uid: number; ang: number; slot: number }
+  /** x, y = 피해를 준 쪽 위치(적 몸·탄·폭발 중심). 모르면 플레이어 위치 */
+  | { t: 'hurt'; dmg: number; x: number; y: number }
+  /** 발사(연사면 발사마다, 일제 발사면 한 번): x, y = 발사 원점(플레이어, 드론이면 드론), ang = 겨눈 방향 */
+  | { t: 'shoot'; w: string; x: number; y: number; ang: number }
   | { t: 'explode'; x: number; y: number; r: number; color: string; big: boolean }
   | { t: 'gem' }
   | { t: 'coin' }

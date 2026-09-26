@@ -15,6 +15,7 @@ export interface HitOpts {
   noCrit?: boolean;
   flat?: boolean;                // might 미적용(화상 등)
   quiet?: boolean;               // 피해 숫자 표시 안 함
+  ha?: number;                   // 연출용 타격 방향(라디안). 없으면 kx/ky, 그것도 없으면 플레이어 → 적
 }
 
 export function damageEnemy(w: World, e: Enemy, raw: number, slot: number, o: HitOpts = {}): number {
@@ -36,7 +37,10 @@ export function damageEnemy(w: World, e: Enemy, raw: number, slot: number, o: Hi
   e.hp -= dmg;
   e.flash = 0.12;
   e.lastHitSlot = slot;
-  if (!o.quiet) w.events.push({ t: 'hit', x: e.x, y: e.y - e.r, dmg: dealt, crit, uid: e.uid });
+  // 연출용 타격 방향(판정과 무관, 난수 안 씀)
+  const ha = o.ha ?? (o.kx !== undefined || o.ky !== undefined ? Math.atan2(o.ky ?? 0, o.kx ?? 0) : Math.atan2(e.y - w.player.y, e.x - w.player.x));
+  e.hitAng = ha;
+  if (!o.quiet) w.events.push({ t: 'hit', x: e.x, y: e.y - e.r, dmg: dealt, crit, uid: e.uid, ang: ha, slot });
   const wi = slot < 6 ? w.weapons.find(x => x.slot === slot) : undefined;
   if (wi) wi.dmg += dealt;
 
@@ -108,7 +112,7 @@ export function killEnemy(w: World, e: Enemy, slot: number) {
     const dim = 1 / (1 + rs.ultUses * 0.12);
     w.player.ult = Math.min(w.player.ultMax, w.player.ult + (e.boss ? 50 : e.elite ? 20 : 1) * w.d.ultMul * dim);
   }
-  w.events.push({ t: 'kill', x: e.x, y: e.y, elite: e.elite, boss: e.boss, id: e.def.id });
+  w.events.push({ t: 'kill', x: e.x, y: e.y, elite: e.elite, boss: e.boss, id: e.def.id, ang: e.hitAng, r: e.r, slot, face: e.face, uid: e.uid });
 
   // 경험치
   if (e.xp > 0) addPickup(w, 'xp', e.x, e.y, e.xp * w.xpMul);

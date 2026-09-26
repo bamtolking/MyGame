@@ -8,6 +8,8 @@ export interface Settings {
   sfx: number; bgm: number; shake: boolean; vibrate: boolean; low: boolean; dmgNums: boolean; joystick: 'float' | 'fixed';
   /** 그래픽 품질. auto = 프레임 시간을 보고 자동 조절 */
   quality: 'auto' | 'high' | 'medium' | 'low';
+  /** 화면 방향. land = 가로 우선(터치 기기가 세로로 서 있으면 화면을 90° 돌려 가로로 보여 줌), auto = 기기 방향 그대로 */
+  orient: 'land' | 'auto';
 }
 
 export interface LastRun {
@@ -54,7 +56,7 @@ export function newProfile(): Profile {
     bests: {},
     heatCleared: {},
     discovered: { weapons: [], enemies: [], lunches: [] },
-    settings: { sfx: 0.8, bgm: 0.5, shake: true, vibrate: true, low: false, dmgNums: true, joystick: 'float', quality: 'auto' },
+    settings: { sfx: 0.8, bgm: 0.5, shake: true, vibrate: true, low: false, dmgNums: true, joystick: 'float', quality: 'auto', orient: 'land' },
     sel: { char: 'kim', stage: 'office', heat: 0 },
     daily: { date: '', played: false, cleared: false, streak: 0, lastClear: '' },
     dailyPick: null,
@@ -118,6 +120,7 @@ export function normalize(raw: unknown): Profile | null {
   for (const k of ['shake', 'vibrate', 'low', 'dmgNums'] as const) if (typeof st[k] !== 'boolean') st[k] = d.settings[k];
   if (st.joystick !== 'fixed' && st.joystick !== 'float') st.joystick = 'float';
   if (!['auto', 'high', 'medium', 'low'].includes(st.quality)) st.quality = st.low ? 'low' : 'auto';
+  if (st.orient !== 'land' && st.orient !== 'auto') st.orient = 'land';
   if (typeof p.sel.char !== 'string') p.sel.char = d.sel.char;
   if (typeof p.sel.stage !== 'string') p.sel.stage = d.sel.stage;
   p.sel.heat = Math.max(0, Math.floor(num(p.sel.heat, 0)));
