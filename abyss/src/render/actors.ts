@@ -218,10 +218,20 @@ function drawHead(c: CanvasRenderingContext2D, L: Look, x: number, y: number, r:
       break;
     }
     case 'woman': case 'human': case 'old': {
-      c.fillStyle = skin; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+      // skull with a soft light from the upper left, a jaw, an ear, and a small readable face
+      const sg = c.createRadialGradient(x - r * 0.35, y - r * 0.45, r * 0.1, x, y, r * 1.1);
+      sg.addColorStop(0, shade(skin, 0.18)); sg.addColorStop(0.65, skin); sg.addColorStop(1, shade(skin, -0.3));
+      c.fillStyle = sg; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+      c.beginPath(); c.moveTo(x - r * 0.35, y + r * 0.55); c.quadraticCurveTo(x + r * 0.2, y + r * 1.25, x + r * 0.95, y + r * 0.55); c.lineTo(x + r * 0.9, y + r * 0.1); c.lineTo(x - r * 0.4, y + r * 0.2); c.fill();
       if (!p.back) {
+        c.fillStyle = skin;
         c.beginPath(); c.moveTo(x + r * 0.7, y - r * 0.1); c.lineTo(x + r * 1.25, y + r * 0.25); c.lineTo(x + r * 0.8, y + r * 0.45); c.fill();
-        c.fillStyle = '#1a1210'; c.fillRect(x + r * 0.45, y - r * 0.2, r * 0.22, r * 0.22);
+        c.fillStyle = shade(skin, -0.25); c.beginPath(); c.ellipse(x - r * 0.28, y + r * 0.1, r * 0.2, r * 0.3, 0, 0, TAU); c.fill(); // ear
+        c.fillStyle = '#f2ece2'; c.fillRect(x + r * 0.4, y - r * 0.22, r * 0.34, r * 0.24);        // eye white
+        c.fillStyle = L.eyes && L.head !== 'old' ? L.eyes : '#1a1210'; c.fillRect(x + r * 0.55, y - r * 0.2, r * 0.18, r * 0.2);
+        c.strokeStyle = shade(L.hair ?? skin, -0.35); c.lineWidth = r * 0.14; c.lineCap = 'round';  // brow
+        c.beginPath(); c.moveTo(x + r * 0.33, y - r * 0.38); c.lineTo(x + r * 0.82, y - r * 0.33); c.stroke();
+        c.strokeStyle = shade(skin, -0.4); c.lineWidth = r * 0.08; c.beginPath(); c.moveTo(x + r * 0.62, y + r * 0.55); c.lineTo(x + r * 0.88, y + r * 0.52); c.stroke(); // mouth
       }
       if (L.beard) { c.fillStyle = L.beard; c.beginPath(); c.moveTo(x - r * 0.1, y + r * 0.2); c.quadraticCurveTo(x + r * 0.9, y + r * 2.4, x + r * 1.0, y + r * 0.4); c.closePath(); c.fill(); }
       if (L.hair && (L.helm === undefined || L.helm < 0)) {
@@ -229,6 +239,10 @@ function drawHead(c: CanvasRenderingContext2D, L: Look, x: number, y: number, r:
         c.beginPath(); c.arc(x - r * 0.1, y - r * 0.15, r * 1.02, Math.PI * 0.85, TAU * 0.98); c.fill();
         if (L.head === 'woman') { c.beginPath(); c.moveTo(x - r, y - r * 0.2); c.quadraticCurveTo(x - r * 1.5, y + r * 2.2, x - r * 0.2, y + r * 2.4); c.lineTo(x - r * 0.1, y); c.fill(); }
         if (p.back) { c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
+        // strands catching the light
+        c.strokeStyle = shade(L.hair, 0.3); c.lineWidth = r * 0.09; c.globalAlpha = 0.7;
+        for (let i = 0; i < 3; i++) { const a0 = Math.PI * (1.05 + i * 0.18); c.beginPath(); c.arc(x - r * 0.1, y - r * 0.15, r * (0.72 + i * 0.08), a0, a0 + 0.45); c.stroke(); }
+        c.globalAlpha = 1;
       }
       break;
     }

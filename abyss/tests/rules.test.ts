@@ -9,6 +9,7 @@ import { armorReduction, computeStats, sheetDps } from '../src/sim/stats';
 import { emptyDmg, giveXp, hurtHero, hurtMonster } from '../src/sim/combat';
 import { makeMonster } from '../src/sim/spawn';
 import { tryCast } from '../src/sim/skills';
+import { isUnlocked, record, type Profile } from '../src/platform/profile';
 import { CLASS_IDS } from '../src/sim/types';
 import type { ClassId, Item } from '../src/sim/types';
 
@@ -256,5 +257,22 @@ describe('economy, inventory, travel and saving', () => {
       return { x: g.hero.x, y: g.hero.y, hp: g.hero.hp, kills: g.hero.kills, xp: g.hero.xp, drops: g.world.drops.length };
     };
     expect(run()).toEqual(run());
+  });
+});
+
+describe('class unlocks (account profile)', () => {
+  it('starting classes are open; others open by boss kills, level, and nightmare bosses', () => {
+    const p: Profile = { v: 1, bosses: {}, maxLevel: 1, seen: [], lastClass: 'warrior' };
+    for (const c of CLASS_IDS) expect(isUnlocked(p, c), c).toBe(c === 'warrior' || c === 'rogue' || c === 'sorcerer');
+    expect(record(p, { boss: 'ordes', diff: 0 })).toEqual(['paladin']);
+    expect(record(p, { level: 10 })).toEqual(['assassin']);
+    expect(record(p, { level: 9 })).toEqual([]);
+    expect(record(p, { boss: 'gromak', diff: 0 })).toEqual(['lancer']);
+    expect(record(p, { boss: 'ignira', diff: 0 })).toEqual(['necromancer']);
+    expect(record(p, { level: 20 })).toEqual(['druid']);
+    expect(record(p, { boss: 'malegath', diff: 0 })).toEqual(['monk']);
+    expect(isUnlocked(p, 'voidknight')).toBe(false);
+    expect(record(p, { boss: 'ordes', diff: 1 })).toEqual(['voidknight']);
+    for (const c of CLASS_IDS) expect(isUnlocked(p, c)).toBe(true);
   });
 });
