@@ -148,9 +148,13 @@ registerSkills({
     apply({ g, h, a, def, rank }) {
       const p = tossSpot(g, a.tx, a.ty);
       const face = Math.atan2(p.y - h.y, p.x - h.x);
+      // the oldest sentry beyond the cap folds up (visual only; capAreas removes it)
+      const mine = g.world.areas.filter((q) => q.kind === 'as_sentry' && q.side === 'hero');
+      for (const old of mine.slice(0, Math.max(0, mine.length + 1 - SENTRY.max))) fx(g, 'as_sentryBreak', old.x, old.y);
       addArea(g, 'as_sentry', 'hero', p.x, p.y, 0.45, SENTRY.dur, emptyDmg(), {
         tick: SENTRY.every, tickT: 0.4,
-        data: { noDmg: 1, range: SENTRY.range, pct: def.pct(rank), ang: Number.isFinite(face) ? face : h.facing, shot: -9, n: 0 },
+        // hx/hy: where it was tossed from (the art flies it in); ang/shot/n drive the turret animation
+        data: { noDmg: 1, range: SENTRY.range, pct: def.pct(rank), ang: Number.isFinite(face) ? face : h.facing, shot: -9, n: 0, hx: h.x, hy: h.y },
       });
       capAreas(g, 'as_sentry', SENTRY.max);
       fx(g, 'as_sentryDrop', p.x, p.y, { x2: h.x, y2: h.y });
@@ -162,6 +166,8 @@ registerSkills({
 /** Sentry brain: aim at the nearest visible enemy and fire a knife. */
 AREA_TICK.as_sentry = (g, a) => {
   if (a.side !== 'hero') return;
+  // last tick of its life: announce the fold-up (r = seconds left, so the visual lands on time)
+  if (a.t + a.tick > a.dur && !a.data.ending) { a.data.ending = 1; fx(g, 'as_sentryBreak', a.x, a.y, { r: Math.max(0, a.dur - a.t) }); sfx(g, 'as_sentryBreak', a.x, a.y); }
   const w = g.world, range = a.data.range ?? SENTRY.range;
   let best: Monster | null = null, bd = range;
   for (const m of w.monsters) {

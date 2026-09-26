@@ -41,7 +41,7 @@ export const LANCER: ClassPack = {
       id: 'ln_javelin', cls: 'lancer', name: '번개 투창', icon: 'ln_javelin', req: 6, kind: 'proj', range: 12, elem: 'light', anim: 'attack',
       mana: (r) => 8 + Math.floor(r * 0.4), cd: () => 0, pct: (r) => 150 + 17 * r,
       desc: '번개를 두른 창을 던집니다. 창은 적을 모두 꿰뚫고, 맞은 적마다 주변 적 2명에게 번개가 튑니다.',
-      detail: (r) => [`${pct(150 + 17 * r)} (번개) · 관통`, `튀는 번개 ${pct(Math.round((150 + 17 * r) * 0.45))}`],
+      detail: (r) => [`${pct(150 + 17 * r)} (번개) · 관통 · 사거리 12칸`, `튀는 번개 ${pct(Math.round((150 + 17 * r) * 0.45))} × 2명 (반경 4칸)`],
       ai: {},
     },
     {
@@ -55,9 +55,10 @@ export const LANCER: ClassPack = {
     {
       id: 'ln_storm', cls: 'lancer', name: '폭풍 창격', icon: 'ln_storm', req: 15, kind: 'proj', range: 3.4, elem: 'phys', anim: 'attack',
       mana: () => 16, cd: () => 6, pct: (r) => 75 + 8 * r,
-      timing: { kind: 'channel', dur: 1.2, hitAt: 0.99 },
+      // 9 thrust cycles of the channel animation (7 per second); the wave leaves with the ninth thrust
+      timing: { kind: 'channel', dur: 9 / 7, hitAt: 8.5 / 9 },
       desc: '눈에 보이지 않는 속도로 여덟 번 찌른 뒤, 마지막에 앞으로 번개 파동을 내보냅니다.',
-      detail: (r) => [`8회 × ${pct(75 + 8 * r)} (전방 부채꼴)`, `마지막 파동 ${pct(150 + 15 * r)} (번개)`, '재사용 6초'],
+      detail: (r) => [`8회 × ${pct(75 + 8 * r)} (전방 부채꼴 3.4칸)`, `마지막 파동 ${pct(150 + 15 * r)} (번개) · 앞으로 6칸 관통`, '재사용 6초'],
       ai: { crowd: 2, boss: true, maxDist: 3 },
     },
   ],
