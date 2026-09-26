@@ -1,6 +1,6 @@
 // 도사: violet chain lightning from the talisman sword; ult 천뢰진 = a floating 八卦 thunder array and 12 bolts from the sky.
 import { EMIT, SCENE } from '../render/paint.ts';
-import { type Tex, type Ctx, makeTex } from '../render/art/core.ts';
+import { type Tex, type Ctx, makeTex, circle } from '../render/art/core.ts';
 import type { ClassFx, FxCtx } from './types.ts';
 
 const VIO = 0xa47bff, PALE = 0xe6dcff, DEEP = 0x6a3cff;
@@ -18,16 +18,14 @@ const triTex = (): Tex[] => triT ??= TRI.map(b => makeTex('fx:taoTri' + b, 40, 4
   const g = c.createRadialGradient(20, 20, 0, 20, 20, 20); g.addColorStop(0, 'rgba(255,255,255,0.35)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, 40, 40);
   c.fillStyle = 'rgba(255,255,255,0.45)'; bars(c, b, 20, 20, 29, 7.5, 2.5); c.fillStyle = '#fff'; bars(c, b, 20, 20, 25, 4.5, 5.5);
 }));
-/** Ground 八卦 thunder array: double octagon, trigrams on the edges, spokes and a 雷 seal in the middle. */
+/** Ground 八卦 thunder array: double octagon with the eight trigrams along its edges and short corner spokes. */
 let baguaT: Tex | null = null;
 const baguaTex = (): Tex => baguaT ??= makeTex('fx:taoBagua', 256, 256, 0.5, 0.5, 2, c => {
   c.translate(128, 128); c.strokeStyle = '#fff'; c.fillStyle = '#fff';
   const oct = (r: number, w: number) => { c.beginPath(); for (let i = 0; i <= 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.lineWidth = w; c.stroke(); };
-  oct(124, 4); oct(114, 1.5); oct(84, 2.5);
-  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; c.beginPath(); c.moveTo(Math.cos(a) * 44, Math.sin(a) * 44); c.lineTo(Math.cos(a) * 84, Math.sin(a) * 84); c.lineWidth = 1.5; c.stroke(); }
-  for (let i = 0; i < 8; i++) { c.save(); c.rotate((i / 8) * Math.PI * 2 + Math.PI / 2); bars(c, TRI[i], 0, -99, 26, 3.6, 2.8); c.restore(); }
-  c.beginPath(); c.arc(0, 0, 44, 0, Math.PI * 2); c.lineWidth = 3; c.stroke(); c.beginPath(); c.arc(0, 0, 38, 0, Math.PI * 2); c.lineWidth = 1; c.stroke();
-  c.font = 'bold 44px serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('雷', 0, 2);
+  oct(124, 2.6); oct(116, 1); oct(86, 1.2);
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; c.beginPath(); c.moveTo(Math.cos(a) * 86, Math.sin(a) * 86); c.lineTo(Math.cos(a) * 124, Math.sin(a) * 124); c.lineWidth = 1.2; c.stroke(); circle(c, Math.cos(a) * 124, Math.sin(a) * 124, 3.2); c.fill(); }
+  for (let i = 0; i < 8; i++) { c.save(); c.rotate((i / 8) * Math.PI * 2 + Math.PI / 2); bars(c, TRI[i], 0, -101, 24, 3, 2.6); c.restore(); }
 });
 
 /** Jagged, flickering lightning (glow + white core) with side forks; the path is re-rolled every few frames. */
@@ -46,12 +44,12 @@ function zap(c: FxCtx, x1: number, y1: number, x2: number, y2: number, w: number
     const a = (k < 0.12 ? 1 : 1 - (k - 0.12) / 0.88) * (Math.random() < 0.2 ? 0.6 : 1);
     for (let i = 0; i + 3 < pts.length; i += 2) { p.beam(EMIT, beam, pts[i], pts[i + 1], pts[i + 2], pts[i + 3], w * 3.4, col, a * 0.5, 1); p.beam(EMIT, beam, pts[i], pts[i + 1], pts[i + 2], pts[i + 3], w, PALE, a, 1); }
     for (const q of fk) for (let i = 0; i + 3 < q.length; i += 2) { p.beam(EMIT, beam, q[i], q[i + 1], q[i + 2], q[i + 3], w * 1.6, col, a * 0.4, 1); p.beam(EMIT, beam, q[i], q[i + 1], q[i + 2], q[i + 3], w * 0.45, PALE, a * 0.8, 1); }
-    p.draw(EMIT, soft, x2, y2, w * 0.28, w * 0.28, 0, col, a * 0.6, 1);
+    p.draw(EMIT, soft, x2, y2, w * 0.16, w * 0.16, 0, col, a * 0.45, 1);
   }, undefined, delay);
 }
 /** Small impact where a chain bolt lands. */
 function spark(c: FxCtx, x: number, y: number, first: boolean): void {
-  c.fx.sparks(x, y, first ? 6 : 4, 0xc9b0ff, 320, undefined, Math.PI, 9); c.fx.glow(x, y, first ? 40 : 30, VIO, 0.22, 0.75); c.fx.light(x, y, 120, VIO, 0.9, 0.25);
+  c.fx.sparks(x, y, first ? 6 : 4, 0xc9b0ff, 320, undefined, Math.PI, 9); c.fx.glow(x, y, first ? 26 : 20, VIO, 0.2, 0.5); c.fx.light(x, y, 110, VIO, 0.8, 0.25);
   if (first) c.fx.ring(x, y, 6, 42, 0.24, PALE, true, 1, 0.7);
 }
 
@@ -79,13 +77,13 @@ export const taoist: ClassFx = {
     c.fx.add(0, DUR, (p, k, t) => {
       const g = k < 0.1 ? easeOut(k / 0.1) : 1, al = k < 0.1 ? k / 0.1 : k > 0.85 ? (1 - k) / 0.15 : 1; const s = (R * 2 * 1.02) / bag.w * g;
       p.draw(EMIT, soft, x, y, R / 20, R / 20 * 0.62, 0, DEEP, 0.16 * al, 1);
-      p.draw(EMIT, bag, x, y, s, s * 0.62, 0, VIO, 0.8 * al, 1); p.draw(EMIT, bag, x, y, s * 0.995, s * 0.995 * 0.62, 0, 0xffffff, 0.22 * al, 1);
+      p.draw(EMIT, bag, x, y, s, s * 0.62, 0, DEEP, 0.5 * al, 1); p.draw(EMIT, bag, x, y, s, s * 0.62, 0, VIO, 0.22 * al, 1);
       if (t >= nextArc && k < 0.85) {
         nextArc = t + 0.07; const i = Math.floor(Math.random() * 8), a0 = (i / 8) * Math.PI * 2 + Math.PI / 8, a1 = a0 + Math.PI / 4, r = R * 0.99 * g; arc = [];
         const ax = Math.cos(a0) * r, ay = Math.sin(a0) * r, bx = Math.cos(a1) * r, by = Math.sin(a1) * r;
         for (let j = 0; j <= 5; j++) { const u = j / 5, jj = j % 5 ? rnd(-9, 9) : 0; arc.push(x + ax + (bx - ax) * u + Math.cos((a0 + a1) / 2) * jj, y + (ay + (by - ay) * u + Math.sin((a0 + a1) / 2) * jj) * 0.62); }
       }
-      for (let j = 0; j + 3 < arc.length; j += 2) { p.beam(EMIT, beam, arc[j], arc[j + 1], arc[j + 2], arc[j + 3], 8, VIO, 0.6 * al, 1); p.beam(EMIT, beam, arc[j], arc[j + 1], arc[j + 2], arc[j + 3], 2.5, PALE, 0.9 * al, 1); }
+      for (let j = 0; j + 3 < arc.length; j += 2) { p.beam(EMIT, beam, arc[j], arc[j + 1], arc[j + 2], arc[j + 3], 7, VIO, 0.45 * al, 1); p.beam(EMIT, beam, arc[j], arc[j + 1], arc[j + 2], arc[j + 3], 2, PALE, 0.7 * al, 1); }
     });
     // eight trigram glyphs rise over the array's edges, one after another, bobbing on light beams
     for (let i = 0; i < 8; i++) {
@@ -105,14 +103,14 @@ export const taoist: ClassFx = {
   },
   uhit: (c, e) => {
     const x = e.x, y = e.y, sx = x + rnd(-60, 60), sy = y - 420;
-    zap(c, sx, sy, x, y - 4, 7, 0.34, 3); zap(c, sx + rnd(-20, 20), sy, x + rnd(-6, 6), y - 4, 2.5, 0.22, 1, 0.03, 0xc8a8ff);
-    c.fx.glow(x, y - 14, 80, VIO, 0.42, 0.5); c.fx.glow(x, y - 6, 26, 0xffffff, 0.18, 0.5);
-    c.fx.ring(x, y, 8, 100, 0.45, VIO, false, 0, 0.9); c.fx.ring(x, y, 4, 60, 0.3, PALE, true, 0, 0.6);
+    zap(c, sx, sy, x, y - 4, 3.4, 0.32, 3); zap(c, sx + rnd(-30, 30), sy, x + rnd(-6, 6), y - 4, 1.4, 0.22, 1, 0.03, 0xc8a8ff);
+    c.fx.glow(x, y - 14, 56, VIO, 0.36, 0.38);
+    c.fx.ring(x, y, 8, 96, 0.45, VIO, false, 0, 0.6);
     c.fx.decal(x, y, 'scorch', 96, 0x140a24, 2.2, 0.62); c.fx.decal(x, y, 'crack', 74, 0x3a2070, 1.8, 0.5);
     c.fx.sparks(x, y - 8, 9, 0xd0b8ff, 480, -Math.PI / 2, 2.6, 12);
     c.fx.debris(x, y - 4, 4, 'shard', [0x5a4c78, 0x3a3050], 240, 5, 0.6);
     c.fx.smoke(x, y - 6, 2, 0x2e2640, 40, 26, 0.9, 0.35);
-    c.fx.light(x, y - 12, 260, VIO, 1.2, 0.4);
+    c.fx.light(x, y - 12, 240, VIO, 0.85, 0.4);
     if (c.mine) { c.fx.shake(0.08); c.fx.wave(x, y - 10, 120, 10, 0.35); }
     c.snd.play('thunder', 0.4 * (c.mine ? 1 : 0.6), x, y);
   },

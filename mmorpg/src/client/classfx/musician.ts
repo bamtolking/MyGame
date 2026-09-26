@@ -59,7 +59,7 @@ export const musician: ClassFx = {
   },
   ult: (c, e) => {
     const x = e.x, y = e.y;
-    castAt.set(c.id, c.fx.time); if (castAt.size > 64) castAt.clear();
+    if (castAt.size > 64) castAt.clear(); castAt.set(c.id, c.fx.time);
     // festive burst: 색동 confetti and a spiral of notes rising from the gayageum
     c.fx.debris(x, y - 30, c.mine ? 22 : 10, 'petal', [0xe0344d, 0xf2c84b, 0x3fb07a, 0x4a7bd8, 0xfff4dc], 340, 7, 1.5, EMIT);
     for (let i = 0; i < 12; i++) c.fx.later(i * 0.04, () => { const a = (i / 12) * Math.PI * 2; note(c, x + Math.cos(a) * 18, y - 28 + Math.sin(a) * 8, Math.cos(a) * 170, -150 + Math.sin(a) * 60, 1.3, 9, NOTES[i % 4]); });
