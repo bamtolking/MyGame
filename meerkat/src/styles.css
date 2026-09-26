@@ -1912,3 +1912,36 @@ input[type='range'].slider {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* 운동 중: 느껴져야 할 곳 한 줄 */
+.player-feel {
+  margin: 10px auto 0;
+  max-width: 420px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.player-feel svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--good);
+}
+
+/* 보통 폰: 준비 화면의 시작 자세 안내는 두 줄까지만 (전체는 '동작 방법'에) */
+@media (max-height: 900px) {
+  .player-setup {
+    font-size: 13.5px;
+    line-height: 1.5;
+    padding-block: 10px;
+  }
+  .player-setup li:nth-child(n + 3) {
+    display: none;
+  }
+}

@@ -8,18 +8,26 @@ import { QUAD, SIT, SUPINE, merge } from '../../figure/poses';
 import type { Exercise } from '../exercise-types';
 
 // ── 이 파일에서 쓰는 자세 ─────────────────────
-/** 360° 호흡: 왼손은 가슴 위, 오른손은 옆구리 아래 갈비뼈 */
-const BREATH_HANDS: Pose = { shL: { flex: 24, hab: -30 }, elL: 112, shR: { flex: 6, abd: 16, rot: -40 }, elR: 88 };
+/**
+ * 360° 호흡: 왼손은 쇄골 아래 가슴 위(손끝이 오른쪽 위를 향함),
+ * 오른손은 옆구리 아래 갈비뼈를 감쌈(손목은 옆구리 옆, 손끝은 앞쪽, 팔꿈치는 옆·뒤로)
+ */
+const BREATH_HANDS: Pose = { shL: { flex: 35, abd: 21, rot: -48 }, elL: 132, wrL: 2, shR: { flex: -34, abd: 46, rot: -52 }, elR: 138 };
 /** 데드버그 테이블 자세: 팔은 천장으로, 엉덩이·무릎 90° */
 const TABLETOP: Pose = merge(SUPINE, both({ hip: { flex: 90 }, kn: 90, an: 0, sh: { flex: 90 }, el: 2 }));
-/** 맥길 컬업: 오른무릎 세우고 왼다리 펴기, 양손은 허리 아래 */
-const CURL_BASE: Pose = merge(SUPINE, { hipR: { flex: 55 }, knR: 105, anR: 10 }, both({ sh: { abd: 24, rot: -80 }, el: 86 }));
+/**
+ * 맥길 컬업: 오른무릎 세워 발바닥을 바닥에 평평하게(엉덩이 46°·무릎 105°·발목 −31°), 왼다리는 펴기.
+ * 양손은 손바닥을 아래로 허리 오목한 곳 밑에, 팔꿈치는 몸 옆 바닥에
+ */
+const CURL_BASE: Pose = merge(SUPINE, { hipR: { flex: 46 }, knR: 105, anR: -31 }, both({ sh: { flex: -12, abd: 39, rot: -100 }, el: 107, wr: 21 }));
+/** 머리·목·어깨를 한 덩어리로 살짝 들기(흉곽만 10°) — 손·팔꿈치가 바닥에 그대로 있도록 어깨 각도 보정 */
+const CURL_LIFT: Pose = merge(CURL_BASE, { thorax: { flex: 10 }, neck: { flex: 2 } }, both({ sh: { flex: -12, abd: 38, rot: -97 }, el: 104, wr: 20 }));
 /** 플랭크: 몸통 기울기(pitch)와 같은 각도로 팔을 들면 위팔이 수직(팔꿈치가 어깨 바로 아래) */
 const plankArms = (pitch: number): Pose => both({ sh: { flex: pitch, abd: 6 }, el: 90 });
 /** 팔꿈치·무릎 대고 엎드린 자세(엉덩이가 어깨보다 높아 몸통이 20° 기울어짐, 발끝 세움) */
 const FOREARM_QUAD: Pose = merge({ root: { pitch: 110 } }, plankArms(110), both({ hip: { flex: 110 }, kn: 102, an: -22 }), { neck: { flex: -6 } });
-/** 무릎 사이드 플랭크(오른쪽 아래): 오른 팔꿈치는 어깨 아래(abd 는 키마다), 왼손은 골반 위 */
-const SIDE_ARMS: Pose = { elR: 90, shL: { abd: 18, rot: -30 }, elL: 95 };
+/** 무릎 사이드 플랭크(오른쪽 아래): 오른 팔꿈치는 어깨 아래(abd 는 키마다), 왼팔은 몸 옆선을 따라 내려 손은 엉덩이 옆 */
+const SIDE_ARMS: Pose = { elR: 90, shL: { abd: 4 }, elL: 10 };
 
 export const CORE: Exercise[] = [
   {
@@ -53,14 +61,14 @@ export const CORE: Exercise[] = [
         '코로 4초 동안 천천히 들이마시며 배·옆구리·허리 뒤쪽을 풍선처럼 사방(360°)으로 부풀려요. 오른손이 옆으로 1~2cm 밀려나야 해요.',
         '들이마시는 동안 가슴 위 왼손과 어깨는 거의 움직이지 않게 해요.',
         '입술을 살짝 오므리고 6초 동안 길게 내쉬며, 갈비뼈가 아래·안쪽으로 모이고 아랫배가 살짝 납작해지는 걸 느껴요.',
-        '한 번에 10초(4초 들숨 + 6초 날숨)씩, 60초 동안 6번 반복해요.',
+        '한 번에 10초(4초 들숨 + 6초 날숨)씩, 시간이 끝날 때까지 반복해요(1분이면 6번).',
       ],
       en: [
         'Start with one easy “haaa” out through the mouth to let your ribs settle down.',
         'Breathe in through your nose for 4 seconds, expanding belly, sides and low back in every direction (360°) like a balloon. Your right hand should be pushed out 1–2 cm.',
         'While you breathe in, keep the left hand on your chest and your shoulders almost still.',
         'Purse your lips and breathe out slowly for 6 seconds, feeling the ribs draw down and in and the lower belly gently flatten.',
-        'Each breath takes 10 seconds (4 in + 6 out) — repeat 6 times in 60 seconds.',
+        'Each breath takes 10 seconds (4 in + 6 out) — keep repeating until the timer ends (6 breaths a minute).',
       ],
     },
     breathing: {
@@ -103,10 +111,8 @@ export const CORE: Exercise[] = [
     anim: {
       view: 30,
       props: [{ kind: 'chair' }],
-      keys: [
-        merge(SIT, BREATH_HANDS, { thorax: { flex: 2 } }),
-        merge(SIT, BREATH_HANDS, { shR: { abd: 21 }, thorax: { flex: -4 }, neck: { flex: 3 } }),
-      ],
+      // 가슴·어깨·머리는 그대로 두고, 들숨에 옆구리가 넓어지며 오른손만 옆으로 약 2cm 밀려남
+      keys: [merge(SIT, BREATH_HANDS, { thorax: { flex: 2 } }), merge(SIT, BREATH_HANDS, { thorax: { flex: 2 }, shR: { abd: 51 } })],
       labels: [
         { ko: '입으로 6초 내쉬기', en: 'Breathe out, 6 s' },
         { ko: '코로 4초 들이마시기', en: 'Breathe in, 4 s' },
@@ -151,14 +157,14 @@ export const CORE: Exercise[] = [
         '입으로 내쉬며 2초에 걸쳐 오른팔은 머리 위 바닥 쪽으로, 왼다리는 뒤꿈치를 멀리 밀며 무릎을 펴서 바닥 쪽으로 내려요.',
         '팔·다리가 바닥에서 한 뼘(15~20cm) 위에 오거나, 허리가 뜨기 직전이면 멈춰요. 더 내리지 않아요.',
         '들이마시며 2초에 걸쳐 처음 테이블 자세로 돌아와요.',
-        '반대쪽(왼팔·오른다리)도 똑같이 하고, 번갈아 한쪽 8회씩 해요.',
+        '오른팔·왼다리로 8회를 이어서 한 뒤, 반대쪽(왼팔·오른다리)으로 바꿔 8회 해요.',
       ],
       en: [
         'Breathe in through your nose to prepare, and brace your belly at about 20–30% to keep that small gap under your back.',
         'Breathe out and, over 2 seconds, reach your right arm overhead toward the floor while your left leg straightens, heel pushing away, and lowers toward the floor.',
         'Stop when your arm and leg are a hand-span (15–20 cm) above the floor, or just before your back starts to lift — no lower.',
         'Breathe in and take 2 seconds to return to tabletop.',
-        'Repeat with the left arm and right leg; alternate for 8 reps per side.',
+        'Do all 8 reps with the right arm and left leg, then switch to the left arm and right leg for 8.',
       ],
     },
     breathing: {
@@ -246,14 +252,14 @@ export const CORE: Exercise[] = [
         '왼발 끝을 바닥에 끌듯이 뒤로 밀어 무릎을 쭉 펴요.',
         '이어서 왼다리를 골반 높이까지 들고, 동시에 오른팔을 어깨 높이로 앞으로 뻗어요. 손끝과 뒤꿈치가 서로 반대 방향으로 멀어지게 해요.',
         '그 자세로 3초 버텨요. 등 위에 물컵이 있다고 생각하고 골반과 어깨를 수평으로 지켜요.',
-        '2초에 걸쳐 손과 무릎을 처음 자리로 내려놓고, 반대쪽(왼팔·오른다리)과 번갈아 한쪽 8회씩 해요.',
+        '2초에 걸쳐 손과 무릎을 처음 자리로 내려놓아요. 오른팔·왼다리로 8회를 마친 뒤, 반대쪽(왼팔·오른다리)으로 바꿔 8회 해요.',
       ],
       en: [
         'Draw your belly button in slightly to brace at about 20%, and start breathing out through your mouth.',
         'Slide your left toes back along the floor until the knee is straight.',
         'Then lift the left leg to hip height while reaching the right arm forward to shoulder height. Fingertips and heel reach away from each other.',
         'Hold for 3 seconds. Imagine a glass of water on your back — keep your hips and shoulders level.',
-        'Take 2 seconds to bring the hand and knee back down, then alternate with the left arm and right leg for 8 reps per side.',
+        'Take 2 seconds to bring the hand and knee back down. Finish all 8 reps with the right arm and left leg, then switch to the left arm and right leg for 8.',
       ],
     },
     breathing: {
@@ -329,7 +335,8 @@ export const CORE: Exercise[] = [
     targets: { lowBackPain: 0.8, lordosis: 0.4, swayback: 0.3 },
     equipment: ['mat'],
     level: 2,
-    dose: { kind: 'reps', sets: 2, value: 6, tempo: 2, holdSec: 8, rest: 20 },
+    // 1회 12초 = 쉬기 1.5 + 들기 1 + 버티기 8 + 내리기 1.5
+    dose: { kind: 'reps', sets: 2, value: 6, tempo: 4, holdSec: 8, rest: 20 },
     setup: {
       ko: [
         '매트에 바로 누워 오른쪽 무릎은 세워 발바닥을 바닥에 두고, 왼다리는 쭉 펴서 내려놓아요.',
@@ -348,14 +355,14 @@ export const CORE: Exercise[] = [
         '숨을 내쉬며 머리·목·어깨를 한 덩어리로 바닥에서 살짝 들어요. 어깨뼈 윗부분이 막 떨어질 정도(3~5cm)면 충분해요.',
         '고개를 끄덕이거나 턱을 가슴으로 당기지 말고, 시선은 천장의 한 점에 둬요. 저울 위에 올린 머리의 무게만 살짝 빼는 느낌이에요.',
         '그 높이에서 8초 버티며 코로 짧게 숨 쉬어요.',
-        '1~2초에 걸쳐 천천히 내려와 2~3초 쉬고, 6회 반복해요. 두 번째 세트는 세운 무릎을 바꿔요.',
+        '1~2초에 걸쳐 천천히 내려와 1~2초 쉬고, 6회 반복해요. 두 번째 세트는 세운 무릎을 바꿔요.',
       ],
       en: [
         'Brace your belly firmly (20–30%), as if someone were about to poke it — but keep breathing.',
         'Breathe out and lift your head, neck and shoulders as one unit just off the floor — only until the tops of your shoulder blades clear it (3–5 cm).',
         'Don’t nod or pull your chin to your chest; keep your eyes on one spot on the ceiling. Think of your head resting on a scale and just taking some weight off it.',
         'Hold that height for 8 seconds, taking short breaths through your nose.',
-        'Lower slowly over 1–2 seconds, rest 2–3 seconds and repeat 6 times. Switch the bent knee for the second set.',
+        'Lower slowly over 1–2 seconds, rest 1–2 seconds and repeat 6 times. Switch the bent knee for the second set.',
       ],
     },
     breathing: {
@@ -401,13 +408,14 @@ export const CORE: Exercise[] = [
       elev: 12,
       props: [{ kind: 'mat' }],
       anchor: ['pelvis'],
-      keys: [CURL_BASE, merge(CURL_BASE, { thorax: { flex: 12 }, neck: { flex: 2 } })],
+      keys: [CURL_BASE, CURL_LIFT],
       labels: [
         { ko: '한 무릎 세우고 눕기', en: 'Lie with one knee bent' },
         { ko: '머리·어깨 살짝 들어 8초', en: 'Lift slightly, hold 8 s' },
       ],
-      durations: [1, 1.4],
-      pauses: [0.5, 7],
+      // 12초 = 쉬기 1.5 → 들기 1 → 버티기 8 → 내리기 1.5 (dose tempo 4 + holdSec 8 과 같음)
+      durations: [1, 1.5],
+      pauses: [1.5, 8],
       focus: [
         { a: 'chest', b: 'pelvis', side: 'front', kind: 'work', r: 3, from: 0.1, to: 0.75 },
         { a: 'shR', b: 'hipR', side: 'out', kind: 'work', r: 2.2, from: 0.35, to: 0.85 },
@@ -534,12 +542,12 @@ export const CORE: Exercise[] = [
       ko: [
         '매트에 오른쪽으로 누워 오른 팔꿈치를 오른 어깨 바로 아래에 두고, 아래팔은 몸 앞쪽으로 뻗어요.',
         '두 무릎을 90도로 굽혀 포개고, 어깨·골반·무릎이 한 줄이 되게(엉덩이가 뒤로 빠지지 않게) 해요.',
-        '왼손은 왼쪽 골반 위나 오른쪽 어깨 위에 얹고, 시선은 정면에 둬요.',
+        '왼팔은 몸 옆선을 따라 내려 손을 왼쪽 엉덩이 옆에 얹거나 오른쪽 어깨 위에 얹고, 시선은 정면에 둬요.',
       ],
       en: [
         'Lie on your right side on a mat with your right elbow directly under your right shoulder, forearm pointing forward.',
         'Stack your knees bent at 90°, with shoulders, hips and knees in one line (don’t let your hips drift back).',
-        'Rest your left hand on your left hip or on your right shoulder, and look straight ahead.',
+        'Rest your left arm along your side with the hand on your left hip (or place it on your right shoulder), and look straight ahead.',
       ],
     },
     steps: {
@@ -595,15 +603,15 @@ export const CORE: Exercise[] = [
     },
     muscles: { ko: '요방형근, 내·외복사근, 중둔근, 어깨 안정근(전거근·회전근개)', en: 'Quadratus lumborum, internal & external obliques, gluteus medius, shoulder stabilisers (serratus anterior, rotator cuff)' },
     caution: { ko: '바닥 쪽 어깨에 통증이 있으면 하지 말고, 버티는 동안 어깨가 아프면 바로 내려와요.', en: 'Skip it if your bottom shoulder is painful, and come down right away if it hurts during the hold.' },
-    avoid: ['shoulderSevere', 'pregnant'],
+    avoid: ['shoulderSevere', 'lowBackSevere', 'pregnant'],
     anim: {
       view: 0,
       elev: 12,
       props: [{ kind: 'mat' }],
       anchor: ['knR'],
       keys: [
-        // 골반은 바닥에, 몸통만 옆으로 세워 팔꿈치로 받침
-        merge({ root: { roll: -86 } }, both({ hip: { flex: 10 }, kn: 90, an: -30 }), SIDE_ARMS, { shR: { abd: 50 }, lumbar: { side: 24 }, thorax: { side: 18 } }),
+        // 골반은 바닥에, 몸통만 옆으로 세워 팔꿈치로 받침 (몸통이 옆으로 휘어 있어 위팔은 조금 더 벌려야 몸 옆선에 얹힘 → 손은 허벅지 바깥)
+        merge({ root: { roll: -86 } }, both({ hip: { flex: 10 }, kn: 90, an: -30 }), SIDE_ARMS, { shR: { abd: 50 }, shL: { abd: 24 }, elL: 15, lumbar: { side: 24 }, thorax: { side: 18 } }),
         // 팔꿈치·무릎을 바닥에 둔 채 골반을 들어 머리~무릎 일직선
         merge({ root: { roll: -66 } }, both({ hip: { flex: 0 }, kn: 90, an: -30 }), SIDE_ARMS, { shR: { abd: 68 } }),
       ],

@@ -13,16 +13,18 @@ import type { Exercise } from '../exercise-types';
 const RIB_HANDS: Pose = both({ sh: { flex: -8, abd: 34, rot: -37 }, el: 130, wr: 28 });
 const B90: Pose = merge(SUPINE, both({ hip: { flex: 90, abd: 4 }, kn: 90, an: 0 }), RIB_HANDS, { neck: { flex: 6 } });
 const B90_TUCK: Pose = merge(B90, { root: { pitch: -95 }, lumbar: { flex: 5 } }, both({ hip: { flex: 86, abd: 4 } }));
-const B90_IN: Pose = merge(B90_TUCK, { thorax: { flex: -4 }, neck: { flex: 9 } }, both({ sh: { flex: -8, abd: 37, rot: -37 }, el: 127, wr: 28 }));
 const B90_OUT: Pose = merge(B90_TUCK, { thorax: { flex: 3 }, neck: { flex: 4 } }, both({ sh: { flex: -8, abd: 32, rot: -37 }, el: 132, wr: 28 }));
+/** 들숨: 몸통·골반·머리·발은 그대로(허리가 젖혀지지 않게), 갈비뼈가 넓어지며 두 손만 바깥·위로 약 1.6씩 밀려남(잘 보이게 실제보다 크게) */
+const B90_IN: Pose = merge(B90_OUT, both({ sh: { flex: -6, abd: 35, rot: -29 }, el: 129, wr: 28 }));
 
-// 악어 호흡: 엎드려 두 손을 포개 이마 밑에
-const CROC: Pose = merge(PRONE, both({ sh: { flex: 37, abd: 147, rot: 103, hab: 26 }, el: 114, wr: 1, an: -70, hip: { abd: 6, rot: 20 } }), {
+// 악어 호흡: 엎드려 두 손을 포개 이마 밑에. 허벅지·무릎·정강이는 매트에 내려놓음
+// (엎드린 자세에서 고관절 flex + 는 허벅지를 바닥 쪽으로 내림 — 두꺼운 골반 때문에 뜨는 다리를 매트에 붙임)
+const CROC: Pose = merge(PRONE, both({ sh: { flex: 37, abd: 147, rot: 103, hab: 26 }, el: 114, wr: 1, an: -68, hip: { flex: 8, abd: 6, rot: 20 }, kn: 6 }), {
   neck: { flex: -4 },
   head: { flex: -7 },
 });
-/** 들숨: 허리(요추 구간)가 1~2cm 솟고 가슴·골반은 바닥에 그대로 */
-const CROC_IN: Pose = merge(CROC, { root: { pitch: 85 }, thorax: { flex: 10 }, neck: { flex: -9 } }, both({ hip: { flex: -5, abd: 6, rot: 20 } }));
+/** 들숨: 허리(요추 구간)만 약 2.3 솟고 골반·가슴·팔·머리·다리는 바닥에 그대로 (잘 보이게 실제 1~2cm보다 크게) */
+const CROC_IN: Pose = merge(CROC, { lumbar: { flex: -12 }, thorax: { flex: 17 } });
 
 // 상자 호흡: 바르게 앉아 오른손은 배꼽 위, 왼손은 허벅지 위
 const BOX_OUT: Pose = merge(SIT, { neck: { flex: -2 }, head: { flex: 3 }, shR: { flex: 3, abd: 17, rot: -57 }, elR: 90, wrR: 30 });
@@ -59,8 +61,11 @@ const SPL_UP: Pose = merge({ root: { roll: -71 } }, both({ hip: { abd: -3 }, an:
 // (손·무릎·발끝이 바닥에 닿도록 맞춘 각도: 손목은 어깨 아래, 무릎은 골반 아래)
 const BEAR_QUAD: Pose = merge(QUAD, { root: { pitch: 83 }, neck: { flex: -8 } }, both({ hip: { flex: 83 }, kn: 88, an: -61, sh: { flex: 83 }, wr: 90 }));
 const BEAR_TOES: Pose = merge(BEAR_QUAD, both({ kn: 111, an: 41 }));
-/** 발끝 위치는 그대로, 무릎만 바닥에서 약 2.3 뜸(잘 보이게 실제 2~3cm보다 살짝 크게) · 등은 수평 */
-const BEAR_UP: Pose = merge(BEAR_QUAD, { root: { pitch: 88 }, neck: { flex: -6 } }, both({ hip: { flex: 88 }, kn: 105, an: 40, sh: { flex: 88 } }));
+/**
+ * 발끝·손목 위치는 그대로, 무릎만 바닥에서 약 4.9 뜸 · 등은 수평.
+ * 실제로는 2~3cm만 들지만, 두꺼운 무릎과 매트 윗면에 가려지지 않도록 일부러 크게 들어 보여 줌(낮은 카메라와 함께).
+ */
+const BEAR_UP: Pose = merge(BEAR_QUAD, { root: { pitch: 92 }, neck: { flex: -6 } }, both({ hip: { flex: 92 }, kn: 100, an: 40, sh: { flex: 92 } }));
 
 export const CORE_PLUS: Exercise[] = [
   // ───────────────────────── 90/90 호흡
@@ -73,7 +78,7 @@ export const CORE_PLUS: Exercise[] = [
     targets: { lordosis: 0.8, stress: 0.8, lowBackPain: 0.5, stiffness: 0.3 },
     equipment: ['mat', 'wall'],
     level: 1,
-    dose: { kind: 'time', sets: 1, value: 90 },
+    dose: { kind: 'time', sets: 1, value: 120 },
     setup: {
       ko: [
         '발이 벽 쪽을 향하게 매트에 바로 누워요. 엉덩이는 벽에서 약 50cm 떨어뜨려요.',
@@ -92,14 +97,14 @@ export const CORE_PLUS: Exercise[] = [
         '입으로 숨을 끝까지 내쉬며 갈비뼈를 배꼽 쪽으로 내려요. 여기가 출발점이에요.',
         '코로 4초 동안 들이마셔요. 배만 불룩 내밀지 말고, 손 밑의 옆구리 갈비뼈와 등 뒤쪽까지 360도로 부풀게 해요.',
         '입으로 “후—” 6~8초 동안 길게 내쉬며, 갈비뼈가 아래·안쪽으로 내려가는 것을 손으로 느껴요. 마지막 2초는 아랫배가 살짝 조여질 때까지 내쉬어요.',
-        '2~3초 쉬었다가 다시 들이마셔요. 골반 말림은 유지한 채 타이머가 끝날 때까지 반복해요(90초면 약 7회).',
+        '2~3초 쉬었다가 다시 들이마셔요. 골반 말림은 유지한 채 타이머가 끝날 때까지 반복해요(2분이면 약 9회).',
       ],
       en: [
-        'Press your heels lightly down the wall toward the floor (2–3/10 effort). The backs of your thighs switch on gently, your pelvis curls slightly and the gap under your low back shrinks.',
+        'Press your heels lightly into the wall and draw them down toward the floor without letting them slide (2–3/10 effort). The backs of your thighs switch on gently, your pelvis curls slightly and the gap under your low back shrinks.',
         'Breathe all the way out through your mouth, letting your ribs drop toward your belly button. This is your starting point.',
         'Breathe in through your nose for 4 seconds. Don’t just push the belly out — expand 360° into the side ribs under your hands and into your back.',
         'Breathe out through your mouth with a long “hoo” for 6–8 seconds, feeling the ribs move down and in under your hands. Use the last 2 seconds to empty until your lower belly firms slightly.',
-        'Pause 2–3 seconds, then breathe in again. Keep the pelvic curl and repeat until the timer ends (about 7 breaths in 90 seconds).',
+        'Pause 2–3 seconds, then breathe in again. Keep the pelvic curl and repeat until the timer ends (about 9 breaths in 2 minutes).',
       ],
     },
     breathing: {
@@ -119,8 +124,8 @@ export const CORE_PLUS: Exercise[] = [
       en: 'Try the 90/90 hip lift — curl your tailbone just 1 cm off the mat — or stretch the exhale to 10 seconds. Then progress to the dead bug.',
     },
     cues: {
-      ko: ['뒤꿈치로 벽을 살짝', '코로 4초 들이마셔요', '입으로 길게 후—', '갈비뼈를 내려요'],
-      en: ['Heels press the wall lightly', 'In through the nose for four', 'Long breath out', 'Let your ribs drop'],
+      ko: ['뒤꿈치를 살짝 끌어내려요', '코로 4초 들이마셔요', '입으로 길게 후—', '갈비뼈를 내려요'],
+      en: ['Draw your heels down', 'In through the nose for four', 'Long breath out', 'Let your ribs drop'],
     },
     mistakes: {
       ko: [
@@ -142,9 +147,10 @@ export const CORE_PLUS: Exercise[] = [
     },
     muscles: { ko: '횡격막, 복횡근·내복사근, 햄스트링(가볍게)', en: 'Diaphragm, transversus abdominis and internal obliques, hamstrings (lightly)' },
     caution: {
-      ko: '호흡 중 어지럽거나 손끝이 저리면 평소 호흡으로 돌아가 쉬세요. 허벅지 뒤쪽에 쥐가 나면 누르는 힘을 줄여요.',
-      en: 'If you feel dizzy or your fingertips tingle, go back to normal breathing and rest. If the backs of your thighs cramp, press more lightly.',
+      ko: '호흡 중 어지럽거나 손끝이 저리면 평소 호흡으로 돌아가 쉬세요. 허벅지 뒤쪽에 쥐가 나면 누르는 힘을 줄여요. 임신 중에는 바로 눕는 대신 옆으로 누워서 호흡하세요.',
+      en: 'If you feel dizzy or your fingertips tingle, go back to normal breathing and rest. If the backs of your thighs cramp, press more lightly. During pregnancy, breathe lying on your side instead of on your back.',
     },
+    avoid: ['pregnant'],
     anim: {
       view: 90,
       elev: 14,
@@ -154,7 +160,7 @@ export const CORE_PLUS: Exercise[] = [
       // 재생 시간 = 실제 호흡 박자 (쉬기 2초 → 들숨 4초 → 날숨 7초)
       keys: [B90_OUT, B90_IN, B90_OUT],
       labels: [
-        { ko: '벽 누른 채 2초 쉬기', en: 'Heels on wall, pause 2 s' },
+        { ko: '뒤꿈치 당긴 채 2초 쉬기', en: 'Heels drawn down, pause 2 s' },
         { ko: '코로 4초 들이마시기', en: 'Inhale 4 s, ribs widen' },
         { ko: '입으로 6~8초 내쉬기', en: 'Exhale 6–8 s, ribs drop' },
       ],
@@ -178,7 +184,7 @@ export const CORE_PLUS: Exercise[] = [
     targets: { stress: 0.9, lowBackPain: 0.5, stiffness: 0.4, neckPain: 0.3, lordosis: 0.3 },
     equipment: ['mat'],
     level: 1,
-    dose: { kind: 'time', sets: 1, value: 90 },
+    dose: { kind: 'time', sets: 1, value: 120 },
     setup: {
       ko: [
         '매트에 엎드려 두 다리를 골반 너비로 편하게 벌리고, 발끝은 바깥으로 툭 떨어뜨려요.',
@@ -197,14 +203,14 @@ export const CORE_PLUS: Exercise[] = [
         '코로 4초 동안 천천히 들이마셔요. 배가 바닥을 누르고, 그 힘에 밀려 허리와 옆구리가 천장 쪽으로 부풀어 올라요.',
         '허리 위에 작은 쿠션이 얹혀 있다고 상상하고, 그 쿠션이 1~2cm 들렸다 내려가는 것을 느껴요.',
         '입으로 6초 동안 길게 내쉬며 허리와 옆구리가 다시 바닥 쪽으로 가라앉게 해요.',
-        '2초 쉬었다가 다시 들이마셔요. 타이머가 끝날 때까지 반복해요(90초면 약 7회).',
+        '2초 쉬었다가 다시 들이마셔요. 타이머가 끝날 때까지 반복해요(2분이면 약 10회).',
       ],
       en: [
         'Breathe out once through your mouth and let your shoulders, glutes and legs go heavy on the floor.',
         'Breathe in slowly through your nose for 4 seconds. Your belly presses into the floor, and that pushes your low back and sides up toward the ceiling.',
         'Imagine a small cushion resting on your low back and feel it rise and fall 1–2 cm.',
         'Breathe out through your mouth for 6 seconds, letting your low back and sides sink back down.',
-        'Pause 2 seconds, then breathe in again. Repeat until the timer ends (about 7 breaths in 90 seconds).',
+        'Pause 2 seconds, then breathe in again. Repeat until the timer ends (about 10 breaths in 2 minutes).',
       ],
     },
     breathing: {
@@ -212,16 +218,16 @@ export const CORE_PLUS: Exercise[] = [
       en: 'In through the nose for 4 seconds, out through the mouth for 6, then rest 2. As you inhale, the belly spreads into the floor and the low back rises toward the ceiling. Shoulders and neck stay quiet.',
     },
     feel: {
-      ko: '들이마실 때 배가 바닥을 누르고 허리·옆구리가 위로 부풀면 정답이에요. 몇 번 지나면 몸이 바닥으로 녹아내리듯 편안해져요. 허리가 아프거나 다리가 저리면 배 밑에 얇은 베개를 받치거나 멈추세요.',
-      en: 'Your belly presses into the floor and your low back and sides rise as you inhale. After a few breaths your body should feel like it’s melting into the floor. If your back hurts or your legs tingle, put a thin pillow under your belly or stop.',
+      ko: '들이마실 때 배가 바닥을 누르고 허리·옆구리가 위로 부풀면 정답이에요. 몇 번 지나면 몸이 바닥으로 녹아내리듯 편안해져요. 허리가 불편하면 배 밑에 얇은 베개를 받치고, 다리가 저리거나 찌릿하면 멈추세요.',
+      en: 'Your belly presses into the floor and your low back and sides rise as you inhale. After a few breaths your body should feel like it’s melting into the floor. If your low back is uncomfortable, put a thin pillow under your belly; if your legs tingle or zing, stop.',
     },
     easier: {
       ko: '배 밑에 얇은 베개를 받치면 허리가 편해요. 엎드리기 힘들면 ‘90/90 호흡’이나 앉아서 하는 ‘360° 복식 호흡’으로 바꿔요.',
       en: 'A thin pillow under your belly makes the low back more comfortable. If lying face down is hard, switch to 90/90 breathing or seated 360° breathing.',
     },
     harder: {
-      ko: '날숨을 8초까지 늘리고 120초 동안 해요. 익숙해지면 ‘아기 자세’에서 등 뒤로 숨을 보내는 연습으로 넘어가요.',
-      en: 'Lengthen the exhale to 8 seconds and go for 120 seconds. Then practise sending your breath into your back in child’s pose.',
+      ko: '날숨을 8초까지 늘리고 3분 동안 해요. 익숙해지면 ‘아기 자세’에서 등 뒤로 숨을 보내는 연습으로 넘어가요.',
+      en: 'Lengthen the exhale to 8 seconds and keep going for 3 minutes. Then practise sending your breath into your back in child’s pose.',
     },
     cues: {
       ko: ['이마는 손등 위에', '허리로 숨을 채워요', '배는 바닥을 눌러요', '길게 내쉬며 녹아요'],
@@ -247,8 +253,8 @@ export const CORE_PLUS: Exercise[] = [
     },
     muscles: { ko: '횡격막(뒤쪽 섬유), 늑간근, 허리 주변 근육 이완(요방형근·척추기립근)', en: 'Diaphragm (rear fibres), intercostals, relaxing the low-back muscles (quadratus lumborum, erector spinae)' },
     caution: {
-      ko: '엎드렸을 때 속이 불편하거나 허리가 아프면 바로 자세를 바꾸세요. 임신 중에는 옆으로 누워서 호흡하세요.',
-      en: 'If lying face down upsets your stomach or hurts your back, change position straight away. During pregnancy, do your breathing lying on your side instead.',
+      ko: '엎드렸을 때 속이 불편하거나 허리가 아프면 바로 자세를 바꾸세요. 다리로 저림이나 찌릿함이 뻗치면 멈추세요. 임신 중에는 옆으로 누워서 호흡하세요.',
+      en: 'If lying face down upsets your stomach or hurts your back, change position straight away. Stop if tingling or zinging runs into your legs. During pregnancy, do your breathing lying on your side instead.',
     },
     avoid: ['pregnant'],
     anim: {
@@ -280,7 +286,7 @@ export const CORE_PLUS: Exercise[] = [
     targets: { stress: 1, neckPain: 0.3, headache: 0.3, stiffness: 0.2 },
     equipment: [],
     level: 1,
-    dose: { kind: 'time', sets: 1, value: 96 },
+    dose: { kind: 'time', sets: 1, value: 112 },
     desk: true,
     setup: {
       ko: [
@@ -301,7 +307,7 @@ export const CORE_PLUS: Exercise[] = [
         '숨을 채운 채 4초 멈춰요. 목구멍을 꽉 조이지 말고, 어깨 힘을 뺀 채 부드럽게 멈춰요.',
         '입이나 코로 4초 동안 고르게 내쉬어요. 배 위의 손이 제자리로 들어가요.',
         '숨을 비운 채 4초 멈춰요. 여기까지가 상자 한 바퀴(16초)예요.',
-        '타이머가 끝날 때까지 상자를 반복해요(6바퀴 ≈ 1분 36초). 숨이 차면 3초씩으로 줄여도 돼요.',
+        '타이머가 끝날 때까지 상자를 반복해요(7바퀴 ≈ 1분 52초). 숨이 차면 3초씩으로 줄여도 돼요.',
       ],
       en: [
         'First, breathe out comfortably through your mouth until empty.',
@@ -309,7 +315,7 @@ export const CORE_PLUS: Exercise[] = [
         'Hold the breath in for 4 seconds. Don’t clamp your throat — keep your shoulders soft and simply pause.',
         'Breathe out evenly through your mouth or nose for 4 seconds. The hand on your belly sinks back.',
         'Hold empty for 4 seconds. That’s one lap of the box (16 seconds).',
-        'Keep going round the box until the timer ends (6 laps ≈ 1 min 36 s). If you feel short of air, shorten each side to 3 seconds.',
+        'Keep going round the box until the timer ends (7 laps ≈ 1 min 52 s). If you feel short of air, shorten each side to 3 seconds.',
       ],
     },
     breathing: {
@@ -369,8 +375,8 @@ export const CORE_PLUS: Exercise[] = [
       ],
       durations: [4, 4, 4, 4],
       pauses: [0, 0, 0, 0],
+      // 배 위 손의 움직임(1~2cm)은 경로 화살표로 그리기엔 너무 작아 생략
       focus: [{ a: 'chest', b: 'pelvis', side: 'front', kind: 'work', from: 0.2, to: 0.85, r: 2.8 }],
-      trace: ['haR'],
     },
   },
 
@@ -458,6 +464,7 @@ export const CORE_PLUS: Exercise[] = [
       ko: '허리나 다리로 찌릿하게 뻗치는 통증이 생기면 멈추세요.',
       en: 'Stop if you feel shooting pain into your back or leg.',
     },
+    avoid: ['pregnant'],
     anim: {
       view: 90,
       elev: 14,
@@ -479,7 +486,8 @@ export const CORE_PLUS: Exercise[] = [
         { a: 'chest', b: 'pelvis', side: 'front', kind: 'work', r: 2.6 },
         { a: 'waist', b: 'hipR', side: 'front', kind: 'work', from: 0.4, to: 1, r: 2 },
       ],
-      trace: ['heelR'],
+      // 경로는 키 0 → 마지막 키 구간을 그림: 오른발은 나갔다 돌아와 화살표가 거꾸로 보이므로, 마지막에 밀려 나가는 왼발 뒤꿈치로
+      trace: ['heelL'],
     },
   },
 
@@ -496,13 +504,13 @@ export const CORE_PLUS: Exercise[] = [
     dose: { kind: 'reps', sets: 2, value: 10, tempo: 4, holdSec: 3, perSide: true, rest: 20 },
     setup: {
       ko: [
-        '밴드를 문고리나 튼튼한 기둥에 가슴(명치) 높이로 묶어요.',
+        '밴드를 튼튼한 기둥에 명치 높이로 묶거나, 문틈에 끼우는 도어 앵커를 명치 높이에 걸어요(문고리를 쓰면 명치보다 조금 낮아도 괜찮아요).',
         '고정점이 오른쪽 옆에 오게 옆으로 서서, 밴드가 팽팽해질 때까지 옆으로 한두 걸음 떨어져요.',
         '발은 골반 너비보다 조금 넓게, 무릎은 살짝(10~15도) 굽히고, 엉덩이에 가볍게 힘을 줘요.',
         '두 손으로 밴드를 포개 잡고 명치 앞에 붙여요. 팔꿈치는 옆구리 가까이 둬요.',
       ],
       en: [
-        'Tie a band to a door handle or sturdy post at chest (breastbone) height.',
+        'Tie the band to a sturdy post at breastbone height, or use a door anchor wedged in the door gap at breastbone height (a door handle, a little lower, is fine too).',
         'Stand side-on with the anchor on your right, then step sideways one or two steps until the band is taut.',
         'Feet a little wider than hip-width, knees slightly bent (10–15°), glutes lightly engaged.',
         'Hold the band with both hands stacked and pressed against your breastbone, elbows close to your sides.',
@@ -533,8 +541,8 @@ export const CORE_PLUS: Exercise[] = [
       en: 'Your sides and the front of your belly firm up diagonally to stop the twist, with your glutes helping. If only your arms and shoulders are working, use a lighter band and focus on the trunk. Stop if you feel sharp back pain or tingling in your legs.',
     },
     easier: {
-      ko: '고정점 쪽으로 반 걸음 다가가 밴드를 느슨하게 하거나, 무릎을 꿇고 앉은 자세에서 해요. 팔을 끝까지 펴지 않고 반만 밀어도 돼요.',
-      en: 'Step half a step toward the anchor to slacken the band, or do it tall-kneeling. You can also press only halfway out.',
+      ko: '고정점 쪽으로 반 걸음 다가가 밴드를 느슨하게 하거나, 두 무릎으로 곧게 선 자세(무릎 서기, 엉덩이는 무릎 바로 위)에서 해요. 팔을 끝까지 펴지 않고 반만 밀어도 돼요.',
+      en: 'Step half a step toward the anchor to slacken the band, or do it tall-kneeling (upright on both knees, hips stacked over them). You can also press only halfway out.',
     },
     harder: {
       ko: '고정점에서 한 걸음 더 떨어지거나, 팔을 편 상태에서 머리 위로 천천히 들어 올렸다 내려요. 두 발을 모으거나 한쪽 무릎을 꿇어 받침면을 좁혀도 돼요.',
@@ -564,13 +572,14 @@ export const CORE_PLUS: Exercise[] = [
     },
     muscles: { ko: '외·내복사근, 복횡근, 둔근, 견갑 안정근', en: 'External and internal obliques, transversus abdominis, glutes, shoulder-blade stabilisers' },
     caution: {
-      ko: '시작 전에 밴드 묶은 곳이 단단한지 확인하세요. 허리에 날카로운 통증이 생기면 멈춰요.',
-      en: 'Check that the band is tied securely before you start. Stop if you feel sharp pain in your back.',
+      ko: '시작 전에 밴드 묶은 곳이 단단한지 확인하세요. 문에 걸 때는 문을 꼭 닫고, 당기면 문이 닫히는 쪽(문이 반대편으로 열리는 쪽)에 서세요. 허리에 날카로운 통증이 생기면 멈춰요.',
+      en: 'Check that the band is anchored securely before you start. If you anchor to a door, shut it fully and stand on the side it opens away from, so pulling closes it. Stop if you feel sharp pain in your back.',
     },
     avoid: ['shoulderSevere'],
     anim: {
-      view: 60,
-      elev: 16,
+      // 낮은 비스듬한 시점: 반대쪽(고정점이 몸 뒤편)에서도 밴드가 가슴 높이에서 옆으로 뻗어 보이게
+      view: 40,
+      elev: 10,
       zoom: 1.1,
       props: [{ kind: 'band', at: 'haR', off: [-50, 0, 0], key: 0 }],
       keys: [PP_SET, PP_PRESS],
@@ -672,7 +681,8 @@ export const CORE_PLUS: Exercise[] = [
     },
     avoid: ['shoulderSevere', 'pregnant', 'lowBackSevere'],
     anim: {
-      view: 0,
+      // 정면(0)이면 앞으로 놓인 아래팔이 카메라를 향해 짧은 기둥처럼 보여서, 살짝 비스듬히 봐 매트 위 아래팔이 보이게
+      view: -25,
       elev: 14,
       props: [{ kind: 'mat' }],
       anchor: ['anR'],
@@ -688,7 +698,8 @@ export const CORE_PLUS: Exercise[] = [
         { a: 'shR', b: 'hipR', side: 'out', kind: 'work', from: 0.3, to: 0.95, r: 3 },
         { a: 'pelvis', b: 'hipR', side: 'out', kind: 'work', r: 3 },
       ],
-      trace: ['hipR'],
+      // 아래쪽 골반의 경로는 강조 띠에 가려지므로 위쪽 골반으로 들어 올림을 보여 줌
+      trace: ['hipL'],
     },
   },
 
@@ -736,8 +747,8 @@ export const CORE_PLUS: Exercise[] = [
       en: 'Exhale as you lift your knees. While holding, breathe in through your nose into your sides and back, then breathe out long through your mouth. Don’t hold your breath.',
     },
     feel: {
-      ko: '배 전체와 허벅지 앞, 겨드랑이 아래 어깨 주변이 단단하게 일하면 정답이에요. 허리가 뻐근하면 무릎을 너무 높이 든 거예요. 손목·어깨·무릎이 찌릿하거나 날카롭게 아프면 멈추세요.',
-      en: 'Your whole belly, the fronts of your thighs and the muscles under your armpits work hard. If your low back aches, your knees are too high. Stop if you feel sharp or zinging pain in your wrists, shoulders or knees.',
+      ko: '배 전체와 허벅지 앞, 겨드랑이 아래 어깨 주변이 단단하게 일하면 정답이에요. 허리가 뻐근하면 허리가 아래로 처지거나 젖혀진 거예요. 배꼽을 살짝 당기고 꼬리뼈를 조금 말아 등을 평평하게 다시 맞추고, 그래도 뻐근하면 무릎을 내려 쉬어요. 손목·어깨·무릎이 찌릿하거나 날카롭게 아프면 멈추세요.',
+      en: 'Your whole belly, the fronts of your thighs and the muscles under your armpits work hard. If your low back aches, it has sagged or arched — draw your belly button in and tuck your tailbone slightly to flatten your back again, and lower your knees to rest if it still aches. Stop if you feel sharp or zinging pain in your wrists, shoulders or knees.',
     },
     easier: {
       ko: '무릎을 들지 않고 네발 자세에서 배에 힘만 주고 20초 버티거나, 무릎을 3초 들었다 내리기를 반복해요.',
@@ -777,7 +788,8 @@ export const CORE_PLUS: Exercise[] = [
     avoid: ['wristPain', 'shoulderSevere', 'kneePain', 'pregnant'],
     anim: {
       view: 90,
-      elev: 12,
+      // 낮은 카메라: 높으면 매트 윗면이 무릎 밑 틈을 가려 무릎이 떠 있는 게 안 보임
+      elev: 5,
       props: [{ kind: 'mat' }],
       anchor: ['haL', 'haR'],
       keys: [BEAR_QUAD, BEAR_TOES, BEAR_UP],

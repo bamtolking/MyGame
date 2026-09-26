@@ -404,53 +404,51 @@ export function drawScene(g: CanvasRenderingContext2D, placed: Placed, prep: Pre
     d: pts.head.d + 0.5,
     fn: (c) => drawHead(c, { c: sk.p.head, M: sk.axes.head, P, toCam: toCamera(cam), R: DIM.headR }, S, pal),
   });
-  // 밴드·수건은 몸 앞쪽에 (to 가 없으면 벽·기둥 고정점에 묶인 밴드)
-  props.forEach((pr, pi) => {
-    const fixed = (pr.kind === 'band' || pr.kind === 'towel') && pr.at && !pr.to ? prep.propAt[pi] : undefined;
-    if (fixed && pr.at) {
-      const a = pts[pr.at], b = P(fixed);
+  // 밴드·수건 줄: 짧은 조각으로 나눠 조각마다 자기 깊이로 그림
+  // (한 덩어리로 그리면 몸 뒤로 지나가는 부분까지 몸 위에 그려짐)
+  const strap = (A: V3, B: V3, towel: boolean, anchor: boolean) => {
+    const N = 10;
+    const col = towel ? pal.seat.f : pal.band;
+    const lerp = (t: number): V3 => [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t];
+    for (let i = 0; i < N; i++) {
+      const p = P(lerp(i / N)), q = P(lerp((i + 1) / N));
+      // 색 선은 이음매가 안 보이게 조금 겹쳐 그림 (그림자는 겹치면 진해지므로 딱 맞게)
+      const r = P(lerp(Math.min(1, (i + 1.15) / N)));
+      const end = i === 0 || i === N - 1;
       list.push({
-        d: Math.max(a.d, b.d) + 0.2,
+        d: (p.d + q.d) / 2 + 0.2,
         fn: (c) => {
-          c.lineCap = 'round';
+          c.lineCap = end ? 'round' : 'butt';
           c.strokeStyle = 'rgba(0,0,0,0.18)';
-          c.lineWidth = 2.2 * S;
+          c.lineWidth = (towel ? 3.2 : 2.2) * S;
           c.beginPath();
-          c.moveTo(a.x, a.y);
-          c.lineTo(b.x, b.y);
-          c.stroke();
-          c.strokeStyle = pr.kind === 'band' ? pal.band : pal.seat.f;
-          c.lineWidth = 1.5 * S;
-          c.stroke();
-          // 고정점(문고리·기둥)
-          c.fillStyle = pal.frame;
-          c.beginPath();
-          c.arc(b.x, b.y, 2 * S, 0, Math.PI * 2);
-          c.fill();
-        },
-      });
-    }
-  });
-  for (const pr of props) {
-    if ((pr.kind === 'band' || pr.kind === 'towel') && pr.at && pr.to) {
-      const a = pts[pr.at], b = pts[pr.to];
-      list.push({
-        d: Math.max(a.d, b.d) + 0.2,
-        fn: (c) => {
-          const col = pr.kind === 'band' ? pal.band : pal.seat.f;
-          c.lineCap = 'round';
-          c.strokeStyle = 'rgba(0,0,0,0.18)';
-          c.lineWidth = (pr.kind === 'band' ? 2.2 : 3.2) * S;
-          c.beginPath();
-          c.moveTo(a.x, a.y);
-          c.lineTo(b.x, b.y);
+          c.moveTo(p.x, p.y);
+          c.lineTo(q.x, q.y);
           c.stroke();
           c.strokeStyle = col;
-          c.lineWidth = (pr.kind === 'band' ? 1.5 : 2.5) * S;
+          c.lineWidth = (towel ? 2.5 : 1.5) * S;
+          c.beginPath();
+          c.moveTo(p.x, p.y);
+          c.lineTo(r.x, r.y);
           c.stroke();
+          if (anchor && i === N - 1) {
+            // 고정점(문고리·기둥)
+            c.fillStyle = pal.frame;
+            c.beginPath();
+            c.arc(q.x, q.y, 2 * S, 0, Math.PI * 2);
+            c.fill();
+          }
         },
       });
     }
+  };
+  // to 가 없으면 벽·기둥 고정점에 묶인 밴드
+  props.forEach((pr, pi) => {
+    if ((pr.kind !== 'band' && pr.kind !== 'towel') || !pr.at) return;
+    const B = pr.to ? sk.p[pr.to] : prep.propAt[pi];
+    if (B) strap(sk.p[pr.at], B, pr.kind === 'towel', !pr.to);
+  });
+  for (const pr of props) {
     if ((pr.kind === 'ball' || pr.kind === 'roller') && pr.at) {
       const base = sk.p[pr.at];
       const o = pr.off ?? [0, 0, 0];
@@ -522,6 +520,14 @@ function focusGlows(sk: Skeleton, focus: FocusSpec[], toCam: V3): Glow[] {
       const m: V3 = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2];
       const c = [sk.p.chest, sk.p.waist, sk.p.pelvis].reduce((best, q) => (Math.hypot(q[0] - m[0], q[1] - m[1], q[2] - m[2]) < Math.hypot(best[0] - m[0], best[1] - m[1], best[2] - m[2]) ? q : best));
       away = (m[0] - c[0]) * toCam[0] + (m[1] - c[1]) * toCam[1] + (m[2] - c[2]) * toCam[2] < -3;
+    }
+    if (!away) {
+      // 머리가 카메라와 강조 띠 사이를 가리면(머리 쪽에서 본 누운 자세 등) 몸 뒤로 그려 머리가 덮게
+      const H = sk.p.head;
+      const rel: V3 = [(p0[0] + p1[0]) / 2 - H[0], (p0[1] + p1[1]) / 2 - H[1], (p0[2] + p1[2]) / 2 - H[2]];
+      const along = rel[0] * toCam[0] + rel[1] * toCam[1] + rel[2] * toCam[2];
+      const perp = Math.hypot(rel[0] - along * toCam[0], rel[1] - along * toCam[1], rel[2] - along * toCam[2]);
+      if (along < 0 && perp < DIM.headR * 0.9) away = true;
     }
     return { p0, p1, r, kind: f.kind, away };
   });
@@ -966,7 +972,8 @@ export interface Prepared {
 
 export function prepare(spec0: AnimSpec, w: number, h: number, mirror = false, yaw = 0): Prepared {
   const spec = mirror ? mirrorSpec(spec0) : spec0;
-  const cam = { yaw: spec.view + yaw, elev: spec.elev ?? 8 };
+  // 반대쪽 시범은 카메라도 거울처럼 돌려 원래 그림의 좌우 대칭이 되게 (일하는 쪽이 계속 카메라를 향함)
+  const cam = { yaw: (mirror ? -spec.view : spec.view) + yaw, elev: spec.elev ?? 8 };
   const len = cycleLength(spec);
   const frames: Placed[] = [];
   const N = Math.max(8, spec.keys.length * 6);

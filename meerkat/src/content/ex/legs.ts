@@ -4,11 +4,19 @@
  * 작성 규칙: docs/CONTENT_GUIDE.md
  */
 import { both, type Pose } from '../../figure/rig';
-import { ARMS_CROSSED, HANDS_ON_HIPS, SIT, STAND, merge } from '../../figure/poses';
+import { SIT, STAND, merge } from '../../figure/poses';
 import type { Exercise } from '../exercise-types';
 
 // ── 이 파일에서 쓰는 자세 조각 ─────────────────────
 // 발이 바닥에 평평하려면 발목 an ≈ (root pitch) − (고관절 flex) + (무릎 굽힘) 이에요.
+
+/** 팔짱: 아래팔을 가슴 가운데에서 X자로 겹치고, 오른손은 왼 위팔·왼손은 오른 위팔 위에
+ *  (공용 ARMS_CROSSED 는 팔이 교차하지 않고 두 주먹이 얼굴 앞에 떠 보여서 이 파일에서 따로 씀) */
+const X_ARMS: Pose = { shR: { flex: 58, abd: 12, rot: -72, hab: -12 }, elR: 112, wrR: -10, shL: { flex: 54, abd: 16, rot: -72, hab: -12 }, elL: 106, wrL: 0 };
+
+/** 두 손을 허리에: 손목은 골반뼈 위(허리 아래 옆), 손끝은 골반 앞, 팔꿈치는 옆·뒤로
+ *  (공용 HANDS_ON_HIPS 는 옆에서 보면 아래팔이 배 앞으로 튀어나와 보여서 이 파일에서 따로 씀) */
+const HIPS_HANDS: Pose = both({ sh: { flex: -28, abd: 38, rot: -48 }, el: 102, wr: -10 });
 
 /** 스쿼트 다리: 깊어질수록 수평 벌림(hab)으로 무릎을 발끝 방향(바깥)으로 보냄 → 발 위치는 그대로 */
 const squatLegs = (flex: number, abd: number, hab: number, kn: number, an: number): Pose => both({ hip: { flex, abd, hab }, kn, an });
@@ -27,41 +35,42 @@ const SQUAT_LOW: Pose = merge(
 );
 
 /** 의자 앉았다 일어서기: 발뒤꿈치 고정(무릎보다 주먹 하나 뒤) */
-const STS_SIT: Pose = merge(SIT, ARMS_CROSSED, both({ hip: { flex: 88, abd: 6 }, kn: 100, an: 12 }));
+const STS_SIT: Pose = merge(SIT, X_ARMS, both({ hip: { flex: 88, abd: 6 }, kn: 100, an: 12 }));
 const STS_LEAN: Pose = merge(
   SIT,
-  ARMS_CROSSED,
+  X_ARMS,
   { root: { pitch: 26 }, lumbar: { flex: 4 }, thorax: { flex: 6 }, neck: { flex: -16 }, head: { flex: -4 } },
   both({ hip: { flex: 114, abd: 6 }, kn: 100, an: 12 }),
 );
-const STS_STAND: Pose = merge(STAND, ARMS_CROSSED, both({ hip: { flex: 0, abd: 3 }, kn: 2, an: 2 }));
+const STS_STAND: Pose = merge(STAND, X_ARMS, both({ hip: { flex: 0, abd: 3 }, kn: 2, an: 2 }));
 const STS_LOWER: Pose = merge(
   STAND,
-  ARMS_CROSSED,
+  X_ARMS,
   { root: { pitch: 30 }, lumbar: { flex: 4 }, thorax: { flex: 4 }, neck: { flex: -14 } },
   both({ hip: { flex: 80, abd: 5 }, kn: 68, an: 18 }),
 );
 
 /** 스플릿 스쿼트: 오른발 앞(일하는 다리) · 왼발 뒤꿈치 들기. 두 발끝 위치가 모든 키에서 같도록 맞춤 */
 const splitLegs = (hr: number, kr: number, ar: number, hl: number, kl: number, al: number): Pose =>
-  merge(STAND, HANDS_ON_HIPS, { hipR: { flex: hr, abd: 3 }, knR: kr, anR: ar, hipL: { flex: hl, abd: 3 }, knL: kl, anL: al });
+  merge(STAND, HIPS_HANDS, { hipR: { flex: hr, abd: 3 }, knR: kr, anR: ar, hipL: { flex: hl, abd: 3 }, knL: kl, anL: al });
 const SPLIT_TOP = splitLegs(29, 5, -24, -32, 14, 10);
 const SPLIT_MID = splitLegs(46, 39, -7, -21, 39, 16);
 const SPLIT_LOW = splitLegs(84, 87, 3, -4, 97, 47);
 
 /** 힙 힌지: 정강이는 거의 수직, 엉덩이만 뒤로 */
-const HINGE_TOP: Pose = merge(STAND, HANDS_ON_HIPS, both({ hip: { flex: 4, abd: 2 }, kn: 16, an: 12 }));
-const HINGE_MID: Pose = merge(STAND, HANDS_ON_HIPS, { root: { pitch: 28 }, neck: { flex: -8 } }, both({ hip: { flex: 44, abd: 2 }, kn: 18, an: 2 }));
-const HINGE_LOW: Pose = merge(STAND, HANDS_ON_HIPS, { root: { pitch: 56 }, neck: { flex: -12 } }, both({ hip: { flex: 80, abd: 2 }, kn: 21, an: -3 }));
+const HINGE_TOP: Pose = merge(STAND, HIPS_HANDS, both({ hip: { flex: 4, abd: 2 }, kn: 16, an: 12 }));
+const HINGE_MID: Pose = merge(STAND, HIPS_HANDS, { root: { pitch: 28 }, neck: { flex: -8 } }, both({ hip: { flex: 44, abd: 2 }, kn: 18, an: 2 }));
+const HINGE_LOW: Pose = merge(STAND, HIPS_HANDS, { root: { pitch: 56 }, neck: { flex: -12 } }, both({ hip: { flex: 80, abd: 2 }, kn: 21, an: -3 }));
 
 /** 의자 햄스트링: 오른다리 쭉 펴 뒤꿈치를 바닥에 (허벅지 각도는 모든 키에서 같게 → 다리를 굽혔다 펴는 동작이 없어 바닥에 파묻히지 않음) */
-const HAM_LEG_R: Pose = { hipR: { flex: 61, abd: 6 }, knR: 4, anR: 14 };
+const HAM_LEG_R: Pose = { hipR: { flex: 61, abd: 6 }, knR: 3.5, anR: 14 };
 /** 오른손은 오른 허벅지 위, 왼손은 왼 허벅지 옆 */
 const HAM_HAND_R: Pose = { shR: { flex: 0, abd: -5, hab: -5 }, elR: 52 };
-/** 걸터앉아 오른다리를 편 준비 자세(발끝은 편하게) */
-const HAM_SIT: Pose = merge(SIT, HAM_LEG_R, HAM_HAND_R, { lumbar: { flex: 1 }, anR: -18 });
+/** 걸터앉아 오른다리를 편 준비 자세(발목은 힘 빼고 중립). 발목만 바꾸면 뒤꿈치 점이 앞뒤로 미끄러지고 몸이 떠서,
+ *  무릎을 1.5° 더 펴 두 발이 모두 바닥에 닿고 뒤꿈치 자리도 거의 그대로이게 맞춤 */
+const HAM_SIT: Pose = merge(SIT, HAM_LEG_R, HAM_HAND_R, { lumbar: { flex: 1 }, knR: 2, anR: 0, anL: 0 });
 /** 발끝을 몸 쪽으로 당기고 허리를 길게 세움 */
-const HAM_READY: Pose = merge(SIT, HAM_LEG_R, HAM_HAND_R, { lumbar: { flex: -3 }, thorax: { flex: -2 } });
+const HAM_READY: Pose = merge(SIT, HAM_LEG_R, HAM_HAND_R, { lumbar: { flex: -3 }, thorax: { flex: -2 }, anL: 0 });
 /** 골반부터 숙여 두 손이 오른 정강이로 미끄러짐 (허벅지 각도는 그대로) */
 const HAM_FOLD: Pose = merge(HAM_SIT, HAM_LEG_R, {
   root: { pitch: 22 },
@@ -70,7 +79,7 @@ const HAM_FOLD: Pose = merge(HAM_SIT, HAM_LEG_R, {
   neck: { flex: -12 },
   hipR: { flex: 83, abd: 6 },
   hipL: { flex: 110, abd: 6 },
-  anL: 2,
+  anL: 0,
   shR: { flex: 55, abd: -13, hab: 0 },
   elR: 3,
   shL: { flex: 48, abd: -33 },
@@ -79,19 +88,25 @@ const HAM_FOLD: Pose = merge(HAM_SIT, HAM_LEG_R, {
 
 /** 서서 허벅지 앞: 벽을 마주 보고 왼손을 어깨 높이로 벽에 */
 const WALL_HAND_L: Pose = { shL: { flex: 82, abd: 4 }, elL: 12 };
-const QUAD_STAND: Pose = merge(STAND, WALL_HAND_L, { knL: 3 });
+const QUAD_STAND: Pose = merge(STAND, WALL_HAND_L, both({ kn: 5, an: 5 }));
 /** 오른손으로 오른 발등을 잡음 (허벅지는 수직) */
-const QUAD_HOLD: Pose = merge(STAND, WALL_HAND_L, { knL: 5, anL: 3, hipR: { flex: 2, abd: 1 }, knR: 146, anR: -32, shR: { flex: -35, abd: -7 }, elR: 18 });
-/** 꼬리뼈를 말아(허리 평평) 무릎을 뒤로 */
+const QUAD_HOLD: Pose = merge(STAND, WALL_HAND_L, { knL: 5, anL: 5, hipR: { flex: 2, abd: 1 }, knR: 146, anR: -32, shR: { flex: -35, abd: -7 }, elR: 18 });
+/** 꼬리뼈 말기: 골반을 10° 뒤로 기울이고(허리 4°·등 6°가 나눠 받쳐 상체는 곧게) 오른무릎을 약 5cm 뒤로.
+ *  허리 굽힘만으로 되돌리면 골반~허리 선이 그대로라 그림에서 기울기가 보이지 않아요.
+ *  몸통이 살짝 뒤로 가는 만큼 왼 어깨를 내밀어(prot) 벽 짚은 손은 제자리, 오른손은 발등을 그대로 잡음 */
 const QUAD_TUCK: Pose = merge(STAND, WALL_HAND_L, {
-  knL: 5,
-  anL: 3,
+  root: { pitch: -10 },
   lumbar: { flex: 4 },
-  hipR: { flex: -12, abd: 1 },
+  thorax: { flex: 6 },
+  hipL: { flex: -10 },
+  knL: 5,
+  anL: 5,
+  scapL: { prot: 1.3 },
+  hipR: { flex: -15, abd: 1 },
   knR: 140,
   anR: -32,
-  shR: { flex: -35, abd: -7 },
-  elR: 8,
+  shR: { flex: -36, abd: -7 },
+  elR: 16,
 });
 
 export const LEGS: Exercise[] = [
@@ -149,7 +164,7 @@ export const LEGS: Exercise[] = [
       ko: '내려가는 시간을 4초로 늘리고 맨 아래에서 2초 버텨요. 익숙해지면 물병이나 가방을 가슴 앞에 안고(고블릿 스쿼트) 하거나 ‘스플릿 스쿼트’로 넘어가요.',
       en: 'Slow the descent to 4 seconds and hold 2 seconds at the bottom. Then hug a water bottle or bag to your chest (goblet squat), or progress to split squats.',
     },
-    cues: { ko: ['엉덩이를 뒤로', '무릎은 발끝 방향', '가슴은 앞을 봐요', '발바닥 전체로 밀어요'], en: ['Hips back', 'Knees over toes', 'Chest faces forward', 'Push through the whole foot'] },
+    cues: { ko: ['엉덩이를 뒤로', '무릎은 발끝 방향', '가슴은 앞을 봐요', '발바닥 전체로 밀어요'], en: ['Hips back', 'Knees follow your toes', 'Chest faces forward', 'Push through the whole foot'] },
     mistakes: {
       ko: [
         '무릎이 안쪽으로 모임 → 무릎을 두 번째 발가락 방향으로 살짝 벌려 밀고, 엄지발가락 뿌리는 바닥에 붙여 둬요.',
@@ -166,7 +181,7 @@ export const LEGS: Exercise[] = [
     },
     why: {
       ko: '교정한 정렬을 실제 움직임에서 쓰도록 연결하는 통합 운동이에요. 엉덩이 힘으로 무릎을 발끝 방향에 두는 연습이라, 무릎이 안으로 모이거나 뒤로 잠기는 습관을 함께 바로잡아요.',
-      en: 'An integration move that carries your new alignment into real movement. Using your glutes to keep the knees over the toes helps retrain knees that cave in or lock back.',
+      en: 'An integration move that carries your new alignment into real movement. Using your glutes to keep your knees in line with your toes helps retrain knees that cave in or lock back.',
     },
     muscles: { ko: '대둔근, 대퇴사두근, 내전근, 햄스트링(보조), 복부·허리 코어', en: 'Glutes, quadriceps, adductors, hamstrings (assist), abdominal and back core' },
     caution: { ko: '무릎이나 허리가 아프면 범위를 줄이거나 ‘의자 앉았다 일어서기’로 대신하세요.', en: 'If your knees or back hurt, shorten the range or do sit-to-stands instead.' },
@@ -278,6 +293,7 @@ export const LEGS: Exercise[] = [
       ko: '어지럽거나 균형이 불안하면 의자를 벽에 붙이고 옆에 잡을 곳을 두세요. 무릎에 날카로운 통증이 있으면 멈추세요.',
       en: 'If you feel dizzy or unsteady, keep the chair against a wall with something to hold nearby. Stop if you feel sharp knee pain.',
     },
+    avoid: ['kneeSevere'],
     anim: {
       view: 90,
       props: [{ kind: 'chair' }],
@@ -334,14 +350,14 @@ export const LEGS: Exercise[] = [
     steps: {
       ko: [
         '상체를 곧게 세운 채 숨을 들이마시며, 뒷무릎을 바닥 쪽으로 2초에 걸쳐 수직으로 내려요.',
-        '뒷무릎이 바닥 위 한 뼘(5~10cm)에 오면 멈춰요. 앞무릎은 약 90도, 두 번째 발가락 방향이에요.',
+        '뒷무릎이 바닥에 닿기 직전(바닥 위 5~10cm, 손바닥 폭 정도)에 오면 멈춰요. 앞무릎은 약 90도, 두 번째 발가락 방향이에요.',
         '잠깐(0.5초) 멈춘 뒤, 숨을 내쉬며 앞발 뒤꿈치와 발바닥 전체로 밀어 2초에 걸쳐 올라와요.',
         '맨 위에서도 발 위치는 그대로 두고, 앞무릎을 완전히 잠그지 않은 채 다음 회를 이어요.',
         '8회를 마치면 왼발을 앞에 두고 8회 해요.',
       ],
       en: [
         'Keeping your torso tall, breathe in and lower your back knee straight down toward the floor over 2 seconds.',
-        'Stop when the back knee is a hand’s width (5–10 cm) above the floor. The front knee is at about 90° and points toward your second toe.',
+        'Stop just before the back knee touches the floor (5–10 cm above it, about a hand’s width). The front knee is at about 90° and points toward your second toe.',
         'Pause briefly (half a second), then breathe out and push through the front heel and whole foot to rise over 2 seconds.',
         'Keep your feet where they are at the top and don’t fully lock the front knee before the next rep.',
         'After 8 reps, put your left foot in front and do 8 more.',
@@ -363,7 +379,7 @@ export const LEGS: Exercise[] = [
       ko: '내려가는 시간을 4초로 늘리고 맨 아래에서 2초 버텨요. 양손에 물병을 들거나, 뒷발을 의자 위에 올리는 불가리안 스플릿 스쿼트로 넘어가요.',
       en: 'Take 4 seconds to lower and hold 2 seconds at the bottom. Hold a water bottle in each hand, or progress to a Bulgarian split squat with the back foot on a chair.',
     },
-    cues: { ko: ['수직으로 내려가요', '앞무릎은 발끝 방향', '골반은 수평', '앞발로 밀어요'], en: ['Straight down', 'Front knee over toes', 'Keep your hips level', 'Drive through the front foot'] },
+    cues: { ko: ['수직으로 내려가요', '앞무릎은 발끝 방향', '골반은 수평', '앞발로 밀어요'], en: ['Straight down', 'Front knee follows your toes', 'Keep your hips level', 'Drive through the front foot'] },
     mistakes: {
       ko: [
         '앞무릎이 안쪽으로 모임 → 무릎을 두 번째 발가락 방향으로 보내고, 엄지발가락 뿌리를 바닥에 붙여 둬요.',
@@ -392,7 +408,7 @@ export const LEGS: Exercise[] = [
       labels: [
         { ko: '오른발 앞, 뒤꿈치 들기', en: 'Right foot forward, back heel up' },
         { ko: '몸통 세운 채 수직으로', en: 'Straight down, torso tall' },
-        { ko: '뒷무릎 바닥 위 한 뼘', en: 'Back knee a hand above floor' },
+        { ko: '뒷무릎 바닥 5~10cm 위', en: 'Back knee 5–10 cm off the floor' },
       ],
       durations: [0.9, 0.9, 1.8],
       pauses: [0.3, 0, 0.5],
@@ -428,14 +444,14 @@ export const LEGS: Exercise[] = [
     steps: {
       ko: [
         '숨을 들이마시며, 뒤에 있는 벽을 엉덩이로 밀듯 엉덩이를 뒤로 쭉 빼기 시작해요.',
-        '등은 곧게 편 채 상체가 따라 숙여지도록 2초에 걸쳐 인사하듯 내려가요. 무릎 각도와 정강이는 그대로예요.',
+        '등은 곧게 편 채 상체가 따라 숙여지도록 2초에 걸쳐 인사하듯 내려가요. 무릎은 처음처럼 살짝 굽힌 채, 정강이는 거의 수직으로 세워 둬요.',
         '허벅지 뒤가 팽팽하게 당기면(보통 상체가 바닥과 30~45도) 멈춰요. 목은 등과 일직선, 시선은 1~2m 앞 바닥이에요.',
         '숨을 내쉬며 발뒤꿈치로 바닥을 누르고 엉덩이를 앞으로 밀어 2초에 걸쳐 일어나요.',
         '맨 위에서 엉덩이를 조이되 허리를 뒤로 젖히지 않아요. 10회 반복해요.',
       ],
       en: [
         'Breathe in and start pushing your hips straight back, as if bumping a wall behind you.',
-        'Keep your back flat and let your torso tip forward like a bow over 2 seconds. Your knee bend and shins stay the same.',
+        'Keep your back flat and let your torso tip forward like a bow over 2 seconds. Keep the soft knee bend and your shins close to vertical.',
         'Stop when the backs of your thighs feel tight — usually when your torso is 30–45° above the floor. Keep your neck in line with your back, eyes on the floor 1–2 m ahead.',
         'Breathe out, press your heels down and drive your hips forward to stand up over 2 seconds.',
         'Squeeze your glutes at the top without leaning back. Repeat 10 times.',
@@ -457,7 +473,7 @@ export const LEGS: Exercise[] = [
       ko: '막대나 빗자루를 등에 세로로 대고 뒤통수·등·꼬리뼈 세 점이 떨어지지 않게 해요. 익숙해지면 물병이나 가방을 들고 하거나, 균형이 괜찮다면 한 다리로 서서 해요.',
       en: 'Hold a stick or broom along your spine and keep it touching your head, upper back and tailbone. Then add a water bottle or bag, or try it on one leg if your balance is good.',
     },
-    cues: { ko: ['엉덩이를 뒤로', '등은 곧게', '정강이는 그대로', '엉덩이 조이며 일어나요'], en: ['Hips back', 'Flat back', 'Shins stay still', 'Squeeze to stand'] },
+    cues: { ko: ['엉덩이를 뒤로', '등은 곧게', '정강이는 수직으로', '엉덩이 조이며 일어나요'], en: ['Hips back', 'Flat back', 'Shins vertical', 'Squeeze to stand'] },
     mistakes: {
       ko: [
         '허리부터 둥글게 숙임 → 가슴을 편 채, 엉덩이가 뒤로 가는 만큼만 상체를 숙여요.',
@@ -478,7 +494,7 @@ export const LEGS: Exercise[] = [
     },
     muscles: { ko: '햄스트링, 대둔근, 척추세움근(등을 곧게 유지), 복부 코어', en: 'Hamstrings, glutes, erector spinae (keep the back flat), abdominal core' },
     caution: { ko: '허리 통증이 심해지거나 다리로 저린 느낌이 내려가면 멈추세요.', en: 'Stop if your back pain gets worse or you feel tingling down the leg.' },
-    avoid: ['lowBackSevere'],
+    avoid: ['lowBackSevere', 'radiating'],
     anim: {
       view: 90,
       keys: [HINGE_TOP, HINGE_MID, HINGE_LOW],
@@ -509,12 +525,12 @@ export const LEGS: Exercise[] = [
     desk: true,
     setup: {
       ko: [
-        '의자 앞쪽 끝에 엉덩이 절반만 걸치고 앉아, 왼발은 무릎 90도로 바닥에 둬요.',
+        '바퀴 없는 튼튼한 의자 앞쪽 끝에 엉덩이 절반만 걸치고 앉아, 왼발은 무릎 90도로 바닥에 둬요.',
         '오른다리를 앞으로 쭉 뻗어 뒤꿈치를 바닥에 대요. 무릎은 펴되 뒤로 꽉 잠그지 않아요.',
         '손은 허벅지 위에 가볍게 얹고, 골반을 세워 허리를 곧게 펴요.',
       ],
       en: [
-        'Sit on the front edge of the chair with only half your buttocks on the seat, left foot flat and the knee at 90°.',
+        'Sit on the front edge of a sturdy chair without wheels, with only half your buttocks on the seat, left foot flat and the knee at 90°.',
         'Stretch your right leg out in front with the heel on the floor. Straighten the knee without jamming it back.',
         'Rest your hands lightly on your thighs and sit up tall on your sit bones.',
       ],
@@ -640,7 +656,7 @@ export const LEGS: Exercise[] = [
       en: 'You should feel the stretch from the middle of the front of your right thigh up to the front of the hip. If your knee feels squeezed or sore, let the foot move away from your buttock; if your low back pinches, you’re arching.',
     },
     easier: {
-      ko: '발이 손에 닿지 않거나 무릎이 불편하면 수건을 발목에 걸어 당겨요. 균형이 불안하면 왼쪽으로 옆으로 누워 같은 방법으로 해요.',
+      ko: '발이 손에 닿지 않거나 무릎이 불편하면 수건을 발목에 걸어 당겨요. 균형이 불안하면 왼쪽 옆으로 누워 같은 방법으로 해요.',
       en: 'If you can’t reach your foot or your knee is uncomfortable, loop a towel around the ankle and pull on it. If your balance is shaky, lie on your left side and do the same stretch.',
     },
     harder: {
@@ -652,13 +668,13 @@ export const LEGS: Exercise[] = [
       ko: [
         '허리를 젖혀 배가 앞으로 나옴 → 배꼽을 당기고 꼬리뼈를 아래로 말아 골반을 세워요.',
         '무릎이 옆으로 벌어지거나 앞으로 들림 → 두 무릎을 나란히 모으고 오른무릎이 바닥을 향하게 해요.',
-        '발뒤꿈치를 엉덩이에 억지로 붙임 → 무릎이 조이면 발을 한 뼘 떼고, 꼬리뼈 말기로 늘려요.',
+        '발뒤꿈치를 엉덩이에 억지로 붙임 → 무릎이 조이면 발을 엉덩이에서 손바닥 폭(약 10cm)만큼 떼고, 꼬리뼈 말기로 늘려요.',
         '상체가 앞으로 숙여짐 → 정수리를 천장으로 세우고, 벽 짚은 손으로는 균형만 잡아요.',
       ],
       en: [
         'Arching your back so your belly pushes forward → Draw your belly in and tuck your tailbone under.',
         'Knee drifting out to the side or forward → Keep your knees side by side with the right knee pointing down.',
-        'Forcing the heel onto your buttock → If the knee feels squeezed, let the foot move a hand’s width away and use the tailbone tuck instead.',
+        'Forcing the heel onto your buttock → If the knee feels squeezed, let the foot move about 10 cm (a hand’s width) away and use the tailbone tuck instead.',
         'Leaning your torso forward → Stand tall and use the wall hand for balance only.',
       ],
     },
@@ -668,7 +684,7 @@ export const LEGS: Exercise[] = [
     },
     muscles: { ko: '대퇴사두근(특히 대퇴직근), 장요근(꼬리뼈를 말 때), 대둔근(골반 세우기)', en: 'Quadriceps (especially rectus femoris), iliopsoas (with the tailbone tuck), glutes (to tuck the pelvis)' },
     caution: { ko: '무릎이 아프면 수건을 발목에 걸어 당기고, 균형이 불안하면 옆으로 누워서 하세요.', en: 'If your knee hurts, loop a towel around the ankle instead; if you feel unsteady, do it lying on your side.' },
-    avoid: ['kneeSevere', 'balance'],
+    avoid: ['kneeSevere', 'kneePain', 'balance'],
     anim: {
       view: 90,
       props: [{ kind: 'wall', wall: 'front', dist: 0.5 }],

@@ -28,8 +28,10 @@ const FACE_WALL: Pose = merge(STAND, { neck: { flex: -4 }, head: { flex: 6 } });
 /** 몸을 앞으로 p° 기울일 때 발바닥이 바닥에 붙어 있도록 발목도 같이 굽힘 */
 const lean = (p: number): Pose => merge({ root: { pitch: p } }, both({ an: p }));
 
-/** 벽 푸시업: 팔을 편 채 벽을 짚고 몸을 16° 기울인 자세 */
-const WALL_PUSH_TOP: Pose = merge(FACE_WALL, lean(16), both({ sh: { flex: 102, abd: 12 }, el: 0, wr: 88 }));
+/** 벽 푸시업: 팔을 편 채 벽을 짚고 몸을 16° 기울인 자세 (손은 어깨너비보다 조금 넓게, 손끝은 위로) */
+const WALL_PUSH_TOP: Pose = merge(FACE_WALL, lean(16), both({ sh: { flex: 102, hab: 12 }, el: 0, wr: 88 }));
+/** 벽 푸시업 아래 자세: 손은 같은 자리에 둔 채 팔꿈치를 몸통에서 약 45° 벌려 굽힘 */
+const WALL_PUSH_LOW: Pose = merge(FACE_WALL, lean(25), both({ sh: { flex: 75, abd: -4, hab: 16 }, el: 98, wr: 30 }));
 
 /** 팔꿈치 90°로 옆구리에 붙이고 선 자세(오른팔) */
 const ER_STAND: Pose = merge(STAND, { shR: { abd: 12, rot: -35 }, elR: 90 });
@@ -78,7 +80,7 @@ export const SHOULDER_PLUS: Exercise[] = [
     },
     breathing: { ko: '팔을 들어 올리며 입으로 “후—” 내쉬고, 버티는 3초 동안은 코로 짧게 숨 쉬어요. 내려놓으면서 들이마셔요.', en: 'Exhale through your mouth as you lift, take small nose breaths during the 3-second hold, and inhale as you lower.' },
     feel: { ko: '두 날개뼈 사이와 어깨 뒤쪽이 따뜻하게 힘이 들어가면 정답이에요. 어깨 위나 앞이 찝히거나, 손이 저리거나, 허리가 아프면 바로 내려놓으세요.', en: 'Warm, working muscles between your shoulder blades and at the back of your shoulders. If the top or front of your shoulder pinches, your hands tingle or your low back hurts, lower your arms right away.' },
-    easier: { ko: '팔꿈치를 90°로 굽혀 팔 길이를 짧게 하거나, 한 팔씩 번갈아 들어요. 엎드리기 불편하면 서서 하는 ‘날개뼈 모으며 팔 벌리기’로 바꿔요.', en: 'Bend your elbows to 90° to shorten the lever, or lift one arm at a time. If lying face down is uncomfortable, switch to the standing scapular squeeze.' },
+    easier: { ko: '팔꿈치를 90°로 굽혀 팔 길이를 짧게 하거나, 한 팔씩 번갈아 들어요. 그래도 버거우면 팔을 W자로 굽힌 ‘엎드려 W 당기기’부터 해요. 엎드리기 불편하면 서서 하는 ‘날개뼈 모으며 팔 벌리기’로 바꿔요.', en: 'Bend your elbows to 90° to shorten the lever, or lift one arm at a time. Still too hard? Start with the prone W pull, arms bent in a “W”. If lying face down is uncomfortable, switch to the standing scapular squeeze.' },
     harder: { ko: '버티는 시간을 5초로 늘리거나 손에 작은 물병(0.5kg)을 쥐어요. 익숙해지면 ‘엎드려 Y 들기’로 넘어가세요.', en: 'Extend the hold to 5 seconds or hold small water bottles (0.5 kg). Once it’s easy, progress to the prone Y raise.' },
     cues: { ko: ['날개뼈를 가운데로', '엄지는 천장으로', '이마는 수건 위에', '3초 버텨요'], en: ['Blades to the middle', 'Thumbs to the ceiling', 'Forehead stays down', 'Hold for three'] },
     mistakes: {
@@ -100,15 +102,15 @@ export const SHOULDER_PLUS: Exercise[] = [
     caution: { ko: '팔을 들 때 어깨 앞이 찝히거나 팔로 저림이 내려가면 범위를 줄이고, 계속되면 멈추세요.', en: 'If the front of your shoulder pinches or tingling runs down your arm, reduce the range; stop if it continues.' },
     avoid: ['pregnant', 'shoulderSevere'],
     anim: {
-      view: 160,
-      elev: 32,
+      view: 170,
+      elev: 22,
       props: [{ kind: 'mat' }],
       anchor: ['pelvis'],
       holdKey: 2,
       keys: [
         PRONE_T,
         merge(PRONE_T, both({ sh: { abd: 90, hab: -16, rot: 70 }, scap: { prot: -2.5, elev: -1 } })),
-        merge(PRONE_T, both({ sh: { abd: 90, hab: -9, rot: 70 }, scap: { prot: -3.5, elev: -1 } })),
+        merge(PRONE_T, both({ sh: { abd: 90, hab: -1, rot: 70 }, scap: { prot: -3.5, elev: -1 } })),
       ],
       labels: [
         { ko: '엎드려 팔을 T자로', en: 'Face down, arms in a T' },
@@ -136,7 +138,7 @@ export const SHOULDER_PLUS: Exercise[] = [
     regions: ['upperBack', 'shoulder'],
     targets: { roundShoulder: 0.9, kyphosis: 0.6, upperBackPain: 0.5, fhp: 0.3 },
     equipment: ['mat'],
-    level: 2,
+    level: 1,
     dose: { kind: 'reps', sets: 2, value: 10, tempo: 4, holdSec: 3, rest: 20 },
     setup: {
       ko: [
@@ -153,14 +155,14 @@ export const SHOULDER_PLUS: Exercise[] = [
     steps: {
       ko: [
         '날개뼈를 바지 뒷주머니 쪽으로 끌어내린다는 느낌으로 아래·안쪽으로 모아요.',
-        '그 힘으로 팔꿈치를 옆구리 쪽으로 한 뼘 당기며, 팔꿈치와 손을 2초에 걸쳐 바닥에서 3~5cm 들어요.',
+        '그 힘으로 팔꿈치를 옆구리 쪽으로 손바닥 너비만큼(8~10cm) 당기며, 팔꿈치와 손을 2초에 걸쳐 바닥에서 3~5cm 들어요.',
         'W 모양을 유지한 채 3초 버티며 날개뼈 아래쪽이 단단해지는 걸 느껴요.',
         '2초에 걸쳐 천천히 내려놓고 어깨 힘을 한 번 풀어요.',
         '10회 반복해요. 이마는 수건에, 허리는 편평하게 유지해요.',
       ],
       en: [
         'Draw your shoulder blades down and in, as if sliding them toward your back pockets.',
-        'Using that pull, draw your elbows a hand-width toward your sides and lift elbows and hands 3–5 cm off the floor over 2 seconds.',
+        'Using that pull, draw your elbows a hand-width (8–10 cm) toward your sides and lift elbows and hands 3–5 cm off the floor over 2 seconds.',
         'Keep the “W” and hold 3 seconds, feeling the lower part of your shoulder blades firm up.',
         'Lower slowly over 2 seconds and let your shoulders relax once.',
         'Repeat 10 times with your forehead on the towel and your low back flat.',
@@ -227,12 +229,12 @@ export const SHOULDER_PLUS: Exercise[] = [
       ko: [
         '왼쪽으로 옆으로 누워 왼팔이나 베개로 머리를 받쳐 목이 일자가 되게 하고, 무릎은 45° 굽혀 두 다리를 포개요.',
         '작은 수건을 주먹 크기로 말아 오른쪽 팔꿈치와 옆구리 사이에 끼워요.',
-        '오른쪽 팔꿈치를 90°로 굽혀 아래팔을 배 앞에 편하게 내려놓고, 엄지는 천장을 향해요.',
+        '오른쪽 팔꿈치를 90°로 굽혀 아래팔을 배 앞에 편하게 내려놓고, 엄지는 머리 쪽을 향하게(손바닥은 배를 향하게) 해요.',
       ],
       en: [
         'Lie on your left side with your head supported on your left arm or a pillow so your neck is level; bend your knees 45° and stack your legs.',
         'Roll a small towel to about the size of a fist and tuck it between your right elbow and your side.',
-        'Bend your right elbow to 90° and rest the forearm across your belly, thumb pointing up.',
+        'Bend your right elbow to 90° and rest the forearm across your belly, thumb pointing toward your head and palm facing your belly.',
       ],
     },
     steps: {
@@ -276,7 +278,7 @@ export const SHOULDER_PLUS: Exercise[] = [
     avoid: ['shoulderSevere'],
     anim: {
       view: -42,
-      elev: 22,
+      elev: 38,
       zoom: 1.1,
       props: [{ kind: 'mat' }],
       anchor: ['pelvis'],
@@ -295,10 +297,10 @@ export const SHOULDER_PLUS: Exercise[] = [
     },
   },
 
-  // ───────────────────────── 슬리퍼 스트레칭
+  // ───────────────────────── 옆으로 누워 어깨 뒤 늘리기(슬리퍼 스트레칭)
   {
     id: 'sleeper-stretch',
-    name: { ko: '슬리퍼 스트레칭', en: 'Sleeper stretch' },
+    name: { ko: '옆으로 누워 어깨 뒤 늘리기(슬리퍼 스트레칭)', en: 'Sleeper stretch' },
     phase: 'stretch',
     position: 'sideLying',
     regions: ['shoulder'],
@@ -359,7 +361,7 @@ export const SHOULDER_PLUS: Exercise[] = [
     avoid: ['shoulderSevere'],
     anim: {
       view: 35,
-      elev: 30,
+      elev: 18,
       zoom: 1.15,
       props: [{ kind: 'mat' }, { kind: 'step', at: 'head', key: 0, size: [14, 0, 16] }],
       anchor: ['pelvis'],
@@ -427,7 +429,7 @@ export const SHOULDER_PLUS: Exercise[] = [
     breathing: { ko: '당길 때 길게 내쉬고, 버티는 동안 천천히 숨 쉬며 내쉴 때마다 팔을 1cm씩 더 가슴 쪽으로 가져와요.', en: 'Exhale long as you pull in; while holding, breathe slowly and bring the arm about 1 cm closer with each exhale.' },
     feel: { ko: '오른쪽 어깨 뒤쪽과 날개뼈 바깥쪽이 늘어나면 정답이에요. 어깨 위(쇄골 끝)나 앞이 찝히거나 손이 저리면 팔 높이를 낮추거나 멈추세요.', en: 'A stretch at the back of your right shoulder and the outer edge of the shoulder blade. If the top of the shoulder (end of the collarbone) or the front pinches, or your hand tingles, lower the arm or stop.' },
     easier: { ko: '팔을 어깨보다 조금 낮게 두고 팔꿈치를 살짝 굽혀서, 당기는 힘을 줄여요. 앉아서 해도 좋아요.', en: 'Keep the arm a little below shoulder height with the elbow slightly bent, and pull more gently. Doing it seated is fine.' },
-    harder: { ko: '당기기 전에 오른쪽 날개뼈를 등 쪽으로 살짝 고정하면 어깨 뒤쪽이 더 정확히 늘어나요. 버티기를 45초로 늘리거나 ‘슬리퍼 스트레칭’으로 넘어가요.', en: 'Set your right shoulder blade slightly back before pulling to target the back of the shoulder more precisely. Lengthen the hold to 45 seconds or progress to the sleeper stretch.' },
+    harder: { ko: '당기기 전에 오른쪽 날개뼈를 등 쪽으로 살짝 고정하면 어깨 뒤쪽이 더 정확히 늘어나요. 버티기를 45초로 늘리거나 ‘옆으로 누워 어깨 뒤 늘리기’로 넘어가요.', en: 'Set your right shoulder blade slightly back before pulling to target the back of the shoulder more precisely. Lengthen the hold to 45 seconds or progress to the sleeper stretch.' },
     cues: { ko: ['팔은 어깨 높이', '어깨는 귀에서 멀리', '가슴은 정면으로', '내쉬며 조금 더'], en: ['Arm at shoulder height', 'Shoulder away from ear', 'Chest faces forward', 'Exhale, a bit closer'] },
     mistakes: {
       ko: [
@@ -632,9 +634,9 @@ export const SHOULDER_PLUS: Exercise[] = [
       holdKey: 3,
       keys: [
         WALL_PUSH_TOP,
-        merge(FACE_WALL, lean(25), both({ sh: { flex: 80, abd: 30, hab: 15 }, el: 100, wr: 36 })),
+        WALL_PUSH_LOW,
         WALL_PUSH_TOP,
-        merge(FACE_WALL, lean(13), both({ sh: { flex: 104, abd: 12 }, el: 0, wr: 88, scap: { prot: 3 } }), { thorax: { flex: 5 } }),
+        merge(FACE_WALL, lean(13), both({ sh: { flex: 104, hab: 12 }, el: 0, wr: 88, scap: { prot: 3 } }), { thorax: { flex: 5 } }),
       ],
       labels: [
         { ko: '팔 펴고 벽 짚기', en: 'Hands on the wall' },
@@ -665,13 +667,13 @@ export const SHOULDER_PLUS: Exercise[] = [
     dose: { kind: 'reps', sets: 2, value: 12, tempo: 5, holdSec: 2, rest: 20, perSide: true },
     setup: {
       ko: [
-        '가벼운 밴드를 문고리나 튼튼한 기둥에 팔꿈치 높이로 묶어요.',
+        '가벼운 밴드를 문고리나 튼튼한 기둥에 팔꿈치 높이로 묶어요. 문고리에 묶었다면 문을 꼭 닫아(가능하면 잠가) 당길 때 문이 열리지 않게 해요.',
         '문을 왼쪽 옆에 두고 서서, 밴드가 살짝 팽팽해지도록 한 걸음 떨어져요. 발은 골반 너비, 무릎은 살짝 풀어요.',
         '오른손으로 밴드를 잡고, 오른쪽 팔꿈치를 90°로 굽혀 옆구리에 붙여요. 팔꿈치와 옆구리 사이에 작게 만 수건을 끼우면 좋아요.',
         '아래팔은 배 앞(문 쪽)에서 시작하고, 손목은 곧게 펴요.',
       ],
       en: [
-        'Tie a light band to a door handle or sturdy post at elbow height.',
+        'Tie a light band to a door handle or sturdy post at elbow height. If you use a door handle, close the door firmly (lock it if you can) so it can’t swing open as you pull.',
         'Stand with the door on your left, one step away so the band has light tension. Feet hip-width apart, knees soft.',
         'Hold the band in your right hand, bend the right elbow to 90° and tuck it against your side — a small rolled towel between elbow and ribs helps.',
         'Start with the forearm across your belly (toward the door) and keep the wrist straight.',
@@ -714,11 +716,11 @@ export const SHOULDER_PLUS: Exercise[] = [
     },
     why: { ko: '말린 어깨에서는 팔을 안으로 돌리는 가슴 근육이 강하고, 바깥으로 돌리는 회전근개는 약해지기 쉬워요. 밴드 저항으로 극하근·소원근을 강화해 어깨 관절의 앞뒤 균형을 맞추는 데 도움이 돼요.', en: 'With rounded shoulders, the chest muscles that turn the arm inward are strong while the cuff muscles that turn it outward get weak. Band resistance strengthens the infraspinatus and teres minor to help rebalance the front and back of the joint.' },
     muscles: { ko: '극하근·소원근, 후면 삼각근', en: 'Infraspinatus, teres minor, posterior deltoid' },
-    caution: { ko: '밴드가 풀리거나 끊어지지 않게 묶은 곳을 먼저 확인하세요. 어깨가 아프면 무게(밴드)보다 범위를 먼저 줄이세요.', en: 'Check that the band is tied securely before you start. If the shoulder hurts, shorten the range before changing the band.' },
+    caution: { ko: '밴드가 풀리거나 끊어지면 얼굴·팔 쪽으로 튕길 수 있어요. 시작 전에 매듭이 단단한지, 밴드에 찢어진 곳이 없는지 확인하세요. 어깨가 아프면 밴드를 바꾸기 전에 범위부터 줄이세요.', en: 'A band that slips or snaps can whip back toward your face or arm — check the knot and look for nicks or tears before you start. If the shoulder hurts, shorten the range before switching bands.' },
     avoid: ['shoulderSevere'],
     anim: {
-      view: 15,
-      elev: 32,
+      view: 45,
+      elev: 30,
       props: [{ kind: 'band', at: 'haR', off: [42, 0, 4], key: 0 }],
       holdKey: 2,
       keys: [

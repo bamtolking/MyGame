@@ -13,10 +13,10 @@ import type { Exercise } from '../exercise-types';
 const FA_W = merge(HOOK, both({ sh: { abd: 80, rot: 88, hab: 12 }, el: 96, scap: { elev: -1 } }));
 const FA_Y = merge(HOOK, both({ sh: { abd: 145, rot: 88, flex: -8 }, el: 22 }));
 
-/** 엎드려 코브라: 팔은 몸 옆 → 날개뼈 모으기 → 가슴 3~5cm 들기 */
+/** 엎드려 코브라: 팔은 몸 옆 → 날개뼈 뒤·아래로 모으기(어깨가 뒤로 올라오며 팔이 살짝 따라 뜸) → 가슴 3~5cm 들기 */
 const PC_REST = merge(PRONE, both({ sh: { flex: 10, abd: 10 }, el: 4 }));
-const PC_SQUEEZE = merge(PRONE, both({ sh: { flex: 14, abd: 10, rot: 10 }, el: 3, scap: { prot: -2.5, elev: -1 } }));
-const PC_LIFT = merge(PRONE, both({ sh: { flex: -3, abd: 14, rot: 45 }, el: 0, scap: { prot: -3, elev: -1.5 } }), {
+const PC_SQUEEZE = merge(PRONE, both({ sh: { flex: 12, abd: 10, rot: 10 }, el: 3, scap: { prot: -4, elev: -1.5 } }));
+const PC_LIFT = merge(PRONE, both({ sh: { flex: -3, abd: 14, rot: 45 }, el: 0, scap: { prot: -4, elev: -1.5 } }), {
   thorax: { flex: -12 },
   lumbar: { flex: -3 },
   neck: { flex: 8 },
@@ -24,13 +24,38 @@ const PC_LIFT = merge(PRONE, both({ sh: { flex: -3, abd: 14, rot: 45 }, el: 0, s
 });
 
 /** 네발에서 등 돌려 열기: 오른손은 뒤통수(팔꿈치는 옆으로), 왼손으로 바닥 짚기.
- *  몸통을 돌려도 짚은 왼팔이 바닥에 수직으로 남도록 shL.hab 을 몸통 회전만큼 반대로 주고, 날개뼈(scapL)로 어깨 높이를 보정 */
+ *  몸통을 돌려도 짚은 왼팔이 바닥에 수직으로 남도록 shL.hab 을 몸통 회전만큼 반대로 주고, 날개뼈(scapL)로 어깨 높이를 보정.
+ *  수평 맞추기(level)가 키마다 몸 기울기를 바꾸므로, 짚은 왼손목이 제자리(무릎 앞 z≈26.6)에 머물고 골반이 무릎 위에 남도록
+ *  키마다 shL.flex 와 고관절 굽힘을 함께 맞춤 (한 사이클 내내 손목 이동 1 미만, 골반은 무릎 위 ±1) */
 const QR_HAND = merge(QUAD, { shR: { flex: 0, abd: 130, rot: 110 }, elR: 120, wrR: 0 });
-const QR_DOWN = merge(QR_HAND, { thorax: { twist: 22, flex: 6 }, lumbar: { twist: 2 }, neck: { twist: 10 }, shL: { flex: 80, hab: -24 }, scapL: { prot: 2.5 } });
-const QR_OPEN = merge(QR_HAND, { thorax: { twist: -38 }, lumbar: { twist: -6 }, neck: { twist: -24 }, shL: { flex: 80, hab: 44 }, scapL: { prot: -3 }, elL: 8, wrL: 78, hipL: { flex: 73 }, hipR: { flex: 73 } });
+/** 팔꿈치를 짚은 손목 쪽으로: 등 윗부분을 왼쪽으로 돌리며 살짝 말고, 오른어깨를 수평으로 모아 팔꿈치가 가슴 밑 가운데를 넘어 왼손목 가까이 감 (손은 뒤통수에 그대로) */
+const QR_DOWN = merge(QR_HAND, {
+  thorax: { twist: 22, flex: 10 },
+  lumbar: { twist: 2 },
+  neck: { twist: 10 },
+  shR: { flex: 95, abd: 115, rot: 65, hab: -30 },
+  elR: 115,
+  shL: { flex: 89, hab: -24 },
+  scapL: { prot: 2.5 },
+  hipL: { flex: 79 },
+  hipR: { flex: 79 },
+});
+const QR_OPEN = merge(QR_HAND, {
+  thorax: { twist: -38 },
+  lumbar: { twist: -6 },
+  neck: { twist: -24 },
+  shL: { flex: 63, hab: 44 },
+  scapL: { prot: -3 },
+  elL: 8,
+  wrL: 78,
+  hipL: { flex: 67 },
+  hipR: { flex: 67 },
+});
 
-/** 스핑크스: 엎드려 W → 팔꿈치 위로 가슴 들기 → 어깨 내리고 길게 */
-const SP_DOWN = merge(PRONE, both({ sh: { abd: 88, rot: 88 }, el: 92 }));
+/** 스핑크스: 엎드려 아래팔을 11자로 바닥에(팔꿈치는 어깨보다 한 뼘 앞·조금 넓게) → 팔꿈치 위로 가슴 들기 → 어깨 내리고 길게.
+ *  첫 자세의 위팔을 hab 로 옆·아래로 향하게 잡아, 가슴을 드는 동안 팔꿈치가 바닥을 스치며 어깨 밑으로 들어오고
+ *  골반·다리는 매트에 붙어 있게 함 (한 사이클 내내 골반 높이 7.5~8.6 = 바닥에 닿은 범위) */
+const SP_DOWN = merge(PRONE, both({ sh: { flex: 144, abd: 22, rot: 35, hab: 68 }, el: 30 }), { thorax: { flex: -5 }, lumbar: { flex: -1 } });
 const SP_UP = merge(PRONE, both({ sh: { flex: 56, abd: 8 }, el: 88 }), { lumbar: { flex: -16 }, thorax: { flex: -18 }, neck: { flex: 4 }, head: { flex: 2 } });
 const SP_LONG = merge(PRONE, both({ sh: { flex: 50, abd: 8 }, el: 88, scap: { elev: -2, prot: 1 } }), { lumbar: { flex: -18 }, thorax: { flex: -22 }, neck: { flex: 4 }, head: { flex: 2 } });
 
@@ -147,6 +172,9 @@ export const THORACIC_PLUS: Exercise[] = [
       focus: [
         { a: 'chest', b: 'shR', side: 'front', kind: 'stretch', r: 2.6 },
         { a: 'chest', b: 'shL', side: 'front', kind: 'stretch', r: 2.6 },
+        // 겨드랑이 아래 광배근 (Y로 올릴수록 늘어남)
+        { a: 'shR', b: 'hipR', side: 'out', kind: 'stretch', r: 2.4, from: 0.08, to: 0.45 },
+        { a: 'shL', b: 'hipL', side: 'out', kind: 'stretch', r: 2.4, from: 0.08, to: 0.45 },
       ],
       trace: ['haR', 'haL'],
     },
@@ -199,7 +227,7 @@ export const THORACIC_PLUS: Exercise[] = [
     },
     easier: {
       ko: '가슴은 바닥에 둔 채 날개뼈 모으기와 팔 띄우기만 해요. 엎드리기 불편하면 서서 하는 ‘날개뼈 모으며 팔 벌리기’로 대신해요.',
-      en: 'Keep your chest on the floor and only squeeze the blades and hover the arms. If lying face down is uncomfortable, do the standing scapular squeeze instead.',
+      en: 'Keep your chest on the floor and only squeeze the blades and hover the arms. If lying face down is uncomfortable, do the standing Scapular squeeze & external rotation instead.',
     },
     harder: {
       ko: '버티는 시간을 10초로 늘리거나, 팔을 머리 위로 뻗는 ‘엎드려 Y 들기’나 ‘엎드려 팔 수영하기’로 넘어가요.',
@@ -232,10 +260,10 @@ export const THORACIC_PLUS: Exercise[] = [
       en: 'Middle & lower trapezius, rhomboids, thoracic erectors, infraspinatus & teres minor (arm rotation)',
     },
     caution: {
-      ko: '허리에 날카로운 통증이 있거나 다리가 저리면 가슴은 들지 말고 팔만 띄워요. 임신 중에는 하지 마세요.',
-      en: 'If you feel sharp low-back pain or tingling in the legs, skip the chest lift and only hover the arms. Don’t do this during pregnancy.',
+      ko: '허리가 불편하면 가슴은 들지 말고 팔만 띄워요. 날카로운 통증이 있거나 다리가 저리면 바로 멈추세요. 임신 중에는 하지 마세요.',
+      en: 'If your low back feels uncomfortable, skip the chest lift and only hover the arms. Stop right away if you feel sharp pain or tingling in your legs. Don’t do this during pregnancy.',
     },
-    avoid: ['pregnant', 'lowBackSevere'],
+    avoid: ['pregnant', 'lowBackSevere', 'radiating'],
     anim: {
       view: 90,
       elev: 14,
@@ -252,6 +280,7 @@ export const THORACIC_PLUS: Exercise[] = [
       holdKey: 2,
       focus: [
         { a: 'shR', b: 'backMid', side: 'back', kind: 'work', r: 2.6 },
+        { a: 'shL', b: 'backMid', side: 'back', kind: 'work', r: 2.6 },
         { a: 'backTop', b: 'backMid', side: 'back', kind: 'work', r: 2.4 },
       ],
       zoom: 1.1,
@@ -343,8 +372,9 @@ export const THORACIC_PLUS: Exercise[] = [
     },
     avoid: ['wristPain', 'kneePain'],
     anim: {
-      view: 90,
-      elev: 16,
+      // 오른쪽 뒤 비스듬히: 팔꿈치가 가슴 밑으로 들어가는 모습과 천장으로 열리는 가슴이 함께 보이게 (정옆에서는 팔꿈치가 짚은 팔에 겹쳐 가려짐)
+      view: 115,
+      elev: 22,
       props: [{ kind: 'mat' }],
       anchor: ['knL', 'knR'],
       level: { a: ['wrL', 'haL'], b: ['knL', 'knR'] },
@@ -377,26 +407,26 @@ export const THORACIC_PLUS: Exercise[] = [
     setup: {
       ko: [
         '매트에 엎드려 다리를 골반 너비로 펴고 발등을 바닥에 내려놓아요.',
-        '팔꿈치를 어깨 바로 아래에 두고, 아래팔은 11자로 나란히 앞으로 뻗어 손바닥을 바닥에 대요.',
+        '아래팔을 11자로 나란히 앞으로 뻗어 바닥에 대고 손바닥은 바닥을 향해요. 팔꿈치는 어깨보다 한 뼘쯤 앞, 어깨너비보다 조금 넓게 둬요.',
         '치골(골반 앞)과 허벅지 앞은 바닥에 붙이고, 엉덩이 힘은 빼고 아랫배만 살짝 끌어올려요.',
       ],
       en: [
         'Lie face down on a mat, legs straight and hip-width apart, tops of the feet on the floor.',
-        'Place your elbows directly under your shoulders with the forearms parallel and pointing forward, palms on the floor.',
+        'Rest your forearms parallel on the floor pointing forward, palms down, with your elbows about a hand-span in front of your shoulders and a little wider than shoulder-width.',
         'Keep your pubic bone and the fronts of your thighs on the floor; relax your glutes and gently draw your lower belly up.',
       ],
     },
     steps: {
       ko: [
-        '아래팔로 바닥을 지그시 누르며 가슴을 앞·위로 들어 올려, 팔꿈치 위에 상체를 기대요.',
-        '바닥을 밀어내듯 눌러 어깨를 귀에서 멀리 내리고, 날개뼈를 등 뒤로 살짝 모아요.',
+        '아래팔로 바닥을 지그시 누르며 가슴을 앞·위로 들어 올리고, 팔꿈치를 어깨 바로 아래로 끌어와 그 위에 상체를 기대요.',
+        '바닥을 밀어내듯 눌러 어깨를 귀에서 멀리 내리고, 쇄골을 옆으로 넓게 펴요.',
         '가슴뼈를 앞쪽으로 길게 내밀듯 늘이고, 목은 그 연장선에 두어 시선은 손끝 한 뼘 앞 바닥을 봐요.',
         '그 자세에서 코로 천천히 5~6번 숨 쉬며 30초 버텨요.',
         '천천히 가슴을 내려 이마를 손등에 대고 10초 쉬었다가 한 번 더 해요.',
       ],
       en: [
-        'Press your forearms gently into the floor and lift your chest forward and up, resting your upper body over your elbows.',
-        'Push the floor away to slide your shoulders down away from your ears and draw your shoulder blades slightly together.',
+        'Press your forearms gently into the floor and lift your chest forward and up, drawing your elbows in until they sit directly under your shoulders, then rest your upper body over them.',
+        'Push the floor away to slide your shoulders down away from your ears, and broaden across your collarbones.',
         'Lengthen your breastbone forward and keep your neck in line with it, eyes on the floor a hand-span beyond your fingertips.',
         'Stay there for 30 seconds, taking 5–6 slow breaths through your nose.',
         'Slowly lower your chest, rest your forehead on your hands for 10 seconds, then do it once more.',
@@ -415,8 +445,8 @@ export const THORACIC_PLUS: Exercise[] = [
       en: 'Place your elbows 5–10 cm in front of your shoulders to lower the height and ease the low back. If it’s still uncomfortable, do the chair thoracic extension instead.',
     },
     harder: {
-      ko: '버티는 시간을 45초로 늘리거나, 버티는 동안 한 팔씩 앞으로 뻗었다 내려놓기를 번갈아 해요. 익숙해지면 ‘엎드려 코브라’로 넘어가요.',
-      en: 'Increase the hold to 45 seconds, or alternate reaching one arm forward and back down during the hold. Then progress to the prone cobra.',
+      ko: '버티는 시간을 45초로 늘리거나, 버티는 동안 한 팔씩 앞으로 뻗었다 내려놓기를 번갈아 해요. 익숙해지면 등을 더 크게 펴는 ‘엎드려 상체 들기’로 넘어가고, 등 근육을 키우려면 ‘엎드려 코브라’를 더해요.',
+      en: 'Increase the hold to 45 seconds, or alternate reaching one arm forward and back down during the hold. When it feels easy, progress to the prone press-up for more extension range, and add the prone cobra to strengthen your upper back.',
     },
     cues: {
       ko: ['어깨는 귀에서 멀리', '가슴을 앞으로 길게', '바닥을 밀어내요', '천천히 숨 쉬어요'],
@@ -456,7 +486,7 @@ export const THORACIC_PLUS: Exercise[] = [
       anchor: ['pelvis'],
       keys: [SP_DOWN, SP_UP, SP_LONG],
       labels: [
-        { ko: '엎드려 팔 내려놓기', en: 'Lie face down' },
+        { ko: '엎드려 아래팔 대기', en: 'Face down, forearms on mat' },
         { ko: '팔꿈치로 가슴 들기', en: 'Prop up on elbows' },
         { ko: '어깨 내리고 길게 30초', en: 'Shoulders down, long, 30 s' },
       ],
@@ -522,8 +552,8 @@ export const THORACIC_PLUS: Exercise[] = [
       en: 'If raising the arm overhead is hard, rest your right hand behind your head or on your waist while you lean. Even 10–15° of lean is enough.',
     },
     harder: {
-      ko: '기울인 상태에서 가슴을 천장 쪽으로 살짝 돌려 등 뒤쪽까지 늘리거나, 버티는 시간을 45초로 늘려요. 서서 하는 ‘서서 옆구리 늘리기’도 좋아요.',
-      en: 'While leaning, turn your chest slightly toward the ceiling to reach the back of the ribs, or extend the hold to 45 seconds. The standing side bend is another option.',
+      ko: '기울인 채 가슴을 바닥(왼쪽 무릎) 쪽으로 살짝 돌리면 등 뒤쪽 갈비뼈와 광배근까지 더 늘어나요. 버티는 시간을 45초로 늘려도 좋고, 서서 하는 ‘서서 옆구리 늘리기’도 좋아요.',
+      en: 'While leaning, turn your chest slightly down toward your left knee to stretch further into the back of the ribs and the lat. You can also extend the hold to 45 seconds, or try the standing side bend.',
     },
     cues: {
       ko: ['엉덩이는 의자에', '위로 길게, 옆으로', '가슴은 정면', '내쉬며 조금 더'],
@@ -570,7 +600,8 @@ export const THORACIC_PLUS: Exercise[] = [
       holdKey: 2,
       focus: [
         { a: 'shR', b: 'hipR', side: 'out', kind: 'stretch', r: 3.4 },
-        { a: 'elR', b: 'shR', side: 'back', kind: 'stretch', r: 2.4, from: 0.4, to: 1 },
+        // 광배근이 겨드랑이를 지나 위팔 안쪽(머리 위로 든 팔에서는 바깥 위를 향함)으로 이어지는 부분 — 정면에서 보이도록 'in'
+        { a: 'elR', b: 'shR', side: 'in', kind: 'stretch', r: 2.4, from: 0.4, to: 1 },
       ],
       trace: ['haR'],
       zoom: 1.1,
@@ -637,8 +668,8 @@ export const THORACIC_PLUS: Exercise[] = [
       en: 'Bend the elbows slightly to shorten the lever, or slide the arms along the floor. You can also work one arm at a time.',
     },
     harder: {
-      ko: 'Y와 엉덩이 옆에서 3초씩 버티거나, 가슴을 바닥에서 2~3cm 띄운 채로 해요.',
-      en: 'Hold 3 seconds at the “Y” and at your hips, or keep your chest hovering 2–3 cm off the floor throughout.',
+      ko: 'Y와 엉덩이 옆에서 3초씩 버티거나, 가슴을 바닥에서 2~3cm 띄운 채로 해요. 이때는 턱을 당긴 채 이마도 수건에서 살짝 떠요.',
+      en: 'Hold 3 seconds at the “Y” and at your hips, or keep your chest hovering 2–3 cm off the floor throughout — your forehead then lifts slightly off the towel too, with the chin kept tucked.',
     },
     cues: {
       ko: ['팔은 바닥에서 띄워요', '날개뼈는 아래로', '크게 원을 그려요', '이마는 수건에'],
@@ -667,8 +698,8 @@ export const THORACIC_PLUS: Exercise[] = [
       en: 'Lower & middle trapezius, rhomboids, posterior deltoid, infraspinatus & teres minor, lats (on the way down)',
     },
     caution: {
-      ko: '어깨가 걸리거나 찌릿한 통증이 반복되면 범위를 줄이거나 ‘엎드려 Y 들기’로 대신하세요. 임신 중에는 하지 마세요.',
-      en: 'If your shoulder catches or pinches repeatedly, shorten the range or switch to the prone Y raise. Don’t do this during pregnancy.',
+      ko: '어깨가 걸리거나 찌릿한 통증이 반복되면 머리 위 구간은 빼고 T와 엉덩이 옆 사이만 움직이거나, 팔을 머리 위로 올리지 않는 ‘엎드려 W 당기기’나 ‘엎드려 코브라’로 대신하세요. 임신 중에는 하지 마세요.',
+      en: 'If your shoulder catches or pinches repeatedly, skip the overhead part and move only between the “T” and your hips, or switch to the prone W pull or the prone cobra, which don’t take the arms overhead. Don’t do this during pregnancy.',
     },
     avoid: ['pregnant', 'shoulderSevere'],
     anim: {

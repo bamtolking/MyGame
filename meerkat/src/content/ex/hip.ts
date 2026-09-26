@@ -3,15 +3,23 @@
  * 문구·용량·대상 이슈는 물리치료 임상 기준으로 작성되었으며, 전문가가 자유롭게 수정할 수 있습니다.
  * 작성 규칙: docs/CONTENT_GUIDE.md
  */
-import { both } from '../../figure/rig';
-import { HALF_KNEEL, HANDS_ON_HIPS, HOOK, SIDE_LYING, SIT, STAND, merge } from '../../figure/poses';
+import { both, type Pose } from '../../figure/rig';
+import { HALF_KNEEL, HOOK, SIDE_LYING, SIT, STAND, merge } from '../../figure/poses';
 import type { Exercise } from '../exercise-types';
 
+/** 두 손을 허리에: 손바닥은 골반 옆 위, 손끝은 앞, 팔꿈치는 옆·뒤로
+ *  (공용 HANDS_ON_HIPS 는 옆에서 보면 손이 배 앞에 떠 보여서 이 파일에서 따로 씀) */
+const HIPS_HANDS: Pose = both({ sh: { abd: 40, flex: -30, rot: -50 }, el: 120 });
+
 /** 오른손만 허리(골반 위)에 */
-const R_HAND_ON_HIP = { shR: { abd: 38, flex: -10, rot: -20 }, elR: 105 };
+const R_HAND_ON_HIP: Pose = { shR: { abd: 40, flex: -30, rot: -50 }, elR: 120 };
 
 /** 서서 고관절 앞 늘리기: 왼발 앞·오른발 뒤꿈치 든 앞뒤 보폭 */
-const SPLIT_STANCE = merge(STAND, HANDS_ON_HIPS, { hipL: { flex: 22 }, knL: 4, anL: -18, hipR: { flex: -22 }, knR: 20, anR: 12 });
+const SPLIT_STANCE = merge(STAND, HIPS_HANDS, { hipL: { flex: 22 }, knL: 4, anL: -18, hipR: { flex: -22 }, knR: 20, anR: 12 });
+
+/** 골반 뒤로 기울이기(꼬리뼈 말기): 골반 −14°, 허리(3°)·등(11°)이 나눠 받쳐 상체는 곧게.
+ *  허리 굽힘만으로 되돌리면 골반~허리 선이 그대로라 그림에서 기울기가 보이지 않아요. */
+const TUCK: Pose = { root: { pitch: -14 }, lumbar: { flex: 3 }, thorax: { flex: 11 } };
 
 /** 의자 4자: 오른발목을 왼무릎 위에 올린 다리 */
 const FIG4_LEG = { hipR: { flex: 108, abd: 3, rot: 100, hab: 37 }, knR: 122, anR: -2 };
@@ -248,15 +256,15 @@ export const HIP: Exercise[] = [
     },
     steps: {
       ko: [
-        '숨을 내쉬며 뒤꿈치로 먼 벽을 밀어내듯 오른다리를 길게 뻗어요.',
-        '그대로 1~2초에 걸쳐 다리를 30~40도(발이 약 40cm 올라가는 높이)까지 들어 올려요. 뒤꿈치가 발끝보다 먼저 올라가요.',
+        '숨을 들이마시며 뒤꿈치로 먼 벽을 밀어내듯 오른다리를 길게 뻗어요.',
+        '숨을 내쉬며, 길게 뻗은 그대로 1~2초에 걸쳐 다리를 30~40도(발이 약 40cm 올라가는 높이)까지 들어 올려요. 뒤꿈치가 발끝보다 먼저 올라가요.',
         '맨 위에서 1초 버티며 엉덩이 옆이 조이는 것을 느껴요.',
         '1~2초에 걸쳐 천천히 내리되, 아래 다리에 닿기 직전(주먹 하나 높이)에서 다시 들어요.',
         '12회 반복한 뒤 반대쪽으로 돌아누워 해요.',
       ],
       en: [
-        'Exhale and reach your right leg long, as if pushing a far wall away with your heel.',
-        'Keeping that length, lift the leg to 30–40° (the foot rises about 40 cm) over 1–2 seconds, heel leading the toes.',
+        'Inhale and reach your right leg long, as if pushing a far wall away with your heel.',
+        'Exhale and, keeping that length, lift the leg to 30–40° (the foot rises about 40 cm) over 1–2 seconds, heel leading the toes.',
         'Hold 1 second at the top and feel the side of your hip squeeze.',
         'Lower slowly over 1–2 seconds, stopping a fist’s height above the bottom leg before lifting again.',
         'Do 12 reps, then roll over and repeat on the other side.',
@@ -394,6 +402,7 @@ export const HIP: Exercise[] = [
     },
     muscles: { ko: '중둔근·소둔근(들어 올리는 쪽), 디딤발 중둔근(안정)', en: 'Gluteus medius and minimus (lifting side), standing-side gluteus medius (stability)' },
     caution: { ko: '균형이 불안하면 두 손으로 잡고, 엉덩이나 허리에 찌릿한 통증이 있으면 멈추세요.', en: 'Hold on with both hands if you feel unsteady, and stop if you feel a sharp twinge in your hip or back.' },
+    avoid: ['balance'],
     anim: {
       view: 0,
       props: [{ kind: 'table', at: 'haL', key: 0, off: [14, 0, 0], size: [30, 0, 34] }],
@@ -505,10 +514,11 @@ export const HIP: Exercise[] = [
       view: 90,
       props: [{ kind: 'mat' }],
       anchor: ['knR'],
+      // 뒷무릎·발등은 매트에, 앞발은 그 자리에 둔 채 골반만 말았다가(키 1) 앞으로 옮김(키 2)
       keys: [
-        merge(HALF_KNEEL, HANDS_ON_HIPS),
-        merge(HALF_KNEEL, HANDS_ON_HIPS, { root: { pitch: -10 }, lumbar: { flex: 10 }, hipL: { flex: 80 }, hipR: { flex: -18 } }),
-        merge(HALF_KNEEL, HANDS_ON_HIPS, { root: { pitch: -10 }, lumbar: { flex: 12 }, hipL: { flex: 81 }, knL: 101, anL: 10, hipR: { flex: -28 }, knR: 82 }),
+        merge(HALF_KNEEL, HIPS_HANDS, { hipL: { flex: 93 }, knL: 93, knR: 81 }),
+        merge(HALF_KNEEL, HIPS_HANDS, TUCK, { hipL: { flex: 79 }, knL: 95, anL: 2, hipR: { flex: -24 }, knR: 79 }),
+        merge(HALF_KNEEL, HIPS_HANDS, TUCK, { hipL: { flex: 80 }, knL: 104, anL: 10, hipR: { flex: -32 }, knR: 71 }),
       ],
       labels: [
         { ko: '한쪽 무릎 꿇고 서기', en: 'Tall half-kneel' },
@@ -605,10 +615,11 @@ export const HIP: Exercise[] = [
     anim: {
       view: 90,
       anchor: ['toeR'],
+      // 두 발은 그 자리에 둔 채 골반만 말았다가(키 1) 앞무릎을 굽혀 골반을 앞·아래로(키 2)
       keys: [
         SPLIT_STANCE,
-        merge(SPLIT_STANCE, { root: { pitch: -10 }, lumbar: { flex: 10 }, hipL: { flex: 15 }, knL: 11, anL: -15, hipR: { flex: -32 }, knR: 20, anR: 11 }),
-        merge(SPLIT_STANCE, { root: { pitch: -10 }, lumbar: { flex: 12 }, hipL: { flex: 30 }, knL: 48, anL: 8, hipR: { flex: -39 }, knR: 18, anR: 18 }),
+        merge(SPLIT_STANCE, TUCK, { hipL: { flex: 8 }, hipR: { flex: -36 } }),
+        merge(SPLIT_STANCE, TUCK, { hipL: { flex: 26 }, knL: 47, anL: 7, hipR: { flex: -41 }, knR: 21, anR: 19 }),
       ],
       labels: [
         { ko: '앞뒤로 크게 벌려 서기', en: 'Split stance, stand tall' },
@@ -704,9 +715,9 @@ export const HIP: Exercise[] = [
     },
     muscles: { ko: '이상근 등 심부 외회전근, 대둔근', en: 'Piriformis and deep external rotators, gluteus maximus' },
     caution: { ko: '엉덩이에서 다리로 저림이 내려가거나 무릎 안쪽이 아프면 바로 멈추세요. 고관절 수술을 받았다면 먼저 담당 의료진과 상의하세요.', en: 'Stop at once if tingling runs down the leg or the inside of the knee hurts. If you’ve had hip surgery, check with your care team first.' },
-    avoid: ['kneeSevere'],
+    avoid: ['kneeSevere', 'radiating'],
     anim: {
-      view: 20,
+      view: 14,
       props: [{ kind: 'chair' }],
       anchor: ['sitL', 'sitR'],
       keys: [
@@ -830,9 +841,10 @@ export const HIP: Exercise[] = [
       keys: [
         merge({ root: { pitch: -4 } }, both({ hip: { flex: 136, abd: 4, rot: 47, hab: 34 }, kn: 123, an: -21, sh: { flex: 41, abd: -27, hab: 12 }, el: 1 })),
         merge({ root: { pitch: -2 } }, both({ hip: { flex: 101, abd: 17, rot: 94, hab: 61 }, kn: 124, an: -25, sh: { flex: 42, abd: -27, hab: 11 }, el: 1 })),
+        // 등을 편 채 골반부터 앞으로 접기(허리·등 굽힘 없이), 다리·손 위치는 그대로
         merge(
-          { root: { pitch: 16 }, lumbar: { flex: 6 }, thorax: { flex: 8 }, neck: { flex: -10 } },
-          both({ hip: { flex: 110, abd: 5, rot: 98, hab: 63 }, kn: 123, an: -26, sh: { flex: 21, abd: -36, hab: 0 }, el: 75 }),
+          { root: { pitch: 20 }, lumbar: { flex: 0 }, thorax: { flex: 2 }, neck: { flex: -6 } },
+          both({ hip: { flex: 112, abd: 4, rot: 101, hab: 64 }, kn: 124, an: -26, sh: { flex: 24, abd: -33, rot: 8, hab: -4 }, el: 65 }),
         ),
       ],
       labels: [

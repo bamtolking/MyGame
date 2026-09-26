@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { Camera, CameraOff, ListChecks, Pause, Play, SkipBack, SkipForward, Volume2, VolumeX, X } from 'lucide-preact';
+import { Camera, CameraOff, Crosshair, ListChecks, Pause, Play, SkipBack, SkipForward, Volume2, VolumeX, X } from 'lucide-preact';
 import { CoachCam } from '../coach/CoachCam';
 import type { CoachState } from '../coach/tracker';
 import { Animal } from '../components/animals';
@@ -16,6 +16,12 @@ import { countWord, speak, stopSpeaking } from '../lib/voice';
 import type { Routine } from '../routine/generator';
 import { activeRoutine, todayRoutine } from '../state/derived';
 import { doneToday, logSession, painLogs, profile, progression, settings, streak, uid, type PainArea } from '../state/store';
+
+/** '여기가 느껴지면 정답' 안내의 첫 문장만 (운동 중엔 짧게) */
+function firstSentence(t: string): string {
+  const m = t.match(/^.*?[.!?](?=\s|$)/);
+  return m ? m[0] : t;
+}
 
 interface StepPlan {
   item: number;
@@ -341,7 +347,8 @@ export function Player() {
           {voiceOn ? <Volume2 size={22} /> : <VolumeX size={22} />}
         </button>
       </div>
-      <div style={{ position: 'relative', height: '44dvh', minHeight: 250, margin: '4px 16px 0', borderRadius: 24, background: 'var(--surface-2)' }}>
+      {/* 시범 화면은 남는 높이에 맞춰 (작은 폰에서도 조작 버튼이 화면 안에 들어오게) */}
+      <div style={{ position: 'relative', height: 'clamp(180px, calc(100dvh - 520px), 44dvh)', flex: 'none', margin: '4px 16px 0', borderRadius: 24, background: 'var(--surface-2)' }}>
         {useCoach ? (
           <>
             <CoachCam spec={ex.coach!} resetKey={`${idx}`} running={phase === 'work' && !paused} onState={onCoach} />
@@ -350,7 +357,10 @@ export function Player() {
             </div>
           </>
         ) : (
-          <Figure spec={anim} mirror={step.side === 1} playing={!paused} time={figTime} height="100%" label={L(ex.name)} overlays />
+          // 위쪽 단계 표시(칩)에 머리가 가리지 않도록 살짝 내려서 그림
+          <div style={{ position: 'absolute', inset: '30px 0 0 0' }}>
+            <Figure spec={anim} mirror={step.side === 1} playing={!paused} time={figTime} height="100%" label={L(ex.name)} overlays />
+          </div>
         )}
         {stepLabel && phase === 'work' && (
           <div class="demo-step" style={{ maxWidth: 'calc(100% - 24px)' }} aria-live="polite">
@@ -383,9 +393,12 @@ export function Player() {
         <div class="num" style={{ fontSize: 64, fontWeight: 900, lineHeight: 1.05, color: phase === 'work' ? 'var(--brand)' : 'var(--text)' }} aria-live="polite">
           {big}
         </div>
-        <div class="body" style={{ minHeight: 24, marginTop: 4, fontWeight: 600, color: coach?.cue === 'good' ? 'var(--good)' : 'var(--text-2)' }}>
-          {cueText}
-        </div>
+        {/* 준비 화면에선 단계 이름 대신 시작 자세 안내를 보여 줌 */}
+        {!(phase === 'ready' && firstOfItem && ex.setup) && (
+          <div class="body" style={{ minHeight: 24, marginTop: 4, fontWeight: 600, color: coach?.cue === 'good' ? 'var(--good)' : 'var(--text-2)' }}>
+            {cueText}
+          </div>
+        )}
         {phase === 'ready' && firstOfItem && ex.setup && (
           <ul class="player-setup fade-up">
             {LA(ex.setup)
@@ -394,6 +407,12 @@ export function Player() {
                 <li key={i}>{s}</li>
               ))}
           </ul>
+        )}
+        {phase === 'work' && ex.feel && !item.note && (
+          <div class="player-feel fade-up">
+            <Crosshair size={15} />
+            <span>{firstSentence(L(ex.feel))}</span>
+          </div>
         )}
         {item.note && phase !== 'rest' && (
           <div class="notice brand" style={{ marginTop: 10, textAlign: 'left', fontSize: 13.5 }}>
