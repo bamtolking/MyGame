@@ -4,7 +4,7 @@
 // "grounded at local x = −40" to "grounded at x = width − 40"; since every chunk starts/ends on hazard-free
 // ground and speed only changes at those boundaries, any sequence of proven chunks is crossable hit-free.
 // The balance bot reuses `solve` as its planner.
-import { DT, TILE, GROUND_Y, VALIDATE_PAD, VALIDATE_INPUT_STEP, PICK_PAD, MAX_JUMPS } from '../data/physics';
+import { DT, TILE, GROUND_Y, VALIDATE_PAD, VALIDATE_INPUT_STEP, PICK_PAD, MAX_JUMPS, SLIDE_W } from '../data/physics';
 import { newBody, stepBody, hurtbox, hazardOverlap, type Body, type BodyCaps } from './body';
 import type { ParsedChunk, Solid } from './chunk';
 
@@ -68,6 +68,8 @@ export function solve(solids: readonly Solid[], hazards: readonly Box[], start: 
         if (!got && must) {
           const pb = hurtbox(b, PICK_PAD - pad);
           if (must.x > pb.x0 && must.x < pb.x1 && must.y > pb.y0 && must.y < pb.y1) got = true;
+          // x only increases: once even the widest pickup box has passed the target, this branch can never collect it
+          else if (b.x - (SLIDE_W * b.scale) / 2 - (PICK_PAD - pad) >= must.x) { dead = true; break; }
         }
         if (b.x >= endX && (b.onGround || !endGrounded) && got) { done = true; break; }
       }

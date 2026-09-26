@@ -7,6 +7,12 @@
 //    on a platform at row r the line sits in row r-1 (r-2 only while standing).
 //  - 'v' in row 9 = slide under it; 'v' in row 8 = low ceiling: run under it standing, do not jump.
 //  - tiers [a,b]: a chunk is proven at every tier speed a..b, so dense patterns live in the high tiers only.
+//    Pits ('.' in the ground row) appear from tier 1: no gameplay chunk whose range includes tier 0 has one.
+//  - tags: ≥ 1 primary family (jump double slide pit platform combo rhythm choice tunnel stairs); special
+//    tags: 'special' (engine-placed by id: landing, warmup, finish_runout), 'tutorial' (the first run, exactly
+//    this one tag, array order), 'tutorial-extra' (stage courses only), 'sky', 'rest' (director breathers),
+//    'setpiece' (one per biome via `biomes`, inserted by the director; never drawn at random).
+//  - 'B' golden pouch only lives in the setpieces (a coin outside stage mode); stages add others via `pouches`.
 import type { ChunkDef } from '../sim/chunk';
 import { ROWS } from './physics';
 

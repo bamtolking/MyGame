@@ -25,13 +25,19 @@ function styleOf(given: HazardStyle | undefined, biome: string | null, col: stri
   return given ?? (biome ? BIOME_BY_ID[biome]?.style : undefined) ?? STYLE_BY_COLOR.get(col.toLowerCase()) ?? 'market';
 }
 
+let OUT_K = 1;
+/** Outline thickness multiplier (e.g. 1.5 in portrait, where the world is drawn at ≈0.45 scale). Cheaper and
+ *  cleaner than stamping the hazard several times: sprites are simply re-rendered with the thicker outline. */
+export function setHazardOutlineScale(k: number): void { OUT_K = Math.max(1, Math.min(2.5, k)); }
+const outerW = () => 7.5 * OUT_K;               // stroke centred on the edge: 3·k px visible outside the inner line
+const innerW = () => 1.5 * OUT_K;
 /** fill + double outline + clipped decoration for a closed path */
 function outlined(g: CanvasRenderingContext2D, path: () => void, body: string, decorate: () => void): void {
   g.lineJoin = 'miter'; g.miterLimit = 3;
-  path(); g.strokeStyle = OUTLINE_OUT; g.lineWidth = 7.5; g.stroke();     // 3 px visible outside the inner line
+  path(); g.strokeStyle = OUTLINE_OUT; g.lineWidth = outerW(); g.stroke();
   g.fillStyle = body; g.fill();
   g.save(); path(); g.clip(); decorate(); g.restore();
-  path(); g.strokeStyle = OUTLINE_IN; g.lineWidth = 1.5; g.stroke();
+  path(); g.strokeStyle = OUTLINE_IN; g.lineWidth = innerW(); g.stroke();
 }
 function poly(g: CanvasRenderingContext2D, pts: number[]): void { g.beginPath(); g.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]); g.closePath(); }
 function chevronUp(g: CanvasPath, x: number, y: number, w: number, th: number): void {
@@ -92,7 +98,7 @@ function paintSpike(g: CanvasRenderingContext2D, st: HazardStyle, col: string): 
 
 export function drawSpike(c: CanvasRenderingContext2D, h: Hazard, col: string, hc: boolean, style?: HazardStyle): void {
   const st = styleOf(style, h.biome, col); const res = worldRes(c);
-  const spr = sprites.get(`s|${st}|${col}|${hc ? 1 : 0}|${res}`, () => { const [cv, g] = makeCanvas(SP_L * 2, SP_UP + SP_DN, res); g.translate(SP_L, SP_UP); paintSpike(g, st, col); return cv; });
+  const spr = sprites.get(`s|${st}|${col}|${hc ? 1 : 0}|${res}|${OUT_K}`, () => { const [cv, g] = makeCanvas(SP_L * 2, SP_UP + SP_DN, res); g.translate(SP_L, SP_UP); paintSpike(g, st, col); return cv; });
   const cx = (h.x0 + h.x1) / 2;
   c.drawImage(spr, cx - SP_L, h.y1 - SP_UP, spr.width / res, spr.height / res);
   if (st === 'bridge') {
@@ -152,7 +158,7 @@ function paintTall(g: CanvasRenderingContext2D, st: HazardStyle, col: string): v
 
 export function drawTall(c: CanvasRenderingContext2D, h: Hazard, col: string, hc: boolean, t: number, style?: HazardStyle): void {
   const st = styleOf(style, h.biome, col); const res = worldRes(c);
-  const spr = sprites.get(`t|${st}|${col}|${hc ? 1 : 0}|${res}`, () => { const [cv, g] = makeCanvas(TL_L * 2, TL_UP + TL_DN, res); g.translate(TL_L, TL_UP); paintTall(g, st, col); return cv; });
+  const spr = sprites.get(`t|${st}|${col}|${hc ? 1 : 0}|${res}|${OUT_K}`, () => { const [cv, g] = makeCanvas(TL_L * 2, TL_UP + TL_DN, res); g.translate(TL_L, TL_UP); paintTall(g, st, col); return cv; });
   const cx = (h.x0 + h.x1) / 2; const top = h.y1 - TALL_H - 12;
   // decorative wisps above the top (soft, translucent, never inside the play box of the hazard)
   if (st === 'market' || st === 'dawn') {
@@ -235,11 +241,11 @@ export function drawHang(c: CanvasRenderingContext2D, x0: number, x1: number, bo
   const st = styleOf(style, null, col); void hc; void t;
   const art = hangCache.get(`${st}|${col}|${x0}|${x1}|${bot}`, () => buildHang(st, x0, x1, bot, col));
   c.lineJoin = 'miter'; c.miterLimit = 3;
-  c.strokeStyle = OUTLINE_OUT; c.lineWidth = 7.5; c.stroke(art.outline);
+  c.strokeStyle = OUTLINE_OUT; c.lineWidth = outerW(); c.stroke(art.outline);
   c.fillStyle = col; c.fill(art.outline);
   for (const [fs, p] of art.fills) { c.fillStyle = fs; c.fill(p); }
   for (const [ss, lw, p, dash] of art.strokes) { c.strokeStyle = ss; c.lineWidth = lw; if (dash) c.setLineDash(dash); c.stroke(p); if (dash) c.setLineDash([]); }
-  c.strokeStyle = OUTLINE_IN; c.lineWidth = 1.5; c.stroke(art.outline);
+  c.strokeStyle = OUTLINE_IN; c.lineWidth = innerW(); c.stroke(art.outline);
 }
 
-if (typeof window !== 'undefined') { const w = window as unknown as { __world?: Record<string, unknown> }; Object.assign((w.__world ??= {}), { drawSpike, drawTall, drawHang }); }
+if (typeof window !== 'undefined') { const w = window as unknown as { __world?: Record<string, unknown> }; Object.assign((w.__world ??= {}), { drawSpike, drawTall, drawHang, setHazardOutlineScale }); }

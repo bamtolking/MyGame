@@ -157,7 +157,7 @@ const marketLayers: LayerSpec[] = [
   } },
   { top: 205, k: 2, paint: (g, W, r, P) => {
     const body = P.near;
-    const aw0 = mix(P.a0, body, 0.5), aw1 = mix(P.a1, body, 0.68);
+    const aw0 = mix(P.a0, body, 0.55), aw1 = mix(P.a1, body, 0.76);
     const stalls = spread(r, W, 150, 230, 50, 130);
     // festival lantern string high over the alley (behind the stalls)
     const lc = [mix(P.a0, body, 0.15), mix('#ffb03b', body, 0.2), mix('#3e9fd1', body, 0.25)];
@@ -165,7 +165,8 @@ const marketLayers: LayerSpec[] = [
     lanternString(g, W * 0.5, -190, W + 20, -196, 22, lc, 34, 5, rgba('#150a18', 0.85));
     for (const [x, w] of stalls) {
       const awBot = -142, awTop = -170, counter = -56;
-      // warm lit interior
+      // back wall + warm lit interior
+      g.fillStyle = mix(body, P.mid, 0.3); g.fillRect(x + 6, awBot, w - 12, counter - awBot);
       const gr = g.createLinearGradient(0, awBot, 0, counter); gr.addColorStop(0, rgba(P.light, 0.42)); gr.addColorStop(1, rgba(P.light, 0.12));
       g.fillStyle = gr; g.fillRect(x + 6, awBot, w - 12, counter - awBot);
       // shelves with jars
@@ -216,7 +217,7 @@ const riversideLayers: LayerSpec[] = [
   } },
   { top: 170, k: 1.25, paint: (g, W, r, P) => {
     // river
-    const gr = g.createLinearGradient(0, RIVER_TOP, 0, 0); gr.addColorStop(0, mix(P.haze, P.mid, 0.35)); gr.addColorStop(1, mix(P.mid, P.near, 0.3));
+    const gr = g.createLinearGradient(0, RIVER_TOP, 0, 0); gr.addColorStop(0, mix(P.haze, P.mid, 0.15)); gr.addColorStop(1, mix(P.mid, P.near, 0.2));
     g.fillStyle = gr; g.fillRect(0, RIVER_TOP, W, -RIVER_TOP + BELOW);
     g.fillStyle = mix(P.far, P.near, 0.25); g.fillRect(0, RIVER_TOP - 4, W, 6);   // far bank
     // distant arch bridge with lights
@@ -235,7 +236,8 @@ const riversideLayers: LayerSpec[] = [
       for (let k = 0; k < 4; k++) { g.fillStyle = rgba(c, 0.22 - k * 0.045); g.fillRect(x - 3 + r() * 2, RIVER_TOP + 8 + k * 12 + r() * 4, 7 - k, 2); }
     }
     // shimmering light lines on the water
-    for (let i = 0; i < 90; i++) { g.fillStyle = rgba('#cfefff', 0.06 + r() * 0.12); g.fillRect(r() * W, RIVER_TOP + 6 + r() * (-RIVER_TOP - 6), 8 + r() * 26, 1.5); }
+    for (let i = 0; i < 110; i++) { g.fillStyle = rgba('#cfefff', 0.1 + r() * 0.18); g.fillRect(r() * W, RIVER_TOP + 6 + r() * (-RIVER_TOP - 6), 8 + r() * 26, 1.5); }
+    g.fillStyle = rgba('#dff4ff', 0.35); g.fillRect(0, RIVER_TOP + 2, W, 1.5);
   } },
   { top: 175, k: 1.5, paint: (g, W, r, P) => {
     const col = P.mid;
@@ -260,7 +262,7 @@ const riversideLayers: LayerSpec[] = [
   } },
   { top: 190, k: 2, paint: (g, W, r, P) => {
     const body = P.near;
-    for (const [x, w] of spread(r, W, 170, 250, 60, 150)) {
+    for (const [x, w] of spread(r, W, 170, 240, 130, 280)) {
       const h = 128 + r() * 22, top = -h;
       // tent glow on the ground
       glowDot(g, x + w / 2, -10, w * 0.7, P.a0, 0.18);
@@ -470,18 +472,17 @@ function moonSprite(rad: number, res: number, pale: boolean, rabbit = false): HT
   return cv;
 }
 function burstSprite(rad: number, res: number, col: string, col2: string): HTMLCanvasElement {
-  const R = rad + 6; const [cv, g] = makeCanvas(R * 2, R * 2, res);
-  glowDot(g, R, R, rad * 0.9, col, 0.3);
-  const rays = 22;
+  const R = rad + 8; const [cv, g] = makeCanvas(R * 2, R * 2, res);
+  glowDot(g, R, R, rad * 1.05, col, 0.32);
+  const rays = 26; g.lineCap = 'round';
   for (let i = 0; i < rays; i++) {
-    const a = (i / rays) * Math.PI * 2 + (i % 2) * 0.08;
-    for (let k = 0; k < 6; k++) {
-      const d = rad * (0.3 + k * 0.13) * (i % 2 ? 0.86 : 1); const s = 2.6 - k * 0.3;
-      g.fillStyle = k > 3 ? rgba(col2, 0.9 - k * 0.12) : rgba(col, 1 - k * 0.1);
-      g.beginPath(); g.arc(R + Math.cos(a) * d, R + Math.sin(a) * d, s, 0, Math.PI * 2); g.fill();
-    }
+    const a = (i / rays) * Math.PI * 2 + (i % 2) * 0.06; const len = rad * (i % 2 ? 0.8 : 1); const ca = Math.cos(a), sa = Math.sin(a);
+    g.strokeStyle = rgba(col, 0.45); g.lineWidth = 2.2; g.beginPath(); g.moveTo(R + ca * len * 0.28, R + sa * len * 0.28); g.lineTo(R + ca * len * 0.78, R + sa * len * 0.78); g.stroke();
+    g.strokeStyle = rgba(col2, 0.9); g.lineWidth = 1.6; g.beginPath(); g.moveTo(R + ca * len * 0.7, R + sa * len * 0.7); g.lineTo(R + ca * len * 0.93, R + sa * len * 0.93); g.stroke();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(R + ca * len, R + sa * len, 2.4, 0, Math.PI * 2); g.fill();
+    g.fillStyle = rgba(col, 0.9); g.beginPath(); g.arc(R + ca * len * 0.55, R + sa * len * 0.55, 1.6, 0, Math.PI * 2); g.fill();
   }
-  g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.arc(R, R, 3, 0, Math.PI * 2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.arc(R, R, 3.5, 0, Math.PI * 2); g.fill();
   return cv;
 }
 function skyLanternSprite(res: number): HTMLCanvasElement {
@@ -513,6 +514,8 @@ function cloud(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: 
   g.fillStyle = shadeCol; blob(4, 1);
   g.fillStyle = col; blob(-2, 0.92);
 }
+
+const FIREWORK_COLS: [string, string][] = [['#ff7ab8', '#ffd1ea'], ['#7ae8ff', '#e0fbff'], ['#ffd36b', '#fff3c4'], ['#b69cff', '#ffffff']];
 
 // ================================================================ ground / platform textures
 const GT_W = 160, GT_UP = 12, GT_H = 140;    // ground texture tile: 160 logical wide, from 12 px above the surface down 128 px
@@ -720,6 +723,7 @@ export class Backdrop {
   private sprites = new SpriteCache(40);
   private tileW = 1440;                  // logical width of one parallax tile (≈1.5× the view)
   private frameT = NaN; private budget = 1;
+  private ta = 1; private td = 1; private te = 0; private tf = 0;   // current screen transform (device px)
   private stars = new Map<string, Float32Array>();
 
   resize(cssW: number, cssH: number, dpr: number, scale: number): void {
@@ -736,9 +740,10 @@ export class Backdrop {
 
   private layer(bi: BiomeDef, li: number, force = false): HTMLCanvasElement | null {
     let arr = this.layers.get(bi.id);
-    if (!arr) {
+    if (arr) { this.layers.delete(bi.id); this.layers.set(bi.id, arr); }          // LRU touch
+    else {
       arr = [null, null, null, null]; this.layers.set(bi.id, arr);
-      // keep at most 3 biomes (current, previous for the cross-fade, next being pre-warmed)
+      // keep at most 3 biomes (current, previous for the cross-fade, next being pre-warmed) ≈ 3 × 7 MB on a phone
       if (this.layers.size > 3) this.layers.delete(this.layers.keys().next().value as string);
     }
     if (arr[li]) return arr[li];
@@ -746,7 +751,9 @@ export class Backdrop {
     this.budget--;
     const spec = LAYERS[bi.style][li]; const W = this.tileW;
     const res = Math.min(2.5, this.scale * Math.min(this.dpr, spec.k));
-    const [cv, g] = makeCanvas(W, spec.top + BELOW, res);
+    // the canvas is a whole number of px wide and the content period is exactly that width (seamless tiling)
+    const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(W * res)); cv.height = Math.max(1, Math.ceil((spec.top + BELOW) * res));
+    const g = cv.getContext('2d')!; g.setTransform(cv.width / W, 0, 0, res, 0, 0);
     g.translate(0, spec.top);
     const P = pal(bi);
     for (const ox of [-W, 0, W]) { g.save(); g.translate(ox, 0); spec.paint(g, W, srng(1000 + li * 97 + bi.id.length * 13 + bi.id.charCodeAt(0)), P); g.restore(); }
@@ -755,9 +762,11 @@ export class Backdrop {
 
   private skyCanvas(bi: BiomeDef | null): HTMLCanvasElement {
     const key = bi ? bi.id : '__bonus'; let cv = this.skyCache.get(key); if (cv) return cv;
-    const H = Math.max(2, Math.round(this.cssH)); cv = document.createElement('canvas'); cv.width = 4; cv.height = H;
+    // device-pixel tall and 4 px wide: blitted 1:1 vertically with smoothing off (a vertical gradient needs no
+    // horizontal filtering) — several times cheaper than a smoothed stretch on CPU-rastered canvases
+    const H = Math.max(2, Math.round(this.cssH * this.dpr)); cv = document.createElement('canvas'); cv.width = 4; cv.height = H;
     const g = cv.getContext('2d')!; const gr = g.createLinearGradient(0, 0, 0, H);
-    const at = (worldY: number) => Math.max(0, Math.min(1, (this.cssH - (VIEW_H - worldY) * this.scale) / H));
+    const at = (worldY: number) => Math.max(0, Math.min(1, ((this.cssH - (VIEW_H - worldY) * this.scale) * this.dpr) / H));
     if (bi) {
       const P = pal(bi);
       gr.addColorStop(0, bi.sky[0]); gr.addColorStop(at(0), bi.sky[0]);
@@ -779,15 +788,15 @@ export class Backdrop {
   /** sky gradient + stars/moon/fireworks + 4 tiled parallax layers (screen space, css px) */
   drawBiome(c: CanvasRenderingContext2D, bi: BiomeDef, alpha: number, camX: number, time: number): void {
     if (time !== this.frameT) { this.frameT = time; this.budget = 1; }
-    const sc = this.scale, gy = this.gy, W = this.cssW;
+    const sc = this.scale, gy = this.gy, W = this.cssW; this.readTransform(c);
     c.globalAlpha = alpha;
-    c.drawImage(this.skyCanvas(bi), 0, 0, W, this.cssH);
+    this.blitSky(c, this.skyCanvas(bi));
     this.drawStars(c, bi, time, alpha);
     // celestial bodies (fixed on screen: they are "at infinity")
     if (bi.style === 'market') this.drawMoon(c, W * 0.8, gy - 335 * sc, 30, false, alpha);
     else if (bi.style === 'riverside') this.drawMoon(c, W * 0.7, gy - 330 * sc, 26, false, alpha);
     else if (bi.style === 'dawn') this.drawMoon(c, W * 0.66, gy - 205 * sc, 92, true, alpha * 0.9);
-    else if (!this.lowFx) this.drawFireworks(c, camX, time, alpha);
+    else this.drawFireworks(c, camX, time, alpha);
     for (let li = 0; li < 4; li++) {
       const L = this.layer(bi, li); if (!L) continue;
       const top = LAYERS[bi.style][li].top;
@@ -803,13 +812,31 @@ export class Backdrop {
     }
   }
 
+  private blitSky(c: CanvasRenderingContext2D, sky: HTMLCanvasElement): void {
+    const sm = c.imageSmoothingEnabled; c.imageSmoothingEnabled = false;
+    c.drawImage(sky, 0, 0, this.cssW, this.cssH); c.imageSmoothingEnabled = sm;
+  }
+
   /** draw a periodic layer canvas across the screen; tiles abut on whole device pixels (no seams, no overlap) */
   private tiled(c: CanvasRenderingContext2D, L: HTMLCanvasElement, scroll: number, y: number, h: number): void {
-    const dpr = this.dpr; const stepDev = Math.max(1, Math.round(this.tileW * this.scale * dpr)); const step = stepDev / dpr;
-    let off = -((scroll * this.scale) % step); if (off > 0) off -= step;
-    off = Math.round(off * dpr) / dpr;
-    for (let x = off; x < this.cssW; x += step) c.drawImage(L, x, y, step, h);
+    // work in device pixels (the context may carry a fractional camera translate): tiles abut exactly, and a
+    // canvas painted at device resolution is blitted 1:1 (fast path, crisp)
+    const a = this.ta, d = this.td;
+    const want = this.tileW * this.scale * a; const one = Math.abs(want - L.width) <= 1.5 && Math.abs(h * d - L.height) <= 2;
+    const stepDev = one ? L.width : Math.max(1, Math.round(want)); const hDev = one ? L.height : h * d;
+    let off = -((scroll * this.scale * a) % stepDev); if (off > 0) off -= stepDev;
+    const Y = Math.round(y * d + this.tf);
+    let X = Math.round(off + this.te); while (X > this.te) X -= stepDev;
+    for (const end = this.cssW * a + this.te; X < end; X += stepDev) c.drawImage(L, (X - this.te) / a, (Y - this.tf) / d, stepDev / a, hDev / d);
   }
+  /** drawImage snapped to device pixels (1:1 when the sprite was painted at device resolution) */
+  private blit(c: CanvasRenderingContext2D, img: HTMLCanvasElement, x: number, y: number, w: number, h: number): void {
+    const a = this.ta, d = this.td; let W = w * a, H = h * d;
+    if (Math.abs(W - img.width) <= 1.5 && Math.abs(H - img.height) <= 1.5) { W = img.width; H = img.height; }
+    const X = Math.round(x * a + this.te), Y = Math.round(y * d + this.tf);
+    c.drawImage(img, (X - this.te) / a, (Y - this.tf) / d, W / a, H / d);
+  }
+  private readTransform(c: CanvasRenderingContext2D): void { const m = c.getTransform(); this.ta = m.a || 1; this.td = m.d || 1; this.te = m.e; this.tf = m.f; }
 
   private drawStars(c: CanvasRenderingContext2D, bi: BiomeDef, time: number, alpha: number): void {
     const n = { market: 26, riverside: 42, bridge: 60, dawn: 14 }[bi.style];
@@ -828,7 +855,7 @@ export class Backdrop {
 
   private drawMoon(c: CanvasRenderingContext2D, x: number, y: number, rad: number, pale: boolean, alpha: number): void {
     const spr = this.sprite(`moon${rad}${pale}`, res => moonSprite(rad, res, pale));
-    const R = rad * (pale ? 1.7 : 2.4) * this.scale; c.globalAlpha = alpha; c.drawImage(spr, x - R, y - R, R * 2, R * 2);
+    const R = rad * (pale ? 1.7 : 2.4) * this.scale; c.globalAlpha = alpha; this.blit(c, spr, x - R, y - R, R * 2, R * 2);
   }
 
   private drawMoonReflection(c: CanvasRenderingContext2D, x: number, y: number, time: number, alpha: number): void {
@@ -841,21 +868,21 @@ export class Backdrop {
   }
 
   private drawFireworks(c: CanvasRenderingContext2D, camX: number, time: number, alpha: number): void {
-    const sc = this.scale, gy = this.gy; const cols: [string, string][] = [['#ff7ab8', '#ffd1ea'], ['#7ae8ff', '#e0fbff'], ['#ffd36b', '#fff3c4'], ['#b69cff', '#ffffff']];
+    const sc = this.scale, gy = this.gy; const cols = FIREWORK_COLS;
     const slow = this.reduceMotion ? 1.8 : 1;
-    for (let i = 0; i < 3; i++) {
-      const P = (2.7 + i * 0.8) * slow; const tt = time + i * 1.37; const cyc = Math.floor(tt / P); const local = tt - cyc * P;
+    for (let i = 0, n = this.lowFx ? 1 : 4; i < n; i++) {
+      const P = (2.3 + i * 0.7) * slow; const tt = time + i * 1.37; const cyc = Math.floor(tt / P); const local = tt - cyc * P;
       const h = hash01(cyc * 7919 + i * 104729), h2 = hash01(cyc * 31 + i * 977 + 5);
       const x = ((h * 0.8 + 0.1) * this.cssW - camX * 0.02 * sc) % this.cssW; const xx = x < 0 ? x + this.cssW : x;
-      const y = gy - (300 + h2 * 110) * sc; const [col, col2] = cols[(cyc + i) % cols.length];
+      const y = gy - (290 + h2 * 130) * sc; const [col, col2] = cols[(cyc + i) % cols.length];
       const rise = 0.55 * slow;
       if (local < rise) {
         if (this.reduceMotion) continue;
         const k = local / rise; c.globalAlpha = alpha * 0.9; c.fillStyle = col2; c.fillRect(xx - 1, y + (1 - k) * 160 * sc, 2, 6 * sc); continue;
       }
       const k = (local - rise) / (1.4 * slow); if (k > 1) continue;
-      const spr = this.sprite(`fw${i}${(cyc + i) % cols.length}`, res => burstSprite(70, res, col, col2));
-      const s = (0.35 + 0.65 * (1 - Math.pow(1 - k, 3))) * 76 * sc; c.globalAlpha = alpha * Math.pow(1 - k, 1.4);
+      const spr = this.sprite(`fw${(cyc + i) % cols.length}`, res => burstSprite(80, res, col, col2));
+      const s = (0.35 + 0.65 * (1 - Math.pow(1 - k, 3))) * (70 + h * 30) * sc; c.globalAlpha = alpha * Math.min(1, 1.6 * Math.pow(1 - k, 1.3));
       c.drawImage(spr, xx - s, y - s + k * k * 14 * sc, s * 2, s * 2);
     }
     c.globalAlpha = alpha;
@@ -870,18 +897,18 @@ export class Backdrop {
       const f = this.reduceMotion ? 0.5 : Math.sin(time * 7 + i * 1.9); const s = (6 + (i % 2) * 2) * sc;
       c.moveTo(x - s, y - f * s * 0.6); c.quadraticCurveTo(x - s * 0.4, y - s * 0.2, x, y); c.quadraticCurveTo(x + s * 0.4, y - s * 0.2, x + s, y - f * s * 0.6);
     }
-    c.stroke(); c.globalAlpha = 1;
+    c.stroke(); c.globalAlpha = alpha;
   }
 
   /** bonus-time sky 보름달 잔치 (screen space): huge moon, drifting clouds, floating 풍등, sparkles */
   drawBonusSky(c: CanvasRenderingContext2D, alpha: number, camX: number, time: number): void {
     if (time !== this.frameT) { this.frameT = time; this.budget = 1; }
-    const sc = this.scale, gy = this.gy, W = this.cssW;
+    const sc = this.scale, gy = this.gy, W = this.cssW; this.readTransform(c);
     c.globalAlpha = alpha;
-    c.drawImage(this.skyCanvas(null), 0, 0, W, this.cssH);
+    this.blitSky(c, this.skyCanvas(null));
     // the moon (with the rabbit pounding rice cakes)
     const mr = 118; const spr = this.sprite('bonusMoon', res => moonSprite(mr, res, false, true));
-    const R = mr * 2.4 * sc; const mx = W * 0.64, my = gy - 290 * sc; c.drawImage(spr, mx - R, my - R, R * 2, R * 2);
+    const R = mr * 2.4 * sc; const mx = W * 0.64, my = gy - 290 * sc; this.blit(c, spr, mx - R, my - R, R * 2, R * 2);
     // sparkles
     const sp = this.sprite('sparkle', res => sparkleSprite(res));
     const n = this.lowFx ? 8 : 18;
@@ -943,7 +970,7 @@ export class Backdrop {
   /** ground, pits, one-way platforms and the finish gate (world space; ctx already transformed) */
   drawGround(c: CanvasRenderingContext2D, s: RunState, bi: BiomeDef, x0: number, x1: number, sky: boolean, time: number): void {
     const res = worldRes(c); const st: GroundStyle = sky ? 'sky' : bi.style; const P = pal(bi);
-    const tile = this.groundTile(st, bi, res); const tw = tile.width / res, th = tile.height / res;
+    const tile = this.groundTile(st, bi, res); const th = tile.height / res;
     const bridged = !sky && (s.rescue > 0 || s.power.giant > 0 || s.power.dash > 0);
     let prev: { x0: number; x1: number } | null = null;
     const solids = s.level.solids;
@@ -959,9 +986,8 @@ export class Backdrop {
       const a = Math.max(so.x0, x0 - 20), b = Math.min(so.x1, x1 + 20);
       for (let tx = Math.floor(a / GT_W) * GT_W; tx < b; tx += GT_W) {
         const u0 = Math.max(a, tx), u1 = Math.min(b, tx + GT_W); if (u1 <= u0) continue;
-        c.drawImage(tile, (u0 - tx) * res, 0, (u1 - u0) * res, tile.height, u0, GROUND_Y - GT_UP, u1 - u0 + 0.5, th);
+        c.drawImage(tile, (u0 - tx) * res, 0, (u1 - u0) * res, tile.height, u0, GROUND_Y - GT_UP, u1 - u0 + (u1 < b ? 0.5 : 0), th);
       }
-      void tw;
       // pit edges: dark cliff face + a bright rounded lip so gaps read instantly
       let adjR = false; for (let j = i + 1; j < solids.length && solids[j].x0 <= so.x1 + 1; j++) if (solids[j].ground && Math.abs(solids[j].x0 - so.x1) < 1) { adjR = true; break; }
       if (!adjL && so.x0 > x0 - 20) this.drawEdge(c, st, P, so.x0, 1);

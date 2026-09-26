@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "settings": { "bgm": 0.35, "sfx": 0.7, "swapSides": true, "reduceMotion": false, "highContrast": true, "lowFx": true, "showHitbox": false, "assist": true, "ghost": false, "vibrate": false, "gameSpeed": 0.9 },
+  "coins": 1843,
+  "unlocked": ["hotteok", "bungeo"],
+  "main": "bungeo",
+  "partner": "hotteok",
+  "stars": { "1-1": 3, "1-2": 2, "1-3": 1, "1-4": 0 },
+  "stageBest": { "1-1": 12840, "1-2": 9800, "1-3": 7020 },
+  "bestEndless": { "score": 48210, "dist": 1874, "charId": "bungeo", "date": 1758000000000, "assist": false },
+  "bestByChar": { "hotteok": 32100, "bungeo": 48210 },
+  "daily": {
+    "2026-09-20": { "best": 30120, "tries": 3, "charId": "kkochi" },
+    "2026-09-21": { "best": 41555, "tries": 5, "charId": "eomuk" },
+    "2026-09-23": { "best": 18030, "tries": 1, "charId": "hotteok" }
+  },
+  "rank": 4,
+  "xp": 2,
+  "missions": [
+    { "id": "jelly_run", "level": 1, "progress": 210, "target": 350, "runsWithout": 0 },
+    { "id": "coin_tot", "level": 1, "progress": 95, "target": 180, "runsWithout": 1 },
+    { "id": "near", "level": 0, "progress": 2, "target": 3, "runsWithout": 2 }
+  ],
+  "missionCounter": 17,
+  "missionsDone": 14,
+  "rerollDay": "2026-09-21",
+  "totals": { "runs": 41, "dist": 52310, "jellies": 48750, "coins": 3920, "bonusTimes": 52, "playTime": 5712.4, "clears": 9 },
+  "ghosts": {
+    "stage:1-1": { "seed": 1101, "content": 305419896, "charId": "hotteok", "partnerId": null, "mode": "stage", "stageId": "1-1", "log": [0, 0, 95, 1, 96, 0, 180, 2, 204, 0], "score": 12840, "steps": 1900, "assist": false },
+    "daily:2026-09-21": { "seed": 2210921, "content": 305419896, "charId": "eomuk", "partnerId": null, "mode": "daily", "stageId": null, "log": [0, 0, 130, 1, 131, 0], "score": 41555, "steps": 9600, "assist": false }
+  },
+  "tutorialDone": true,
+  "seenHints": ["jump", "slide", "pit"]
+}

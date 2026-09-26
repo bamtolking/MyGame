@@ -102,7 +102,7 @@ export function recordBests(p: Progress, s: RunState): void {
   // hit-free stretch needs a replay unless the run was entirely hit-free; only worth it while it could set a record
   const whole = Math.floor(s.dist);
   if (st.hits + st.shieldsUsed === 0) up(b, 'nohit', whole);
-  else if (whole > (b.nohit ?? 0) && !p.achievements?.sk_nohit) up(b, 'nohit', runTrace(s).noHit);
+  else if (whole > (b.nohit ?? 0) && whole >= 200 && !p.achievements?.sk_nohit) up(b, 'nohit', runTrace(s).noHit);   // one cached replay (~30–60 ms)
 }
 
 // ---------------------------------------------------------------- the 30 achievements

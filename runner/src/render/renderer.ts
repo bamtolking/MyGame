@@ -481,10 +481,13 @@ export class Renderer {
     const c = this.c; const W = this.cssW, H = this.worldH;
     const k = Math.min(1, h.t / 0.2); const pulse = this.opts.reduceMotion ? 1 : 1 + 0.06 * Math.sin(h.t * 8);
     c.globalAlpha = k;
-    const fs = Math.min(40, Math.max(22, W * 0.05)) * pulse;
-    const cx = W / 2, cy = H * 0.3;
+    const fs = Math.min(40, Math.max(20, W * 0.05)) * pulse;
+    const cx = W / 2, cy = H * 0.5;           // below the chunk signs (y 150), above the ground band
+    c.font = `900 ${Math.round(fs)}px ${FONT}`; const tw = c.measureText(h.text).width;
+    const pw = Math.min(W - 16, tw + 40), ph = fs * (h.sub ? 2.05 : 1.35);
+    c.fillStyle = 'rgba(20,12,40,0.55)'; rr(c, cx - pw / 2, cy - fs * 0.72, pw, ph, 14); c.fill();
     bigText(c, cx, cy, h.text, '#ffe27a', fs);
-    if (h.sub) bigText(c, cx, cy + fs * 0.95, h.sub, '#fff', Math.max(12, fs * 0.42));
+    if (h.sub) bigText(c, cx, cy + fs * 0.88, h.sub, '#fff', Math.max(12, fs * 0.42));
     c.globalAlpha = 1;
   }
 
@@ -520,15 +523,17 @@ export class Renderer {
     c.fillStyle = g; c.fillRect(0, top, W, bh);
     c.fillStyle = 'rgba(255,255,255,0.12)'; c.fillRect(0, top, W, 1);
     const L = this.insets.l + 12, R = W - this.insets.r - this.hud.pauseW - 8;
-    const barH = 13 * u; const y1 = top + 7 * u;
+    // row 1: 따끈함 (full width) · row 2: lanterns + score/흐름 · row 3: progress + stage chips — rows scale with the band
+    const barH = bh * 0.19; const y1 = top + bh * 0.09;
     this.warmthBar(s, L + 18 * u, y1, Math.max(60, R - L - 18 * u), barH, u);
-    const row2 = top + 7 * u + barH + 7 * u; const ls = 19 * u;
-    this.lanterns(s, L, row2, ls);
-    const midX = L + BONUS_WORD.length * (ls + 4 * u) + (R - (L + BONUS_WORD.length * (ls + 4 * u))) * 0.42;
-    this.scoreBlock(s, midX, row2 + ls * 0.55, u * 0.92);
-    if (s.mode === 'stage') this.stageChips(s, R, row2 + ls * 0.55, u * 0.9, 'right');
-    // progress: a thin full-width line at the band's bottom
-    this.progressBar(s, L, top + bh - 7 * u, R - L, 4 * u, u, true);
+    const ls = Math.min(19 * u, bh * 0.27); const cy2 = top + bh * 0.52;
+    this.lanterns(s, L, cy2 - ls * 0.52, ls);
+    const lw = BONUS_WORD.length * ls * 1.2;
+    this.scoreBlock(s, L + lw + (R - L - lw) * 0.5, cy2, Math.min(u * 0.95, bh / 70), false, R);
+    const cy3 = top + bh * 0.85; const k = Math.min(u * 0.85, bh / 76);
+    let pr = R;
+    if (s.mode === 'stage') pr = R - this.stageChips(s, R, cy3, k, 'right') - 8;
+    this.progressBar(s, L, cy3 - 2 * u, Math.max(40, pr - L), 4 * u, k, true, s.mode !== 'stage' ? R : 0);
     // power rings float in the world area's top-left corner (small, away from the runner's column)
     this.powerRings(s, 10 + this.insets.l, 16 * u, 10 * u, u);
   }
@@ -537,8 +542,8 @@ export class Renderer {
     const c = this.c;
     const pct = Math.max(0, Math.min(1, s.hp / s.maxHp));
     this.hpGhost = pct > this.hpGhost ? pct : this.hpGhost + (pct - this.hpGhost) * 0.04;
-    const low = pct < LOW_HP_FRAC && s.phase !== 'over';
-    const pulse = low && !this.opts.reduceMotion ? 0.5 + 0.5 * Math.sin(this.time * Math.PI * 1.6) : 0;   // 0.8 Hz
+    const low = pct < LOW_HP_FRAC;
+    const pulse = low && s.phase === 'run' && !this.opts.reduceMotion ? 0.5 + 0.5 * Math.sin(this.time * Math.PI * 1.6) : 0;   // 0.8 Hz
     c.fillStyle = 'rgba(20,14,40,0.72)'; rr(c, bx - 3, by - 3, bw + 6, bh + 6, (bh + 6) / 2); c.fill();
     c.fillStyle = 'rgba(255,255,255,0.28)'; if (this.hpGhost > 0.01) { rr(c, bx, by, Math.max(bh, bw * this.hpGhost), bh, bh / 2); c.fill(); }
     const hg = c.createLinearGradient(bx, 0, bx + bw, 0);
@@ -546,8 +551,10 @@ export class Renderer {
     c.fillStyle = hg; if (pct > 0) { rr(c, bx, by, Math.max(bh, bw * pct), bh, bh / 2); c.fill(); }
     if (low && pulse > 0) { c.strokeStyle = `rgba(${FROST},${0.35 + 0.4 * pulse})`; c.lineWidth = 2; rr(c, bx - 2, by - 2, bw + 4, bh + 4, (bh + 4) / 2); c.stroke(); }
     c.fillStyle = 'rgba(20,14,40,0.3)'; for (let i = 1; i < 5; i++) c.fillRect(bx + bw * i / 5 - 1, by + 2, 2, bh - 4);
-    c.font = `800 ${Math.round(10.5 * u)}px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = low ? '#1c3550' : '#4a2200';
-    c.fillText(`따끈함 ${Math.ceil(Math.max(0, s.hp))}`, bx + 7 * u, by + bh / 2 + 0.5);
+    c.font = `800 ${Math.round(10.5 * u)}px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.lineJoin = 'round';
+    const lab = `따끈함 ${Math.ceil(Math.max(0, s.hp))}`;
+    c.lineWidth = 3; c.strokeStyle = 'rgba(20,12,36,0.85)'; c.strokeText(lab, bx + 7 * u, by + bh / 2 + 0.5);
+    c.fillStyle = '#fff'; c.fillText(lab, bx + 7 * u, by + bh / 2 + 0.5);
     // icon: steam when warm, a frost crystal when cold (slow 0.8 Hz pulse)
     const ix = bx - 11 * u, iy = by + bh / 2, ir = 9 * u * (1 + 0.12 * pulse);
     c.fillStyle = low ? '#dff2ff' : '#ffb35c'; c.beginPath(); c.arc(ix, iy, ir, 0, Math.PI * 2); c.fill();
@@ -581,7 +588,7 @@ export class Renderer {
     return px;
   }
 
-  private scoreBlock(s: RunState, cx: number, cy: number, u: number): void {
+  private scoreBlock(s: RunState, cx: number, cy: number, u: number, flowBelow = false, maxX = Infinity): void {
     const c = this.c; const sc = totalScore(s).toLocaleString('ko-KR');
     const fs = 22 * u; c.font = `900 ${Math.round(fs)}px ${FONT}`;
     const tw = c.measureText(sc).width;
@@ -589,7 +596,12 @@ export class Renderer {
     this.flameRing(s, fx, cy, fr);
     bigText(c, cx, cy, sc, '#fff', fs);
     const lv = flowLevel(s);
-    if (lv > 0) { c.font = `800 ${Math.round(10 * u)}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#ffcf8a'; c.fillText(`흐름 +${Math.round(lv * STREAK_BONUS * 100)}%`, fx, cy + fr + 8 * u); }
+    if (lv > 0) {
+      const t = `흐름 +${Math.round(lv * STREAK_BONUS * 100)}%`;
+      c.font = `800 ${Math.round(10 * u)}px ${FONT}`; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineWidth = 3; c.strokeStyle = 'rgba(20,12,36,0.85)'; c.fillStyle = '#ffcf8a';
+      if (flowBelow) { c.textAlign = 'center'; c.strokeText(t, fx, cy + fr + 8 * u); c.fillText(t, fx, cy + fr + 8 * u); }
+      else if (cx + tw / 2 + 6 * u + c.measureText(t).width <= maxX) { c.textAlign = 'left'; c.strokeText(t, cx + tw / 2 + 6 * u, cy + 1); c.fillText(t, cx + tw / 2 + 6 * u, cy + 1); }
+    }
   }
 
   /** 흐름: a ring filling toward the next level around a flame that grows per level */
@@ -607,23 +619,27 @@ export class Renderer {
   }
 
   /** stage: distance to the finish · endless/daily: distance vs personal best (with a PB tick) */
-  private progressBar(s: RunState, x: number, y: number, w: number, h: number, u: number, thin = false): void {
+  private progressBar(s: RunState, x: number, y: number, w: number, h: number, u: number, thin = false, labelRight = 0): void {
     const c = this.c;
     let f = 0; let label = ''; let mark = -1;
     if (s.mode === 'stage' && s.level.stageLen > 0) { f = Math.min(1, s.dist / s.level.stageLen); label = `${Math.floor(f * 100)}%`; }
     else if (this.hud.pbDist > 0 && !s.trial) { const span = Math.max(this.hud.pbDist * 1.15, s.dist + 1); f = s.dist / span; mark = this.hud.pbDist / span; label = s.dist >= this.hud.pbDist ? '최고 기록 넘었어요!' : `최고까지 ${Math.ceil(this.hud.pbDist - s.dist).toLocaleString('ko-KR')}m`; }
     else if (s.mode === 'tutorial' || s.trial) return;
     else { label = `${Math.floor(s.dist).toLocaleString('ko-KR')}m`; f = 0; }
+    if (thin && label && labelRight) {
+      c.font = `700 ${Math.round(10 * u)}px ${FONT}`; c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,255,255,0.8)';
+      c.fillText(label, labelRight, y + h / 2); w = Math.max(30, labelRight - c.measureText(label).width - 8 * u - x); label = '';
+    }
     c.fillStyle = 'rgba(20,14,40,0.6)'; rr(c, x, y, w, h, h / 2); c.fill();
     if (f > 0) { c.fillStyle = s.mode === 'stage' ? '#80ed99' : '#8fd8ff'; rr(c, x, y, Math.max(h, w * f), h, h / 2); c.fill(); }
     if (mark >= 0) { c.fillStyle = '#ff5d8f'; c.fillRect(x + w * mark - 1.5, y - 3, 3, h + 6); }
     if (s.mode === 'stage') { c.fillStyle = '#fff'; c.fillRect(x + w - 2, y - 3, 2, h + 6); }
     if (!thin && label) { c.font = `700 ${Math.round(10 * u)}px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,255,255,0.88)'; c.fillText(label, x + w + 6 * u, y + h / 2); }
-    else if (thin && label && s.mode !== 'stage') { c.font = `700 ${Math.round(9 * u)}px ${FONT}`; c.textAlign = 'right'; c.textBaseline = 'bottom'; c.fillStyle = 'rgba(255,255,255,0.7)'; c.fillText(label, x + w, y - 2); }
+
   }
 
   /** stage chips: 「별사탕 72% / 80%」 and the 3 golden pouches */
-  private stageChips(s: RunState, x: number, y: number, u: number, align: 'center' | 'right'): void {
+  private stageChips(s: RunState, x: number, y: number, u: number, align: 'center' | 'right'): number {
     const c = this.c; const goal = this.hud.stageGoalPct;
     const pct = jellyPct(s); const ok = goal > 0 && pct >= goal;
     const txt = goal > 0 ? `별사탕 ${pct}% / ${goal}%` : `별사탕 ${pct}%`;
@@ -639,6 +655,7 @@ export class Renderer {
       const got = (s.pouchesGot >> i) & 1, before = (this.hud.pouchesBefore >> i) & 1;
       pouch(c, x0 + i * (ps * 2 + 3 * u), y, ps, got ? 2 : before ? 1 : 0);
     }
+    return total;
   }
 }
 

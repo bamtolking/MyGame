@@ -44,7 +44,7 @@ interface RunCtx {
   slow: { t: number; untilX: number } | null;
   slideTaught: boolean;                     // tutorial: before the slide beat the whole landscape screen is "jump"
   warned50: boolean; lowT: number; missionT: number; toasted: Set<string>;
-  results: { dispose: () => void } | null;
+  results: { dispose: () => void; readyAt: number } | null;
   timers: number[];
   unbind: (() => void) | null;
 }
@@ -58,6 +58,9 @@ export class App {
   run: RunCtx | null = null;
   screen: Screen = 'home';
   fps = 0; private frames = 0; private fpsT = 0;
+  /** a frame gap longer than this auto-pauses a live run (GDD §4.7); tests may raise it around screenshots */
+  stallMs = STALL_PAUSE_MS;
+  private graceUntil = 0;            // no stall-pause right after a run starts / the first gesture (audio init)
   private raf = 0; private loopOn = false;
   private lastW = 0; private lastH = 0;
   private persistAsked = false;
@@ -82,9 +85,12 @@ export class App {
     document.addEventListener('selectstart', e => { if (!inField(e)) e.preventDefault(); });
     document.addEventListener('gesturestart', e => e.preventDefault());
     // WebAudio may only start from a gesture: Chrome counts pointerup/touchend for touch, iOS touchend
-    const unlock = () => this.audio.unlock();
+    const unlock = () => {
+      if (!this.audio.ctx) this.graceUntil = Math.max(this.graceUntil, performance.now() + 1000);   // the first gesture builds the audio graph
+      this.audio.unlock();
+    };
     for (const t of ['pointerdown', 'pointerup', 'touchend', 'keydown']) document.addEventListener(t, unlock, { capture: true, passive: true });
-    this.input.onPress = () => { this.audio.unlock(); document.getElementById('title-ov')?.classList.add('gone'); };
+    this.input.onPress = () => { unlock(); document.getElementById('title-ov')?.classList.add('gone'); };
     this.input.onChange = () => this.padsLit();
     try { const as = (navigator as any).audioSession; if (as) as.type = 'ambient'; } catch { /* ignore */ }
     if (!this.p.tutorialDone) this.startTutorial(); else this.showHome();
@@ -112,6 +118,9 @@ export class App {
   // ------------------------------------------------------------------ generic UI bits
   toast(text: string, kind: 'info' | 'good' | 'warn' = 'info', sec = 2.5): void {
     let box = document.getElementById('toasts'); if (!box) { box = h('div', { id: 'toasts' }); document.body.append(box); }
+    // during a run toasts stay off the play band: landscape → over the ground at the bottom, portrait → under the HUD band
+    box.classList.toggle('in-run', this.screen === 'run' && !!this.run);
+    box.classList.toggle('port', this.isPortrait());
     const el = h('div', { class: 'toast ' + kind, role: 'status' }, text); box.append(el);
     setTimeout(() => el.classList.add('out'), sec * 1000); setTimeout(() => el.remove(), sec * 1000 + 400);
   }
@@ -178,8 +187,7 @@ export class App {
   }
 
   startRun(cfg: RunConfig, o: { dateKey?: string } = {}): void {
-    this.audio.unlock();
-    this.nav('run');
+    this.nav('run');                 // (audio is unlocked by the gesture that started the run — never at boot)
     // a daily started through startRun(cfg) (e.g. from the 7-day archive) books into the day its seed belongs to
     const dateKey = o.dateKey ?? (cfg.mode === 'daily' ? dailyArchive().find(k => dailySeed(k) === (cfg.seed >>> 0)) : undefined) ?? todayKey();
     const s = newRun(cfg);
@@ -198,7 +206,12 @@ export class App {
     };
     this.buildRunDom(this.run);
     this.input.reset(); this.input.enabled = true;
+    this.graceUntil = performance.now() + 1000;
     this.biomeMusic(s.biome);
+    // portrait is a first-class layout (no "please rotate" wall) — one gentle, one-time tip
+    if (this.isPortrait() && s.mode !== 'tutorial' && Array.isArray(this.p.seen) && !this.p.seen.includes('rotate-tip')) {
+      this.p.seen.push('rotate-tip'); this.toast('가로로 돌리면 화면이 더 커져요', 'info', 3.5);
+    }
     if (s.phase === 'countdown') this.audio.play('count');
     this.startLoop();
   }
@@ -206,17 +219,17 @@ export class App {
   private buildRunDom(rc: RunCtx): void {
     const st = this.p.settings; const swap = st.swapSides; const s = rc.s;
     const pad = (zone: Exclude<Zone, null>) => h('div', { class: `pad ${zone}`, 'data-zone': zone },
-      h('div', { class: 'pad-in' }, h('span', { class: 'ic' }, zone === 'jump' ? '⤒' : '⤓'), h('b', {}, zone === 'jump' ? '점프' : '슬라이드'), h('small', {}, zone === 'jump' ? '탭 · 공중에서 한 번 더' : '누르고 있기')));
+      h('div', { class: 'pad-in' }, h('span', { class: 'ic' }, zone === 'jump' ? '▲' : '▼'), h('b', {}, zone === 'jump' ? '점프' : '슬라이드'), h('small', {}, zone === 'jump' ? '탭 · 공중에서 한 번 더' : '누르고 있기')));
     const pauseBtn = h('button', { id: 'btn-pause', type: 'button', 'aria-label': '일시정지', onclick: () => { this.audio.play('click'); this.setPaused(true); } }, h('i'), h('i'));
     const stage = h('div', { id: 'stage' }, h('canvas', { id: 'cv' }), pauseBtn);
     const showHints = st.showPads || this.p.totals.runs < 3 || s.mode === 'tutorial';
     const hints = h('div', { id: 'lhints', class: (swap ? 'swap' : '') + (showHints ? ' show' : '') },
-      h('div', { class: 'lh jump' }, h('span', {}, '⤒'), h('b', {}, '점프')), h('div', { class: 'lh slide' }, h('span', {}, '⤓'), h('b', {}, '슬라이드')));
+      h('div', { class: 'lh jump' }, h('span', {}, '▲'), h('b', {}, '점프')), h('div', { class: 'lh slide' }, h('span', {}, '▼'), h('b', {}, '슬라이드')));
     const pads = h('div', { id: 'pads', class: swap ? 'swap' : '' }, pad('jump'), pad('slide'));
     const runEl = h('div', { id: 'run', class: 'screen run' }, stage, hints, pads);
     if (s.mode === 'tutorial') {
       runEl.append(
-        h('div', { id: 'title-ov', 'aria-hidden': 'true' }, h('h1', {}, '야식 대질주'), h('p', { class: 'sub' }, '보름달까지 달려라!'), h('p', { class: 'how' }, '화면을 누르면 점프!')),
+        h('div', { id: 'title-ov', 'aria-hidden': 'true' }, h('h1', {}, '야식 대질주'), h('p', { class: 't-sub' }, '보름달까지 달려라!'), h('p', { class: 't-how' }, this.isPortrait() ? '점프 버튼을 누르면 점프!' : '화면을 누르면 점프!')),
         h('button', { id: 'btn-skip', type: 'button', onclick: () => { this.audio.play('click'); this.skipTutorial(); } }, '건너뛰기'),
       );
     }
@@ -281,6 +294,7 @@ export class App {
       stage.style.height = worldH + bandH + 'px';
       runEl.style.setProperty('--bandH', bandH + 'px');
       runEl.style.setProperty('--worldH', worldH + 'px');
+      document.documentElement.style.setProperty('--toastTop', worldH + bandH + 10 + 'px');
     } else { stage.style.height = ''; runEl.style.removeProperty('--bandH'); runEl.style.removeProperty('--worldH'); }
     const rect = stage.getBoundingClientRect();
     if (rect.width > 10 && rect.height > 10) r.resize(rect.width, rect.height, { dprCap: st.fps30 ? 1.5 : 2, bandH, insets: portrait ? { l: ins.l, r: ins.r, t: 0, b: 0 } : ins });
@@ -388,7 +402,8 @@ export class App {
     if (rc.lastT && now - rc.lastT < minGap) return;
     let real = rc.lastT ? (now - rc.lastT) / 1000 : 0; rc.lastT = now; rc.frames++;
     const s = rc.s;
-    if (real * 1000 > STALL_PAUSE_MS && rc.frames > 3 && !rc.ended && (s.phase === 'run' || s.phase === 'countdown')) { this.setPaused(true); return; }
+    // a hitch (> 250 ms) pauses a live run so it can never cost a hit; the tutorial has nothing to lose, so it just drops the time
+    if (real * 1000 > this.stallMs && rc.frames > 3 && now > this.graceUntil && s.mode !== 'tutorial' && !rc.ended && (s.phase === 'run' || s.phase === 'countdown')) { this.setPaused(true); return; }
     real = Math.min(real, 0.25);
 
     // post-pause 3-2-1 (the sim is simply not stepped)

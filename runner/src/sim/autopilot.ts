@@ -37,7 +37,9 @@ export class Autopilot {
       this.target = null;
     }
     this.holdLeft--;
-    return { jump, slide: this.slide, jumpHeld: jump || (s.bonusStage === 'sky' && this.skyHold(s)) };
+    // the planner does not model gliding, so never hold jump on the ground course (a held press would glide and
+    // desynchronise the plan); in the sky, bob through the candy field
+    return { jump, slide: this.slide, jumpHeld: (jump && charOf(s).glide === 0) || (s.bonusStage === 'sky' && this.skyHold(s)) };
   }
 
   private late(): number { return this.jitter <= 0 ? 0 : Math.floor(rngNext(this.rng) * (this.jitter + 1)); }

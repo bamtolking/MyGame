@@ -136,7 +136,12 @@ export function tipFor(s: RunState): string {
       case 'pit': return '구덩이는 끝자락에서 점프해요 — 별사탕 아치를 따라가요';
     }
   }
-  if ((s.deathCause ?? 'drain') === 'drain' && s.stats.hits <= 1) return '꿀물 길을 따라가면 더 오래 따끈해요';
+  if (s.phase !== 'clear' && (s.deathCause ?? 'drain') === 'drain' && s.stats.hits <= 1) return '꿀물 길을 따라가면 더 오래 따끈해요';
+  if (s.phase === 'clear' && s.stageId) {
+    const st = STAGE_BY_ID[s.stageId];
+    if (st && jellyPct(s) < st.stars.jellyPct) return '별사탕 줄이 곧 안전한 길이에요 — 줄을 따라가면 ★2가 가까워요';
+    if (((s.pouchesGot ?? 0) & 7) !== 7) return '황금 복주머니는 높은 길, 위험한 줄, 멀리 보이는 갈림길에 숨어 있어요';
+  }
   if (s.stats.letters < BONUS_WORD.length && s.stats.bonusTimes === 0) return '보·름·달·잔·치 다섯 글자를 모으면 보름달 잔치가 열려요';
   if (s.stats.nearMisses === 0) return '아슬아슬하게 넘으면 흐름이 두 칸씩 쌓여요';
   return '흐름을 이어가면 별사탕 점수가 최대 +50%예요';
@@ -194,7 +199,7 @@ export function mountResults(host: HTMLElement, o: ResultsOpts): { el: HTMLEleme
     const thisPouch = [0, 1, 2].filter(i => (s.pouchesGot >> i) & 1).length;
     starsEl = h('div', { class: 'res-stars' },
       h('div', { class: 'stars' }, ...[0, 1, 2].map(i => h('span', { class: 'st' + ((mask >> i) & 1 ? ' on' : '') + ((fresh >> i) & 1 ? ' new' : ''), style: `animation-delay:${0.25 + i * 0.18}s` }, '★'))),
-      h('small', {}, [cleared ? '도착' : `도착 못 함`, `별사탕 ${jellyPct(s)}%/${stage.stars.jellyPct}%`, `복주머니 ${cleared ? pouchCount : thisPouch}/3`].join(' · ')),
+      h('small', {}, [cleared ? '도착' : '도착 전', `별사탕 ${jellyPct(s)}%/${stage.stars.jellyPct}%`, `복주머니 ${cleared ? pouchCount : thisPouch}/3`].join(' · ')),
     );
   }
 

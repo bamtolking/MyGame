@@ -90,7 +90,7 @@ export const MISSIONS: MissionTemplate[] = [
   { id: 'dist_run', scope: 'run', verb: 'run', text: n => `한 판에 ${m(n)} 달리기`, targets: [400, 900, 1600], measure: dist, requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },
   { id: 'dist_nofall', scope: 'run', verb: 'run', text: n => `구덩이에 안 빠지고 ${m(n)} 달리기`, targets: [300, 700, 1200], measure: s => runTrace(s).noFall, quick: 2, stageLevels: 1, quickStage: 1 },
   { id: 'streak', scope: 'run', verb: 'dodge', text: n => `위험물을 ${n}번 연달아 피하기`, targets: [10, 25, 45], measure: s => s.stats.bestStreak, quick: 3, stageLevels: 1, quickStage: 1 },
-  { id: 'near', scope: 'run', verb: 'dodge', text: n => `한 판에 아슬아슬 ${n}번`, targets: [3, 7, 11], measure: s => s.stats.nearMisses, requires: 'long', quick: 1, stageLevels: 0, quickStage: 0 },   // GDD→ [3, 8, 15]
+  { id: 'near', scope: 'run', verb: 'dodge', text: n => `한 판에 아슬아슬 ${n}번`, targets: [3, 6, 9], measure: s => s.stats.nearMisses, requires: 'long', quick: 1, stageLevels: 0, quickStage: 0 },   // GDD→ [3, 8, 15]
   { id: 'airjump', scope: 'run', verb: 'jump', text: n => `한 판에 2단 점프 ${n}번`, targets: [15, 25, 35], measure: s => s.stats.airJumps, requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },   // GDD→ [15, 35, 60]
   { id: 'slide', scope: 'run', verb: 'slide', text: n => `한 판에 슬라이드 ${n}번`, targets: [8, 13, 18], measure: s => s.stats.slides, requires: 'long', quick: 1, stageLevels: 0, quickStage: 0 },   // GDD→ [10, 25, 45]
   { id: 'bonus_tot', scope: 'total', verb: 'feast', text: n => `보름달 잔치 ${n}번 열기 (누적)`, targets: [1, 3, 6], measure: s => s.stats.bonusTimes, requires: 'long', quick: 1, stageLevels: 0, quickStage: 0 },
@@ -109,7 +109,7 @@ export const MISSIONS: MissionTemplate[] = [
   { id: 'bonus_run', scope: 'run', verb: 'feast', text: n => `한 판에 보름달 잔치 ${n}번`, targets: [1, 2, 3], measure: s => s.stats.bonusTimes, requires: 'long', levelRequires: [null, null, 'relay'], quick: 1, stageLevels: 0, quickStage: 0 },   // 3 needs the relay partner's extra distance
   { id: 'tier_run', scope: 'run', verb: 'run', text: n => `속도 ${n}단계까지 달리기`, targets: [3, 5, 6], measure: s => s.stats.maxTier + 1, requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },
   { id: 'smash_run', scope: 'run', verb: 'power', text: n => `한 판에 장애물 ${n}개 부수기`, targets: [3, 8, 15], measure: s => s.stats.smashed, requires: 'long', quick: 3, stageLevels: 0, quickStage: 0 },
-  { id: 'flow_run', scope: 'run', verb: 'dodge', text: n => `흐름 불꽃 ${n}단계 만들기`, targets: [2, 3, 5], measure: s => s.stats.maxFlow, quick: 2, stageLevels: 1, quickStage: 1 },
+  { id: 'flow_run', scope: 'run', verb: 'dodge', text: n => `흐름 불꽃 ${n}단계 만들기`, targets: [2, 3, 5], measure: s => s.stats.maxFlow, quick: 2, stageLevels: 1, quickStage: 0 },
   { id: 'coin_run', scope: 'run', verb: 'coin', text: n => `한 판에 엽전 ${n}개`, targets: [20, 45, 80], measure: s => s.stats.coins, requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },
   { id: 'potion_run', scope: 'run', verb: 'honey', text: n => `한 판에 꿀물 ${n}개`, targets: [4, 7, 9], measure: s => s.stats.potions + s.stats.miniPotions, requires: 'long', quick: 1, stageLevels: 0, quickStage: 0 },   // GDD→ [4, 8, 12]
   { id: 'sky_run', scope: 'run', verb: 'feast', text: n => `잔치에서 하늘 별사탕 ${n}개`, targets: [30, 70, 120], measure: s => s.stats.bonusJellies, requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },
@@ -120,7 +120,7 @@ export const MISSIONS: MissionTemplate[] = [
   { id: 'nohit_dist', scope: 'run', verb: 'dodge', text: n => `한 번도 안 부딪히고 ${m(n)} 달리기`, targets: [250, 550, 900], measure: s => runTrace(s).noHit, quick: 2, stageLevels: 1, quickStage: 1 },   // GDD→ [250, 600, 1100]
   { id: 'super_bonus', scope: 'total', verb: 'feast', quirky: true, text: n => `왕보름달 잔치 ${n}번 열기 (누적)`, targets: [1, 2, 3], measure: s => s.stats.superBonus, requires: 'long', levelRequires: [null, null, 'relay'], quick: 0, stageLevels: 0, quickStage: 0 },
   { id: 'fastfall_run', scope: 'run', verb: 'slide', text: n => `한 판에 빠른 낙하 ${n}번`, targets: [5, 15, 30], measure: s => s.stats.fastFalls, requires: 'world2', quick: 0, stageLevels: 0, quickStage: 0 },
-  { id: 'relay_dist', scope: 'run', verb: 'run', text: n => `이어달리기 주자로 ${m(n)} 달리기`, targets: [200, 500, 900], measure: s => Math.floor(s.stats.relayDist), requires: 'relay', quick: 0, stageLevels: 0, quickStage: 0 },
+  { id: 'relay_dist', scope: 'run', verb: 'run', text: n => `이어달리기 주자로 ${m(n)} 달리기`, targets: [200, 400, 550], measure: s => Math.floor(s.stats.relayDist), requires: 'relay', quick: 0, stageLevels: 0, quickStage: 0 },   // GDD→ [200, 500, 900]
   { id: 'dist_tot', scope: 'total', verb: 'run', text: n => `모두 합쳐 ${m(n)} 달리기`, targets: [3000, 8000, 14000], measure: dist, quick: 0, stageLevels: 1, quickStage: 0 },   // GDD→ [3000, 8000, 20000]
   { id: 'jelly_tot', scope: 'total', verb: 'candy', text: n => `별사탕 ${fmt(n)}개 먹기 (누적)`, targets: [1000, 3000, 8000], measure: s => s.stats.jellies, quick: 1, stageLevels: 1, quickStage: 0 },
   { id: 'near_tot', scope: 'total', verb: 'dodge', text: n => `아슬아슬 ${n}번 (누적)`, targets: [20, 40, 60], measure: s => s.stats.nearMisses, requires: 'long', quick: 0, stageLevels: 0, quickStage: 0 },   // GDD→ [20, 50, 120]
@@ -134,12 +134,22 @@ export const MISSION_BY_ID: Record<string, MissionTemplate> = Object.fromEntries
 
 export interface ActiveMission { id: string; level: number; progress: number; target: number; runsWithout: number }
 
-/** Reward per difficulty level (GDD §9.3: XP 1/2/3, 엽전 40/90/160). */
-export const MISSION_REWARD = [{ xp: 1, coins: 40 }, { xp: 2, coins: 90 }, { xp: 3, coins: 160 }];
+/**
+ * Reward per difficulty level. XP 1/2/3 as GDD §9.3; 엽전 lowered from the GDD's 40/90/160 to 15/35/60 because the
+ * casual-bot economy sim (tests/missions.test.ts) books ~1.5 missions per run: with GDD values missions alone paid
+ * ~120 엽전/run and the total came to ~500/run against the 120–180 target.
+ */
+export const MISSION_REWARD = [{ xp: 1, coins: 15 }, { xp: 2, coins: 35 }, { xp: 3, coins: 60 }];
 export const RANK_MAX = 30;
 export const RANK_XP = (rank: number) => Math.min(3 + Math.floor(rank / 3), 9);   // xp from rank → rank+1
-/** coins on reaching rank+1 (GDD §9.4 `100 + 50r`, r = the rank being left) */
-export const RANK_REWARD = (rank: number) => 100 + rank * 50;
+/**
+ * Economy knobs (tests/missions.test.ts "economy" reports the effect). GDD §9.4 asks 100 + 50r, but that sums to
+ * 24,750 엽전 by rank 30 — more than everything the shop sells (10,800) — and paid ~250/run on its own in the sim.
+ * 50 + 5r sums to 3,675 (≈ 35/run).
+ */
+export const ECONOMY = { rankBase: 50, rankPer: 5 };
+/** coins on reaching rank+1 (r = the rank being left) */
+export const RANK_REWARD = (rank: number) => ECONOMY.rankBase + rank * ECONOMY.rankPer;
 /** Titles shown for every rank (index = rank). Ranks that unlock a character show the character instead. */
 export const RANK_TITLES: string[] = [
   '첫 손님', '골목 새내기', '야시장 심부름꾼', '호떡 뒤집개', '꼬치 굽는 손', '떡꼬치 단골', '붕어빵 틀지기', '달고나 견습생',
@@ -200,10 +210,18 @@ export function levelForRank(rank: number, roll: number): number {
   return r < 15 ? 0 : r < 60 ? 1 : 2;
 }
 
+/** How many levels of `t` count as "finished in one typical run" for this save's current main mode. */
+export function quickLevels(t: MissionTemplate, p: Progress): number { return longModeOpen(p) ? t.quick : t.quickStage; }
+
 /**
  * Deterministic mission draw (the same save always offers the same next mission).
  * `exclude`: ids that must not be drawn (all active ones). `others`: the missions that will stay active next to the new one
  * (for the verb / quirky / quick rules) — defaults to the excluded ids.
+ *
+ * Slot shape: exactly one "이번 판" mission — a 하-level mission a typical run finishes — and two goals that take a few
+ * runs (중/상 by rank). The first draw without a quick mission among `others` is the quick one, so after any
+ * completion / swap the set is back to one quick + two longer goals. This keeps the GDD rule (≥ 1 finishable in one run)
+ * while pacing rank XP (all-quick sets would hand out ~2× the XP the rank curve is built for).
  */
 export function drawMission(exclude: string[], p: Progress, counter: number, others?: ActiveMission[]): ActiveMission {
   const co: { id: string; level: number }[] = others ?? exclude.map(id => ({ id, level: 0 }));
@@ -213,21 +231,27 @@ export function drawMission(exclude: string[], p: Progress, counter: number, oth
     const t = MISSION_BY_ID[a.id]; if (!t) continue;
     verbs[t.verb] = (verbs[t.verb] ?? 0) + 1; if (t.quirky) quirky = true; if (isQuick(a, p)) quick = true;
   }
-  const needQuick = co.length >= 2 && !quick;
   const want = levelForRank(p.rank, mix(counter, p.rank, 7));
-  const pool: { t: MissionTemplate; level: number }[] = [];
-  for (const t of MISSIONS) {
-    if (exclude.includes(t.id) || (verbs[t.verb] ?? 0) >= 2 || (quirky && t.quirky)) continue;
-    let lv = Math.min(want, maxLevelFor(t, p));
-    if (lv < 0) continue;
-    if (needQuick) { lv = Math.min(lv, (longModeOpen(p) ? t.quick : t.quickStage) - 1); if (lv < 0) continue; }
-    pool.push({ t, level: lv });
-  }
+  const build = (mode: 'quick' | 'goal' | 'any') => {
+    const pool: { t: MissionTemplate; level: number }[] = [];
+    for (const t of MISSIONS) {
+      if (exclude.includes(t.id) || (verbs[t.verb] ?? 0) >= 2 || (quirky && t.quirky)) continue;
+      const max = maxLevelFor(t, p); if (max < 0) continue;
+      const q = quickLevels(t, p);
+      if (mode === 'quick') { if (q > 0) pool.push({ t, level: 0 }); continue; }
+      const lo = mode === 'goal' ? q : 0;
+      if (lo > max) continue;
+      pool.push({ t, level: Math.max(lo, Math.min(want, max)) });
+    }
+    return pool;
+  };
+  let pool = build(quick ? 'goal' : 'quick');
+  if (!pool.length) pool = build('any');
   // quirky missions are a seasoning, not the meal: half weight
   const weighted: { t: MissionTemplate; level: number }[] = [];
   for (const c of pool) { weighted.push(c); if (!c.t.quirky) weighted.push(c); }
   if (!weighted.length) {
-    // safety net (should not happen: jelly_run / smash_tot / big_tot are always eligible): any unexcluded template at level 0
+    // safety net (should not happen: jelly_run / big_tot are always eligible): any unexcluded template at level 0
     const t = MISSIONS.find(x => !exclude.includes(x.id)) ?? MISSIONS[0];
     return { id: t.id, level: 0, progress: 0, target: t.targets[0], runsWithout: 0 };
   }
@@ -268,7 +292,13 @@ const traceCache = new WeakMap<RunState, RunTrace>();
 export function runTrace(s: RunState): RunTrace {
   const hit = traceCache.get(s); if (hit) return hit;
   let t: RunTrace | null = null;
-  if (s.log.length && s.steps > 0) for (const nc of [false, true]) { t = replayTrace(s, nc); if (t) break; }
+  // if the sim ever tracks these itself (recommended: RunStats.stretchM), use them and skip the replay
+  const pre = (s.stats as unknown as { stretchM?: Partial<RunTrace> }).stretchM;
+  if (pre && typeof pre.noHit === 'number' && typeof pre.noPotion === 'number' && typeof pre.noAir === 'number' && typeof pre.noJelly === 'number' && typeof pre.noFall === 'number') {
+    t = { exact: true, noPotion: Math.floor(pre.noPotion), noAir: Math.floor(pre.noAir), noJelly: Math.floor(pre.noJelly), noHit: Math.floor(pre.noHit), noFall: Math.floor(pre.noFall), skip500: Math.floor(pre.skip500 ?? 0) };
+    traceCache.set(s, t); return t;
+  }
+  if (s.steps > 0 && !s.trial) for (const nc of [false, true]) { t = replayTrace(s, nc); if (t) break; }
   if (!t) {
     const d = dist(s); const st = s.stats;
     t = {
@@ -305,6 +335,31 @@ function replayTrace(s: RunState, noCountdown: boolean): RunTrace | null {
   const out = { exact: true, skip500: Math.max(0, skip500) } as RunTrace;
   keys.forEach((k, i) => { out[k] = Math.floor(Math.max(best[i], r.dist - last[i])); });
   return out;
+}
+
+// ---------------------------------------------------------------- live (mid-run) progress for the 1.5 s toast
+const STRETCH: Record<string, (s: RunState) => number> = {
+  // cheap lower bounds while running (the exact stretch is computed from a replay once the run is booked)
+  dist_nofall: s => (s.stats.falls === 0 ? dist(s) : 0),
+  nohit_dist: s => (s.stats.hits + s.stats.shieldsUsed === 0 ? dist(s) : 0),
+  no_potion: s => (s.stats.potions + s.stats.miniPotions === 0 ? dist(s) : 0),
+  no_air: s => (s.stats.airJumps === 0 ? dist(s) : 0),
+  no_jelly: s => (s.dist >= 500 && s.stats.jelliesSeen > 0 && s.stats.jellies === 0 ? 100 : 0),
+};
+/**
+ * What each active mission would show if the run ended now — call it a few times a second during a run and toast
+ * ("미션 완료!") when `done` flips to true. Never mutates the missions; star/pouch/clear missions only move at run end.
+ */
+export function liveMissionProgress(active: ActiveMission[], s: RunState): { id: string; progress: number; target: number; done: boolean }[] {
+  return active.map(a => {
+    const t = MISSION_BY_ID[a.id];
+    let v = 0;
+    if (t && !s.trial && s.mode !== 'tutorial' && (!t.modes || t.modes.includes(s.mode)) && !(t.id in { star_tot: 1, pouch_tot: 1, clear_tot: 1 })) {
+      try { v = STRETCH[t.id] ? STRETCH[t.id](s) : t.measure(s); } catch { v = 0; }
+    }
+    const progress = !t ? a.progress : t.scope === 'run' ? Math.max(a.progress, v) : a.progress + v;
+    return { id: a.id, progress, target: a.target, done: progress >= a.target };
+  });
 }
 
 // ---------------------------------------------------------------- booking

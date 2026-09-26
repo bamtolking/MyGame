@@ -69,7 +69,9 @@ const shots = await page.evaluate(() => {
   const res = {};
   for (const bi of W.BIOMES) {
     res[`world-${bi.id}`] = scene(bi, { cssW: 960, cssH: 540, dpr: 2, scale: 1, camX: 5000 });
+    W.setHazardOutlineScale?.(1.5);   // portrait: thicker hazard outline (renderer calls this on resize)
     res[`world-${bi.id}-phone`] = scene(bi, { cssW: 390, cssH: 316, dpr: 2, scale: Math.min(390 / 840, 316 / 540), camX: 5000 });
+    W.setHazardOutlineScale?.(1);
   }
   res['world-bonus'] = scene(null, { cssW: 960, cssH: 540, dpr: 2, scale: 1, camX: 5000, sky: true });
   res['world-bonus-phone'] = scene(null, { cssW: 390, cssH: 316, dpr: 2, scale: Math.min(390 / 840, 316 / 540), camX: 5000, sky: true });

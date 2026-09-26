@@ -96,7 +96,7 @@
 | fork_spike_easy | 0–1 | 30 | 23 | 23 | 100% | combo double jump |
 | slide_fork_easy | 0–1 | 30 | 14 | 14 | 100% | combo slide double |
 | stairs_gentle | 0–2 | 32 | 23 | 23 | 100% | stairs platform jump |
-| high_shelf_B | 0–2 | 30 | 23 | 23 | 100% | platform double choice |
+| high_shelf | 0–2 | 30 | 23 | 23 | 100% | platform double choice |
 | spike_cluster | 0–1 | 24 | 23 | 23 | 100% | jump |
 | shelf_spike | 0–2 | 30 | 23 | 23 | 100% | platform choice jump |
 | slide_bench | 0–2 | 30 | 14 | 14 | 100% | combo slide platform |
@@ -129,8 +129,8 @@
 | stairs_descent | 4–5 | 36 | 23 | 23 | 100% | stairs platform choice |
 | slide_bench_pit | 4–5 | 38 | 14 | 14 | 100% | combo slide platform pit |
 | fork_spike_fork | 4–5 | 42 | 23 | 23 | 100% | double jump rhythm |
-| danger_line_B | 3–5 | 38 | 14 | 14 | 100% | combo slide jump |
-| planned_route_B | 3–5 | 40 | 23 | 23 | 100% | choice platform pit |
+| danger_line | 3–5 | 38 | 14 | 14 | 100% | combo slide jump |
+| planned_route | 3–5 | 40 | 23 | 23 | 100% | choice platform pit |
 | spike_stream | 5–5 | 44 | 23 | 23 | 100% | rhythm jump double |
 | fork_pit_row | 5–5 | 40 | 23 | 23 | 100% | double pit combo |
 | ceiling_spike_mix | 4–5 | 40 | 23 | 23 | 100% | tunnel jump rhythm |

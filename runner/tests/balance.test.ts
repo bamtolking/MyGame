@@ -35,13 +35,18 @@ describe('balance sweep', () => {
     expect(medT.casual).toBeGreaterThanOrEqual(medT.novice * 0.9);
   });
 
-  it('characters are sidegrades: median score per character (good bot)', () => {
-    lines.push('## 캐릭터별 (good 봇, 시드 8개)', '', '| 캐릭터 | 중앙 시간(s) | 중앙 거리(m) | 중앙 점수 | 기준 대비 |', '|---|---:|---:|---:|---:|');
+  it('characters are sidegrades: mean score per character within ±12 % (good bot, 48 seeds)', () => {
+    // GDD §10: characters change a verb, never the ceiling. Mean (not median) over many seeds — per-seed scores
+    // are heavy-tailed (bonus stages), so small samples swing ±10 % on their own.
+    const seeds = Array.from({ length: 48 }, (_, i) => 1000 + i * 37);
+    lines.push('## 캐릭터별 (good 봇, 반딧불 짝꿍, 시드 48개, 평균 점수)', '', '| 캐릭터 | 중앙 시간(s) | 중앙 거리(m) | 평균 점수 | 기준 대비 |', '|---|---:|---:|---:|---:|');
     let base = 0;
     for (const c of CHARACTERS) {
-      const rs = SEEDS.map(seed => playRun({ mode: 'endless', seed, charId: c.id }, { jitter: 5, pad: 3, seed }).r);
-      const sc = med(rs.map(r => r.score)); if (!base) base = sc;
-      lines.push(`| ${c.name} | ${med(rs.map(r => r.t)).toFixed(0)} | ${med(rs.map(r => r.dist)).toFixed(0)} | ${sc.toFixed(0)} | ${((sc / base - 1) * 100).toFixed(0)}% |`);
+      const rs = seeds.map(seed => playRun({ mode: 'endless', seed, charId: c.id, companionId: 'firefly' }, { jitter: 5, pad: 3, seed }).r);
+      const sc = rs.reduce((a, r) => a + r.score, 0) / rs.length; if (!base) base = sc;
+      const rel = sc / base - 1;
+      lines.push(`| ${c.name} | ${med(rs.map(r => r.t)).toFixed(0)} | ${med(rs.map(r => r.dist)).toFixed(0)} | ${sc.toFixed(0)} | ${(rel * 100).toFixed(1)}% |`);
+      expect(Math.abs(rel), `${c.id} ${(rel * 100).toFixed(1)}%`).toBeLessThanOrEqual(0.12);
     }
     lines.push('');
     mkdirSync('docs', { recursive: true });

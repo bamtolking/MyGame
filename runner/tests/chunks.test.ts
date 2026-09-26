@@ -29,11 +29,10 @@ describe('chunk library', () => {
     }
   });
 
-  it('every tier has enough distinct chunks for the no-repeat window', () => {
+  it('every tier has enough distinct chunks the random picker can draw (≥ 28)', () => {
+    const drawable = normal.filter(p => !p.def.tags?.some(t => ['tutorial', 'tutorial-extra', 'rest', 'setpiece', 'stageonly'].includes(t)));
     for (let t = 0; t <= MAX_TIER; t++) {
-      // gameplay chunks only (GDD §7.2): tutorial, tutorial extras, rest breathers, setpieces and stage-only chunks do not count
-      const n = normal.filter(p => p.def.tiers[0] <= t && p.def.tiers[1] >= t
-        && !['tutorial', 'tutorial-extra', 'rest', 'setpiece', 'stageonly'].some(tag => p.def.tags?.includes(tag))).length;
+      const n = drawable.filter(p => p.def.tiers[0] <= t && p.def.tiers[1] >= t).length;
       expect(n, `tier ${t} pool`).toBeGreaterThanOrEqual(28);
     }
   });

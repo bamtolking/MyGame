@@ -13,10 +13,11 @@ import {
   buyCharacter, buyCompanion, companionState, canReroll, reroll, todayKey, dailyChar, dailyCompanion, dailyArchive,
   DAILY_MEDALS, recordCode, type Progress, type Feature, type GhostRec, type HallRec,
 } from '../meta/progress';
-import * as progressMod from '../meta/progress';
-import { missionText, MISSION_BY_ID, MISSION_REWARD, RANK_XP, RANK_REWARD, RANK_MAX } from '../meta/missions';
-import * as missionsMod from '../meta/missions';
-import * as achMod from '../meta/achievements';
+import { missionText, missionReward, missionTag, rankRewardPreview, RANK_TITLES, RANK_XP, RANK_MAX } from '../meta/missions';
+import {
+  ACHIEVEMENTS, COSMETICS, COSMETIC_BY_ID, COSMETIC_KIND_NAMES, GROUP_NAMES, achievementView, achievementFor,
+  buyCosmetic, equipCosmetic, unequipCosmetic, equippedFor, type CosmeticKind,
+} from '../meta/achievements';
 import { h, clear } from './dom';
 import {
   icon, starRow, pouchRow, medalBadge, bar, coinAmount, newDot, fmtNum, fmtDist, fmtDuration, fmtDateKey, fmtDateMs,
@@ -56,8 +57,16 @@ function section(title: string, ico: string | null, ...kids: (Node | string | nu
 }
 function sheet(app: App, cls: string, title: string, ...kids: (Node | string | null | false | undefined)[]): HTMLElement {
   return h('div', { class: `msheet ${cls}`, role: 'dialog', 'aria-label': title },
-    h('div', { class: 'msheet-head' }, h('h3', {}, title), h('button', { class: 'ms-iconbtn ghost', 'aria-label': '닫기', onclick: app.click(() => app.closeModal()) }, icon('close'))),
+    h('div', { class: 'msheet-head' }, h('h3', {}, title), h('button', { class: 'ms-iconbtn ghost msheet-x', 'aria-label': '닫기', onclick: app.click(() => app.closeModal()) }, icon('close'))),
     ...kids);
+}
+/** app.modal + an optional callback for every way the sheet can be closed (×, backdrop tap). */
+function openSheet(app: App, el: HTMLElement, onClose?: () => void): void {
+  app.modal(el, true);
+  if (!onClose) return;
+  const m = document.getElementById('modal');
+  m?.addEventListener('click', e => { if (e.target === m) onClose(); });
+  el.querySelector('.msheet-x')?.addEventListener('click', () => onClose());
 }
 /** Element.append without the nulls (conditional children). */
 function add(el: HTMLElement, ...kids: (Node | string | null | false | undefined)[]): HTMLElement {
@@ -212,8 +221,8 @@ export function openReady(app: App, o: { context: 'home' | 'stage' | 'endless'; 
     );
   };
   render();
-  app.modal(sheet(app, 'ready', '준비', body,
-    h('div', { class: 'msheet-foot' }, h('button', { class: 'ms-btn primary', id: 'ready-done', onclick: app.click(done) }, icon('check'), '완료'))));
+  openSheet(app, sheet(app, 'ready', '준비', body,
+    h('div', { class: 'msheet-foot' }, h('button', { class: 'ms-btn primary', id: 'ready-done', onclick: app.click(done) }, icon('check'), '완료'))), o.onDone);
 }
 
 // ================================================================ 골목 지도 (GDD §8.2)
@@ -227,14 +236,13 @@ export function showAdventure(app: App): void {
   body.append(h('p', { class: 'ms-hint' }, '골목은 매번 똑같은 길이에요. ', h('b', {}, '★1'), ' 도착 · ', h('b', {}, '★2'), ' 별사탕 모으기 · ', h('b', {}, '★3'), ' 황금 복주머니 3개. 별은 한 번 받으면 사라지지 않아요.'), wrap);
   for (const w of worlds) {
     const stages = stagesOfWorld(w);
-    const regular = stages.filter(s => !isRemix(s));
     const bi = BIOME_BY_ID[stages[0].biome];
     const ws = worldStars(p, w);
     const sec = h('section', { class: 'world', style: `--w1:${bi?.sky[0] ?? '#2b2d6e'};--w2:${bi?.sky[1] ?? '#f28f6b'};--wl:${bi?.light ?? '#ffc86b'}` },
       h('div', { class: 'world-head' },
         h('span', { class: 'world-no' }, String(w)),
         h('div', { class: 'world-txt' }, h('h3', {}, worldName(w)), h('small', {}, WORLD_VERBS[w] ?? '')),
-        h('span', { class: 'world-stars' }, icon('star'), `${ws}/${regular.length * 3}`)));
+        h('span', { class: 'world-stars' }, icon('star'), `${ws}/${stages.length * 3}`)));
     const grid = h('div', { class: 'nodes' });
     for (const st of stages) {
       const ok = stageUnlocked(p, st.id); const stars = stageStarCount(p, st.id); const remix = isRemix(st);
@@ -246,7 +254,7 @@ export function showAdventure(app: App): void {
         onclick: app.click(() => openStageCard(app, st.id)),
       },
         cur ? h('span', { class: 'node-here' }, '지금') : null,
-        h('span', { class: 'node-id' }, remix ? h('span', {}, icon('sparkle'), 'R') : st.id),
+        h('span', { class: 'node-id' }, remix ? icon('sparkle') : null, st.id),
         ok ? starRow(stars, 3, 'sm') : h('span', { class: 'node-lock' }, icon('lock')),
         ok ? pouchRow(p.pouches[st.id] ?? 0, 'sm') : need,
         h('span', { class: 'node-name' }, st.name)));
@@ -280,7 +288,7 @@ export function openStageCard(app: App, id: string): void {
     h('ol', { class: 'conds' },
       cond((mask & 1) === 1, '결승 깃발에 도착', null),
       cond((mask & 2) === 2, `별사탕 ${st.stars.jellyPct}% 이상 먹고 도착`, '한 판에서 모아야 해요'),
-      cond((mask & 4) === 4, '황금 복주머니 3개', h('span', { class: 'pouch-line' }, pouchRow(pouches), ` ${pn}/3 · 도착한 판에서 먹은 것만, 여러 판을 합쳐 세요`))),
+      cond((mask & 4) === 4, '황금 복주머니 3개', h('span', { class: 'pouch-line' }, pouchRow(pouches), ` ${pn}/3 · 도착한 판에서 먹은 것만 세고, 여러 판을 합쳐요`))),
     h('div', { class: 'stage-meta' },
       kv('최고 기록', p.stageBest[id] ? `${fmtNum(p.stageBest[id])}점` : '아직 없어요'),
       h('label', { class: 'set ghost-row' }, h('span', { class: 'txt' }, h('b', {}, icon('ghost'), ' 유령과 달리기'), h('small', {}, ghost ? '내 최고 기록이 흐릿하게 함께 달려요' : '도착하면 최고 기록이 유령으로 남아요')), ghostSw),
@@ -304,7 +312,7 @@ function unlockBox(p: Progress, c: CharacterDef): HTMLElement | null {
   if (u.kind === 'start') return null;
   let label = ''; let frac = 0; let extra = '';
   if (u.kind === 'stars') { const n = totalStars(p); label = `골목 지도 ★ ${fmtNum(Math.min(n, u.n))}/${fmtNum(u.n)}`; frac = n / u.n; extra = `골목 지도에서 별 ${fmtNum(u.n)}개를 모으면 합류해요`; }
-  else if (u.kind === 'rank') { label = `계급 ${Math.min(p.rank, u.n)}/${u.n}`; frac = (p.rank + (p.rank < u.n ? p.xp / RANK_XP(p.rank) : 0)) / u.n; extra = `미션을 끝내 계급 ${u.n}이 되면 합류해요`; }
+  else if (u.kind === 'rank') { label = `계급 ${Math.min(p.rank, u.n)}/${u.n}`; frac = (p.rank + (p.rank < u.n ? p.xp / RANK_XP(p.rank) : 0)) / u.n; extra = `미션을 끝내 ${josa(`계급 ${u.n}`, '이/가')} 되면 합류해요`; }
   else { label = `엽전 ${fmtNum(Math.min(p.coins, u.cost))}/${fmtNum(u.cost)}`; frac = p.coins / u.cost; extra = paceText(p, u.cost); }
   return h('div', { class: 'unlock' }, h('div', { class: 'unlock-top' }, icon(u.kind === 'coins' ? 'coin' : u.kind === 'stars' ? 'star' : 'mission'), h('b', {}, label), extra ? h('small', {}, extra) : null), bar(frac));
 }
@@ -408,81 +416,80 @@ function renderCompsTab(app: App, pane: HTMLElement, rerender: () => void): void
   pane.append(list);
 }
 
-type CosmeticLike = { id: string; kind: string; name: string; charId?: string; cost?: number; desc?: string };
-type AchievementLike = { id: string; group: string; name: string; desc: string; hidden?: boolean; hint?: string; reward: string; progress?: (p: Progress) => [number, number] | number };
-const COSM_KIND: Record<string, [string, string]> = { hat: ['모자', 'hat'], trail: ['발자취', 'trail'], jumpSound: ['점프 소리', 'note'], palette: ['색깔', 'palette'] };
-function cosmetics(): CosmeticLike[] { return ((achMod as unknown as { COSMETICS?: CosmeticLike[] }).COSMETICS ?? []); }
-function achievements(): AchievementLike[] { return ((achMod as unknown as { ACHIEVEMENTS?: AchievementLike[] }).ACHIEVEMENTS ?? []); }
-function rewardName(reward: string): string {
+function rewardLabel(reward: string): string {
   if (reward.startsWith('title:')) return `칭호 「${reward.slice(6)}」`;
-  const c = cosmetics().find(x => x.id === reward);
-  return c ? `${COSM_KIND[c.kind]?.[0] ?? '꾸미기'} 「${c.name}」` : reward;
+  const c = COSMETIC_BY_ID[reward];
+  return c ? `${COSMETIC_KIND_NAMES[c.kind] ?? '꾸미기'} 「${c.name}」` : reward;
 }
+const COSM_ICON: Record<CosmeticKind, string> = { hat: 'hat', trail: 'trail', jumpSound: 'note', palette: 'palette' };
 
 function renderCosmTab(app: App, pane: HTMLElement, rerender: () => void): void {
-  const p = app.p; const all = cosmetics();
+  const p = app.p;
   if (!p.unlocked.includes(cosmTarget)) cosmTarget = p.loadout.main;
+  const target = CHAR_BY_ID[cosmTarget] ?? CHARACTERS[0];
   const owned = new Set(p.cosmetics.owned);
-  pane.append(h('p', { class: 'ms-hint' }, `꾸미기 ${all.filter(c => owned.has(c.id)).length}/${all.length} · 업적을 이루면 하나씩 열려요. 모양만 바뀌고 달리기에는 영향이 없어요.`));
+  pane.append(h('p', { class: 'ms-hint' }, `꾸미기 ${COSMETICS.filter(c => owned.has(c.id)).length}/${COSMETICS.length} · 업적을 이루면 하나씩 열려요. 모양만 바뀌고 달리기에는 영향이 없어요.`));
   // whose look are we changing?
   pane.append(h('div', { class: 'chips', role: 'radiogroup', 'aria-label': '누구를 꾸밀까요' },
     ...CHARACTERS.filter(c => p.unlocked.includes(c.id)).map(c => h('button', { class: 'ms-chip' + (c.id === cosmTarget ? ' on' : ''), 'aria-pressed': c.id === cosmTarget ? 'true' : 'false', onclick: app.click(() => { cosmTarget = c.id; rerender(); }) }, charPortrait(c, 26), c.name))));
-  if (!all.length) { pane.append(h('p', { class: 'empty' }, '곧 꾸미기가 들어와요.')); return; }
-  const eq = (p.cosmetics.equipped[cosmTarget] ?? {}) as Record<string, string | undefined>;
-  const achs = achievements();
-  const buy = (progressMod as unknown as { buyCosmetic?: (p: Progress, id: string) => { ok: boolean; error?: string } }).buyCosmetic;
-  for (const kind of Array.from(new Set(all.map(c => c.kind)))) {
-    const [kname, kico] = COSM_KIND[kind] ?? ['꾸미기', 'sparkle'];
-    const items = all.filter(c => c.kind === kind && (!c.charId || c.charId === cosmTarget));
+  const eq = equippedFor(p, cosmTarget);
+  const wearing = (['hat', 'trail', 'jumpSound', 'palette'] as CosmeticKind[]).map(k => eq[k]?.name).filter(Boolean);
+  pane.append(h('p', { class: 'ms-hint small' }, `${josa(target.name, '은/는')} 지금 ${wearing.length ? wearing.join(' · ') : '기본 모습'}이에요.`));
+  for (const kind of ['hat', 'trail', 'jumpSound', 'palette'] as CosmeticKind[]) {
+    const items = COSMETICS.filter(c => c.kind === kind && (kind !== 'palette' || c.charId === cosmTarget));
     if (!items.length) continue;
     const grid = h('div', { class: 'cosm-grid' });
     for (const c of items) {
-      const own = owned.has(c.id); const on = eq[kind] === c.id;
-      const src = achs.find(a => a.reward === c.id);
-      const how = own ? '' : src ? (src.hidden && !p.achievements[src.id] ? '숨은 업적 ???' : `업적 「${src.name}」`) : c.cost ? `엽전 ${fmtNum(c.cost)}` : '';
+      const own = owned.has(c.id); const on = eq[kind]?.id === c.id;
+      const src = achievementFor(c.id);
+      const secret = !!src?.hidden && !p.achievements[src.id];
+      const how = own ? '' : src ? (secret ? `숨은 업적${src.hint ? ` · ${src.hint}` : ''}` : `업적 「${src.name}」`) : c.price ? `엽전 ${fmtNum(c.price)}` : '';
       let act: HTMLElement | null = null;
       if (own) act = h('button', { class: 'ms-btn sm' + (on ? ' on' : ''), onclick: app.click(() => {
-        const cur = { ...(p.cosmetics.equipped[cosmTarget] ?? {}) } as Record<string, string | undefined>;
-        if (on) delete cur[kind]; else cur[kind] = c.id;
-        (p.cosmetics.equipped as Record<string, unknown>)[cosmTarget] = cur; app.persist(); rerender();
+        if (on) unequipCosmetic(p, cosmTarget, kind);
+        else { const r = equipCosmetic(p, cosmTarget, c.id); if (!r.ok) { app.toast(r.error ?? '', 'warn'); return; } }
+        app.persist(); rerender();
       }) }, on ? '쓰는 중' : '쓰기');
-      else if (c.cost && buy) act = h('button', { class: 'ms-btn sm primary', disabled: p.coins < c.cost, onclick: app.click(() => { const r = buy(p, c.id); if (r.ok) { app.audio.play('unlock'); app.persist(); } else app.toast(r.error ?? '', 'warn'); rerender(); }) }, icon('coin'), '사기');
-      grid.append(h('div', { class: 'cosm' + (own ? '' : ' locked') + (on ? ' on' : ''), 'data-cosm': c.id },
-        h('span', { class: 'cosm-ico' }, icon(own ? kico : 'lock')), h('b', {}, c.name),
-        how ? h('small', {}, how) : c.desc ? h('small', {}, c.desc) : null,
-        c.cost && !own ? h('small', {}, paceText(p, c.cost)) : null, act));
+      else if (c.price) act = h('button', { class: 'ms-btn sm primary', disabled: p.coins < c.price, onclick: app.click(() => {
+        const r = buyCosmetic(p, c.id);
+        if (r.ok) { equipCosmetic(p, cosmTarget, c.id); app.audio.play('unlock'); app.toast(`${josa(c.name, '을/를')} 샀어요`, 'good'); app.persist(); } else { app.audio.play('error'); app.toast(r.error ?? '', 'warn'); }
+        rerender();
+      }) }, icon('coin'), '사기');
+      const pic = kind === 'palette' && c.colors ? charPortrait({ ...target, palette: c.colors }, 56) : icon(own ? COSM_ICON[kind] : 'lock');
+      grid.append(h('div', { class: 'cosm' + (own ? '' : c.price ? ' shop' : ' locked') + (on ? ' on' : '') + (kind === 'palette' ? ' pal' : ''), 'data-cosm': c.id },
+        h('span', { class: 'cosm-ico', style: c.color && own ? `color:${c.color === '#2b2b33' ? '#c9c3e6' : c.color}` : '' }, pic),
+        h('b', {}, c.name),
+        how ? h('small', {}, how) : null,
+        c.price && !own ? h('small', {}, paceText(p, c.price, '지금 살 수 있어요')) : null, act));
     }
-    pane.append(h('h4', { class: 'sub' }, icon(kico), kname), grid);
+    pane.append(h('h4', { class: 'sub' }, icon(COSM_ICON[kind]), COSMETIC_KIND_NAMES[kind] ?? kind), grid);
   }
 }
 
 function renderAchTab(app: App, pane: HTMLElement): void {
-  const p = app.p; const all = achievements();
-  const done = all.filter(a => p.achievements[a.id]).length;
-  pane.append(h('div', { class: 'mpanel ach-sum' }, h('b', {}, `업적 ${done}/${all.length}`), bar(all.length ? done / all.length : 0), h('small', {}, '업적은 한 판이 끝날 때 확인해요. 하나마다 꾸미기나 칭호를 하나 받아요.')));
-  if (!all.length) { pane.append(h('p', { class: 'empty' }, '곧 업적이 들어와요.')); return; }
-  const GROUPS: Record<string, string> = { dist: '거리', collect: '수집', skill: '기술', mastery: '숙련', curious: '호기심' };
-  const groups = Array.from(new Set(all.map(a => a.group)));
-  for (const g of groups) {
+  const p = app.p;
+  const views = ACHIEVEMENTS.map(a => ({ a, v: achievementView(p, a.id) })).filter(x => x.v);
+  const done = views.filter(x => x.v!.unlocked).length;
+  const titles = (p as Progress & { titles?: string[] }).titles ?? [];
+  pane.append(h('div', { class: 'mpanel ach-sum' }, h('b', {}, `업적 ${done}/${views.length}`), bar(views.length ? done / views.length : 0),
+    h('small', {}, '업적은 한 판이 끝날 때 확인해요. 하나마다 꾸미기나 칭호를 하나 받아요.'),
+    titles.length ? h('div', { class: 'chips' }, ...titles.map(t => h('span', { class: 'tag gold' }, icon('title'), t))) : null));
+  if (!views.length) { pane.append(h('p', { class: 'empty' }, '곧 업적이 들어와요.')); return; }
+  for (const g of Array.from(new Set(ACHIEVEMENTS.map(a => a.group)))) {
     const list = h('div', { class: 'ach-list' });
-    for (const a of all.filter(x => x.group === g)) {
-      const got = p.achievements[a.id]; const secret = !!a.hidden && !got;
-      let prog: HTMLElement | null = null;
-      if (!got && typeof a.progress === 'function') {
-        try {
-          const v = a.progress(p); const [cur, max] = Array.isArray(v) ? v : [v, 1];
-          prog = h('div', { class: 'ach-prog' }, bar(max ? cur / max : 0), h('small', {}, `${fmtNum(Math.min(cur, max))}/${fmtNum(max)}`));
-        } catch { prog = null; }
-      }
+    for (const { a, v } of views.filter(x => x.a.group === g)) {
+      const got = v!.unlocked; const secret = !!a.hidden && !got;
+      const [cur, max] = v!.progress;
+      const prog = !got && a.progress && max > 1 ? h('div', { class: 'ach-prog' }, bar(cur / max), h('small', {}, `${fmtNum(cur)}/${fmtNum(max)}`)) : null;
       list.append(h('div', { class: 'ach' + (got ? ' on' : '') + (secret ? ' secret' : ''), 'data-ach': a.id },
         h('span', { class: 'ach-ico' }, icon(got ? 'check' : secret ? 'lock' : 'trophy')),
         h('div', { class: 'ach-txt' },
-          h('b', {}, secret ? '???' : a.name),
-          h('small', {}, secret ? (a.hint ? `힌트: ${a.hint}` : '숨은 업적이에요') : a.desc),
+          h('b', {}, v!.name),
+          h('small', {}, secret ? `힌트: ${v!.desc}` : v!.desc),
           prog,
-          h('small', { class: 'ach-reward' }, got ? `${fmtDateMs(got)} · ${rewardName(a.reward)}` : secret ? '' : `보상: ${rewardName(a.reward)}`))));
+          h('small', { class: 'ach-reward' }, got ? `${fmtDateMs(v!.at)} · ${rewardLabel(a.reward)}` : secret ? '보상: ???' : `보상: ${rewardLabel(a.reward)}`))));
     }
-    pane.append(h('h4', { class: 'sub' }, GROUPS[g] ?? g), list);
+    pane.append(h('h4', { class: 'sub' }, GROUP_NAMES[g] ?? g), list);
   }
 }
 
@@ -491,23 +498,23 @@ export function showMissions(app: App): void {
   const { body } = shell(app, 'missions', '미션');
   markSeen(app, 'missions');
   const p = app.p;
-  const titles = (missionsMod as unknown as { RANK_TITLES?: string[]; rankTitle?: (r: number) => string });
-  const rankTitle = (r: number) => titles.rankTitle?.(r) ?? titles.RANK_TITLES?.[r] ?? '';
-  const nextChar = CHARACTERS.find(c => c.unlock.kind === 'rank' && c.unlock.n === p.rank + 1);
-  const rankChars = CHARACTERS.filter(c => c.unlock.kind === 'rank');
   const maxed = p.rank >= RANK_MAX;
+  const next = maxed ? null : rankRewardPreview(p.rank + 1);
+  const nextChar = next?.unlocks.map(id => CHAR_BY_ID[id]).find(Boolean) ?? null;
+  const rankChars = CHARACTERS.filter(c => c.unlock.kind === 'rank');
   body.append(h('section', { class: 'mpanel rank' },
     h('div', { class: 'rank-head' },
       h('span', { class: 'rank-no' }, h('small', {}, '계급'), h('b', {}, String(p.rank))),
       h('div', { class: 'rank-txt' },
-        rankTitle(p.rank) ? h('b', {}, rankTitle(p.rank)) : null,
-        maxed ? h('small', {}, '가장 높은 계급이에요!') : h('small', {}, `다음 계급까지 미션 별 ${RANK_XP(p.rank) - p.xp}개`),
+        RANK_TITLES[p.rank] ? h('b', {}, RANK_TITLES[p.rank]) : null,
+        maxed ? h('small', {}, '가장 높은 계급이에요!') : h('small', {}, `다음 계급까지 미션 별 ${fmtNum(RANK_XP(p.rank) - p.xp)}개`),
         bar(maxed ? 1 : p.xp / RANK_XP(p.rank), 'xp'),
         maxed ? null : h('small', { class: 'muted' }, `${p.xp}/${RANK_XP(p.rank)}`))),
-    maxed ? null : h('div', { class: 'rank-next' },
-      h('span', {}, `계급 ${p.rank + 1}이 되면`),
-      coinAmount(RANK_REWARD(p.rank)),
-      nextChar ? h('span', { class: 'rank-char' }, charPortrait(nextChar, 34), `${josa(nextChar.name, '이/가')} 합류해요`) : rankTitle(p.rank + 1) ? h('span', {}, `칭호 「${rankTitle(p.rank + 1)}」`) : null),
+    next ? h('div', { class: 'rank-next' },
+      h('span', {}, `${josa(`계급 ${next.rank}`, '이/가')} 되면`),
+      coinAmount(next.coins),
+      nextChar ? h('span', { class: 'rank-char' }, charPortrait(nextChar, 34), `${josa(nextChar.name, '이/가')} 합류해요`)
+        : next.title ? h('span', {}, `칭호 「${next.title}」`) : null) : null,
     rankChars.length ? h('div', { class: 'rank-road' }, ...rankChars.map(c => {
       const n = (c.unlock as { n: number }).n; const got = p.unlocked.includes(c.id);
       return h('span', { class: 'tag' + (got ? ' jade' : '') }, got ? icon('check') : icon('lock'), `계급 ${n} ${c.name}`);
@@ -517,10 +524,10 @@ export function showMissions(app: App): void {
   const render = () => {
     clear(list);
     p.missions.forEach((m, i) => {
-      const rw = MISSION_REWARD[m.level] ?? MISSION_REWARD[0]; const t = MISSION_BY_ID[m.id];
+      const rw = missionReward(m); const tag = missionTag(m);
       const cur = Math.min(m.progress, m.target);
       list.append(h('article', { class: 'mission' + (m.progress >= m.target * 0.8 ? ' close' : ''), 'data-mission': m.id },
-        h('div', { class: 'mission-top' }, starRow(rw.xp, 3, 'sm'), h('span', { class: 'tag' }, t?.scope === 'total' ? '누적' : '한 판')),
+        h('div', { class: 'mission-top' }, starRow(rw.xp, 3, 'sm'), tag ? h('span', { class: 'tag' + (tag === '별난' ? ' gold' : '') }, tag) : null),
         h('b', { class: 'mission-txt' }, missionText(m)),
         bar(cur / m.target),
         h('div', { class: 'mission-foot' },
@@ -673,7 +680,7 @@ export function share(app: App, text: string): void { shareText(app, text); }
 export function showSettings(app: App): void {
   const { body } = shell(app, 'settings', '설정');
   const p = app.p; const st = p.settings;
-  const save = () => { app.applySettings(); if (st.musicOff) app.audio.setVolumes(st.sfx, 0); applyUi(app); app.persist(); };
+  const save = () => { app.applySettings(); applyUi(app); app.persist(); };
   type BoolKey = { [K in keyof typeof st]: typeof st[K] extends boolean ? K : never }[keyof typeof st];
   const toggle = (key: BoolKey, label: string, desc: string, after?: () => void) => h('label', { class: 'set', 'data-set': key },
     h('span', { class: 'txt' }, h('b', {}, label), desc ? h('small', {}, desc) : null),
@@ -729,42 +736,51 @@ export function showSettings(app: App): void {
 
 function dataSection(app: App): HTMLElement {
   const box = h('textarea', { class: 'code-box', rows: 3, spellcheck: false, placeholder: '백업 코드를 여기에 붙여 넣어요', 'aria-label': '백업 코드' }) as HTMLTextAreaElement;
-  const area = h('div', { class: 'code-area hidden' }, box);
-  const show = () => area.classList.remove('hidden');
-  const stamp = () => { const t = new Date(); return `${t.getFullYear()}${String(t.getMonth() + 1).padStart(2, '0')}${String(t.getDate()).padStart(2, '0')}`; };
+  const areaBtns = h('div', { class: 'btnrow' });
+  const area = h('div', { class: 'code-area hidden' }, box, areaBtns);
+  const copy = (text: string) => {
+    try { navigator.clipboard.writeText(text).then(() => app.toast('백업 코드를 복사했어요', 'good'), () => app.toast('코드를 길게 눌러 복사해 주세요', 'info')); } catch { app.toast('코드를 길게 눌러 복사해 주세요', 'info'); }
+  };
   const doImport = (text: string) => {
     const r = store.importString(text);
     if (!r.p) { app.audio.play('error'); app.toast(r.error ?? '코드를 읽지 못했어요', 'warn', 4); return; }
     app.confirm('이 백업 코드로 지금 기록을 바꿀까요? 지금 기록은 사라져요.', () => { app.p = r.p!; app.persist(); app.applySettings(); app.toast('백업을 불러왔어요', 'good'); showSettings(app); });
   };
+  const mode = (m: 'export' | 'import') => {
+    area.classList.remove('hidden'); clear(areaBtns);
+    if (m === 'export') {
+      box.readOnly = true; box.value = store.exportString(app.p); box.select(); copy(box.value);
+      areaBtns.append(h('button', { class: 'ms-btn sm', onclick: app.click(() => { box.select(); copy(box.value); }) }, icon('copy'), '복사'));
+    } else {
+      box.readOnly = false; box.value = ''; box.focus();
+      areaBtns.append(
+        h('button', { class: 'ms-btn sm primary', id: 'data-load', onclick: app.click(() => { if (box.value.trim()) doImport(box.value); else app.toast('백업 코드를 먼저 붙여 넣어 주세요', 'info'); }) }, icon('check'), '불러오기'),
+        h('button', { class: 'ms-btn sm ghost', onclick: app.click(() => file.click()) }, '파일 열기'));
+    }
+  };
   const file = h('input', { type: 'file', accept: '.txt,text/plain', class: 'hidden', onchange: (e: Event) => {
     const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
-    f.text().then(t => { box.value = t.trim(); show(); doImport(t); }, () => app.toast('파일을 읽지 못했어요', 'warn'));
+    f.text().then(t => { box.value = t.trim(); doImport(t); }, () => app.toast('파일을 읽지 못했어요', 'warn'));
   } }) as HTMLInputElement;
   const ok = store.storageInfo.available;
   return section('데이터', 'data',
-    h('p', { class: 'ms-hint' + (ok ? '' : ' warn') }, ok ? '기록은 이 브라우저에 저장돼요.' : '이 브라우저는 지금 기록을 저장하지 못해요. 백업 코드를 꼭 저장해 두세요.'),
+    h('p', { class: 'ms-hint' + (ok ? '' : ' warn') }, ok ? '기록은 이 브라우저에 저장돼요. 다른 기기로 옮기거나 지켜 두려면 백업 코드를 써요.' : '이 브라우저는 지금 기록을 저장하지 못해요. 백업 코드를 꼭 저장해 두세요.'),
     h('p', { class: 'ms-note' }, '사파리는 오래 열지 않으면 기록을 지울 수 있어요 — 홈 화면에 추가하거나 백업 코드를 저장해 두세요'),
     h('div', { class: 'btnrow' },
-      h('button', { class: 'ms-btn sm', id: 'data-export', onclick: app.click(() => {
-        box.value = store.exportString(app.p); show(); box.select();
-        try { navigator.clipboard.writeText(box.value).then(() => app.toast('백업 코드를 복사했어요', 'good'), () => app.toast('코드를 길게 눌러 복사해 주세요', 'info')); } catch { app.toast('코드를 길게 눌러 복사해 주세요', 'info'); }
-      }) }, icon('copy'), '내보내기'),
+      h('button', { class: 'ms-btn sm', id: 'data-export', onclick: app.click(() => mode('export')) }, icon('copy'), '내보내기'),
       h('button', { class: 'ms-btn sm', id: 'data-download', onclick: app.click(() => {
         try {
-          const blob = new Blob([store.exportString(app.p) + '\n'], { type: 'text/plain' });
-          const a = h('a', { href: URL.createObjectURL(blob), download: `야식대질주-백업-${stamp()}.txt` }); document.body.append(a); a.click();
+          const blob = new Blob([store.backupFileContent(app.p)], { type: 'text/plain;charset=utf-8' });
+          const a = h('a', { href: URL.createObjectURL(blob), download: store.backupFileName() }); document.body.append(a); a.click();
           setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
         } catch { app.toast('내려받기가 안 되는 환경이에요. 내보내기로 복사해 주세요', 'warn'); }
       }) }, icon('download'), '내려받기'),
-      h('button', { class: 'ms-btn sm', id: 'data-import', onclick: app.click(() => { if (area.classList.contains('hidden') || !box.value.trim()) { box.value = ''; show(); box.focus(); } else doImport(box.value); }) }, icon('data'), '가져오기'),
-      h('button', { class: 'ms-btn sm ghost', onclick: app.click(() => file.click()) }, '파일 열기')),
+      h('button', { class: 'ms-btn sm', id: 'data-import', onclick: app.click(() => mode('import')) }, icon('data'), '가져오기')),
     area, file,
     h('div', { class: 'set danger-row' }, h('span', { class: 'txt' }, h('b', {}, '처음부터 다시'), h('small', {}, '엽전, 별, 주자, 기록이 모두 지워져요. 설정은 남아요')),
       h('button', { class: 'ms-btn sm danger', id: 'data-reset', onclick: app.click(() => app.confirm('정말 처음부터 다시 할까요? 되돌릴 수 없어요.', () => {
         const keep = app.p.settings; app.p = defaultProgress(); app.p.settings = keep;
-        const clearG = (store as unknown as { clearGhosts?: () => void }).clearGhosts;
-        try { if (clearG) clearG(); else for (const k of store.listGhosts()) localStorage.removeItem('jelly_runner_ghost_' + k); } catch { /* ignore */ }
+        try { for (const k of store.listGhosts()) store.removeGhost(k); } catch { /* ignore */ }
         app.persist(); app.toast('새로 시작해요', 'good'); app.showHome();
       })) }, '다시 하기')));
 }

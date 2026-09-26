@@ -1,83 +1,192 @@
+e2e (2026-09-26T10:47:48.356Z) — play/index.html in headless Chromium
 
 ## phone-portrait 390×844
-  ✓ first run is the tutorial
-  ✓ touch on the jump zone jumps
-  ✓ holding the slide zone slides
-  ✓ space key jumps
+  ✓ boots into the run (232 ms)
+  ✓ first launch is the tutorial run (no menu first)
+  ✓ translucent title overlay over the live run
+  ✓ a small '건너뛰기' button
+  pads [{"w":195,"h":557},{"w":195,"h":557}] · world 390×219
+  ✓ portrait pads ≥ 180×120 CSS px
+  ✓ portrait world view is 16:9
+  ✓ the first tap jumps
+  ✓ AudioContext running after the first tap (running)
+  ✓ title overlay fades on the first press
+  ✓ double-tap-hold: no text selection / context menu / zoom ({"sel":"","cm":0,"zoom":1})
+  ✓ a tutorial miss shows a verb hint
+  hint "점프!" · flashing 2 · 12 steps in 0.5 s
+  ✓ the matching pad / thumb hint flashes
+  ✓ rewind replays at ~40 % game speed
   ✓ pause freezes the sim
-  ✓ resume continues
+  ✓ pause sheet: 계속 · 처음부터 · quick settings
+  ✓ still held during the 3-2-1
+  ✓ runs again after the countdown
+  ✓ the tutorial clears by playing it (rewinds: 2)
+  ✓ then stage 1-1 starts right away
   ✓ tutorial completion is saved
-  ✓ results → endless run
-  endless after 9 s: {"dist":97,"hp":91,"hits":0,"jellies":94,"fps":60}
-  ✓ the runner makes progress
-  ✓ jellies get collected
-  results: {"why":"체력이 다 닳았어요시간에 따른 체력 감소 (-9) · 거의 안 부딪혔어요! 물약(초록 하트)을 더 챙기면 더 멀리 가요","score":"1,519","coins":0,"runs":2}
-  ✓ results explain why the run ended
-  ✓ run was booked into the save
-  ✓ progress survives a reload
-  ✓ 캐릭터 screen opens
-  ✓ 모험 screen opens
-  ✓ 오늘의 코스 screen opens
-  ✓ 미션 screen opens
-  ✓ 설정 screen opens
-  ✓ stage run starts from the map
-  ✓ leaving the tab auto-pauses
+  ✓ holding the slide zone slides
+  ✓ multi-touch: slide held + jump tap → jumps, slide stays held
+  ✓ hiding the page auto-pauses; coming back does not resume by itself
+  ✓ countdown after 계속
+  ✓ resumes after the countdown
+  ✓ a 420 ms stall auto-pauses (1 steps ran)
+  stage 1-1: {"phase":"clear","dist":313,"hits":1,"jellies":291,"fps":60}
+  ✓ stage 1-1 played to the finish flag
+  ✓ ★1 booked for 1-1
+  ✓ stage clear shows the stars
+  ✓ 다시 달리기 → the stage again, no countdown
+  ✓ mashing at the KO does not skip the results ({"res":true,"phase":"over"})
+  ✓ results fit one screen without scrolling ({"sh":262,"ch":262,"docH":844,"vh":844,"bottom":844})
+  ✓ 쓰러짐 card names the hazard + its verb ("석쇠 꼬챙이 — 한 번 점프마지막으로 부딪힌 것")
+  ✓ 따끈함 장부 + 점수 내역 shown
+  ✓ 다시 달리기 is the biggest button
+  ✓ 다시 달리기 sits where the jump pad was
+  ✓ death → retry → jump in 1394 ms (≤ 2500)
+  ✓ holding the jump zone 0.4 s on the results retries
+  ✓ 홈 leaves the run (rAF stopped, menus shown)
   network requests: 0
   ✓ no network requests (fully offline)
   console/page errors: 0
   ✓ no console errors
 
 ## small-portrait 360×640
-  ✓ first run is the tutorial
-  ✓ touch on the jump zone jumps
-  ✓ holding the slide zone slides
-  ✓ space key jumps
+  ✓ boots into the run (220 ms)
+  ✓ first launch is the tutorial run (no menu first)
+  ✓ translucent title overlay over the live run
+  ✓ a small '건너뛰기' button
+  pads [{"w":180,"h":375},{"w":180,"h":375}] · world 360×203
+  ✓ portrait pads ≥ 180×120 CSS px
+  ✓ portrait world view is 16:9
+  ✓ the first tap jumps
+  ✓ AudioContext running after the first tap (running)
+  ✓ title overlay fades on the first press
+  ✓ double-tap-hold: no text selection / context menu / zoom ({"sel":"","cm":0,"zoom":1})
+  ✓ a tutorial miss shows a verb hint
+  hint "점프!" · flashing 2 · 12 steps in 0.5 s
+  ✓ the matching pad / thumb hint flashes
+  ✓ rewind replays at ~40 % game speed
   ✓ pause freezes the sim
-  ✓ resume continues
+  ✓ pause sheet: 계속 · 처음부터 · quick settings
+  ✓ still held during the 3-2-1
+  ✓ runs again after the countdown
+  ✓ then stage 1-1 starts right away
   ✓ tutorial completion is saved
-  ✓ results → endless run
-  endless after 9 s: {"dist":98,"hp":76,"hits":1,"jellies":97,"fps":60}
-  ✓ the runner makes progress
-  ✓ jellies get collected
-  results: {"why":"체력이 다 닳았어요충돌 1회 (-15) · 시간에 따른 체력 감소 (-9) · 거의 안 부딪혔어요! 물약(초록 하트)을 더 챙기면 더 멀리 가요","score":"1,330","coins":1,"runs":2}
-  ✓ results explain why the run ended
-  ✓ run was booked into the save
-  ✓ progress survives a reload
-  ✓ 캐릭터 screen opens
-  ✓ 모험 screen opens
-  ✓ 오늘의 코스 screen opens
-  ✓ 미션 screen opens
-  ✓ 설정 screen opens
-  ✓ stage run starts from the map
-  ✓ leaving the tab auto-pauses
+  ✓ holding the slide zone slides
+  ✓ multi-touch: slide held + jump tap → jumps, slide stays held
+  ✓ hiding the page auto-pauses; coming back does not resume by itself
+  ✓ countdown after 계속
+  ✓ resumes after the countdown
+  ✓ a 420 ms stall auto-pauses (1 steps ran)
+  ✓ mashing at the KO does not skip the results ({"res":true,"phase":"over"})
+  ✓ results fit one screen without scrolling ({"sh":262,"ch":262,"docH":640,"vh":640,"bottom":640})
+  ✓ 쓰러짐 card names the hazard + its verb ("석쇠 꼬챙이 — 한 번 점프마지막으로 부딪힌 것")
+  ✓ 따끈함 장부 + 점수 내역 shown
+  ✓ 다시 달리기 is the biggest button
+  ✓ 다시 달리기 sits where the jump pad was
+  ✓ death → retry → jump in 1406 ms (≤ 2500)
+  ✓ holding the jump zone 0.4 s on the results retries
+  ✓ 홈 leaves the run (rAF stopped, menus shown)
   network requests: 0
   ✓ no network requests (fully offline)
   console/page errors: 0
   ✓ no console errors
 
 ## phone-landscape 844×390
-  ✓ first run is the tutorial
-  ✓ touch on the jump zone jumps
-  ✓ holding the slide zone slides
-  ✓ space key jumps
+  ✓ boots into the run (379 ms)
+  ✓ first launch is the tutorial run (no menu first)
+  ✓ translucent title overlay over the live run
+  ✓ a small '건너뛰기' button
+  ✓ the first tap jumps
+  ✓ AudioContext running after the first tap (running)
+  ✓ title overlay fades on the first press
+  ✓ double-tap-hold: no text selection / context menu / zoom ({"sel":"","cm":0,"zoom":1})
+  ✓ a tutorial miss shows a verb hint
+  hint "점프!" · flashing 2 · 12 steps in 0.5 s
+  ✓ the matching pad / thumb hint flashes
+  ✓ rewind replays at ~40 % game speed
   ✓ pause freezes the sim
-  ✓ resume continues
+  ✓ pause sheet: 계속 · 처음부터 · quick settings
+  ✓ still held during the 3-2-1
+  ✓ runs again after the countdown
+  ✓ then stage 1-1 starts right away
   ✓ tutorial completion is saved
-  ✓ results → endless run
-  endless after 9 s: {"dist":98,"hp":60,"hits":3,"jellies":93,"fps":47}
-  ✓ the runner makes progress
-  ✓ jellies get collected
-  results: {"why":"마지막 한 방: 매달린 장애물 (슬라이드!)충돌 3회 (-45) · 시간에 따른 체력 감소 (-9) · 물약 회복 (+14) · 가장 많이 부딪힌 것: 매달린 장애물 (슬라이드!) ×3","score":"1,461","coins":1,"runs":2}
-  ✓ results explain why the run ended
-  ✓ run was booked into the save
-  ✓ progress survives a reload
-  ✓ 캐릭터 screen opens
-  ✓ 모험 screen opens
-  ✓ 오늘의 코스 screen opens
-  ✓ 미션 screen opens
-  ✓ 설정 screen opens
-  ✓ stage run starts from the map
-  ✓ leaving the tab auto-pauses
+  ✓ holding the slide zone slides
+  ✓ multi-touch: slide held + jump tap → jumps, slide stays held
+  ✓ hiding the page auto-pauses; coming back does not resume by itself
+  ✓ countdown after 계속
+  ✓ resumes after the countdown
+  ✓ a 420 ms stall auto-pauses (1 steps ran)
+  stage 1-1: {"phase":"clear","dist":313,"hits":1,"jellies":291,"fps":54}
+  ✓ stage 1-1 played to the finish flag
+  ✓ ★1 booked for 1-1
+  ✓ stage clear shows the stars
+  ✓ 다시 달리기 → the stage again, no countdown
+  ✓ mashing at the KO does not skip the results ({"res":true,"phase":"over"})
+  ✓ results fit one screen without scrolling ({"sh":236,"ch":236,"docH":390,"vh":390,"bottom":390})
+  ✓ 쓰러짐 card names the hazard + its verb ("석쇠 꼬챙이 — 한 번 점프마지막으로 부딪힌 것")
+  ✓ 따끈함 장부 + 점수 내역 shown
+  ✓ 다시 달리기 is the biggest button
+  ✓ 다시 달리기 sits under the right thumb
+  ✓ death → retry → jump in 1406 ms (≤ 2500)
+  ✓ holding the jump zone 0.4 s on the results retries
+  ✓ 홈 leaves the run (rAF stopped, menus shown)
+  network requests: 0
+  ✓ no network requests (fully offline)
+  console/page errors: 0
+  ✓ no console errors
+
+## desktop 1280×720 (mouse + keyboard)
+  ✓ boots into the tutorial
+  ✓ Space jumps
+  ✓ AudioContext running after the first key
+  ✓ mouse click on the left half jumps
+  ✓ ArrowDown held slides
+  ✓ right-click context menu is blocked
+  ✓ Esc pauses
+  ✓ Esc resumes (after the countdown)
+  ✓ Enter during the input guard is ignored (305 ms before ready)
+  ✓ Enter retries on the results
+  fps 60
+  ✓ no network requests
+  console/page errors: 0
+  ✓ no console errors
+
+## no-storage 390×844 (localStorage blocked)
+  ✓ boots into the run (183 ms)
+  ✓ first launch is the tutorial run (no menu first)
+  ✓ translucent title overlay over the live run
+  ✓ a small '건너뛰기' button
+  pads [{"w":195,"h":557},{"w":195,"h":557}] · world 390×219
+  ✓ portrait pads ≥ 180×120 CSS px
+  ✓ portrait world view is 16:9
+  ✓ the first tap jumps
+  ✓ AudioContext running after the first tap (running)
+  ✓ title overlay fades on the first press
+  ✓ double-tap-hold: no text selection / context menu / zoom ({"sel":"","cm":0,"zoom":1})
+  ✓ a tutorial miss shows a verb hint
+  hint "점프!" · flashing 2 · 13 steps in 0.5 s
+  ✓ the matching pad / thumb hint flashes
+  ✓ rewind replays at ~40 % game speed
+  ✓ pause freezes the sim
+  ✓ pause sheet: 계속 · 처음부터 · quick settings
+  ✓ still held during the 3-2-1
+  ✓ runs again after the countdown
+  ✓ then stage 1-1 starts right away
+  ✓ tutorial completion is saved
+  ✓ holding the slide zone slides
+  ✓ multi-touch: slide held + jump tap → jumps, slide stays held
+  ✓ hiding the page auto-pauses; coming back does not resume by itself
+  ✓ countdown after 계속
+  ✓ resumes after the countdown
+  ✓ a 420 ms stall auto-pauses (1 steps ran)
+  ✓ mashing at the KO does not skip the results ({"res":true,"phase":"over"})
+  ✓ results fit one screen without scrolling ({"sh":259,"ch":259,"docH":844,"vh":844,"bottom":844})
+  ✓ 쓰러짐 card names the hazard + its verb ("석쇠 꼬챙이 — 한 번 점프마지막으로 부딪힌 것")
+  ✓ 따끈함 장부 + 점수 내역 shown
+  ✓ 다시 달리기 is the biggest button
+  ✓ 다시 달리기 sits where the jump pad was
+  ✓ death → retry → jump in 1407 ms (≤ 2500)
+  ✓ holding the jump zone 0.4 s on the results retries
+  ✓ 홈 leaves the run (rAF stopped, menus shown)
   network requests: 0
   ✓ no network requests (fully offline)
   console/page errors: 0

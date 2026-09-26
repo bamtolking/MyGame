@@ -8,12 +8,13 @@ import { COMPANIONS, COMPANION_BY_ID } from '../data/companions';
 import { STAGES, STAGE_BY_ID } from '../data/stages';
 import { SCORE_VERSION } from '../data/tuning';
 import { applyRunToMissions, drawMission, fillMissionSlots, MISSION_REWARD, MISSION_BY_ID, RANK_XP, RANK_REWARD, RANK_MAX, missionText, type ActiveMission } from './missions';
-import { evaluateAchievements, COSMETIC_BY_ID, type AchievementUnlock } from './achievements';
+import { evaluateAchievements, COSMETIC_BY_ID, ACHIEVEMENTS, type AchievementUnlock } from './achievements';
 // UI conveniences: the shop / wardrobe / achievement helpers live in achievements.ts, the rank preview in missions.ts
 export { buyCosmetic, equipCosmetic, unequipCosmetic, equippedFor, achievementProgress, achievementView, shopList, estimateRuns, COSMETICS, ACHIEVEMENTS } from './achievements';
 export { rankRewardPreview, RANK_TITLES } from './missions';
 
 export const SAVE_VERSION = 2;
+const ACHIEVEMENT_REWARD = (): Record<string, string> => Object.fromEntries(ACHIEVEMENTS.map(a => [a.id, a.reward]));
 
 export interface Settings {
   bgm: number; sfx: number; musicOff: boolean;
@@ -96,14 +97,31 @@ export const MIGRATIONS: Record<number, (o: any) => any> = {
     const starMask: Record<string, number> = {};
     for (const [k, v] of Object.entries(o.stars ?? {})) starMask[k] = (v as number) >= 3 ? 7 : (v as number) >= 2 ? 3 : (v as number) >= 1 ? 1 : 0;
     const set = o.settings ?? {};
+    const daily: Record<string, DailyRec> = Object.fromEntries(Object.entries(o.daily ?? {}).map(([k, d]: [string, any]) => [k, { best: d?.best ?? 0, dist: 0, tries: d?.tries ?? 0, charId: d?.charId ?? 'hotteok', medal: 0 }]));
+    // v1 records predate SCORE_VERSION: keep them, marked as version 0 (never silently re-scored)
+    const bestEndless = o.bestEndless ? { relay: false, ...o.bestEndless, scoreVersion: o.bestEndless.scoreVersion ?? 0 } : null;
+    const hall: HallRec[] = [];
+    if (bestEndless) hall.push({ ...bestEndless, mode: 'endless' });
+    for (const [k, d] of Object.entries(daily)) if (d.best > 0) hall.push({ score: d.best, dist: 0, charId: d.charId, date: 0, assist: false, relay: false, scoreVersion: 0, mode: 'daily', key: k });
+    const seen = [...(Array.isArray(o.seen) ? o.seen : []), ...(Array.isArray(o.seenHints) ? o.seenHints.map((h: string) => 'hint:' + h) : [])];
     return {
       ...o, version: 2, starMask, pouches: {}, companions: [], loadout: { main: o.main, partner: o.partner ?? null, companion: null },
       settings: { ...set, assistHalfDrain: !!set.assist, assistNoHit: false, assistAutoSlide: false },
-      achievements: {}, cosmetics: { owned: [], equipped: {} }, hall: [], seen: [], daysPlayed: Object.keys(o.daily ?? {}).length, lastDay: '',
-      daily: Object.fromEntries(Object.entries(o.daily ?? {}).map(([k, d]: [string, any]) => [k, { best: d.best ?? 0, dist: 0, tries: d.tries ?? 0, charId: d.charId ?? 'hotteok', medal: 0 }])),
+      achievements: {}, cosmetics: { owned: [], equipped: {} }, hall, seen, daysPlayed: Object.keys(o.daily ?? {}).length, lastDay: '',
+      daily, bestEndless,
+      // ghosts move to their own storage keys: storage.load() calls takeLegacyGhosts() before normalize()
     };
   },
 };
+
+/** v1 kept ghosts inside the main save; v2 stores one per key. Returns them (key → GhostRec) so the storage layer can move them. */
+export function takeLegacyGhosts(raw: any): Record<string, GhostRec> {
+  const g = raw && typeof raw === 'object' ? raw.ghosts : null;
+  if (!g || typeof g !== 'object' || Array.isArray(g)) return {};
+  const out: Record<string, GhostRec> = {};
+  for (const [k, v] of Object.entries(g)) if (v && typeof v === 'object' && Array.isArray((v as GhostRec).log)) { const r = v as GhostRec; out[k] = { ...r, partnerId: r.partnerId ?? null, companionId: r.companionId ?? null }; }
+  return out;
+}
 
 /** Migrate + merge a loaded (possibly older/partial) save onto defaults so new fields never crash old saves. */
 export function normalize(raw: any): Progress {
@@ -122,8 +140,19 @@ export function normalize(raw: any): Progress {
   const pa = p.loadout.partner; if (pa && (!CHAR_BY_ID[pa] || !p.unlocked.includes(pa) || pa === p.loadout.main)) p.loadout.partner = null;
   const co = p.loadout.companion; if (co && !p.companions.includes(co)) p.loadout.companion = p.companions[0] ?? null;
   if (!Array.isArray(p.missions)) p.missions = [];
-  p.missions = p.missions.filter(m => m && typeof m.id === 'string');
-  for (const k of ['starMask', 'pouches', 'stageBest', 'bestByChar', 'daily', 'achievements'] as const) if (!p[k] || typeof p[k] !== 'object') (p as any)[k] = {};
+  // keep only missions whose template still exists (an unknown one could never complete); repair numbers
+  p.missions = p.missions.filter(m => m && typeof m.id === 'string' && MISSION_BY_ID[m.id]).slice(0, 3).map(m => {
+    const level = Math.max(0, Math.min(2, Math.floor(Number(m.level) || 0)));
+    return { id: m.id, level, progress: Math.max(0, Number(m.progress) || 0), target: Number(m.target) > 0 ? Number(m.target) : MISSION_BY_ID[m.id].targets[level], runsWithout: Math.max(0, Number(m.runsWithout) || 0) };
+  });
+  for (const k of ['missionCounter', 'missionsDone', 'coins', 'rank', 'xp'] as const) if (typeof p[k] !== 'number' || !isFinite(p[k])) (p as any)[k] = 0;
+  for (const k of ['starMask', 'pouches', 'stageBest', 'bestByChar', 'daily', 'achievements', 'bests'] as const) if (!p[k] || typeof p[k] !== 'object' || Array.isArray(p[k])) (p as any)[k] = {};
+  if (!Array.isArray(p.cosmetics.owned)) p.cosmetics.owned = [];
+  p.cosmetics.owned = Array.from(new Set(p.cosmetics.owned.filter(x => typeof x === 'string')));
+  if (!p.cosmetics.equipped || typeof p.cosmetics.equipped !== 'object') p.cosmetics.equipped = {};
+  // achievement rewards are never lost: re-grant any cosmetic whose achievement is recorded
+  const rewards = ACHIEVEMENT_REWARD();
+  for (const id of Object.keys(p.achievements)) { const rw = rewards[id]; if (rw && COSMETIC_BY_ID[rw] && !p.cosmetics.owned.includes(rw)) p.cosmetics.owned.push(rw); }
   if (!Array.isArray(p.hall)) p.hall = [];
   if (!Array.isArray(p.seen)) p.seen = [];
   delete (p as any).ghosts; delete (p as any).stars; delete (p as any).main; delete (p as any).partner; delete (p as any).rerollDay; delete (p as any).seenHints;
@@ -155,7 +184,7 @@ export function nextStage(p: Progress): string | null {
 }
 
 /** Progressive disclosure (GDD §9.8). */
-export type Feature = 'map' | 'missions' | 'endless' | 'relay' | 'daily' | 'chars';
+export type Feature = 'map' | 'missions' | 'endless' | 'relay' | 'daily' | 'chars' | 'backup';
 export function featureOpen(p: Progress, f: Feature): boolean {
   switch (f) {
     case 'map': return p.totals.runs >= 1 || p.tutorialDone;
@@ -164,6 +193,8 @@ export function featureOpen(p: Progress, f: Feature): boolean {
     case 'relay': return stageCleared(p, '1-6');
     case 'daily': return p.totals.runs >= 6;
     case 'chars': return p.unlocked.length > 1 || p.companions.length > 1 || p.totals.runs >= 5;
+    // 백업 코드 + 홈 화면 추가 안내 (in 설정, never a popup): after 5 runs or the first unlock
+    case 'backup': return p.totals.runs >= 5 || p.unlocked.length > 1 || p.companions.length > 1 || (p.cosmetics?.owned?.length ?? 0) > 0;
   }
 }
 
@@ -268,9 +299,11 @@ export function applyRun(p: Progress, s: RunState, dateKey = todayKey()): RunRew
   };
   if (s.trial) return r;                     // try-out runs never touch records, missions or coins
   const T = p.totals; const st = s.stats;
+  const missionsOpen = featureOpen(p, 'missions');   // judged before this run counts (GDD §9.8: missions appear after 3 runs)
   T.runs++; T.dist += Math.floor(s.dist); T.jellies += st.jellies; T.coins += st.coins; T.bonusTimes += st.bonusTimes; T.playTime += s.t;
   T.nearMisses += st.nearMisses; T.airJumps += st.airJumps; T.smashed += st.smashed; T.potions += st.potions; T.bigJellies += st.bigJellies;
   T.letters += st.letters; T.lines += st.lines; T.superBonus += st.superBonus; T.bestStreak = Math.max(T.bestStreak, st.bestStreak);
+  T.moonCakes = (T.moonCakes ?? 0) + st.moonCakes; T.fastFalls = (T.fastFalls ?? 0) + st.fastFalls; T.relayDist = (T.relayDist ?? 0) + Math.floor(st.relayDist);
   if (p.lastDay !== dateKey) { p.lastDay = dateKey; p.daysPlayed++; }
   const main = s.mainId;
   const rec: BestRec = { score, dist: Math.floor(s.dist), charId: main, date: Date.now(), assist: s.assist, relay: s.relayUsed, scoreVersion: SCORE_VERSION };
@@ -305,8 +338,9 @@ export function applyRun(p: Progress, s: RunState, dateKey = todayKey()): RunRew
     addHall(p, { ...rec, mode: 'daily', key: dateKey });
   }
 
-  if (s.mode !== 'tutorial') {
-    const done = applyRunToMissions(p.missions, s, p);
+  if (s.mode !== 'tutorial' && missionsOpen) {
+    const done = applyRunToMissions(p.missions, s, p, { newStars: r.newStars, pouchesNew: r.pouchesNew, cleared: s.mode === 'stage' && s.phase === 'clear' });
+    const finished = done.map(i => p.missions[i].id);
     for (const i of done.sort((a, b) => b - a)) {
       const m = p.missions[i]; const rw = MISSION_REWARD[m.level];
       r.missionsDone.push({ text: missionText(m), xp: rw.xp, coins: rw.coins });
@@ -314,11 +348,12 @@ export function applyRun(p: Progress, s: RunState, dateKey = todayKey()): RunRew
       p.missions.splice(i, 1);
     }
     while (p.rank < RANK_MAX && p.xp >= RANK_XP(p.rank)) { p.xp -= RANK_XP(p.rank); r.coinsFromRank += RANK_REWARD(p.rank); p.rank++; r.rankUps++; }
-    fillMissions(p);
-  } else p.tutorialDone = true;
+    if (p.rank >= RANK_MAX) p.xp = Math.min(p.xp, RANK_XP(RANK_MAX));   // capped: keep the bar full, never overflow
+    fillMissions(p, finished);
+  } else if (s.mode === 'tutorial') p.tutorialDone = true;
 
   r.coins = coinsFromPickups + coinsFromDist + r.coinsFromMissions + r.coinsFromRank;
-  p.coins += r.coins;
+  p.coins += r.coins; T.coinsEarned = (T.coinsEarned ?? 0) + r.coins;
   r.unlocked = autoUnlock(p);
   r.achievements = evaluateAchievements(p, s);
   return r;
@@ -345,7 +380,8 @@ function addHall(p: Progress, h: HallRec): void {
 export function canReroll(p: Progress, i: number): boolean { return !!p.missions[i]; }
 export function reroll(p: Progress, i: number): boolean {
   if (!p.missions[i]) return false;
-  const others = p.missions.map(m => m.id);
-  p.missions[i] = drawMission(others, p, p.missionCounter++);
+  const all = p.missions.map(m => m.id);
+  const others = p.missions.filter((_, j) => j !== i);   // the rules look at the two that stay
+  p.missions[i] = drawMission(all, p, p.missionCounter++, others);
   return true;
 }

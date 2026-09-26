@@ -3,7 +3,7 @@
 import type { CharacterDef } from '../data/characters';
 import type { CompanionDef } from '../data/companions';
 import type { Progress } from '../meta/progress';
-import { RANK_REWARD, MISSION_REWARD } from '../meta/missions';
+import { estimateRuns } from '../meta/achievements';
 import { drawCharacter } from '../render/characters';
 import { shapeOf } from '../render/renderer';
 import { h } from './dom';
@@ -112,20 +112,10 @@ export function coinAmount(n: number, cls = ''): HTMLElement { return h('span', 
 export function newDot(): HTMLElement { return h('i', { class: 'newdot', 'aria-label': '새로 열림' }); }
 
 // ---------------------------------------------------------------- economy estimate (「지금 속도면 약 6판」)
-/** Average coins a run has earned so far (pickups + distance + missions + rank rewards), or null before any run. */
-export function coinsPerRun(p: Progress): number | null {
-  const runs = p.totals.runs; if (runs < 1) return null;
-  let rank = 0; for (let r = 0; r < p.rank; r++) rank += RANK_REWARD(r);
-  const mission = p.missionsDone * MISSION_REWARD[1].coins;
-  const earned = p.totals.coins + Math.floor(p.totals.dist / 100) + mission + rank;
-  return earned > 0 ? earned / runs : null;
-}
-/** 「지금 속도면 약 N판」 for a coin price, or '' when there is no data yet. */
-export function paceText(p: Progress, cost: number): string {
-  const left = cost - p.coins;
-  if (left <= 0) return '지금 데려올 수 있어요';
-  const avg = coinsPerRun(p); if (!avg) return '';
-  return `지금 속도면 약 ${fmtNum(Math.max(1, Math.ceil(left / avg)))}판`;
+/** 「지금 속도면 약 N판」 for a coin price (average income of this save; see meta estimateRuns). */
+export function paceText(p: Progress, cost: number, now = '지금 데려올 수 있어요'): string {
+  const n = estimateRuns(p, cost);
+  return n <= 0 ? now : `지금 속도면 약 ${fmtNum(n)}판`;
 }
 
 // ---------------------------------------------------------------- portraits

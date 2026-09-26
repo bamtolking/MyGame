@@ -161,7 +161,7 @@
 .home-stats .stat-rank { display: inline-flex; align-items: center; gap: 0.3em; }
 .home-stats .stat-rank small { color: var(--mute); font-weight: 700; font-size: 0.8em; }
 .home-stats .stat-rank .mbar { width: 3.4em; height: 0.42em; }
-.ms-banner { width: 100%; display: flex; align-items: center; gap: 0.5em; padding: 0.3em 0.3em 0.3em 0.9em; border-radius: 1em; background: rgba(255, 213, 90, 0.16); border: 1px solid rgba(255, 213, 90, 0.4); color: #ffecb8; font-weight: 800; font-size: 0.9em; }
+.ms-banner { width: 100%; display: flex; align-items: center; gap: 0.5em; padding: 0.3em 0.3em 0.3em 0.9em; border-radius: 1em; background: linear-gradient(0deg, rgba(255, 213, 90, 0.16), rgba(255, 213, 90, 0.16)), rgba(22, 14, 44, 0.94); border: 1px solid rgba(255, 213, 90, 0.4); color: #ffecb8; font-weight: 800; font-size: 0.9em; }
 .ms-banner span { flex: 1; }
 .home-title { position: relative; text-align: center; padding: 0.3em 0 0.1em; }
 .home-title .moon { position: absolute; z-index: -1; width: 5.4em; height: 5.4em; left: 50%; top: -0.9em; margin-left: 3.3em; border-radius: 50%;
@@ -248,7 +248,7 @@
 .world-txt h3 { font-size: 1.15em; font-weight: 900; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); }
 .world-txt small { font-size: 0.78em; color: #f3e6ff; opacity: 0.85; }
 .world-stars { display: inline-flex; align-items: center; gap: 0.2em; font-weight: 900; color: var(--gold); background: rgba(0, 0, 0, 0.35); padding: 0.25em 0.6em; border-radius: 999px; white-space: nowrap; }
-.nodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5em, 1fr)); gap: 0.55em; }
+.nodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.75em, 1fr)); gap: 0.5em; }
 .ms .node { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 0.18em; min-height: 7.4em; padding: 0.55em 0.25em 0.45em;
   border-radius: 1em; background: rgba(14, 9, 38, 0.72); border: 1.5px solid rgba(255, 214, 160, 0.22); color: var(--ink); font: inherit; cursor: pointer; box-shadow: 0 0.2em 0 rgba(0, 0, 0, 0.35); }
 .ms .node:active { transform: translateY(2px); }
@@ -311,6 +311,7 @@ input.switch:focus-visible, .ms-btn:focus-visible, .tab:focus-visible, .dock-btn
 .hflag.assist { background: rgba(143, 208, 255, 0.16); color: #cfeaff; }
 .hflag.assist .ico { color: #ff8fb0; }
 .hflag.relay { color: var(--jade); }
+.code-area { display: flex; flex-direction: column; gap: 0.5em; margin: 0.35em 0; }
 .code-box { width: 100%; font: 0.8em ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.4; color: #fff; background: rgba(8, 5, 28, 0.7); border: 1px solid var(--line2); border-radius: 0.8em; padding: 0.6em; resize: vertical; user-select: text; -webkit-user-select: text; word-break: break-all; }
 .danger-row .txt b { color: #ffb0b0; }
 
@@ -341,12 +342,14 @@ input.switch:focus-visible, .ms-btn:focus-visible, .tab:focus-visible, .dock-btn
 .unlock-top > .ico { color: var(--gold); }
 .unlock-top b { font-size: 0.95em; }
 .unlock-top small { flex-basis: 100%; font-size: 0.78em; color: var(--mute); }
-.cosm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5em), 1fr)); gap: 0.55em; }
+.cosm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.2em), 1fr)); gap: 0.55em; }
 .cosm { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.25em; padding: 0.7em 0.5em; border-radius: 1em; background: var(--card); border: 1.5px solid var(--line); }
 .cosm.on { border-color: rgba(111, 224, 176, 0.7); }
 .cosm.locked { opacity: 0.75; }
 .cosm-ico { width: 2.6em; height: 2.6em; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(255, 200, 97, 0.14); color: var(--lantern2); }
 .cosm-ico .ico { width: 1.5em; height: 1.5em; }
+.cosm.pal .cosm-ico { width: 3.6em; height: 3.6em; background: radial-gradient(circle at 50% 60%, rgba(255, 190, 110, 0.3), rgba(40, 26, 90, 0.8) 70%); }
+.cosm.shop { border-style: dashed; border-color: rgba(255, 200, 97, 0.45); }
 .cosm small { font-size: 0.74em; color: var(--mute); }
 .cosm .ms-btn { width: 100%; margin-top: auto; }
 .ach-sum { flex-direction: column; }
@@ -448,7 +451,7 @@ input.switch:focus-visible, .ms-btn:focus-visible, .tab:focus-visible, .dock-btn
 @media (orientation: landscape) and (max-height: 520px) {
   .ms, .msheet { font-size: calc(14px * var(--ui, 1)); }
   .ms-home { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: auto 1fr auto;
-    grid-template-areas: "title head" "hero actions" "hero dock"; column-gap: 1.4em; row-gap: 0.55em; align-content: center; padding-top: calc(8px + var(--sat, 0px)); }
+    grid-template-areas: "title head" "hero actions" "hero dock"; column-gap: 1.4em; row-gap: 0.55em; align-content: start; align-content: safe center; padding-top: calc(8px + var(--sat, 0px)); }
   .ms-home > * { width: auto; margin: 0; }
   .home-title { grid-area: title; align-self: end; }
   .home-title h1 { font-size: clamp(2.1em, 7.2vh + 1em, 2.9em); }

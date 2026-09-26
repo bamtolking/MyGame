@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "settings": { "bgm": 0.5, "sfx": 0.6, "musicOff": false, "swapSides": false, "showPads": true, "slideToggle": true, "reduceMotion": true, "shake": 0, "highContrast": false, "lowFx": false, "uiScale": 1.15, "fps30": false, "showHitbox": false, "vibrate": true, "ghost": true, "gameSpeed": 1, "assistNoHit": false, "assistHalfDrain": false, "assistAutoSlide": true },
+  "coins": 2675,
+  "unlocked": ["hotteok", "bungeo", "kkochi"],
+  "companions": ["firefly", "magpie"],
+  "loadout": { "main": "kkochi", "partner": "bungeo", "companion": "magpie" },
+  "starMask": { "1-1": 7, "1-2": 3, "1-3": 3, "1-4": 1, "1-5": 1 },
+  "pouches": { "1-1": 7, "1-2": 5 },
+  "stageBest": { "1-1": 14020, "1-2": 11890, "1-3": 9400, "1-4": 8800, "1-5": 7310 },
+  "bestEndless": { "score": 61230, "dist": 2210, "charId": "kkochi", "date": 1758800000000, "assist": false, "relay": true, "scoreVersion": 1 },
+  "bestByChar": { "hotteok": 40100, "kkochi": 61230 },
+  "daily": { "2026-09-24": { "best": 52000, "dist": 2105, "tries": 4, "charId": "dalgona", "medal": 2 } },
+  "daysPlayed": 6,
+  "lastDay": "2026-09-24",
+  "rank": 6,
+  "xp": 3,
+  "missions": [
+    { "id": "dist_run", "level": 1, "progress": 640, "target": 900, "runsWithout": 0 },
+    { "id": "big_tot", "level": 2, "progress": 120, "target": 200, "runsWithout": 0 },
+    { "id": "streak", "level": 0, "progress": 7, "target": 10, "runsWithout": 1 }
+  ],
+  "missionCounter": 29,
+  "missionsDone": 23,
+  "achievements": { "near_20": 1758700000000 },
+  "cosmetics": { "owned": ["hat_gat"], "equipped": { "kkochi": { "hat": "hat_gat" } } },
+  "totals": { "runs": 64, "dist": 88110, "jellies": 80233, "coins": 6120, "bonusTimes": 95, "playTime": 9120.5, "clears": 21, "nearMisses": 311, "airJumps": 1650, "smashed": 1720, "potions": 480, "bigJellies": 9900, "letters": 640, "lines": 1300, "superBonus": 7, "pouches": 5, "bestStreak": 88 },
+  "hall": [
+    { "score": 61230, "dist": 2210, "charId": "kkochi", "date": 1758800000000, "assist": false, "relay": true, "scoreVersion": 1, "mode": "endless" },
+    { "score": 14020, "dist": 330, "charId": "hotteok", "date": 1758600000000, "assist": false, "relay": false, "scoreVersion": 1, "mode": "stage", "key": "1-1" }
+  ],
+  "seen": ["map", "missions", "chars"],
+  "tutorialDone": true,
+  "scoreVersion": 1
+}
