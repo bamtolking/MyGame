@@ -107,6 +107,8 @@ export interface FoodCompound {
   amount?: string;
   /** 이 식품에서 이 성분이 하는 역할 한두 문장 */
   role: string;
+  /** 이 식품 안에서의 영향이 성분 기본값과 다를 때만 (예: 통과일 속 과당은 첨가당과 달라 'mixed') */
+  effect?: Effect;
 }
 
 export interface Food {

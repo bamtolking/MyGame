@@ -144,17 +144,18 @@ export function nutritionHtml(food: { nutrients: Nutrients; basis: string; servi
 
 // ---------- 식품 ----------
 
-function compoundCard(ref: { id: CompoundId; amount?: string; role: string }, open: boolean): string {
+function compoundCard(ref: { id: CompoundId; amount?: string; role: string; effect?: Effect }, open: boolean): string {
   const c = COMPOUND_BY_ID.get(ref.id);
   const name = c?.name ?? COMPOUND_CATALOG[ref.id];
   if (!c) {
     return `<article class="cc"><header><a class="cc-name" href="${compoundLink(ref.id)}">${esc(name)}</a></header><p class="cc-role">${esc(ref.role)}</p></article>`;
   }
   const first = c.pathways[0];
-  return `<article class="cc fx-edge-${c.effect}">
+  const effect = ref.effect ?? c.effect;
+  return `<article class="cc fx-edge-${effect}">
     <header>
       <a class="cc-name" href="${compoundLink(c.id)}">${esc(name)}</a>
-      ${effectPill(c.effect)}
+      ${effectPill(effect)}
     </header>
     ${ref.amount ? `<p class="cc-amt">${esc(ref.amount)}</p>` : ''}
     <p class="cc-role">${esc(ref.role)}</p>
