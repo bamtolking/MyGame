@@ -73,7 +73,7 @@ abyss/
 
 ```bash
 npm run abyss:test      # 규칙·던전 테스트 (약 3초)
-npm run abyss:balance   # 봇이 3직업 × 3시드로 1~12층을 플레이 → abyss/docs/balance-results.md (약 1~2분)
+npm run abyss:balance   # 봇이 10직업 × 3시드로 1~12층을 플레이 → abyss/docs/balance-results.md (약 3~4분)
 npm run abyss:build     # 타입 검사 + 빌드 + play/index.html
 npm run abyss:shots     # 헤드리스 Chromium으로 PC/휴대폰 화면 촬영 + 상점·장착·포탈·표석·사망·저장 흐름 확인 (e2e-out/)
 ```
