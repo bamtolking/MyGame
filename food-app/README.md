@@ -37,7 +37,7 @@ npm run dev      # http://localhost:5173 (같은 Wi-Fi의 휴대폰은 PC IP:517
 npm test         # 데이터 무결성 + 검색 + AI 응답 정리 테스트
 npm run build    # 타입검사 + 빌드 + play/index.html, play/artifact.html 생성
 npm run shot     # 헤드리스 Chromium으로 휴대폰 화면 캡처 (shots/)
-node scripts/e2e-ai.mjs   # window.claude를 흉내 내 AI 분석·질문 흐름 점검
+node scripts/e2e.mjs      # 뷰어와 비슷한 iframe 조건에서 이동·탭·질문·AI 분석 흐름 점검
 ```
 
 ## 한계

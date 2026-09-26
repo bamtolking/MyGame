@@ -3,7 +3,8 @@ import { COMPOUNDS } from '../src/data/compounds';
 import { FOODS } from '../src/data/foods';
 import { buildFoodPrompt, errorInfo, sanitizeAiFood } from '../src/lib/ai';
 import { fmtNum } from '../src/lib/format';
-import { SearchIndex, choseong, normalize } from '../src/lib/search';
+import { FaqIndex, SearchIndex, choseong, normalize } from '../src/lib/search';
+import { answerHtml } from '../src/ui/views';
 
 const index = new SearchIndex(FOODS, COMPOUNDS);
 const top = (q: string) => index.search(q)[0];
@@ -35,6 +36,45 @@ describe('검색', () => {
   it('공백·기호를 무시한다', () => {
     expect(normalize(' 강낭 콩 ')).toBe('강낭콩');
     expect(index.search('   ')).toEqual([]);
+  });
+});
+
+describe('질문 검색', () => {
+  const faq = new FaqIndex([
+    {
+      kind: 'food',
+      map: {
+        spinach: [
+          { q: '임산부가 먹어도 되나요?', a: '엽산이 풍부해 좋습니다.' },
+          { q: '하루에 얼마나 먹나요?', a: '한 접시 정도가 적당합니다. 임신 중에도 같습니다.' },
+        ],
+        egg: [{ q: '하루에 몇 개까지 먹어도 되나요?', a: '대부분 1~2개는 괜찮습니다.' }],
+      },
+      names: (id) => (id === 'spinach' ? ['시금치'] : ['달걀', '계란']),
+    },
+  ]);
+  it('항목 이름과 질문 낱말이 모두 들어간 질문을 먼저 찾는다', () => {
+    const hits = faq.search('시금치 임산부');
+    expect(hits[0]).toMatchObject({ kind: 'food', id: 'spinach', index: 0 });
+    expect(hits).toHaveLength(1);
+  });
+  it('질문에 없고 답에만 있는 낱말은 낮은 점수로 찾는다', () => {
+    const hits = faq.search('임신');
+    expect(hits.map((h) => h.index)).toEqual([1]);
+    expect(hits[0].score).toBeLessThan(10);
+  });
+  it('별칭으로도 찾고, 너무 짧은 검색어는 무시한다', () => {
+    expect(faq.search('계란 몇 개')[0]).toMatchObject({ id: 'egg' });
+    expect(faq.search('하')).toEqual([]);
+  });
+});
+
+describe('답 표시', () => {
+  it('문단·목록·근거 배지를 처리하고 HTML을 이스케이프한다', () => {
+    const html = answerHtml('첫 문장입니다. [근거 강함]\n• 하나\n• 둘 <b>\n\n다음 문단');
+    expect(html).toContain('<p>첫 문장입니다. <a class="ev ev-strong"');
+    expect(html).toContain('<ul class="bullets"><li>하나</li><li>둘 &lt;b&gt;</li></ul>');
+    expect(html).toContain('<p>다음 문단</p>');
   });
 });
 
@@ -70,6 +110,7 @@ describe('AI 응답 정리', () => {
     pairings: { good: ['물'], avoid: 'x' },
     cautions: ['<img src=x onerror=alert(1)>'],
     myths: [{ claim: 'c', truth: 't' }, { claim: '' }],
+    faq: [{ q: '하루에 얼마나 먹나요', a: '한두 쪽이 적당합니다.' }, { q: '냄새가 왜 나나요?', a: '황화합물 때문입니다.' }, { q: '', a: 'x' }, 'nope'],
   };
 
   it('잘못된 값은 버리고 쓸 수 있는 값만 남긴다', () => {
@@ -86,6 +127,10 @@ describe('AI 응답 정리', () => {
     expect(f.howToEat).toHaveLength(1);
     expect(f.pairings).toEqual({ good: ['물'], avoid: [] });
     expect(f.myths).toHaveLength(1);
+    expect(f.faq).toEqual([
+      { q: '하루에 얼마나 먹나요?', a: '한두 쪽이 적당합니다.' },
+      { q: '냄새가 왜 나나요?', a: '황화합물 때문입니다.' },
+    ]);
     // 이스케이프는 화면에서 하므로 원문은 보존
     expect(f.cautions[0]).toContain('<img');
   });

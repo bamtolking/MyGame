@@ -112,3 +112,55 @@ export class SearchIndex {
     return hits.slice(0, limit);
   }
 }
+
+// ---------- 자주 묻는 질문 검색 ----------
+
+export interface FaqHit {
+  kind: 'food' | 'compound';
+  id: string;
+  index: number;
+  q: string;
+  score: number;
+}
+
+interface FaqEntry extends FaqHit {
+  head: string; // 정규화된 "항목 이름 + 질문"
+  body: string; // 정규화된 답
+}
+
+/**
+ * 질문 검색. 검색어를 띄어쓰기로 나눠 모든 낱말이 "항목 이름 + 질문"에 있으면 높은 점수,
+ * 질문에는 없고 답에만 있으면 낮은 점수로 찾는다.
+ */
+export class FaqIndex {
+  private entries: FaqEntry[] = [];
+
+  constructor(sets: { kind: 'food' | 'compound'; map: Record<string, { q: string; a: string }[]>; names: (id: string) => string[] }[]) {
+    for (const { kind, map, names } of sets) {
+      for (const [id, list] of Object.entries(map)) {
+        const nameKey = names(id).map(normalize).join(' ');
+        list.forEach((x, index) => {
+          this.entries.push({ kind, id, index, q: x.q, score: 0, head: `${nameKey} ${normalize(x.q)}`, body: normalize(x.a) });
+        });
+      }
+    }
+  }
+
+  get size(): number {
+    return this.entries.length;
+  }
+
+  search(raw: string, limit = 40): FaqHit[] {
+    const terms = raw.split(/\s+/).map(normalize).filter((t) => t.length >= 1);
+    if (!terms.length || terms.join('').length < 2) return [];
+    const hits: FaqHit[] = [];
+    for (const e of this.entries) {
+      let score = 0;
+      if (terms.every((t) => e.head.includes(t))) score = 10 + (e.head.includes(normalize(raw)) ? 5 : 0);
+      else if (terms.every((t) => e.head.includes(t) || e.body.includes(t))) score = 3;
+      if (score) hits.push({ kind: e.kind, id: e.id, index: e.index, q: e.q, score });
+    }
+    hits.sort((a, b) => b.score - a.score);
+    return hits.slice(0, limit);
+  }
+}

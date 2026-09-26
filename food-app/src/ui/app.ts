@@ -1,28 +1,35 @@
-// 라우터와 이벤트. 주소의 #뒤 토큰으로 화면을 고른다: f.<식품> c.<성분> t.<작용> k.<분류> a.<AI 분석> s(검색) about index
+// 라우터와 이벤트.
+// 화면은 토큰으로 고른다: f.<식품>[.<탭>[.<질문 번호>]] c.<성분>[.<탭>[.<질문 번호>]] t.<작용> k.<분류> a.<AI 분석> s(검색) about index
+// claude.ai 뷰어처럼 액자(iframe) 안에서 돌 때도 이동이 되도록, 링크 대신 data-go를 직접 처리하고
+// 스크롤도 문서가 아니라 앱 안의 스크롤 영역(#scroller)에서 한다.
 import { TAG_IDS, type CompoundId } from '../data/catalog';
 import { COMPOUNDS, COMPOUND_BY_ID } from '../data/compounds';
+import { COMPOUND_FAQ, FOOD_FAQ } from '../data/faq';
 import { FOODS, FOOD_BY_ID } from '../data/foods';
 import type { TagId } from '../data/types';
-import { analyzeFood, buildQuestionPrompt, errorInfo, foodKey, getSample, loadAiFoods, removeAiFood, saveAiFood, type AiFood, type SampleFn } from '../lib/ai';
+import { analyzeFood, errorInfo, foodKey, getSample, loadAiFoods, removeAiFood, saveAiFood, type AiFood, type SampleFn } from '../lib/ai';
 import { esc } from '../lib/format';
-import { SearchIndex } from '../lib/search';
+import { FaqIndex, SearchIndex } from '../lib/search';
 import {
-  CATEGORY_ORDER, aboutView, aiFoodView, answerHtml, categoryView, compoundContext, compoundView, foodContext, foodView,
-  homeView, indexView, notFoundView, nutritionHtml, searchView, tagView,
+  CATEGORY_ORDER, aboutView, aiFoodView, categoryView, compoundView, foodView, homeView, indexView, notFoundView, nutritionHtml, searchView, tagView,
 } from './views';
 
+const $scroller = document.getElementById('scroller')!;
 const $view = document.getElementById('view')!;
 const $q = document.getElementById('q') as HTMLInputElement;
 const $form = document.getElementById('search') as HTMLFormElement;
+const $back = document.getElementById('back') as HTMLButtonElement;
 const index = new SearchIndex(FOODS, COMPOUNDS);
-const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+const faqIndex = new FaqIndex([
+  { kind: 'food', map: FOOD_FAQ, names: (id) => { const f = FOOD_BY_ID.get(id); return f ? [f.name, ...(f.aliases ?? []).slice(0, 3)] : [id]; } },
+  { kind: 'compound', map: COMPOUND_FAQ, names: (id) => { const c = COMPOUND_BY_ID.get(id as CompoundId); return c ? [c.name, ...(c.aliases ?? []).slice(0, 3)] : [id]; } },
+]);
 
 let query = '';
 let grams = 100;
 let sample: SampleFn | null = null;
-let askCtl: AbortController | null = null;
 let analyzing: { query: string; ctl: AbortController } | null = null;
-let current: { kind: 'food'; food: (typeof FOODS)[number] } | { kind: 'ai'; food: AiFood } | { kind: 'compound'; id: CompoundId } | { kind: 'other' } = { kind: 'other' };
+let current: { kind: 'food'; food: (typeof FOODS)[number] } | { kind: 'ai'; food: AiFood } | { kind: 'other' } = { kind: 'other' };
 
 // ---------- 저장 ----------
 const store = {
@@ -49,8 +56,20 @@ function pushRecent(id: string) {
   store.set('mw.recent', list.slice(0, 8));
 }
 
-// ---------- 라우팅 ----------
-function token(): string {
+function sessionGet(k: string): string {
+  try {
+    return sessionStorage.getItem(k) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+// ---------- 이동 ----------
+// 현재 화면 토큰과, 뒤로 가기용 자체 기록. 브라우저 기록(pushState)은 되면 쓰고, 막혀 있어도 앱은 동작한다.
+let currentToken = tokenFromHash();
+const backStack: string[] = [];
+
+function tokenFromHash(): string {
   try {
     return decodeURIComponent(location.hash.replace(/^#/, ''));
   } catch {
@@ -58,21 +77,83 @@ function token(): string {
   }
 }
 
-function go(t: string) {
-  if (token() === t) route();
-  else location.hash = t;
+function writeHistory(t: string, replace: boolean) {
+  try {
+    const url = t ? `#${t}` : location.pathname + location.search;
+    if (replace) history.replaceState({ t }, '', url);
+    else history.pushState({ t }, '', url);
+  } catch {
+    /* 샌드박스 등에서 막혀도 화면 이동은 계속 */
+  }
+}
+
+/** 다른 화면으로 이동 */
+export function navigate(t: string, opts: { replace?: boolean } = {}) {
+  if (t === currentToken) {
+    render(t);
+    return;
+  }
+  if (!opts.replace) backStack.push(currentToken);
+  currentToken = t;
+  writeHistory(t, !!opts.replace);
+  render(t);
+}
+
+function goBack() {
+  if (!backStack.length) {
+    navigate('', { replace: true });
+    return;
+  }
+  const before = currentToken;
+  try {
+    history.back();
+  } catch {
+    /* ignore */
+  }
+  // 브라우저 기록이 동작하지 않는 환경이면 자체 기록으로 되돌린다.
+  window.setTimeout(() => {
+    if (currentToken === before && backStack.length) {
+      currentToken = backStack.pop()!;
+      writeHistory(currentToken, true);
+      render(currentToken);
+    }
+  }, 250);
+}
+
+function onHistoryMove(t: string) {
+  if (t === currentToken) return;
+  // 브라우저 뒤로/앞으로: 자체 기록도 맞춰 준다.
+  if (backStack[backStack.length - 1] === t) backStack.pop();
+  else backStack.push(currentToken);
+  currentToken = t;
+  render(t);
+}
+window.addEventListener('popstate', (e) => onHistoryMove(typeof e.state?.t === 'string' ? e.state.t : tokenFromHash()));
+window.addEventListener('hashchange', () => onHistoryMove(tokenFromHash()));
+
+function scrollToTop() {
+  $scroller.scrollTop = 0;
+  // 문서 전체가 스크롤되는 환경(앱 스크롤 영역이 없을 때) 대비
+  if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+}
+
+/** 스크롤 영역 안에서 요소가 탭 막대 바로 아래에 오도록 */
+function scrollToEl(el: Element, extra = 8) {
+  const tabs = $view.querySelector<HTMLElement>('.tabs');
+  const offset = (tabs ? tabs.offsetHeight : 0) + extra;
+  const top = el.getBoundingClientRect().top - $scroller.getBoundingClientRect().top + $scroller.scrollTop - offset;
+  $scroller.scrollTop = Math.max(0, top);
 }
 
 function setTitle(name?: string) {
   document.title = name ? `${name} · 먹는 원리` : '먹는 원리';
 }
 
-function route() {
-  askCtl?.abort();
-  askCtl = null;
-  const t = token();
-  const [kind, ...rest] = t.split('.');
-  const arg = rest.join('.');
+// ---------- 화면 그리기 ----------
+function render(t: string) {
+  const parts = t.split('.');
+  const [kind, arg = '', tab = '', qa = ''] = parts;
+  const openQa = qa !== '' && /^\d+$/.test(qa) ? Number(qa) : -1;
   current = { kind: 'other' };
   let html: string;
   let title: string | undefined;
@@ -86,28 +167,29 @@ function route() {
     grams = 100;
     current = { kind: 'food', food };
     pushRecent(food.id);
-    html = foodView(food, grams);
+    html = foodView(food, grams, tab, openQa);
     title = food.name;
   } else if (kind === 'c' && COMPOUND_BY_ID.has(arg as CompoundId)) {
     const c = COMPOUND_BY_ID.get(arg as CompoundId)!;
-    current = { kind: 'compound', id: c.id };
-    html = compoundView(c);
+    html = compoundView(c, tab, openQa);
     title = c.name;
   } else if (kind === 't' && (TAG_IDS as string[]).includes(arg)) {
     html = tagView(arg as TagId);
   } else if (kind === 'k' && CATEGORY_ORDER[Number(arg)]) {
     html = categoryView(CATEGORY_ORDER[Number(arg)]);
     title = CATEGORY_ORDER[Number(arg)];
-  } else if (kind === 'a' && loadAiFoods()[arg]) {
-    const food = loadAiFoods()[arg];
+  } else if (kind === 'a' && loadAiFoods()[safeDecode(arg)]) {
+    const food = loadAiFoods()[safeDecode(arg)];
     grams = 100;
     current = { kind: 'ai', food };
-    html = aiFoodView(food, grams);
+    html = aiFoodView(food, grams, tab, openQa);
     title = food.name;
   } else if (t === 's') {
-    if (!query) query = sessionStorageGet('mw.q');
+    if (!query) query = sessionGet('mw.q');
     $q.value = query;
     renderSearch();
+    $back.hidden = false;
+    scrollToTop();
     return;
   } else if (t === 'about') {
     html = aboutView();
@@ -118,30 +200,51 @@ function route() {
   }
   $view.innerHTML = html;
   setTitle(title);
-  if (t !== 's' && document.activeElement !== $q) $q.value = '';
-  window.scrollTo(0, 0);
-  syncAi();
+  if (document.activeElement !== $q) $q.value = '';
+  $back.hidden = !t;
+  scrollToTop();
+  if (openQa >= 0) {
+    const el = document.getElementById(`qa-${openQa}`);
+    if (el) scrollToEl(el);
+  }
 }
 
-function sessionStorageGet(k: string): string {
+function safeDecode(s: string): string {
   try {
-    return sessionStorage.getItem(k) ?? '';
+    return decodeURIComponent(s);
   } catch {
-    return '';
+    return s;
   }
 }
 
 function renderSearch() {
   const q = query.trim();
   if (!q) {
-    location.hash = '';
+    navigate('', { replace: true });
     return;
   }
   const hits = index.search(q);
+  const faqHits = faqIndex.search(q);
   const saved = loadAiFoods()[foodKey(q)];
-  $view.innerHTML = searchView(q, hits, !!sample, saved);
+  $view.innerHTML = searchView(q, hits, faqHits, !!sample, saved);
   setTitle(`“${q}” 검색`);
   if (analyzing && analyzing.query === q) showAnalyzing(analyzing.query, 0);
+}
+
+// ---------- 탭 ----------
+function selectTab(id: string) {
+  const tabs = $view.querySelector<HTMLElement>('.tabs');
+  if (!tabs) return;
+  for (const b of tabs.querySelectorAll<HTMLButtonElement>('[data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === id));
+  for (const p of $view.querySelectorAll<HTMLElement>('.panel')) p.hidden = p.id !== `panel-${id}`;
+  // 주소에 탭을 남겨 두면 뒤로 가기·새로고침 때 같은 탭이 열린다 (기록은 쌓지 않음).
+  const base = currentToken.split('.').slice(0, 2).join('.');
+  currentToken = `${base}.${id}`;
+  writeHistory(currentToken, true);
+  // 탭 막대가 화면 위에 붙어 있을 만큼 내려와 있었다면, 새 패널의 처음이 보이게 올린다.
+  const tabsTop = tabs.getBoundingClientRect().top - $scroller.getBoundingClientRect().top + $scroller.scrollTop;
+  if ($scroller.scrollTop > tabsTop) $scroller.scrollTop = tabsTop;
+  tabs.querySelector<HTMLElement>(`[data-tab="${id}"]`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
 }
 
 // ---------- 검색 입력 ----------
@@ -153,10 +256,10 @@ $q.addEventListener('input', () => {
     /* ignore */
   }
   if (!query.trim()) {
-    if (token() === 's') location.hash = '';
+    if (currentToken === 's') navigate('', { replace: true });
     return;
   }
-  if (token() !== 's') location.hash = 's';
+  if (currentToken !== 's') navigate('s');
   else renderSearch();
 });
 
@@ -165,58 +268,82 @@ $form.addEventListener('submit', (e) => {
   query = $q.value;
   const hits = index.search(query);
   const [a, b] = hits;
+  $q.blur();
   if (a && a.score >= 80 && (!b || a.score - b.score >= 10)) {
-    $q.blur();
-    go(a.type === 'food' ? `f.${a.id}` : a.type === 'compound' ? `c.${a.id}` : `t.${a.id}`);
+    navigate(a.type === 'food' ? `f.${a.id}` : a.type === 'compound' ? `c.${a.id}` : `t.${a.id}`);
     return;
   }
-  $q.blur();
-  go('s');
+  if (currentToken === 's') renderSearch();
+  else navigate('s');
 });
 
+$back.addEventListener('click', goBack);
+
 // ---------- 화면 안 클릭 ----------
-document.addEventListener('click', (e) => {
-  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-jump],[data-grams],[data-ai-analyze],[data-ai-refresh],[data-ai-delete],[data-ai-stop],[data-ask-example]');
-  if (!el) return;
-  if (el.dataset.jump) {
+// 캡처 단계에서 받아, 페이지 안의 다른 처리보다 먼저 이동을 처리한다.
+document.addEventListener(
+  'click',
+  (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-go],[data-tab],[data-grams],[data-faq-toggle],[data-ai-analyze],[data-ai-refresh],[data-ai-delete],[data-ai-stop]');
+    if (!el) return;
+    if (el.dataset.go != null) {
+      e.preventDefault();
+      e.stopPropagation();
+      navigate(el.dataset.go);
+    } else if (el.dataset.tab) {
+      selectTab(el.dataset.tab);
+    } else if (el.dataset.grams) {
+      grams = Number(el.dataset.grams);
+      const box = $view.querySelector<HTMLElement>('[data-nut]');
+      if (box && (current.kind === 'food' || current.kind === 'ai')) box.innerHTML = nutritionHtml(current.food, grams);
+    } else if (el.dataset.faqToggle != null) {
+      const items = [...$view.querySelectorAll<HTMLDetailsElement>('.qa:not([hidden])')];
+      const open = items.some((d) => !d.open);
+      for (const d of items) d.open = open;
+      el.textContent = open ? '모두 접기' : '모두 펼치기';
+    } else if (el.dataset.aiAnalyze) {
+      void runAnalysis(el.dataset.aiAnalyze, false);
+    } else if (el.dataset.aiRefresh) {
+      void runAnalysis(el.dataset.aiRefresh, true);
+    } else if (el.dataset.aiDelete) {
+      removeAiFood(el.dataset.aiDelete);
+      navigate('', { replace: true });
+    } else if (el.dataset.aiStop != null) {
+      analyzing?.ctl.abort();
+    }
+  },
+  true,
+);
+
+// 키보드: 링크 역할 요소는 Enter로 이동
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const el = (e.target as HTMLElement).closest?.<HTMLElement>('[data-go]');
+  if (el) {
     e.preventDefault();
-    document.getElementById(el.dataset.jump)?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
-  } else if (el.dataset.grams) {
-    grams = Number(el.dataset.grams);
-    const box = $view.querySelector<HTMLElement>('[data-nut]');
-    if (box && (current.kind === 'food' || current.kind === 'ai')) box.innerHTML = nutritionHtml(current.food, grams);
-  } else if (el.dataset.aiAnalyze) {
-    void runAnalysis(el.dataset.aiAnalyze, false);
-  } else if (el.dataset.aiRefresh) {
-    void runAnalysis(el.dataset.aiRefresh, true);
-  } else if (el.dataset.aiDelete) {
-    removeAiFood(el.dataset.aiDelete);
-    location.hash = '';
-  } else if (el.dataset.aiStop != null) {
-    analyzing?.ctl.abort();
-  } else if (el.dataset.askExample) {
-    const input = $view.querySelector<HTMLInputElement>('#ask-input');
-    if (input) input.value = el.dataset.askExample;
-    void runAsk(el.dataset.askExample);
+    navigate(el.dataset.go!);
   }
 });
 
-document.addEventListener('submit', (e) => {
-  const form = (e.target as HTMLElement).closest<HTMLFormElement>('.ask-form');
-  if (!form) return;
-  e.preventDefault();
-  const q = (form.elements.namedItem('q') as HTMLInputElement).value.trim();
-  if (q) void runAsk(q);
+// 질문 목록 안에서 찾기
+document.addEventListener('input', (e) => {
+  const input = e.target as HTMLInputElement;
+  if (input.id !== 'faq-filter') return;
+  const terms = input.value.toLowerCase().split(/\s+/).map((t) => t.replace(/[\s·・()\[\]{}\-_,./'"!?~]+/g, '')).filter(Boolean);
+  let shown = 0;
+  for (const d of $view.querySelectorAll<HTMLDetailsElement>('.qa')) {
+    const text = d.dataset.text ?? '';
+    const ok = terms.every((t) => text.includes(t));
+    d.hidden = !ok;
+    if (ok) shown++;
+  }
+  const empty = $view.querySelector<HTMLElement>('.faq-empty');
+  if (empty) empty.hidden = shown > 0;
 });
 
-// ---------- AI ----------
-function syncAi() {
-  for (const el of $view.querySelectorAll<HTMLElement>('.ask')) el.hidden = !sample;
-}
-
+// ---------- AI (DB에 없는 식품 분석) ----------
 function disableAi(message: string) {
   sample = null;
-  syncAi();
   const slot = $view.querySelector<HTMLElement>('[data-ai-slot]');
   if (slot) slot.innerHTML = `<div class="empty"><p>${esc(message)}</p></div>`;
 }
@@ -238,7 +365,7 @@ async function runAnalysis(q: string, refresh: boolean) {
     analyzing = null;
     if (res.ok) {
       saveAiFood(res.food);
-      go(`a.${res.food.key}`);
+      navigate(`a.${encodeURIComponent(res.food.key)}`);
     } else {
       const slot = $view.querySelector<HTMLElement>('[data-ai-slot]');
       if (slot) slot.innerHTML = `<div class="empty"><p>${esc(res.message)}</p></div>`;
@@ -247,8 +374,7 @@ async function runAnalysis(q: string, refresh: boolean) {
     analyzing = null;
     const info = errorInfo(err);
     if (info.hide) return disableAi(info.message);
-    if (token() === 's') renderSearch();
-    else route();
+    render(currentToken);
     if (!info.silent) {
       const slot = $view.querySelector<HTMLElement>('[data-ai-slot]') ?? $view.querySelector<HTMLElement>('.ai-banner');
       slot?.insertAdjacentHTML('beforeend', `<p class="err">${esc(info.message)}</p>`);
@@ -256,43 +382,9 @@ async function runAnalysis(q: string, refresh: boolean) {
   }
 }
 
-async function runAsk(question: string) {
-  if (!sample) return;
-  const out = $view.querySelector<HTMLElement>('.ask .answer');
-  const btn = $view.querySelector<HTMLButtonElement>('.ask-form button');
-  if (!out) return;
-  let context = '';
-  if (current.kind === 'food') context = foodContext(current.food);
-  else if (current.kind === 'ai') context = foodContext(current.food);
-  else if (current.kind === 'compound') context = compoundContext(COMPOUND_BY_ID.get(current.id)!);
-  askCtl?.abort();
-  const ctl = new AbortController();
-  askCtl = ctl;
-  out.innerHTML = `<p class="q-echo">${esc(question)}</p><p class="progress">생각하는 중…</p>`;
-  if (btn) btn.disabled = true;
-  try {
-    await sample(buildQuestionPrompt(context, question), {
-      signal: ctl.signal,
-      onText: ({ text }) => {
-        out.innerHTML = `<p class="q-echo">${esc(question)}</p>${answerHtml(text)}`;
-      },
-    });
-  } catch (err) {
-    const info = errorInfo(err);
-    if (info.hide) return disableAi(info.message);
-    const kept = (err as { text?: string })?.text;
-    if (!info.silent) out.innerHTML = `<p class="q-echo">${esc(question)}</p>${kept ? answerHtml(kept) : ''}<p class="err">${esc(info.message)}</p>`;
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
 // ---------- 시작 ----------
-window.addEventListener('hashchange', route);
-route();
+render(currentToken);
 void getSample().then((s) => {
   sample = s;
-  if (!s) return;
-  syncAi();
-  if (token() === 's') renderSearch();
+  if (s && currentToken === 's') renderSearch();
 });

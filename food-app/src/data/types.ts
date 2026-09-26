@@ -134,3 +134,12 @@ export interface Food {
   /** 흔한 주장과 실제 근거 */
   myths?: { claim: string; truth: string }[];
 }
+
+/** 자주 묻는 질문 하나. a에는 "• " 목록 줄과 [근거 강함]·[근거 중간]·[근거 제한적]·[논쟁 중] 표시를 쓸 수 있다. */
+export interface QA {
+  q: string;
+  a: string;
+}
+
+/** 식품 id 또는 성분 id → 질문 목록 */
+export type FaqMap = Record<string, QA[]>;

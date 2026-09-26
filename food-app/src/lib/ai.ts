@@ -2,7 +2,7 @@
 // claude.ai에서 열었을 때만 동작하고, 그 밖(파일로 연 경우 등)에서는 기능을 숨긴다.
 import { COMPOUND_CATALOG, COMPOUND_IDS, type CompoundId } from '../data/catalog';
 import { NUTRIENTS, NUTRIENT_IDS } from '../data/nutrients';
-import type { Effect, Evidence, FoodCategory, Nutrients, Pathway, Step, Verdict } from '../data/types';
+import type { Effect, Evidence, FoodCategory, Nutrients, Pathway, QA, Step, Verdict } from '../data/types';
 import { normalize } from './search';
 
 export interface AiCompoundRef {
@@ -32,6 +32,7 @@ export interface AiFood {
   pairings: { good: string[]; avoid: string[] };
   cautions: string[];
   myths: { claim: string; truth: string }[];
+  faq: QA[];
 }
 
 export type AiResult = { ok: true; food: AiFood } | { ok: false; notFood: true; message: string };
@@ -112,8 +113,9 @@ export function buildFoodPrompt(query: string): string {
 - "${query}"가 먹는 것이 아니면 {"notFood": true, "message": "먹는 것이 아니라는 짧은 안내"}만 답하세요.
 
 JSON 형식 (이 키만 사용, 다른 텍스트 없이 JSON 하나만):
-{"name":"표준 한국어 이름","en":"English name","emoji":"이모지 1개","category":"채소","summary":"2~3문장 요약","verdict":{"tone":"good","text":"한 줄 평가"},"basis":"생 ○○ 100g","serving":{"label":"1회 분량 설명","grams":80},"nutrients":{"kcal":0,"carb":0,"protein":0,"fat":0},"compounds":[{"id":"lutein","amount":"약 ○mg/100g","role":"이 식품에서 하는 일"},{"name":"목록에 없는 성분","effect":"benefit","amount":"","role":"","pathway":{"title":"","evidence":"limited","steps":[{"title":"흡수","body":""}]}}],"howToEat":[{"title":"","body":"조리법이 성분에 주는 영향을 기전과 연결"}],"pairings":{"good":[""],"avoid":[""]},"cautions":[""],"myths":[{"claim":"흔한 주장","truth":"실제 근거"}]}
-howToEat 3~4개, cautions 1~3개, myths 0~2개.`;
+{"name":"표준 한국어 이름","en":"English name","emoji":"이모지 1개","category":"채소","summary":"2~3문장 요약","verdict":{"tone":"good","text":"한 줄 평가"},"basis":"생 ○○ 100g","serving":{"label":"1회 분량 설명","grams":80},"nutrients":{"kcal":0,"carb":0,"protein":0,"fat":0},"compounds":[{"id":"lutein","amount":"약 ○mg/100g","role":"이 식품에서 하는 일"},{"name":"목록에 없는 성분","effect":"benefit","amount":"","role":"","pathway":{"title":"","evidence":"limited","steps":[{"title":"흡수","body":""}]}}],"howToEat":[{"title":"","body":"조리법이 성분에 주는 영향을 기전과 연결"}],"pairings":{"good":[""],"avoid":[""]},"cautions":[""],"myths":[{"claim":"흔한 주장","truth":"실제 근거"}],"faq":[{"q":"하루에 얼마나 먹어도 되나요?","a":"..."}]}
+howToEat 3~4개, cautions 1~3개, myths 0~2개.
+"faq"에는 이 식품에 대해 사람들이 실제로 많이 묻는 질문 8~12개를 [{"q":"...?","a":"..."}] 형식으로 넣으세요: 하루 적정량, 먹는 시간, 생으로/익혀서, 임산부·어린이, 당뇨·고혈압·신장질환 등 질환자, 약물 상호작용, 보관법, 흔히 기대하는 효능의 근거 등. 질문은 "?"로 끝나고, 답은 첫 문장에서 바로 답한 뒤 이유를 설명하며 2~4문장입니다. 건강 효과·위험 주장에는 문장 끝에 [근거 강함]·[근거 중간]·[근거 제한적]·[논쟁 중] 중 하나를 붙이세요.`;
 }
 
 const str = (v: unknown, max = 900): string => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -208,6 +210,11 @@ export function sanitizeAiFood(raw: unknown, query: string, now = Date.now()): A
         .map((m) => ({ claim: str((m as Record<string, unknown>)?.claim, 200), truth: str((m as Record<string, unknown>)?.truth, 700) }))
         .filter((m) => m.claim && m.truth)
         .slice(0, 3),
+      faq: arr(r.faq)
+        .map((x) => ({ q: str((x as Record<string, unknown>)?.q, 200), a: str((x as Record<string, unknown>)?.a, 900) }))
+        .filter((x) => x.q && x.a)
+        .map((x) => ({ q: /[?？]$/.test(x.q) ? x.q.replace(/？$/, '?') : `${x.q}?`, a: x.a }))
+        .slice(0, 15),
     },
   };
 }
@@ -226,25 +233,6 @@ export async function analyzeFood(
   const res = sanitizeAiFood(raw, query);
   if (!res) throw { code: 'invalid_json', message: 'unusable response' };
   return res;
-}
-
-// ---------- 질문 ----------
-
-export function buildQuestionPrompt(context: string, question: string): string {
-  return `당신은 영양생화학과 기능의학을 잘 아는 설명가입니다. 아래 [앱 데이터]를 참고해 [질문]에 한국어("~합니다" 체)로 답하세요.
-
-규칙
-- 몸속에서 일어나는 일을 순서대로(흡수 → 대사 → 표적 → 결과) 구체적으로 설명하세요.
-- 주장마다 문장 끝에 근거 수준을 [근거 강함], [근거 중간], [근거 제한적], [논쟁 중] 중 하나로 붙이세요.
-- 사람 연구에서 확인된 것과 시험관·동물 연구 수준의 가설을 구분하고, 과장하지 마세요.
-- 질병 치료나 약 복용과 관련된 질문이면 마지막에 의료진과 상의하라는 문장을 한 번만 넣으세요.
-- 제목·표·굵은 글씨 없이 짧은 문단 3~6개, 전체 800자 안팎. 목록이 필요하면 줄 앞에 "• "를 쓰세요.
-
-[앱 데이터]
-${context.slice(0, 6000)}
-
-[질문]
-${question.slice(0, 500)}`;
 }
 
 // ---------- 저장 (이 브라우저에만) ----------
