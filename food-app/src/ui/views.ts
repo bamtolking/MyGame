@@ -131,9 +131,10 @@ export function nutritionHtml(food: { nutrients: Nutrients; basis: string; servi
     <div class="label">
       <div class="label-head">
         <span class="label-title">영양정보</span>
-        <span class="label-size">총 내용량 ${fmtNum(grams)}g<small>${esc(food.basis.replace(/\s*100g\s*$/, ''))} 기준</small></span>
+        <span class="label-size">총 내용량 ${fmtNum(grams)}g</span>
         <span class="kcal"><b>${fmtNum(kcal)}</b>kcal</span>
       </div>
+      <p class="label-basis">수치 기준: ${esc(food.basis)}</p>
       <div class="label-cap"><span>총 내용량당</span><span>1일 영양성분 기준치에 대한 비율</span></div>
       ${main}
       ${fats ? `<div class="label-sec">지방산 구성</div>${fats}` : ''}
