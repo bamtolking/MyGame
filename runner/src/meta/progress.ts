@@ -7,8 +7,11 @@ import { CHARACTERS, CHAR_BY_ID } from '../data/characters';
 import { COMPANIONS, COMPANION_BY_ID } from '../data/companions';
 import { STAGES, STAGE_BY_ID } from '../data/stages';
 import { SCORE_VERSION } from '../data/tuning';
-import { applyRunToMissions, drawMission, fillMissionSlots, MISSION_REWARD, RANK_XP, RANK_REWARD, RANK_MAX, missionText, type ActiveMission } from './missions';
-import { evaluateAchievements, type AchievementUnlock } from './achievements';
+import { applyRunToMissions, drawMission, fillMissionSlots, MISSION_REWARD, MISSION_BY_ID, RANK_XP, RANK_REWARD, RANK_MAX, missionText, type ActiveMission } from './missions';
+import { evaluateAchievements, COSMETIC_BY_ID, type AchievementUnlock } from './achievements';
+// UI conveniences: the shop / wardrobe / achievement helpers live in achievements.ts, the rank preview in missions.ts
+export { buyCosmetic, equipCosmetic, unequipCosmetic, equippedFor, achievementProgress, achievementView, shopList, estimateRuns, COSMETICS, ACHIEVEMENTS } from './achievements';
+export { rankRewardPreview, RANK_TITLES } from './missions';
 
 export const SAVE_VERSION = 2;
 
@@ -45,11 +48,15 @@ export interface Progress {
   rank: number; xp: number;
   missions: ActiveMission[]; missionCounter: number; missionsDone: number;
   achievements: Record<string, number>;   // id → unlocked at (ms)
-  cosmetics: { owned: string[]; equipped: Record<string, { hat?: string; trail?: string; palette?: string }> };
+  cosmetics: { owned: string[]; equipped: Record<string, { hat?: string; trail?: string; palette?: string; jumpSound?: string }> };
+  bests: Record<string, number>;          // single-run records the achievements read (e.g. 'dist:hotteok', 'near', 'nohit')
+  titles?: string[];                      // title rewards (none of the 30 achievements uses one yet)
   totals: {
     runs: number; dist: number; jellies: number; coins: number; bonusTimes: number; playTime: number; clears: number;
     nearMisses: number; airJumps: number; smashed: number; potions: number; bigJellies: number; letters: number; lines: number;
     superBonus: number; pouches: number; bestStreak: number;
+    coinsEarned: number;                  // every 엽전 booked (pickups + distance + missions + rank) — for "약 N판" estimates
+    moonCakes: number; fastFalls: number; relayDist: number;
   };
   hall: HallRec[];                        // local top records (per mode/character, ≤ 10 each)
   seen: string[];                         // features/tabs already visited (for the single 'new' dot)
@@ -73,15 +80,15 @@ export function defaultProgress(): Progress {
     loadout: { main: starters[0] ?? 'hotteok', partner: null, companion: comps[0] ?? null },
     starMask: {}, pouches: {}, stageBest: {}, bestEndless: null, bestByChar: {}, daily: {}, daysPlayed: 0, lastDay: '',
     rank: 0, xp: 0, missions: [], missionCounter: 0, missionsDone: 0,
-    achievements: {}, cosmetics: { owned: [], equipped: {} },
-    totals: { runs: 0, dist: 0, jellies: 0, coins: 0, bonusTimes: 0, playTime: 0, clears: 0, nearMisses: 0, airJumps: 0, smashed: 0, potions: 0, bigJellies: 0, letters: 0, lines: 0, superBonus: 0, pouches: 0, bestStreak: 0 },
+    achievements: {}, cosmetics: { owned: [], equipped: {} }, bests: {},
+    totals: { runs: 0, dist: 0, jellies: 0, coins: 0, bonusTimes: 0, playTime: 0, clears: 0, nearMisses: 0, airJumps: 0, smashed: 0, potions: 0, bigJellies: 0, letters: 0, lines: 0, superBonus: 0, pouches: 0, bestStreak: 0, coinsEarned: 0, moonCakes: 0, fastFalls: 0, relayDist: 0 },
     hall: [], seen: [], tutorialDone: false, scoreVersion: SCORE_VERSION,
   };
   fillMissions(p);
   return p;
 }
 
-export function fillMissions(p: Progress): void { fillMissionSlots(p.missions, p, () => p.missionCounter++); }
+export function fillMissions(p: Progress, avoid: string[] = []): void { fillMissionSlots(p.missions, p, () => p.missionCounter++, avoid); }
 
 /** Save migrations: each step takes a vN object and returns vN+1. Never wipes progress. */
 export const MIGRATIONS: Record<number, (o: any) => any> = {

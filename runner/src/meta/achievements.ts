@@ -3,7 +3,7 @@
 import type { RunState } from '../sim/types';
 import { STAGES } from '../data/stages';
 import { CHARACTERS, CHAR_BY_ID } from '../data/characters';
-import { COMPANIONS, COMPANION_BY_ID } from '../data/companions';
+import { COMPANIONS } from '../data/companions';
 // NOTE: circular import (progress.ts imports this module). Only used inside functions, never at module init.
 import { stageCleared, totalStars, type Progress } from './progress';
 import { runTrace } from './missions';
@@ -251,4 +251,3 @@ export function shopList(p: Progress): ShopItem[] {
   for (const c of COSMETICS) if (c.price) add('cosmetic', c.id, c.name, c.price, p.cosmetics.owned.includes(c.id), c.charId);
   return out;
 }
-export { COMPANION_BY_ID };
