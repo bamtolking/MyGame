@@ -137,6 +137,7 @@ export class App implements AppApi {
       onToast: (text: string, color?: string, big?: boolean) => this.toast(text, color, big),
       onBoss: (b: BossInfo | null) => this.renderBoss(b),
       onUlt: (cls: ClassId) => this.cutIn(cls),
+      onUnlock: (cls: ClassId) => this.unlockCard(cls),
       onWb: (w: WorldBossState) => this.renderWb(w),
       onError: (msg: string, fatal: boolean) => { if (fatal) { this.tr?.close(); this.fatal(msg); } else { this.toast(msg, '#ff9a9a'); this.snd.play('error'); } },
       onLevel: (lv: number) => { const el = this.el.lvlup; el.textContent = `LEVEL ${lv}`; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); if (TAL_SLOT_LEVELS.includes(lv)) this.toast(`부적 칸이 열렸습니다! 부적 메뉴에서 장착하세요`, '#ffe066', true); },
@@ -331,7 +332,13 @@ export class App implements AppApi {
     E.classList.remove('show'); void E.offsetWidth; E.classList.add('show');
   }
   private titleCard(name: string, sub: string): void {
-    const E = this.el.bossCard; clear(E); E.append(h('small', {}, sub), h('b', {}, name), h('i', {}));
+    const E = this.el.bossCard; clear(E); E.classList.remove('unlock'); E.append(h('small', {}, sub), h('b', {}, name), h('i', {}));
+    E.classList.remove('show'); void E.offsetWidth; E.classList.add('show'); this.snd.duck(0.4, 1.5);
+  }
+  /** Big centred card when a new class becomes available (the 직업 sheet then flags it NEW). */
+  private unlockCard(cls: ClassId): void {
+    const E = this.el.bossCard; const c = CLASSES[cls]; clear(E); E.classList.add('unlock'); E.style.setProperty('--c', c.color);
+    E.append(h('img', { src: classIcon(cls, 128) }), h('small', {}, '새 직업 해금'), h('b', {}, c.name), h('em', {}, `${c.role} · 마을 신당 무당에게서 전직`), h('i', {}));
     E.classList.remove('show'); void E.offsetWidth; E.classList.add('show'); this.snd.duck(0.4, 1.5);
   }
   private renderBoss(b: BossInfo | null): void {

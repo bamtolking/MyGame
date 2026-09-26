@@ -349,6 +349,12 @@ label.set input[type=range] { width: 50%; } label.set input[type=checkbox] { wid
 .bosscard small { display: block; font-family: "Nanum Myeongjo", serif; font-weight: 800; letter-spacing: 6px; color: #ffb0a0; font-size: 14px; text-shadow: 0 2px 0 #000; }
 .bosscard b { display: block; font-family: "Nanum Brush Script", "Nanum Myeongjo", serif; font-size: clamp(52px, min(12cqw, 24cqh), 104px); font-weight: 400; color: #fff; line-height: 1.05; text-shadow: 0 4px 0 #2a0610, 0 0 26px rgba(255, 60, 60, 0.85); }
 .bosscard i { display: block; margin: 6px auto 0; width: 56%; height: 5px; background: linear-gradient(90deg, transparent, #ff3a4a, transparent); transform: scaleX(0); animation: bline 2.6s ease-out forwards; }
+.bosscard img, .bosscard em { display: none; }
+.bosscard.unlock img { display: block; margin: 0 auto 4px; width: min(96px, 22cqh); height: min(96px, 22cqh); filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.45)); }
+.bosscard.unlock small { color: color-mix(in srgb, var(--c) 65%, #fff); }
+.bosscard.unlock b { text-shadow: 0 4px 0 #120a1e, 0 0 26px var(--c); }
+.bosscard.unlock em { display: block; margin-top: 2px; font-style: normal; font-weight: 700; font-size: 14px; color: #fff; opacity: 0.85; text-shadow: 0 2px 0 #000; }
+.bosscard.unlock i { background: linear-gradient(90deg, transparent, var(--c), transparent); }
 @keyframes bcard { 0% { opacity: 0; transform: scale(1.45); } 12% { opacity: 1; transform: scale(1); } 80% { opacity: 1; transform: scale(1.02); } 100% { opacity: 0; transform: scale(1.03); } }
 @keyframes bline { 10% { transform: scaleX(0); } 32%, 100% { transform: scaleX(1); } }
 .seg { display: inline-flex; gap: 4px; }

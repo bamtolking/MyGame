@@ -10,6 +10,8 @@ import { CLASSES } from '../shared/data/classes.ts';
 import { RARITY_COLORS } from '../shared/data/items.ts';
 import { Renderer, DIE_T, type REnt, type View, type Quality } from './render/world.ts';
 import { FxSystem, hexCol } from './render/fx.ts';
+/** Perceived brightness of a 0xRRGGBB colour, 0..1. */
+const lum = (c: number) => (0.3 * (c >> 16 & 255) + 0.59 * (c >> 8 & 255) + 0.11 * (c & 255)) / 255;
 import { EMIT } from './render/paint.ts';
 import { ZONE_SONG } from './audio/music.ts';
 import type { Transport } from './net.ts';
@@ -276,8 +278,8 @@ export class Game {
         const r = this.roster.get(e.p); const cls = r?.cls ?? 'sword'; const mine = e.p === this.myId; const col = hexCol(CLASSES[cls].color); const cf = CLASS_FX[cls] ?? CLASS_FX.sword;
         snd.play('ult_' + cls, mine ? 1 : 0.45, e.x, e.y);
         if (mine) { snd.duck(0.5, 1.2); fx.flash(0xffffff, 0.35); fx.shake(0.5); fx.stop(0.09, true); fx.zoomPunch(0.07); fx.chroma(0.014); fx.wave(e.x, e.y - 20, 380, 20, 0.8); this.hooks.onUlt(cls); }
-        const R = cf.ultR ?? 170;
-        fx.pillar(e.x, e.y, col, 0.9, 80, 380); fx.sigil(e.x, e.y, R, col, 1.4, 'sigil', 1.2, mine ? 0.8 : 0.4); fx.ring(e.x, e.y, 20, R + 30, 0.7, col, true, 0); fx.light(e.x, e.y, 420, col, 1.2, 0.8);
+        const R = cf.ultR ?? 170; const pale = lum(col) > 0.75 ? 0.65 : 1; // near-white class colours (painter) bloom much harder
+        fx.pillar(e.x, e.y, col, 0.75 * pale, 80, 380); fx.sigil(e.x, e.y, R, col, 1.4, 'sigil', 1.2, (mine ? 0.8 : 0.4) * pale); fx.ring(e.x, e.y, 20, R + 30, 0.7, col, true, 0); fx.light(e.x, e.y, 420, col, 0.9 * pale, 0.8);
         cf.ult(this.fxCtx(e.p, cls, e.x, e.y, false), e);
         return;
       }

@@ -16,7 +16,7 @@ function bars(c: Ctx, b: number, x: number, y: number, w: number, h: number, gap
 let triT: Tex[] | null = null;
 const triTex = (): Tex[] => triT ??= TRI.map(b => makeTex('fx:taoTri' + b, 40, 40, 0.5, 0.5, 2, c => {
   const g = c.createRadialGradient(20, 20, 0, 20, 20, 20); g.addColorStop(0, 'rgba(255,255,255,0.35)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, 40, 40);
-  c.fillStyle = 'rgba(255,255,255,0.45)'; bars(c, b, 20, 20, 29, 7.5, 2.5); c.fillStyle = '#fff'; bars(c, b, 20, 20, 25, 4.5, 5.5);
+  c.fillStyle = 'rgba(255,255,255,0.4)'; bars(c, b, 20, 20, 30, 8.5, 2.5); c.fillStyle = '#fff'; bars(c, b, 20, 20, 26, 5.5, 5.5);
 }));
 /** Ground 八卦 thunder array: double octagon with the eight trigrams along its edges and short corner spokes. */
 let baguaT: Tex | null = null;
@@ -76,7 +76,7 @@ export const taoist: ClassFx = {
     let arc: number[] = [], nextArc = 0;
     c.fx.add(0, DUR, (p, k, t) => {
       const g = k < 0.1 ? easeOut(k / 0.1) : 1, al = k < 0.1 ? k / 0.1 : k > 0.85 ? (1 - k) / 0.15 : 1; const s = (R * 2 * 1.02) / bag.w * g;
-      p.draw(EMIT, soft, x, y, R / 20, R / 20 * 0.62, 0, DEEP, 0.16 * al, 1);
+      p.draw(EMIT, soft, x, y, R / 28, R / 28 * 0.62, 0, DEEP, 0.14 * al, 1);
       p.draw(EMIT, bag, x, y, s, s * 0.62, 0, DEEP, 0.5 * al, 1); p.draw(EMIT, bag, x, y, s, s * 0.62, 0, VIO, 0.22 * al, 1);
       if (t >= nextArc && k < 0.85) {
         nextArc = t + 0.07; const i = Math.floor(Math.random() * 8), a0 = (i / 8) * Math.PI * 2 + Math.PI / 8, a1 = a0 + Math.PI / 4, r = R * 0.99 * g; arc = [];
@@ -92,7 +92,7 @@ export const taoist: ClassFx = {
         const pop = Math.min(1, t / 0.18), al = (k > 0.85 ? (1 - k) / 0.15 : 1) * pop, lift = 30 + easeOut(pop) * 18 + Math.sin(t * 3 + i) * 4;
         p.beam(EMIT, beam, gx, gy, gx, gy - lift, 5, VIO, 0.35 * al, 1);
         p.draw(EMIT, soft, gx, gy - lift, 0.9, 0.9, 0, VIO, 0.35 * al, 1);
-        const s = 0.72 * (1.4 - 0.4 * easeOut(pop)); p.draw(EMIT, tris[i], gx, gy - lift, s, s, 0, PALE, 0.95 * al, 1); p.draw(EMIT, tris[i], gx, gy - lift, s * 1.35, s * 1.35, 0, VIO, 0.4 * al, 1);
+        const s = 0.95 * (1.4 - 0.4 * easeOut(pop)); p.draw(EMIT, tris[i], gx, gy - lift, s * 1.3, s * 1.3, 0, DEEP, 0.4 * al, 1); p.draw(EMIT, tris[i], gx, gy - lift, s, s, 0, PALE, 0.7 * al, 1);
       }, undefined, d);
       c.fx.later(d, () => c.fx.sparks(gx, gy - 30, 3, 0xd8c8ff, 200, -Math.PI / 2, 1.2, 8));
     }
@@ -104,7 +104,7 @@ export const taoist: ClassFx = {
   uhit: (c, e) => {
     const x = e.x, y = e.y, sx = x + rnd(-60, 60), sy = y - 420;
     zap(c, sx, sy, x, y - 4, 3.4, 0.32, 3); zap(c, sx + rnd(-30, 30), sy, x + rnd(-6, 6), y - 4, 1.4, 0.22, 1, 0.03, 0xc8a8ff);
-    c.fx.glow(x, y - 14, 56, VIO, 0.36, 0.38);
+    c.fx.glow(x, y - 14, 56, VIO, 0.36, 0.3);
     c.fx.ring(x, y, 8, 96, 0.45, VIO, false, 0, 0.6);
     c.fx.decal(x, y, 'scorch', 96, 0x140a24, 2.2, 0.62); c.fx.decal(x, y, 'crack', 74, 0x3a2070, 1.8, 0.5);
     c.fx.sparks(x, y - 8, 9, 0xd0b8ff, 480, -Math.PI / 2, 2.6, 12);
