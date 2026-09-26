@@ -36,7 +36,8 @@ export function onTap<T extends HTMLElement>(el: T, fn: (e: Event) => void, o: {
   });
   el.addEventListener('pointercancel', e => { if (e.pointerId === id) id = null; });
   el.addEventListener('click', e => {
-    if (performance.now() - seenAt < 1000) { e.preventDefault(); return; }   // part of a pointer tap: handled (or cancelled) above
+    // part of a pointer tap: handled (or cancelled) above. Keyboard activation (detail 0: Enter/Space) always goes through.
+    if (e.detail !== 0 && performance.now() - seenAt < 1000) { e.preventDefault(); return; }
     if (!o.native) fire(e);
   });
   return el;

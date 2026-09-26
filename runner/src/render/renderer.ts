@@ -626,8 +626,11 @@ export class Renderer {
     if (lv > 0) {
       const t = `흐름 +${Math.round(lv * STREAK_BONUS * 100)}%`;
       c.font = `800 ${labelPx(10, u)}px ${FONT}`; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineWidth = 3; c.strokeStyle = 'rgba(20,12,36,0.85)'; c.fillStyle = '#ffcf8a';
-      if (flowBelow) { c.textAlign = 'center'; c.strokeText(t, fx, cy + fr + 8 * u); c.fillText(t, fx, cy + fr + 8 * u); }
-      else if (cx + tw / 2 + 6 * u + c.measureText(t).width <= maxX) { c.textAlign = 'left'; c.strokeText(t, cx + tw / 2 + 6 * u, cy + 1); c.fillText(t, cx + tw / 2 + 6 * u, cy + 1); }
+      const short = `+${Math.round(lv * STREAK_BONUS * 100)}%`;     // big scores on narrow phones: the flame already says 흐름
+      const lx = cx + tw / 2 + 6 * u;
+      const fit = flowBelow ? null : lx + c.measureText(t).width <= maxX ? t : lx + c.measureText(short).width <= maxX ? short : null;
+      if (fit) { c.textAlign = 'left'; c.strokeText(fit, lx, cy + 1); c.fillText(fit, lx, cy + 1); }
+      else { c.textAlign = 'center'; const lbl = flowBelow ? t : short; c.strokeText(lbl, fx, cy + fr + 8 * u); c.fillText(lbl, fx, cy + fr + 8 * u); }
     }
   }
 

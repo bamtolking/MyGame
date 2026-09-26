@@ -601,7 +601,7 @@ export function showHall(app: App): void {
         const c = CHAR_BY_ID[d.charId]; const hr = p.hall.find(r => r.mode === 'daily' && r.key === k && r.score === d.best);
         return h('div', { class: 'hrow' },
           medalBadge(d.medal, false),
-          h('div', { class: 'htxt' }, h('b', {}, fmtDateKey(k)), h('small', {}, `${fmtNum(d.best)}점 · ${fmtDist(d.dist)} · ${c?.name ?? ''} · ${fmtNum(d.tries)}번 달림`)),
+          h('div', { class: 'htxt' }, h('b', {}, fmtDateKey(k)), h('small', {}, `${fmtNum(d.best)}점 · ${fmtDist(d.bestDist ?? d.dist)} · ${c?.name ?? ''} · ${fmtNum(d.tries)}번 달림`)),
           h('span', { class: 'hicons' }, hr?.assist ? h('span', { class: 'hflag assist' }, icon('assist'), '도움') : null));
       })));
     } else {
@@ -636,8 +636,8 @@ export function showDaily(app: App): void {
     ...DAILY_MEDALS.map((m, i) => h('span', { class: `mark ${['bronze', 'silver', 'gold'][i]}${bestDist >= m ? ' on' : ''}`, style: `left:${((100 * m) / MAXD).toFixed(1)}%` })));
   const share = () => {
     if (!d) return;
-    const code = recordCode(dk, d.best, d.dist);
-    const text = `야식 대질주 · 오늘의 골목 ${fmtDateKey(dk, false)}\n${fmtNum(d.best)}점 · ${fmtDist(d.dist)}${d.medal ? ` · ${MEDAL_NAMES[d.medal]}메달` : ''}\n기록 코드 ${code}`;
+    const code = recordCode(dk, d.best, d.bestDist ?? d.dist, !!d.assist);   // score and distance of the SAME try
+    const text = `야식 대질주 · 오늘의 골목 ${fmtDateKey(dk, false)}\n${fmtNum(d.best)}점 · ${fmtDist(d.bestDist ?? d.dist)}${d.medal ? ` · ${MEDAL_NAMES[d.medal]}메달` : ''}\n기록 코드 ${code}`;
     shareText(app, text);
   };
   body.append(
@@ -652,7 +652,7 @@ export function showDaily(app: App): void {
         h('b', {}, d ? `${fmtNum(d.best)}점` : '아직 안 달렸어요'),
         h('small', {}, d ? `최고 ${fmtDist(d.dist)} · ${fmtNum(d.tries)}번 달렸어요 · 몇 번이든 다시 달려도 돼요` : '몇 번이든 달릴 수 있고, 가장 좋은 기록만 남아요')),
       h('button', { class: 'ms-btn primary huge', id: 'daily-go', onclick: app.click(() => app.startDaily(dk)) }, icon('play'), h('span', { class: 'lbl' }, '달리기', h('small', {}, '혼자 달려요 · 이어달리기 없음'))),
-      d ? h('div', { class: 'share-row' }, h('code', {}, recordCode(dk, d.best, d.dist)), h('button', { class: 'ms-btn sm', id: 'daily-share', onclick: app.click(share) }, icon('share'), '기록 공유')) : null),
+      d ? h('div', { class: 'share-row' }, h('code', {}, recordCode(dk, d.best, d.bestDist ?? d.dist, !!d.assist)), h('button', { class: 'ms-btn sm', id: 'daily-share', onclick: app.click(share) }, icon('share'), '기록 공유')) : null),
     h('p', { class: 'days-played' }, icon('calendar'), ` 참여한 날 ${fmtNum(p.daysPlayed)}일`));
 
   const past = dailyArchive(dk).slice(1);
