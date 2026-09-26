@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="음식을 검색하면 영양성분, 핵심 성분, 그 성분이 몸속에서 작용하는 기전을 근거 수준과 함께 보여주는 기능의학 식품 사전" />
+  <title>먹는 원리</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥬</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <a class="brand" href="#" aria-label="먹는 원리 처음으로"><span class="brand-mark" aria-hidden="true"></span>먹는 원리</a>
+      <form id="search" class="search" role="search" autocomplete="off">
+        <label class="sr" for="q">음식이나 성분 검색</label>
+        <input id="q" type="search" enterkeyhint="search" placeholder="음식·성분 검색 (예: 시금치)" />
+        <button type="submit" class="btn">찾기</button>
+      </form>
+    </header>
+    <main id="view"></main>
+    <footer class="foot">
+      <p>교육용 정보이며 진단·치료를 대신하지 않습니다. 질환이 있거나 약을 먹고 있다면 의료진과 상의하세요. <a href="#about">근거 수준과 출처</a></p>
+    </footer>
+  </div>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>
