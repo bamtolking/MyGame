@@ -7,6 +7,130 @@
   },
   "games": [
     {
+      "slug": "abyss",
+      "title": "심연의 군주",
+      "tagline": "디아블로 스타일 쿼터뷰 핵앤슬래시 액션 RPG. 직업 10종(3종으로 시작, 7종 해금), 매번 새로 생성되는 12층 던전, 무작위 전리품, 보스 4종. 휴대폰은 가로 화면 전용.",
+      "emoji": "🔥",
+      "orientation": "landscape",
+      "pwa": false,
+      "branch": "claude/zen-lamport-5zzkqg",
+      "sourcePath": "abyss/ 폴더 (브랜치 루트 package.json 의 abyss:build 로 빌드)",
+      "chat": "디아블로 같은 게임 만들기",
+      "live": {
+        "dir": ".",
+        "fallback": "abyss/play/index.html"
+      },
+      "build": {
+        "install": true,
+        "command": "npm run abyss:build",
+        "outDir": "abyss/dist"
+      }
+    },
+    {
+      "slug": "meerkat",
+      "title": "미어캣 — AI 자세 분석·교정 운동",
+      "tagline": "정면·옆모습 사진 두 장으로 AI 가 체형을 분석하고, 물리치료사가 설계한 교정 운동 루틴을 매일 처방. 카메라 AI 코치, 변화 기록. 분석은 기기 안에서만.",
+      "emoji": "🐿️",
+      "orientation": "portrait",
+      "pwa": true,
+      "branch": "claude/dreamy-darwin-hxqjan",
+      "sourcePath": "meerkat/ 폴더 (Preact + MediaPipe, Capacitor 앱과 같은 코드)",
+      "chat": "물리치료사/헬스트레이너 앱 기획",
+      "live": {
+        "dir": "meerkat"
+      },
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
+    },
+    {
+      "slug": "moonlit",
+      "title": "달빛 퇴마단",
+      "tagline": "엄지 하나로 요괴 떼를 쓸어버리는 한 손 퇴마 MMORPG. 직업 10종(검객·궁사로 시작, 전직으로 해금). 허브에서는 서버 없이 AI 동료 6명과 함께하는 오프라인 체험 월드로 실행됩니다. 휴대폰은 가로 화면.",
+      "emoji": "🌙",
+      "orientation": "landscape",
+      "pwa": false,
+      "branch": "claude/nice-hypatia-xlm01y",
+      "sourcePath": "mmorpg/ 폴더 (클라이언트 + 브라우저 안 오프라인 서버)",
+      "chat": "MMO RPG 앱 기획",
+      "live": {
+        "dir": "mmorpg",
+        "fallback": "play/index.html"
+      },
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
+    },
+    {
+      "slug": "slime-heist",
+      "title": "슬라임 하이스트! (로블록스)",
+      "tagline": "행진하는 슬라임을 사서 내 기지에서 돈을 벌고, 남의 기지에서 제일 비싼 슬라임을 훔쳐 오는 로블록스 게임. 들키면 뿅망치!",
+      "emoji": "🟢",
+      "kind": "roblox",
+      "branch": "claude/vigilant-brahmagupta-hf2k5b",
+      "sourcePath": "roblox/ 폴더 (Rojo + Luau), 실행 파일 roblox/build/SlimeHeist.rbxlx",
+      "chat": "로블록스 1위 게임 개발",
+      "live": {
+        "dir": "roblox"
+      },
+      "download": {
+        "file": "build/SlimeHeist.rbxlx",
+        "images": [
+          "docs/preview/slimes.png",
+          "docs/preview/top.png",
+          "docs/preview/base.png",
+          "docs/preview/plaza.png",
+          "docs/preview/closeup.png"
+        ]
+      }
+    },
+    {
+      "slug": "nyang",
+      "title": "냥체역학",
+      "tagline": "말랑한 고양이를 떨어뜨려 같은 고양이끼리 합체시키는 물리 퍼즐. 냥냥 피버, 황금 고양이, 집사 레벨·꾸미기, 오늘의 미션.",
+      "emoji": "🐱",
+      "orientation": "portrait",
+      "pwa": true,
+      "branch": "claude/determined-wright-wwlwgn",
+      "sourcePath": "nyang/ 폴더",
+      "chat": "대박 앱 아이디어",
+      "live": {
+        "dir": "nyang",
+        "fallback": "play/index.html",
+        "hubSw": true
+      },
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
+    },
+    {
+      "slug": "kaltoe",
+      "title": "칼퇴 서바이버",
+      "tagline": "09:00부터 18:00까지 몰려오는 메일·서류·회의·상사를 한 손으로 쓸어버리는 직장인 서바이벌 로그라이트. 점심 메뉴 버프, 부장님 보스.",
+      "emoji": "⏰",
+      "orientation": "portrait",
+      "pwa": true,
+      "branch": "claude/zen-maxwell-uwcoq6",
+      "sourcePath": "kaltoe/ 폴더",
+      "chat": "게임 앱 개발",
+      "live": {
+        "dir": "kaltoe",
+        "fallback": "play/index.html",
+        "hubSw": true
+      },
+      "build": {
+        "install": true,
+        "command": "npm run build",
+        "outDir": "dist"
+      }
+    },
+    {
       "slug": "daebak-defense",
       "title": "대박수비대: 합성 대폭주",
       "tagline": "랜덤 소환·합성·배치 타워 디펜스. 도깨비 야시장의 보물 창고를 40웨이브 동안 지킵니다.",
