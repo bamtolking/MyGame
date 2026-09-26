@@ -77,6 +77,7 @@ describe('식품 구조', () => {
       for (const c of f.compounds) {
         expect(COMPOUND_IDS).toContain(c.id);
         expect(filled(c.role)).toBe(true);
+        if (c.effect != null) expect(EFFECT).toContain(c.effect);
       }
       expect(f.howToEat.length).toBeGreaterThanOrEqual(2);
       for (const s of f.howToEat) expect(filled(s.title) && filled(s.body)).toBe(true);
@@ -86,6 +87,10 @@ describe('식품 구조', () => {
 });
 
 describe('식품 목록', () => {
+  it('모든 성분이 적어도 한 식품에 연결된다', () => {
+    const used = new Set(FOODS.flatMap((f) => f.compounds.map((c) => c.id)));
+    expect(COMPOUND_IDS.filter((id) => !used.has(id))).toEqual([]);
+  });
   it('식품 id와 이름이 중복되지 않는다', () => {
     expect(new Set(FOODS.map((f) => f.id)).size).toBe(FOODS.length);
     expect(new Set(FOODS.map((f) => f.name)).size).toBe(FOODS.length);

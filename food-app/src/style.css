@@ -118,9 +118,7 @@ p { margin: 0; }
   padding-block: 10px;
   margin-inline: -16px;
   padding-inline: 16px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: saturate(1.4) blur(10px);
-  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+  background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
 .brand { display: inline-flex; align-items: center; gap: 8px; font-family: var(--f-display); font-weight: 700; font-size: 1.1rem; color: var(--ink); text-decoration: none; white-space: nowrap; }
@@ -166,7 +164,7 @@ main { padding-block: 20px 40px; }
 .page h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(1.9rem, 6vw, 2.5rem); line-height: 1.2; letter-spacing: -0.01em; }
 .page h1.q { font-size: clamp(1.5rem, 5vw, 2rem); }
 .lede { font-size: 1.06rem; color: var(--ink-2); max-width: 65ch; }
-.sec { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 120px); }
+.sec { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 124px); }
 .sec h2 { font-family: var(--f-display); font-weight: 700; font-size: 1.35rem; }
 .sec h3 { font-size: 1rem; font-weight: 700; margin-top: 4px; }
 .bullets { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
@@ -274,14 +272,16 @@ main { padding-block: 20px 40px; }
   scrollbar-width: none;
   padding: 6px;
   margin-inline: -6px;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
 }
 .jump::-webkit-scrollbar { display: none; }
 .jump a { flex: none; padding: 6px 12px; border-radius: 999px; font-size: 0.88rem; font-weight: 600; color: var(--ink-2); text-decoration: none; background: var(--surface); border: 1px solid var(--line); }
 .jump a:hover { color: var(--accent); border-color: var(--accent); }
-@media (max-width: 520px) { .jump { top: calc(env(safe-area-inset-top, 0px) + 112px); } }
+@media (max-width: 520px) {
+  .jump { top: calc(env(safe-area-inset-top, 0px) + 103px); }
+  .sec { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 172px); }
+}
 
 /* 영양정보 (식품 영양표시 형식) */
 .nut { display: flex; flex-direction: column; gap: 12px; }
