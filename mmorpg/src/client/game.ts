@@ -278,7 +278,8 @@ export class Game {
         const r = this.roster.get(e.p); const cls = r?.cls ?? 'sword'; const mine = e.p === this.myId; const col = hexCol(CLASSES[cls].color); const cf = CLASS_FX[cls] ?? CLASS_FX.sword;
         snd.play('ult_' + cls, mine ? 1 : 0.45, e.x, e.y);
         if (mine) { snd.duck(0.5, 1.2); fx.flash(0xffffff, 0.35); fx.shake(0.5); fx.stop(0.09, true); fx.zoomPunch(0.07); fx.chroma(0.014); fx.wave(e.x, e.y - 20, 380, 20, 0.8); this.hooks.onUlt(cls); }
-        const R = cf.ultR ?? 170; const pale = lum(col) > 0.75 ? 0.65 : 1; // near-white class colours (painter) bloom much harder
+        // near-white class colours (painter, guardian) bloom much harder; other players' ults stay in the background
+        const R = cf.ultR ?? 170; const pale = (lum(col) > 0.75 ? 0.65 : 1) * (mine ? 1 : 0.6);
         fx.pillar(e.x, e.y, col, 0.75 * pale, 80, 380); fx.sigil(e.x, e.y, R, col, 1.4, 'sigil', 1.2, (mine ? 0.8 : 0.4) * pale); fx.ring(e.x, e.y, 20, R + 30, 0.7, col, true, 0); fx.light(e.x, e.y, 420, col, 0.9 * pale, 0.8);
         cf.ult(this.fxCtx(e.p, cls, e.x, e.y, false), e);
         return;
