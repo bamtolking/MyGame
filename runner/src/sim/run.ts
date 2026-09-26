@@ -1,5 +1,5 @@
 // One run: fixed-step, deterministic (seed + input stream → identical result). No DOM.
-import { DT, TILE, GROUND_Y, PX_PER_M, PICK_PAD, GIANT_SCALE, SPEED_TIERS } from '../data/physics';
+import { DT, TILE, GROUND_Y, PX_PER_M, PICK_PAD, GIANT_SCALE, SPEED_TIERS, JUMP_BUFFER_T } from '../data/physics';
 import {
   BASE_MAX_HP, DRAIN_BY_TIER, LATE_DRAIN_START, LATE_DRAIN_PER_S, HIT_DAMAGE, FALL_DAMAGE, HIT_IFRAMES, FALL_IFRAMES,
   RESCUE_BOUNCE_V, RESCUE_BRIDGE_T, LOW_HP_FRAC, POTION_HEAL, BIG_POTION_HEAL, POWER_DUR, POWER_AFTER_IFRAMES, DASH_MUL,
@@ -16,6 +16,7 @@ import type { RunState, RunInput, PowerKind, Pickup, Hazard, Mode, SimEvent } fr
 
 export const RUN_VERSION = 1;
 export const NEAR_PAD = 14;          // passing within this many px of a hazard (without touching) = near miss
+export const HITSTOP_STEPS = 4;      // 67 ms freeze when damaged
 
 export interface RunConfig {
   mode: Mode;
@@ -24,15 +25,17 @@ export interface RunConfig {
   partnerId?: string | null;         // relay runner (takes over once at 50 % HP)
   stageId?: string | null;
   assist?: boolean;                  // gentler damage/drain; records are flagged
+  trial?: boolean;                   // try-out run with a locked character: no rewards, ends after TRIAL_T
 }
+export const TRIAL_T = 60;
 
 export function newRun(cfg: RunConfig): RunState {
   const ch = CHAR_BY_ID[cfg.charId] ?? CHAR_BY_ID['hotteok'];
   const stage = cfg.stageId ? STAGES.find(s => s.id === cfg.stageId) ?? null : null;
   const seed = (stage ? stage.seed : cfg.seed) >>> 0;
   const s: RunState = {
-    version: RUN_VERSION, seed, rng: seedRng(seed), mode: cfg.mode, stageId: stage?.id ?? null, charId: ch.id,
-    partnerId: cfg.partnerId && cfg.partnerId !== ch.id && CHAR_BY_ID[cfg.partnerId] ? cfg.partnerId : null, relayUsed: false, assist: !!cfg.assist,
+    version: RUN_VERSION, seed, rng: seedRng(seed), mode: cfg.mode, stageId: stage?.id ?? null, charId: ch.id, mainId: ch.id,
+    partnerId: cfg.partnerId && cfg.partnerId !== ch.id && CHAR_BY_ID[cfg.partnerId] ? cfg.partnerId : null, relayUsed: false, assist: !!cfg.assist, trial: !!cfg.trial,
     phase: 'countdown', t: 0, countdown: COUNTDOWN_T, steps: 0,
     body: newBody(TILE * 2, GROUND_Y), speed: SPEED_TIERS[0], baseSpeed: SPEED_TIERS[0], tier: stage ? stage.tiers[0] : 0,
     biome: stage ? stage.biome : BIOME_ORDER[0],
@@ -47,7 +50,7 @@ export function newRun(cfg: RunConfig): RunState {
       bonusTimes: 0, bestStreak: 0, skillUses: 0, jumps: 0, airJumps: 0, slides: 0, jelliesSeen: 0, hpFromPotions: 0,
       drained: 0, nearMisses: 0, maxTier: 0, bonusJellies: 0,
     },
-    deathCause: null, lastHit: null, events: [], inputJumpHeld: false, prevSlide: false, lowHpWarned: false,
+    deathCause: null, lastHit: null, events: [], inputJumpHeld: false, prevSlide: false, lowHpWarned: false, hitstop: 0,
     log: [], lastBits: 0, dyingT: 0,
   };
   if (cfg.mode === 'tutorial') s.level.stageLen = 0;
@@ -79,6 +82,10 @@ export function stepRun(s: RunState, inp: RunInput): void {
   }
   if (s.phase === 'dying') { s.dyingT += DT; if (s.dyingT >= 1.2) s.phase = 'over'; return; }
   if (s.phase !== 'run') return;
+  if (s.hitstop > 0) {                 // brief freeze on damage (sim-level so replays match); presses stay buffered
+    s.hitstop--; if (inp.jump) s.body.buffer = JUMP_BUFFER_T;
+    return;
+  }
 
   const ch = charOf(s);
   s.t += DT;
@@ -128,6 +135,7 @@ export function stepRun(s: RunState, inp: RunInput): void {
     s.phase = 'clear'; emit(s, { t: 'clear' });
   }
   if (s.phase === 'run' && s.t >= RUN_CAP_T) { s.hp = 0; s.deathCause = 'cap'; onZeroHp(s); }
+  if (s.phase === 'run' && s.trial && s.t >= TRIAL_T) { s.phase = 'clear'; emit(s, { t: 'clear' }); }
 }
 
 function fall(s: RunState): void {
@@ -163,7 +171,7 @@ function collideHazards(s: RunState): void {
       emit(s, { t: 'smash', kind: h.kind, x: (h.x0 + h.x1) / 2, y: Math.max(h.y0, 0) + 20 });
       continue;
     }
-    if (s.iframes > 0) { h.near = false; h.touched = true; continue; }
+    if (s.iframes > 0 || h.touched) { h.near = false; h.touched = true; continue; } // touched while invulnerable = harmless forever
     hitBy(s, h);
   }
 }
@@ -177,7 +185,7 @@ function hitBy(s: RunState, h: Hazard): void {
     return;
   }
   const dmg = s.assist ? HIT_DAMAGE / 2 : HIT_DAMAGE;
-  s.hp -= dmg; s.iframes = HIT_IFRAMES; s.hurtT = 0; s.streak = 0;
+  s.hp -= dmg; s.iframes = HIT_IFRAMES; s.hurtT = 0; s.streak = 0; s.hitstop = HITSTOP_STEPS;
   s.stats.hits++; s.stats.hitsBy[h.kind] = (s.stats.hitsBy[h.kind] || 0) + 1;
   s.lastHit = { kind: h.kind, biome: h.biome, x: cx };
   emit(s, { t: 'hit', kind: h.kind, x: cx, y: cy, dmg, shielded: false });
@@ -194,10 +202,10 @@ function collectPickups(s: RunState, ch: CharacterDef): void {
     if (p.x > pb.x1 + Math.max(magR, 0) + 40) break;   // pickups are appended in x order
     if (!p.seen && p.x < pb.x0 - 80) { p.seen = true; if (p.type === 'jelly' || p.type === 'big') s.stats.jelliesSeen++; continue; }
     if (magR > 0 && p.type !== 'letter' && p.type !== 'power' && !p.pulled) {
-      const d = Math.hypot(p.x - bx, p.y - by); if (d < magR) p.pulled = true;
+      const ddx = p.x - bx, ddy = p.y - by; if (ddx * ddx + ddy * ddy < magR * magR) p.pulled = true;
     }
     if (p.pulled) {
-      const ddx = bx - p.x, ddy = by - p.y; const d = Math.hypot(ddx, ddy) || 1;
+      const ddx = bx - p.x, ddy = by - p.y; const d = Math.sqrt(ddx * ddx + ddy * ddy) || 1;   // sqrt is exact; hypot is not
       const v = Math.min(d, (MAGNET_PULL_V + s.speed) * DT);
       p.x += ddx / d * v; p.y += ddy / d * v;
     }

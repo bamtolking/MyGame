@@ -58,6 +58,7 @@ export interface Level {
   retiredGroundM: number; // ground metres of chunks already pruned behind the player
   stageLen: number;      // m; 0 = endless
   finishX: number;       // world x of the finish line (stage), else Infinity
+  hazardRun: number;     // consecutive chunks with hazards (the director forces a breather)
 }
 
 export interface PowerState { giant: number; dash: number; magnet: number; after: number /* post-power grace i-frames */ }
@@ -77,10 +78,12 @@ export interface RunState {
   rng: RngState;
   mode: Mode;
   stageId: string | null;
-  charId: string;
+  charId: string;         // character currently running (changes on relay)
+  mainId: string;         // character that started the run
   partnerId: string | null;
   relayUsed: boolean;
   assist: boolean;
+  trial: boolean;          // try-out run (no rewards/records); ends after TRIAL_T
   phase: Phase;
   t: number;             // run time (s), excludes countdown
   countdown: number;
@@ -114,6 +117,7 @@ export interface RunState {
   inputJumpHeld: boolean;
   prevSlide: boolean;
   lowHpWarned: boolean;
+  hitstop: number;       // steps of freeze left after taking damage
   log: number[];         // input log: [step, bits, step, bits, …] (bits: 1 jump press, 2 slide held, 4 jump held)
   lastBits: number;
   dyingT: number;

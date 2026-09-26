@@ -9,6 +9,8 @@ import { BIOME_ORDER } from '../data/biomes';
 import { STAGES } from '../data/stages';
 import { parseChunk, type ParsedChunk } from './chunk';
 import { rngNext, rngInt } from './rng';
+
+export const BREATHER_AFTER = 4;
 import type { RunState, Level, PlacedChunk, PowerKind, Pickup } from './types';
 
 export const PARSED: ParsedChunk[] = CHUNKS.map(parseChunk);
@@ -18,7 +20,7 @@ export function newLevel(stageLen: number): Level {
   return {
     chunks: [], solids: [], hazards: [], pickups: [], genX: 0, recent: [], nextId: 1,
     potionDebt: POTION_GAP_M * 0.6, powerDebt: POWER_GAP_M * 0.5, letterDebt: LETTER_GAP_M * 0.5,
-    chunksPlaced: 0, potionsPlaced: 0, retiredGroundM: 0, stageLen, finishX: Infinity,
+    chunksPlaced: 0, potionsPlaced: 0, retiredGroundM: 0, stageLen, finishX: Infinity, hazardRun: 0,
   };
 }
 
@@ -43,9 +45,11 @@ export function placedGroundM(lv: Level): number {
 
 function pickChunk(s: RunState, tier: number, biome: string): ParsedChunk {
   const lv = s.level;
-  const pool = PARSED.filter(p => p.def.tiers[0] <= tier && p.def.tiers[1] >= tier && !p.def.tags?.includes('sky') && !p.def.tags?.includes('tutorial')
+  const pool = PARSED.filter(p => p.def.tiers[0] <= tier && p.def.tiers[1] >= tier && !p.def.tags?.includes('sky') && !p.def.tags?.includes('tutorial') && !p.def.tags?.includes('special')
     && (!p.def.biomes || p.def.biomes.includes(biome)) && !lv.recent.includes(p.def.id));
-  const cands = pool.length ? pool : PARSED.filter(p => p.def.tiers[0] <= tier && p.def.tiers[1] >= tier && !p.def.tags?.includes('sky') && !p.def.tags?.includes('tutorial'));
+  let cands = pool.length ? pool : PARSED.filter(p => p.def.tiers[0] <= tier && p.def.tiers[1] >= tier && !p.def.tags?.includes('sky') && !p.def.tags?.includes('tutorial') && !p.def.tags?.includes('special'));
+  // director: after BREATHER_AFTER hazard chunks in a row, force a breather if one is available
+  if (lv.hazardRun >= BREATHER_AFTER) { const rest = cands.filter(p => p.def.tags?.includes('rest')); if (rest.length) cands = rest; }
   // favour chunks whose range is centred on this tier, so each tier has its own flavour
   let total = 0; const w = cands.map(p => { const c = (p.def.tiers[0] + p.def.tiers[1]) / 2; const x = (p.def.weight ?? 1) / (1 + Math.abs(c - tier)); total += x; return x; });
   let r = rngNext(s.rng) * total;
@@ -97,7 +101,10 @@ export function placeChunk(s: RunState, p: ParsedChunk, tier: number, biome: str
   }
   lv.genX += p.width;
   lv.chunksPlaced++;
-  if (!sky) { lv.recent.push(p.def.id); if (lv.recent.length > NO_REPEAT) lv.recent.shift(); }
+  if (!sky) {
+    lv.recent.push(p.def.id); if (lv.recent.length > NO_REPEAT) lv.recent.shift();
+    lv.hazardRun = p.hazards.length > 0 ? lv.hazardRun + 1 : 0;
+  }
   return pc;
 }
 

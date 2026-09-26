@@ -1,6 +1,6 @@
 // Run rules: damage, i-frames, pits, potions, power-ups, bonus time, relay, streak/near-miss, determinism.
 import { describe, it, expect } from 'vitest';
-import { newRun, stepRun, stateHash, totalScore } from '../src/sim/run';
+import { newRun, stepRun, stateHash, totalScore, HITSTOP_STEPS } from '../src/sim/run';
 import { restartStreamAt, placeChunk } from '../src/sim/level';
 import { parseChunk } from '../src/sim/chunk';
 import { DT, GROUND_Y, TILE, SPEED_TIERS } from '../src/data/physics';
@@ -52,6 +52,8 @@ describe('hazards & i-frames', () => {
   it('i-frames last HIT_IFRAMES', () => {
     const s = runWith(flatRows('='.repeat(20), { 10: E(8) + '^' + E(11) }));
     let n = 0; while (s.stats.hits === 0 && n++ < 600) stepRun(s, NONE);
+    expect(s.iframes).toBeGreaterThan(HIT_IFRAMES - 2 * DT);
+    steps(s, HITSTOP_STEPS);                       // frozen: i-frames do not tick during hitstop
     expect(s.iframes).toBeGreaterThan(HIT_IFRAMES - 2 * DT);
     steps(s, Math.ceil(HIT_IFRAMES / DT) + 1);
     expect(s.iframes).toBe(0);
@@ -134,9 +136,10 @@ describe('bonus time', () => {
     expect(s.bonusStage).toBe('none');
     expect(s.letters.every(l => !l)).toBe(true);
     expect(s.iframes).toBeGreaterThan(0);
-    steps(s, 120);
+    steps(s, 40);                                    // dropped onto the hazard-free landing chunk
     expect(s.phase).toBe('run');
     expect(s.body.onGround).toBe(true);
+    expect(s.level.chunks.find(c => c.x <= s.body.x && s.body.x < c.x + c.width)?.id).toBe('landing');
   });
 });
 

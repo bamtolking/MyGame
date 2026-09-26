@@ -18,7 +18,13 @@ export interface Body {
 }
 
 export interface BodyInput { jump: boolean; slide: boolean }   // jump = pressed this step (edge), slide = held
-export interface BodyCaps { maxJumps: number; glide?: number }  // glide: fall-speed cap while jump is held (0/undefined = none)
+export interface BodyCaps {
+  maxJumps: number;
+  glide?: number;       // fall-speed cap while jump is held (0/undefined = none)
+  fastFall?: boolean;   // false = holding slide in the air does nothing (validator: easy tiers assume beginners)
+}
+export const LAND_PREDICT_STEPS = 4;   // 67 ms
+export const LIP = 12;                 // px of forgiveness when clipping a ledge top while falling
 
 export interface StepResult { jumped: 0 | 1 | 2; landed: boolean }
 
@@ -44,8 +50,20 @@ function supportTop(q: SolidQuery, x: number, yFrom: number, yTo: number, bridge
   return best;
 }
 
+/** Would a falling body (no input) touch support within `steps` steps? Used to disambiguate a press just
+ *  before landing: it becomes a buffered GROUND jump, so the air jump is not wasted as a tiny hop. */
+function landsWithin(b: Body, dx: number, dt: number, q: SolidQuery, bridge: boolean, steps: number): boolean {
+  let y = b.y, vy = b.vy, x = b.x;
+  for (let i = 0; i < steps; i++) {
+    x += dx; vy = Math.min(vy + GRAVITY * dt, MAX_FALL_V); const ny = y + vy * dt;
+    if (vy >= 0 && supportTop(q, x, y, ny, bridge) !== null) return true;
+    y = ny;
+  }
+  return false;
+}
+
 /**
- * Advance one fixed step. `bridge` = treat pits as solid ground (dash/giant/bonus).
+ * Advance one fixed step. `bridge` = treat pits as solid ground (dash/giant/rescue).
  * `holdJump` (optional) = jump button currently held, only used by gliding characters.
  */
 export function stepBody(b: Body, inp: BodyInput, dx: number, dt: number, q: SolidQuery, caps: BodyCaps, bridge = false, holdJump = false): StepResult {
@@ -56,7 +74,7 @@ export function stepBody(b: Body, inp: BodyInput, dx: number, dt: number, q: Sol
   if (b.buffer > 0) {
     if (b.onGround || b.coyote > 0) {
       b.vy = -JUMP_V; b.jumps = 1; b.onGround = false; b.coyote = 0; b.buffer = 0; res.jumped = 1;
-    } else if (b.jumps < caps.maxJumps && inp.jump) {
+    } else if (b.jumps < caps.maxJumps && inp.jump && !(b.vy > 0 && landsWithin(b, dx, dt, q, bridge, LAND_PREDICT_STEPS))) {
       // air jump only on a fresh press (a stale buffered press must not burn it)
       b.vy = -DJUMP_V; b.jumps = Math.max(b.jumps, 1) + 1; b.buffer = 0; res.jumped = 2;
     }
@@ -74,12 +92,13 @@ export function stepBody(b: Body, inp: BodyInput, dx: number, dt: number, q: Sol
   // airborne
   b.sliding = false;
   let g = GRAVITY;
-  if (inp.slide && b.vy > -200) g *= FASTFALL_MUL;
+  if (inp.slide && b.vy > -200 && caps.fastFall !== false) g *= FASTFALL_MUL;
   b.vy = Math.min(b.vy + g * dt, MAX_FALL_V);
   if (caps.glide && holdJump && b.vy > caps.glide && !inp.slide) b.vy = caps.glide;
   const ny = b.y + b.vy * dt;
   if (b.vy >= 0) {
-    const top = supportTop(q, b.x, b.y, ny, bridge);
+    // normal landing (feet cross a top), else lip correction: feet up to LIP px below a top snap onto it
+    const top = supportTop(q, b.x, b.y, ny, bridge) ?? supportTop(q, b.x, ny - LIP, ny, false);
     if (top !== null) {
       b.y = top; b.vy = 0; b.onGround = true; b.jumps = 0; res.landed = true;
       b.sliding = inp.slide;

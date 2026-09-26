@@ -85,16 +85,35 @@ export function solve(solids: readonly Solid[], hazards: readonly Box[], start: 
   return { ok, explored, path: ok ? path.map(i => CHOICES[i]) : [], aborted };
 }
 
-export interface ValidateOpts { pad?: number; inputStep?: number; caps?: BodyCaps; mustCollect?: { x: number; y: number } }
+export interface ValidateOpts { pad?: number; inputStep?: number; caps?: BodyCaps; mustCollect?: { x: number; y: number }; phase?: number }
 
-/** Chunk-local proof. Flat ground is assumed just before and after the chunk (lint guarantees it). */
+/** Validator caps for a tier: beginners (tiers 0–1) are not assumed to know the air fast-fall. */
+export function tierCaps(tier: number): BodyCaps { return { maxJumps: MAX_JUMPS, fastFall: tier >= 2 }; }
+/** Minimum action window (frames) guaranteed per tier by the phase-robust check: 250 / 200 / 150 ms. */
+export const ROBUST_STEPS = [15, 15, 12, 12, 9, 9];
+
+function chunkSolids(p: ParsedChunk): Solid[] {
+  return [{ x0: -600, x1: 0, top: GROUND_Y, ground: true }, ...p.solids, { x0: p.width, x1: p.width + 400, top: GROUND_Y, ground: true }];
+}
+
+/** Chunk-local proof. Flat ground is assumed just before and after the chunk (lint guarantees it).
+ *  `phase` shifts the start back by that many frames, i.e. shifts the decision grid against the geometry. */
 export function validateChunk(p: ParsedChunk, speed: number, opts: ValidateOpts = {}): SolveResult {
-  const solids: Solid[] = [
-    { x0: -400, x1: 0, top: GROUND_Y, ground: true },
-    ...p.solids,
-    { x0: p.width, x1: p.width + 400, top: GROUND_Y, ground: true },
-  ];
-  return solve(solids, p.hazards, newBody(-TILE, GROUND_Y), speed, p.width - TILE, { ...opts, endGrounded: true });
+  const start = newBody(-TILE - (opts.phase ?? 0) * speed * DT, GROUND_Y);
+  return solve(chunkSolids(p), p.hazards, start, speed, p.width - TILE, { ...opts, endGrounded: true });
+}
+
+/**
+ * Phase-robust proof: with decisions only every S frames, the chunk must be crossable for EVERY alignment of
+ * that grid (S phases). A contiguous action window of W frames contains a grid point of every phase iff W ≥ S,
+ * so passing all phases guarantees every forced action has a window of at least S frames (S/60 s).
+ */
+export function validateRobust(p: ParsedChunk, tier: number, speed: number, pad = 2): { ok: boolean; failedPhase: number } {
+  const S = ROBUST_STEPS[tier]; const caps = tierCaps(tier);
+  for (let ph = 0; ph < S; ph++) {
+    if (!validateChunk(p, speed, { pad, inputStep: S, caps, phase: ph }).ok) return { ok: false, failedPhase: ph };
+  }
+  return { ok: true, failedPhase: -1 };
 }
 
 /** Largest hurtbox inflation (px, capped at 23) at which the chunk is still crossable — how forgiving it is. */
