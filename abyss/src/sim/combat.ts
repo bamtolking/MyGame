@@ -216,7 +216,7 @@ export function killMonster(g: Game, m: Monster, d?: Dmg, dealt = 0): void {
     for (const o of w.monsters) if (o.summoned && !o.dead) killMonster(g, o);
     g.bosses[m.tpl] = (g.bosses[m.tpl] ?? 0) + 1;
     const final = w.floor === LAST_FLOOR;
-    g.emit({ t: 'bossDead', name: m.name, final });
+    g.emit({ t: 'bossDead', name: m.name, final, tpl: m.tpl, diff: g.diff });
     g.emit({ t: 'msg', text: BOSS_LINES[m.tpl]?.death ?? '', color: '#ff9070' });
     g.emit({ t: 'shake', v: 1 });
     g.emit({ t: 'sfx', id: 'bossDeath' });

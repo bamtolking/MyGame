@@ -99,21 +99,28 @@ export class Renderer {
   }
 
   resize(w: number, h: number): void {
-    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.cam.w = w; this.cam.h = h;
+    this.applySize();
+  }
+
+  /** Backing-store resolution follows the quality level: up to 3× on sharp phone screens at high quality. */
+  private applySize(): void {
+    const w = this.cam.w, h = this.cam.h, q = this.quality;
+    this.dpr = Math.min(q >= 2 ? 3 : q === 1 ? 2 : 1.5, window.devicePixelRatio || 1);
     this.cv.width = Math.round(w * this.dpr); this.cv.height = Math.round(h * this.dpr);
     this.cv.style.width = w + 'px'; this.cv.style.height = h + 'px';
-    this.cam.w = w; this.cam.h = h;
     // camera: about 14.5 tiles across in landscape, 7.8 in portrait
     const across = w >= h ? 14.5 : 7.8;
     this.cam.zoom = Math.max(0.72, Math.min(2.3, Math.min(w / (TW * across), h / (TH * 12.5))));
-    setTexScale(Math.max(2, Math.min(4, Math.ceil(this.cam.zoom * this.dpr))));
-    this.setQuality(this.quality);
+    setTexScale(Math.max(2, Math.min(q >= 2 ? 5 : 4, Math.ceil(this.cam.zoom * this.dpr))));
+    this.darkScale = q >= 2 ? 0.75 : 0.5;
+    this.dark.width = Math.ceil(w * this.darkScale); this.dark.height = Math.ceil(h * this.darkScale);
   }
 
   setQuality(q: number): void {
+    const changed = q !== this.quality;
     this.quality = q;
-    this.darkScale = q >= 2 ? 0.75 : 0.5;
-    this.dark.width = Math.ceil(this.cam.w * this.darkScale); this.dark.height = Math.ceil(this.cam.h * this.darkScale);
+    if (changed || this.dark.width !== Math.ceil(this.cam.w * (q >= 2 ? 0.75 : 0.5))) this.applySize();
     this.fx.low = this.lowFx || q === 0;
   }
 
@@ -578,6 +585,7 @@ export class Renderer {
     this.spawnAmbient(g, x0, y0, x1, y1, dt);
     // ---------------- darkness, grading
     this.drawDarkness(g, x0, y0, x1, y1);
+    this.drawBloom();
     // ---------------- labels, texts, bars
     this.drawLabels(g);
     this.drawOverheadBars(g);
@@ -1135,6 +1143,34 @@ export class Renderer {
       c.fillStyle = gr; c.fillRect(sx - 6 * z, sy - 240 * z, 12 * z, 240 * z);
       c.fillRect(sx - 2 * z, sy - 240 * z, 4 * z, 240 * z); c.restore();
     }
+  }
+
+  /**
+   * Bloom (high quality): the frame is shrunk twice (the bilinear filtering blurs it), multiplied with itself so only
+   * bright pixels survive, then added back on top — fire, spells and lit metal get a soft glow.
+   */
+  private bloomA = document.createElement('canvas');
+  private bloomB = document.createElement('canvas');
+  private drawBloom(): void {
+    if (this.quality < 2 || this.lowFx) return;
+    const W = this.cv.width, H = this.cv.height;
+    const aw = Math.max(1, Math.round(W / 4)), ah = Math.max(1, Math.round(H / 4));
+    const bw = Math.max(1, Math.round(W / 10)), bh = Math.max(1, Math.round(H / 10));
+    if (this.bloomA.width !== aw || this.bloomA.height !== ah) { this.bloomA.width = aw; this.bloomA.height = ah; }
+    if (this.bloomB.width !== bw || this.bloomB.height !== bh) { this.bloomB.width = bw; this.bloomB.height = bh; }
+    const a = this.bloomA.getContext('2d')!, b = this.bloomB.getContext('2d')!;
+    a.globalCompositeOperation = 'copy'; a.imageSmoothingEnabled = true;
+    a.drawImage(this.cv, 0, 0, W, H, 0, 0, aw, ah);
+    b.globalCompositeOperation = 'copy'; b.imageSmoothingEnabled = true;
+    b.drawImage(this.bloomA, 0, 0, aw, ah, 0, 0, bw, bh);
+    // keep the highlights: x → x³
+    b.globalCompositeOperation = 'multiply';
+    b.drawImage(this.bloomB, 0, 0); b.drawImage(this.bloomB, 0, 0);
+    const c = this.c;
+    c.save(); c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalCompositeOperation = 'lighter'; c.imageSmoothingEnabled = true;
+    c.globalAlpha = 0.5; c.drawImage(this.bloomB, 0, 0, bw, bh, 0, 0, W, H);
+    c.restore();
   }
 
   /** Full-screen feedback: low-health pulse and hurt flash. */

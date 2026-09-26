@@ -35,6 +35,35 @@ function speckle(c: CanvasRenderingContext2D, n: number, cols: string[], size = 
   }
   c.globalAlpha = 1;
 }
+/** Fine grain (sub-unit dots) — invisible at low resolution, gives stone its texture on sharp screens. */
+function grain(c: CanvasRenderingContext2D, n: number, dark: string, light: string): void {
+  for (let i = 0; i < n; i++) {
+    const [x, y] = P(rnd(), rnd());
+    c.fillStyle = rnd() < 0.55 ? dark : light;
+    c.globalAlpha = 0.08 + rnd() * 0.16;
+    const d = 0.25 + rnd() * 0.45;
+    c.fillRect(x, y, d, d * 0.8);
+  }
+  c.globalAlpha = 1;
+}
+/** Damp moss / grime patch or a small puddle with a highlight. */
+function patch(c: CanvasRenderingContext2D, kind: 'moss' | 'puddle' | 'grime'): void {
+  const [x, y] = P(0.25 + rnd() * 0.5, 0.25 + rnd() * 0.5);
+  const rx = 3 + rnd() * 6, ry = rx * 0.5;
+  if (kind === 'puddle') {
+    const g = c.createRadialGradient(x - rx * 0.2, y - ry * 0.3, 0.2, x, y, rx);
+    g.addColorStop(0, 'rgba(120,130,140,0.35)'); g.addColorStop(0.6, 'rgba(20,24,30,0.55)'); g.addColorStop(1, 'rgba(10,12,16,0)');
+    c.fillStyle = g; c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, 7); c.fill();
+    c.strokeStyle = 'rgba(200,210,230,0.25)'; c.lineWidth = 0.35; c.beginPath(); c.ellipse(x - rx * 0.15, y - ry * 0.2, rx * 0.55, ry * 0.4, 0, Math.PI * 1.1, Math.PI * 1.7); c.stroke();
+    return;
+  }
+  const col = kind === 'moss' ? ['rgba(70,96,40,', 'rgba(110,130,60,'] : ['rgba(20,16,12,', 'rgba(40,32,24,'];
+  for (let i = 0; i < 14; i++) {
+    const a = rnd() * 7, rr = Math.sqrt(rnd());
+    c.fillStyle = col[i % 2] + (0.12 + rnd() * 0.18) + ')';
+    c.beginPath(); c.ellipse(x + Math.cos(a) * rx * rr, y + Math.sin(a) * ry * rr, 0.8 + rnd() * 1.8, 0.5 + rnd() * 1, 0, 0, 7); c.fill();
+  }
+}
 function crack(c: CanvasRenderingContext2D, col: string, width = 0.6): void {
   let [x, y] = P(0.2 + rnd() * 0.6, 0.2 + rnd() * 0.6);
   c.strokeStyle = col; c.lineWidth = width; c.beginPath(); c.moveTo(x, y);
@@ -82,12 +111,23 @@ function floorTile(zone: number, v: number, kind: 'normal' | 'dirt' | 'flag' = '
     for (const [u0, v0, u1, v1] of cuts) {
       const g = 0.035;
       quad(c, u0 + g, v0 + g, u1 - g, v1 - g);
-      c.fillStyle = shade(stoneBase, (rnd() - 0.5) * 0.18); c.fill();
-      // bevel highlight on top-left edges
-      c.strokeStyle = shade(stoneBase, 0.18); c.lineWidth = 0.6; c.globalAlpha = 0.5; c.stroke(); c.globalAlpha = 1;
+      const sc = shade(stoneBase, (rnd() - 0.5) * 0.18);
+      // slightly domed stone: lit from the top, darker toward the bottom corner
+      const a0 = P(u0, v0), a1 = P(u1, v1);
+      const sg = c.createLinearGradient(a0[0], a0[1], a1[0], a1[1]);
+      sg.addColorStop(0, shade(sc.startsWith('#') ? sc : stoneBase, 0.1)); sg.addColorStop(0.5, sc); sg.addColorStop(1, shade(stoneBase, -0.18));
+      c.fillStyle = sg; c.fill();
+      // bevels: highlight on the top-left edges, shadow on the bottom-right ones
+      const e0 = P(u0 + g, v1 - g), e1 = P(u0 + g, v0 + g), e2 = P(u1 - g, v0 + g), e3 = P(u1 - g, v1 - g);
+      c.lineWidth = 0.55; c.globalAlpha = 0.55;
+      c.strokeStyle = shade(stoneBase, 0.3); c.beginPath(); c.moveTo(e0[0], e0[1]); c.lineTo(e1[0], e1[1]); c.lineTo(e2[0], e2[1]); c.stroke();
+      c.strokeStyle = 'rgba(0,0,0,0.6)'; c.beginPath(); c.moveTo(e2[0], e2[1]); c.lineTo(e3[0], e3[1]); c.lineTo(e0[0], e0[1]); c.stroke();
+      c.globalAlpha = 1;
     }
     speckle(c, 40, [dark, light, '#000000'], 1.1);
+    grain(c, 520, '#000000', shade(light, 0.3));
     if (rnd() < 0.5) crack(c, shade(dark, -0.4));
+    if (zone === 1 && rnd() < 0.3) patch(c, rnd() < 0.5 ? 'moss' : 'grime');
   } else if (zone === 2) {
     // packed earth + small bricks
     c.fillStyle = shade(base, (rnd() - 0.5) * 0.12); c.fillRect(0, 0, TW, TH);
@@ -101,12 +141,15 @@ function floorTile(zone: number, v: number, kind: 'normal' | 'dirt' | 'flag' = '
       c.globalAlpha = 1;
     }
     speckle(c, 80, [dark, light, '#1a120c'], 1.3);
+    grain(c, 480, '#0e0906', shade(light, 0.25));
     if (rnd() < 0.3) crack(c, '#1a120c');
+    if (rnd() < 0.18) patch(c, 'puddle'); else if (rnd() < 0.2) patch(c, 'grime');
   } else if (zone === 3) {
     c.fillStyle = shade(base, (rnd() - 0.5) * 0.14); c.fillRect(0, 0, TW, TH);
     for (let i = 0; i < 6; i++) { const [x, y] = P(rnd(), rnd()); c.fillStyle = rnd() < 0.5 ? shade(dark, -0.1) : shade(light, 0.05); c.globalAlpha = 0.45; c.beginPath(); c.ellipse(x, y, 4 + rnd() * 7, 2 + rnd() * 3, 0, 0, 7); c.fill(); }
     c.globalAlpha = 1;
     speckle(c, 70, ['#1a1410', '#6a5a4a', '#2c241e'], 1.4);
+    grain(c, 480, '#0c0806', '#8a7a68');
     for (let i = 0; i < 4; i++) { const [x, y] = P(rnd(), rnd()); c.fillStyle = '#6e6254'; c.beginPath(); c.ellipse(x, y, 1.3, 0.8, 0, 0, 7); c.fill(); c.fillStyle = '#231d18'; c.fillRect(x - 1, y + 0.5, 2, 0.5); }
     if (rnd() < 0.4) crack(c, '#140e0a', 0.8);
   } else {
@@ -115,6 +158,7 @@ function floorTile(zone: number, v: number, kind: 'normal' | 'dirt' | 'flag' = '
     for (let i = 0; i < 5; i++) { const [x, y] = P(rnd(), rnd()); c.fillStyle = shade(dark, -0.2); c.globalAlpha = 0.5; c.beginPath(); c.ellipse(x, y, 5 + rnd() * 6, 2 + rnd() * 3, 0, 0, 7); c.fill(); }
     c.globalAlpha = 1;
     speckle(c, 60, ['#140606', '#5a2a24', '#200a08'], 1.3);
+    grain(c, 480, '#070202', '#7a3a30');
     if (rnd() < 0.55) { c.shadowColor = '#ff5010'; c.shadowBlur = 3; crack(c, '#ff6a20', 0.7); c.shadowBlur = 0; }
   }
   // soft edge darkening for tile readability
@@ -170,11 +214,17 @@ function brickFace(c: CanvasRenderingContext2D, pts: [number, number][], col: st
         c.fillStyle = shade(col, (rnd() - 0.5) * 0.2);
         c.globalAlpha = 0.55;
         c.beginPath(); c.moveTo(x + 0.6, yy + 0.6 + slope * 0.6); c.lineTo(x + brickW - 0.6, yy + 0.6 + slope * (brickW - 0.6)); c.lineTo(x + brickW - 0.6, yy + rowH - 0.6 + slope * (brickW - 0.6)); c.lineTo(x + 0.6, yy + rowH - 0.6 + slope * 0.6); c.closePath(); c.fill();
-        c.globalAlpha = 1;
+        // bevel: lit top edge, shadowed bottom edge
+        c.globalAlpha = 0.45; c.lineWidth = 0.45;
+        c.strokeStyle = shade(col, 0.35); c.beginPath(); c.moveTo(x + 0.8, yy + 0.9 + slope * 0.8); c.lineTo(x + brickW - 0.8, yy + 0.9 + slope * (brickW - 0.8)); c.stroke();
+        c.strokeStyle = 'rgba(0,0,0,0.75)'; c.beginPath(); c.moveTo(x + 0.8, yy + rowH - 0.9 + slope * 0.8); c.lineTo(x + brickW - 0.8, yy + rowH - 0.9 + slope * (brickW - 0.8)); c.stroke();
+        c.globalAlpha = 1; c.lineWidth = zone === 2 ? 0.9 : 1.1; c.strokeStyle = mortar;
         c.beginPath(); c.moveTo(x, yy + slope * 0); c.lineTo(x, yy + rowH); c.stroke();
       }
     }
     speckle2(c, x0, y0, x1, y1, 40, [shade(col, -0.4), shade(col, 0.25)]);
+    for (let i = 0; i < 260; i++) { c.fillStyle = rnd() < 0.55 ? '#000' : shade(col, 0.4); c.globalAlpha = 0.07 + rnd() * 0.12; const d = 0.25 + rnd() * 0.4; c.fillRect(x0 + rnd() * (x1 - x0), y0 + rnd() * (y1 - y0), d, d); }
+    c.globalAlpha = 1;
     if (zone === 4) { c.shadowColor = '#ff4010'; c.shadowBlur = 4; c.strokeStyle = '#ff5a1a'; c.lineWidth = 0.7; let x = x0 + rnd() * (x1 - x0), y = y0 + rnd() * 20; c.beginPath(); c.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (rnd() - 0.5) * 8; y += 5 + rnd() * 6; c.lineTo(x, y); } c.stroke(); c.shadowBlur = 0; }
     if (zone === 2 && rnd() < 0.5) { // skull niche
       const cx = (x0 + x1) / 2 + (rnd() - 0.5) * 8, cy = y0 + (y1 - y0) * 0.45 + slope * ((x0 + x1) / 2 - x0);

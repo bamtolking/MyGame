@@ -6,6 +6,8 @@ import { ITEM_KIND, OFFHAND_ART, SKILL_ICON, WEAPON_ART } from './registry';
 
 const cache = new Map<string, HTMLCanvasElement>();
 const SZ = 64;
+/** Icons are painted in a 64-unit space at this resolution multiplier (crisp on high-DPI screens). */
+const RES = 2;
 
 function metal(tier: number): string { return ['#a8a8a0', '#c8ccd4', '#9aa0b0', '#6a6e7e', '#6a2a2e'][Math.max(0, Math.min(4, tier))]; }
 
@@ -131,8 +133,9 @@ export function itemIcon(it: Item): HTMLCanvasElement {
   const key = `${it.base}|${it.rarity}`;
   let cv = cache.get(key);
   if (cv) return cv;
-  cv = document.createElement('canvas'); cv.width = SZ; cv.height = SZ;
+  cv = document.createElement('canvas'); cv.width = SZ * RES; cv.height = SZ * RES;
   const c = cv.getContext('2d')!;
+  c.scale(RES, RES);
   drawCat(c, b.cat, b.tier, it.rarity);
   cache.set(key, cv);
   return cv;
@@ -153,8 +156,9 @@ const skillCache = new Map<string, string>();
 export function skillIconUrl(icon: string): string {
   let u = skillCache.get(icon);
   if (u) return u;
-  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+  const cv = document.createElement('canvas'); cv.width = 64 * RES; cv.height = 64 * RES;
   const c = cv.getContext('2d')!;
+  c.scale(RES, RES);
   const bg = c.createRadialGradient(32, 32, 4, 32, 32, 44);
   const tint: Record<string, [string, string]> = {
     sword: ['#5a4a3a', '#1a120c'], bash: ['#8a5a2a', '#1a0e06'], cleave: ['#6a6a7a', '#141418'], warcry: ['#a07a20', '#201404'], leap: ['#7a5a3a', '#180e06'], berserk: ['#a02010', '#200404'],
@@ -167,7 +171,7 @@ export function skillIconUrl(icon: string): string {
   c.fillStyle = bg; c.fillRect(0, 0, 64, 64);
   c.translate(32, 32);
   c.lineCap = 'round'; c.lineJoin = 'round';
-  const glow = (col: string, blur = 10) => { c.shadowColor = col; c.shadowBlur = blur; };
+  const glow = (col: string, blur = 10) => { c.shadowColor = col; c.shadowBlur = blur * RES; }; // shadowBlur ignores the transform
   switch (icon) {
     case 'sword': c.rotate(Math.PI * 0.75); drawWeapon(c, 'sword', 0, -14, 0, 1, '#d0d0d0', undefined, 1.3); break;
     case 'bash': glow('#ffd080'); c.rotate(Math.PI * 0.6); drawWeapon(c, 'mace', 0, -12, 0, 2, '#e0e0e0', undefined, 1.3); c.rotate(-Math.PI * 0.6); c.strokeStyle = '#ffe0a0'; c.lineWidth = 2.5; for (let i = 0; i < 5; i++) { const an = -Math.PI / 2 + (i - 2) * 0.5; c.beginPath(); c.moveTo(Math.cos(an) * 16, Math.sin(an) * 16 + 12); c.lineTo(Math.cos(an) * 24, Math.sin(an) * 24 + 12); c.stroke(); } break;

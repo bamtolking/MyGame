@@ -1,6 +1,6 @@
 // App shell: title/class select, game loop, HUD (orbs, skill bar, target bar, minimap), panels, modals,
 // touch controls, audio + event routing, autosave.
-import { CLASSES, SKILLS, xpToNext } from '../data/classes';
+import { CLASSES, CLASS_ORDER, SKILLS, skillAnim, xpToNext } from '../data/classes';
 import { MON_MODS, MONSTERS } from '../data/monsters';
 import { DIFFICULTIES, ZONES } from '../data/zones';
 import { DT, Game, newHero, type SaveData } from '../sim/game';
@@ -11,7 +11,8 @@ import { computeStats } from '../sim/stats';
 import type { ClassId, EquipSlot, GEvent, Item } from '../sim/types';
 import { Audio } from '../platform/audio';
 import * as store from '../platform/storage';
-import { drawBiped } from '../render/actors';
+import { isUnlocked, loadProfile, record, saveProfile, unlockProgress, type Profile } from '../platform/profile';
+import { drawBiped, type Look } from '../render/actors';
 import { skillIconUrl } from '../render/icons';
 import { Renderer, heroLook } from '../render/renderer';
 import { BASE_BY_ID } from '../data/items';
@@ -56,12 +57,17 @@ export class App {
   private hitStop = 0; private slowMo = 0; private slowDur = 1;
   private lowFps = 0; private playT = 0;
   private readonly lockQ = /[?&]hq\b/.test(location.search);
+  /** Logical (landscape) viewport size in css px, and whether the app is rotated 90° to force landscape. */
+  vw = window.innerWidth; vh = window.innerHeight; rotated = false;
+  /** Account-wide progress (class unlocks). */
+  profile: Profile = loadProfile();
 
   constructor(root: HTMLElement) {
     this.root = root;
     this.touchMode = matchMedia('(pointer: coarse)').matches;
-    window.addEventListener('resize', () => this.layout());
-    window.addEventListener('orientationchange', () => setTimeout(() => this.layout(), 250));
+    this.fitViewport();
+    window.addEventListener('resize', () => { this.fitViewport(); this.layout(); });
+    window.addEventListener('orientationchange', () => setTimeout(() => { this.fitViewport(); this.layout(); }, 250));
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { this.saveNow(); this.audio.suspend(); }
       else this.audio.resume();
@@ -70,6 +76,46 @@ export class App {
     // any first gesture starts audio, so sounds and music are synthesized while the title screen is up
     for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, () => this.unlockAudio(), { capture: true, passive: true });
     this.showTitle();
+  }
+
+  /**
+   * The game is landscape-only. On a phone held upright the whole app is rotated 90° (so it plays sideways even with the
+   * rotation lock on); everything inside works in app-local coordinates — see toLocal().
+   */
+  fitViewport(): void {
+    const W = window.innerWidth, H = window.innerHeight;
+    const rot = (this.touchMode || /[?&]rot\b/.test(location.search)) && H > W;
+    this.rotated = rot;
+    this.vw = rot ? H : W; this.vh = rot ? W : H;
+    document.documentElement.classList.toggle('rot', rot);
+    document.documentElement.classList.toggle('short', this.vh <= 520);
+    document.documentElement.classList.toggle('narrowL', this.vw <= 700 && this.vh > 520);
+    document.documentElement.style.setProperty('--lvw', `${this.vw / 100}px`);
+    document.documentElement.style.setProperty('--lvh', `${this.vh / 100}px`);
+    const st = this.root.style;
+    if (rot) { st.inset = 'auto'; st.left = '0'; st.top = '0'; st.width = `${H}px`; st.height = `${W}px`; st.transformOrigin = '0 0'; st.transform = `translateX(${W}px) rotate(90deg)`; }
+    else { st.inset = ''; st.left = ''; st.top = ''; st.width = ''; st.height = ''; st.transform = ''; st.transformOrigin = ''; }
+  }
+  /** Screen (client) coordinates → app-local css px. */
+  toLocal(cx: number, cy: number): { x: number; y: number } {
+    return this.rotated ? { x: cy, y: this.vh - cx } : { x: cx, y: cy };
+  }
+  /** An element's box in app-local css px. */
+  localRect(el: Element): { left: number; top: number; right: number; bottom: number } {
+    const r = el.getBoundingClientRect();
+    if (!this.rotated) return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    const a = this.toLocal(r.left, r.top), b = this.toLocal(r.right, r.bottom);
+    return { left: Math.min(a.x, b.x), top: Math.min(a.y, b.y), right: Math.max(a.x, b.x), bottom: Math.max(a.y, b.y) };
+  }
+  /** Tries to go fullscreen + lock landscape on phones (Android); iOS keeps the CSS rotation. */
+  private tryLandscapeLock(): void {
+    if (!this.touchMode) return;
+    try {
+      const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+      const fs = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : null;
+      const lock = () => { const o = screen.orientation as ScreenOrientation & { lock?: (t: string) => Promise<void> }; o?.lock?.('landscape').catch(() => { /* not supported */ }); };
+      if (fs) fs.then(lock).catch(() => { /* fullscreen refused */ }); else lock();
+    } catch { /* ignore */ }
   }
 
   unlockAudio(): void {
@@ -89,19 +135,69 @@ export class App {
     this.screen = 'title';
     cancelAnimationFrame(this.titleAnim);
     clear(this.root);
+    this.fitViewport();
     this.audio.setMusic('title');
+    const prof = (this.profile = loadProfile());
     const bg = h('canvas', { id: 'titlebg' });
-    const cards = h('div', { class: 'classes' });
-    const portraits: { cv: HTMLCanvasElement; cls: ClassId; look: ReturnType<typeof heroLook> }[] = [];
-    for (const cls of ['warrior', 'rogue', 'sorcerer'] as ClassId[]) {
-      const c = CLASSES[cls];
-      const save = store.loadHero(cls);
-      const hero = newHero(cls, c.name);
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const lookOf = (cls: ClassId, save: SaveData | null): Look => {
+      const hero = newHero(cls, CLASSES[cls].name);
       if (save) { for (const k of Object.keys(save.equip) as EquipSlot[]) hero.equip[k] = save.equip[k]; hero.level = save.level; }
-      else { const rng = new Rng(1); for (const id of c.startGear) { const b = BASE_BY_ID[id]; hero.equip[b.slot === 'ring' ? 'ring1' : (b.slot as EquipSlot)] = genItem(rng, 1, 1, { base: id, rarity: 'normal' }); } }
-      const pc = h('canvas', { class: 'portrait', width: 180, height: 200 });
-      portraits.push({ cv: pc, cls, look: heroLook(hero) });
-      const nameIn = h('input', { class: 'namein', id: `name-${cls}`, maxlength: '12', value: save?.name ?? c.name, 'aria-label': '이름' }) as HTMLInputElement;
+      else { const rng = new Rng(1); for (const id of CLASSES[cls].startGear) { const b = BASE_BY_ID[id]; hero.equip[b.slot === 'ring' ? 'ring1' : (b.slot as EquipSlot)] = genItem(rng, 1, 1, { base: id, rarity: 'normal' }); } }
+      return heroLook(hero);
+    };
+    const pose = (t: number, atk: number, spell: boolean) => ({ t, walk: 0, moving: false, atk: spell ? -1 : atk, cast: spell ? atk : -1, hit: 0, dead: -1, flip: false, back: false, alpha: 1, frozen: false, chill: false });
+    const grid = h('div', { class: 'cgrid' });
+    const detail = h('div', { class: 'detail' });
+    const big = h('canvas', { class: 'bigportrait' }) as HTMLCanvasElement;
+    const tiles = new Map<ClassId, HTMLElement>();
+    const saves = new Map<ClassId, SaveData | null>();
+    const looks = new Map<ClassId, Look>();
+    let sel: ClassId = isUnlocked(prof, prof.lastClass) ? prof.lastClass : 'warrior';
+    let unlockedN = 0;
+    for (const cls of CLASS_ORDER) {
+      const c = CLASSES[cls];
+      const locked = !isUnlocked(prof, cls);
+      if (!locked) unlockedN++;
+      const save = locked ? null : store.loadHero(cls);
+      saves.set(cls, save);
+      const look = lookOf(cls, save);
+      looks.set(cls, look);
+      const cv = h('canvas', { class: 'tport' }) as HTMLCanvasElement;
+      const isNew = !locked && !prof.seen.includes(cls);
+      const tile = h('button', { class: 'ctile' + (locked ? ' locked' : '') + (isNew ? ' new' : ''), style: `--cc:${c.color};--ca:${c.accent}`, 'aria-label': c.name, onclick: () => select(cls) },
+        cv, h('div', { class: 'tname' }, c.name), h('div', { class: 'tsub' }, locked ? '🔒 잠김' : save ? `Lv.${save.level}` : c.title));
+      grid.appendChild(tile); tiles.set(cls, tile);
+      // static tile portrait (silhouette while locked)
+      const W = 84, H = 96;
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      const tc = cv.getContext('2d')!;
+      tc.scale(dpr, dpr);
+      const gl = tc.createRadialGradient(W / 2, H - 14, 2, W / 2, H - 26, 50);
+      gl.addColorStop(0, locked ? 'rgba(120,120,140,0.18)' : 'rgba(255,150,70,0.32)'); gl.addColorStop(1, 'rgba(0,0,0,0)');
+      tc.fillStyle = gl; tc.fillRect(0, 0, W, H);
+      tc.fillStyle = 'rgba(0,0,0,0.45)'; tc.beginPath(); tc.ellipse(W / 2, H - 10, 20, 6, 0, 0, Math.PI * 2); tc.fill();
+      tc.save(); tc.translate(W / 2, H - 10); tc.scale(1.45, 1.45);
+      drawBiped(tc, look, pose(0.6, -1, false));
+      tc.restore();
+      if (locked) { tc.setTransform(1, 0, 0, 1, 0, 0); tc.globalCompositeOperation = 'source-atop'; tc.fillStyle = 'rgba(10,8,14,0.93)'; tc.fillRect(0, 0, cv.width, cv.height); tc.globalCompositeOperation = 'source-over'; }
+    }
+    const renderDetail = (): void => {
+      clear(detail);
+      const c = CLASSES[sel];
+      const locked = !isUnlocked(prof, sel);
+      const save = saves.get(sel) ?? null;
+      detail.setAttribute('style', `--cc:${c.color};--ca:${c.accent}`);
+      const skills = [c.basic, ...c.skills];
+      const icons = h('div', { class: 'dskills' }, ...skills.map((id) => h('img', { src: skillIconUrl(SKILLS[id]?.icon ?? id), alt: SKILLS[id]?.name ?? id, title: `${SKILLS[id]?.name ?? id} (레벨 ${SKILLS[id]?.req ?? 1})` })));
+      detail.append(h('div', { class: 'cname' }, c.name, h('small', {}, c.title)), h('div', { class: 'cdesc' }, c.desc), icons);
+      if (locked) {
+        const prog = unlockProgress(prof, sel);
+        detail.append(h('div', { class: 'lockbox' }, h('b', {}, '🔒 해금 조건'), h('div', {}, c.unlock?.text ?? ''), prog ? h('small', {}, prog) : null));
+        return;
+      }
+      const nameIn = h('input', { class: 'namein', id: `name-${sel}`, maxlength: '12', value: save?.name ?? c.name, 'aria-label': '이름' }) as HTMLInputElement;
+      const cls = sel;
       const begin = () => this.startGame(cls, nameIn.value.trim() || c.name, null);
       const start = () => {
         this.unlockAudio();
@@ -112,22 +208,30 @@ export class App {
           h('div', { class: 'row' },
             h('button', { class: 'danger', onclick: begin }, '지우고 시작'),
             h('button', { onclick: () => box.remove() }, '취소')));
-        card.querySelector('.confirm')?.remove();
-        card.appendChild(box);
+        detail.querySelector('.confirm')?.remove();
+        detail.appendChild(box);
       };
-      const card = h('div', { class: 'ccard', style: `--cc:${c.color};--ca:${c.accent}` });
-      cards.appendChild(card);
-      card.append(...[pc,
-        h('div', { class: 'cname' }, c.name, h('small', {}, c.title)),
-        h('div', { class: 'cdesc' }, c.desc),
-        save ? h('button', { class: 'primary', onclick: () => { this.unlockAudio(); this.startGame(cls, save.name, save); } }, `이어하기 · ${save.name} Lv.${save.level}`, h('small', {}, `${DIFFICULTIES[Math.min(save.diff, 2)].name} · 최심 ${Math.max(...save.maxFloor)}층`)) : null,
-        h('div', { class: 'newrow' }, nameIn, h('button', { class: save ? '' : 'primary', onclick: start }, save ? '새로 시작' : '시작'))].filter((x) => x !== null) as HTMLElement[]);
-    }
+      if (save) detail.append(h('button', { class: 'primary cont', onclick: () => { this.unlockAudio(); this.startGame(cls, save.name, save); } }, `이어하기 · ${save.name} Lv.${save.level}`, h('small', {}, `${DIFFICULTIES[Math.min(save.diff, 2)].name} · 최심 ${Math.max(...save.maxFloor)}층`)));
+      detail.append(h('div', { class: 'newrow' }, nameIn, h('button', { class: save ? '' : 'primary', onclick: start }, save ? '새로 시작' : '시작')));
+    };
+    const select = (cls: ClassId): void => {
+      sel = cls;
+      for (const [k, t] of tiles) t.classList.toggle('sel', k === cls);
+      if (isUnlocked(prof, cls) && !prof.seen.includes(cls)) { prof.seen.push(cls); saveProfile(prof); tiles.get(cls)?.classList.remove('new'); }
+      renderDetail();
+    };
     const t = h('div', { id: 'title' }, bg,
-      h('div', { class: 'logo' }, h('small', {}, 'ABYSS · 액션 RPG'), h('h1', {}, '심연의 군주'), h('div', { class: 'sub' }, '대성당 아래 열린 심연 속으로. 괴물을 베고, 전리품을 줍고, 심연의 군주를 쓰러뜨려라.')),
-      cards,
-      h('div', { class: 'foot' }, 'PC: 클릭 이동·공격 · 1~5 기술 · Q/E 물약 · T 귀환 · I/C/K 창 · Tab 지도', h('br'), '모바일: 왼쪽 아래를 드래그해 이동 · 오른쪽 버튼으로 공격·기술 (가로 화면 추천)', h('br'), h('span', { class: 'dim' }, store.storageOk ? '진행은 이 브라우저에 자동 저장됩니다.' : '⚠ 저장소를 쓸 수 없는 환경입니다. 창을 닫으면 진행이 사라집니다.')));
+      h('div', { class: 'tleft' },
+        h('div', { class: 'logo' }, h('small', {}, 'ABYSS · 액션 RPG'), h('h1', {}, '심연의 군주'), h('div', { class: 'sub' }, '대성당 아래 열린 심연 속으로. 괴물을 베고, 전리품을 줍고, 심연의 군주를 쓰러뜨려라.')),
+        h('div', { class: 'dwrap' }, big, detail)),
+      h('div', { class: 'tright' },
+        h('div', { class: 'cghead' }, '직업 선택', h('small', {}, `${unlockedN} / ${CLASS_ORDER.length} 해금 · 진행하면 새 직업이 열립니다`)),
+        grid,
+        h('div', { class: 'foot' }, 'PC: 클릭 이동·공격 · 1~5 기술 · Q/E 물약 · T 귀환 · I/C/K 창 · Tab 지도', h('br'), '모바일: 가로 화면 전용 · 왼쪽 아래를 드래그해 이동 · 오른쪽 버튼으로 공격·기술', h('br'), h('span', { class: 'dim' }, store.storageOk ? '진행은 이 브라우저에 자동 저장됩니다.' : '⚠ 저장소를 쓸 수 없는 환경입니다. 창을 닫으면 진행이 사라집니다.'))));
     this.root.appendChild(t);
+    select(sel);
+    // big animated portrait of the selected class
+    const portraits: { cv: HTMLCanvasElement; cls: () => ClassId }[] = [{ cv: big, cls: () => sel }];
     // animated background embers + portraits
     const bctx = bg.getContext('2d')!;
     const embers = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), s: 0.5 + Math.random() * 2, v: 0.02 + Math.random() * 0.06 }));
@@ -146,17 +250,24 @@ export class App {
         bctx.fillRect(e.x * W, e.y * H, e.s * 1.5, e.s * 1.5);
       }
       for (const p of portraits) {
+        const cls = p.cls();
+        const locked = !isUnlocked(prof, cls);
+        const cw = p.cv.clientWidth || 170, ch = p.cv.clientHeight || 200;
+        if (p.cv.width !== Math.round(cw * dpr) || p.cv.height !== Math.round(ch * dpr)) { p.cv.width = Math.round(cw * dpr); p.cv.height = Math.round(ch * dpr); }
         const c = p.cv.getContext('2d')!;
-        c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, 180, 200);
-        const g2 = c.createRadialGradient(90, 170, 5, 90, 150, 110);
-        g2.addColorStop(0, 'rgba(255,140,60,0.35)'); g2.addColorStop(1, 'rgba(0,0,0,0)');
-        c.fillStyle = g2; c.fillRect(0, 0, 180, 200);
-        c.fillStyle = 'rgba(0,0,0,0.45)'; c.beginPath(); c.ellipse(90, 176, 40, 12, 0, 0, Math.PI * 2); c.fill();
-        c.translate(90, 176); c.scale(2.7, 2.7);
+        c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, cw, ch);
+        const g2 = c.createRadialGradient(cw / 2, ch - 24, 5, cw / 2, ch * 0.7, ch * 0.6);
+        g2.addColorStop(0, locked ? 'rgba(140,140,170,0.2)' : 'rgba(255,140,60,0.35)'); g2.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = g2; c.fillRect(0, 0, cw, ch);
+        c.fillStyle = 'rgba(0,0,0,0.45)'; c.beginPath(); c.ellipse(cw / 2, ch - 22, cw * 0.22, 11, 0, 0, Math.PI * 2); c.fill();
+        c.save();
+        c.translate(cw / 2, ch - 22); const k = Math.min(cw / 64, ch / 78); c.scale(k, k);
         const tt = now / 1000;
         const atk = (tt % 3.2) > 2.4 ? ((tt % 3.2) - 2.4) / 0.8 : -1;
-        const spell = p.cls === 'sorcerer';
-        drawBiped(c, p.look, { t: tt, walk: 0, moving: false, atk: spell ? -1 : atk, cast: spell ? atk : -1, hit: 0, dead: -1, flip: false, back: false, alpha: 1, frozen: false, chill: false });
+        const spell = skillAnim(cls, CLASSES[cls].basic) === 'cast';
+        drawBiped(c, looks.get(cls)!, pose(tt, locked ? -1 : atk, spell));
+        c.restore();
+        if (locked) { c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-atop'; c.fillStyle = 'rgba(10,8,14,0.92)'; c.fillRect(0, 0, p.cv.width, p.cv.height); c.globalCompositeOperation = 'source-over'; }
       }
       this.audio.tick();
       this.titleAnim = requestAnimationFrame(loop);
@@ -173,6 +284,9 @@ export class App {
   // ================================================================ game
   startGame(cls: ClassId, name: string, save: SaveData | null): void {
     cancelAnimationFrame(this.titleAnim);
+    this.tryLandscapeLock();
+    this.profile.lastClass = cls;
+    if (save) record(this.profile, { level: save.level }); else saveProfile(this.profile);
     const seed = save?.seed ?? ((Math.random() * 2 ** 32) >>> 0);
     this.g = new Game(cls, name, seed, save ?? undefined);
     const stash = store.loadStash();
@@ -207,7 +321,8 @@ export class App {
       b.addEventListener('contextmenu', (e) => { e.preventDefault(); if (i >= 0 && rankOf(this.g!, i) > 0) { this.g!.hero.rmbSkill = i; } });
       return b;
     };
-    const orb = (cls: string) => h('div', { class: 'orb ' + cls }, h('canvas', { width: 120, height: 120 }), h('span', { class: 'orbtxt' }));
+    const hd = this.hudDpr();
+    const orb = (cls: string) => h('div', { class: 'orb ' + cls }, h('canvas', { width: Math.round(120 * hd), height: Math.round(120 * hd) }), h('span', { class: 'orbtxt' }));
     const hud = h('div', { id: 'hud' },
       orb('hp'),
       h('div', { id: 'bar' },
@@ -257,7 +372,7 @@ export class App {
       h('div', { id: 'top' },
         h('div', { id: 'zone' }),
         h('div', { id: 'target', class: 'hidden' }, h('div', { class: 'tname' }), h('div', { class: 'tbar' }, h('i')), h('div', { class: 'tsub' })),
-        h('canvas', { id: 'minimap', width: 180, height: 120 })),
+        h('canvas', { id: 'minimap', width: Math.round(180 * hd), height: Math.round(120 * hd) })),
       h('div', { id: 'buffs' }),
       h('div', { id: 'msgs' }),
       h('div', { id: 'banner' }),
@@ -282,10 +397,11 @@ export class App {
 
   layout(): void {
     if (this.screen !== 'game' || !this.r) return;
-    const w = window.innerWidth, hgt = window.innerHeight;
+    const w = this.vw, hgt = this.vh;
     this.r.resize(w, hgt);
     const mm = $('#mapov canvas') as HTMLCanvasElement | null;
-    if (mm) { mm.width = w; mm.height = hgt; }
+    const hd = this.hudDpr();
+    if (mm) { mm.width = Math.round(w * hd); mm.height = Math.round(hgt * hd); }
     $('#game')?.classList.toggle('narrow', w < 820);
     $('#game')?.classList.toggle('portrait', hgt > w);
   }
@@ -312,7 +428,7 @@ export class App {
         if (this.lowFps >= 3) { r.setQuality(r.quality - 1); this.lowFps = 0; }
       }
     }
-    this.paused = this.modal === 'menu' || this.modal === 'waypoint' || this.modal === 'victory' || document.hidden || ((this.panelL !== null || this.panelR !== null || this.mapOpen) && (this.touchMode || window.innerWidth < 820) && g.world.floor > 0);
+    this.paused = this.modal === 'menu' || this.modal === 'waypoint' || this.modal === 'victory' || document.hidden || ((this.panelL !== null || this.panelR !== null || this.mapOpen) && (this.touchMode || this.vw < 820) && g.world.floor > 0);
     r.mouse.x = this.input.mouse.x; r.mouse.y = this.input.mouse.y; r.mouse.inside = this.input.mouse.inside && !this.touchMode;
     // hit-stop freezes the action for a few frames on heavy blows; slow motion eases back after boss kills
     let scale = 1;
@@ -351,10 +467,19 @@ export class App {
         tip.classList.remove('hidden');
       }
       const tip = $('#tip')!;
-      const x = Math.min(window.innerWidth - tip.offsetWidth - 6, this.input.mouse.x + 18), y = Math.min(window.innerHeight - tip.offsetHeight - 6, this.input.mouse.y + 12);
+      const x = Math.min(this.vw - tip.offsetWidth - 6, this.input.mouse.x + 18), y = Math.min(this.vh - tip.offsetHeight - 6, this.input.mouse.y + 12);
       tip.style.left = `${Math.max(4, x)}px`; tip.style.top = `${Math.max(4, y)}px`;
     } else if (this.canvasTip) { this.canvasTip = 0; this.hideTip(); }
     requestAnimationFrame((t) => this.frame(t));
+  }
+
+  /** Tells the player about classes that just became playable. */
+  private announceUnlocks(list: ClassId[]): void {
+    list.forEach((cls, i) => setTimeout(() => {
+      this.banner(`새 직업 해금: ${CLASSES[cls].name}`, `${CLASSES[cls].title} — 제목 화면에서 새 캐릭터로 시작할 수 있습니다`);
+      this.showMsg(`🔓 새 직업 「${CLASSES[cls].name}」이(가) 해금되었습니다!`, '#ffd070', true);
+      this.audio.play('uniqueDrop');
+    }, 1200 + i * 3000));
   }
 
   /** 0..1: awake monsters close to the hero (bosses count as a full fight). */
@@ -396,7 +521,7 @@ export class App {
       case 'msg': this.showMsg(e.text, e.color ?? '#e8d8b0', !!e.big); break;
       case 'itemDrop': this.audio.play(e.rarity === 'unique' ? 'uniqueDrop' : e.rarity === 'rare' ? 'rareDrop' : 'itemDrop'); break;
       case 'pickup': this.showMsg(`획득: ${e.item.name}`, e.item.rarity === 'unique' ? '#c8a45a' : e.item.rarity === 'rare' ? '#f2e05a' : e.item.rarity === 'magic' ? '#8a9aff' : '#d8d0c0'); this.refresh(); break;
-      case 'levelup': this.refresh(true); this.saveNow(); break;
+      case 'levelup': this.refresh(true); this.saveNow(); this.announceUnlocks(record(this.profile, { level: e.level })); break;
       case 'death': this.audio.muffle(3); this.slowMo = this.slowDur = 1.2; this.deadShown = false; setTimeout(() => { if (this.g === g && g.hero.dead && !this.deadShown) { this.deadShown = true; this.openModal('death'); } }, 1400); this.audio.setMusic('none'); break;
       case 'zone': {
         this.audio.prepare(ZONES[g.world.zone].monsters.flatMap((id) => [`die_${MONSTERS[id].art}`, MONSTERS[id].proj ? `mshoot_${MONSTERS[id].proj}` : '']).filter((n) => n));
@@ -408,12 +533,12 @@ export class App {
         break;
       }
       case 'boss': this.bossTarget = e.id; this.audio.setMusic('boss'); break;
-      case 'bossDead': this.bossTarget = 0; this.audio.setMusic(ZONES[g.world.zone].music); this.saveNow(); if (e.final) this.victoryPending = 3.5; break;
+      case 'bossDead': this.announceUnlocks(record(this.profile, { boss: e.tpl, diff: e.diff })); this.bossTarget = 0; this.audio.setMusic(ZONES[g.world.zone].music); this.saveNow(); if (e.final) this.victoryPending = 3.5; break;
       case 'open':
         this.npcLine++;
         this.sel = null;
         if (e.ui === 'waypoint') { this.wpDiff = g.diff; this.openModal('waypoint'); }
-        else { this.panelL = e.ui === 'shop' ? 'shop' : e.ui; this.panelR = e.ui === 'shop' || e.ui === 'stash' || e.ui === 'gambler' ? 'inv' : this.touchMode || window.innerWidth < 820 ? null : this.panelR; this.audio.play('open'); this.refresh(true); }
+        else { this.panelL = e.ui === 'shop' ? 'shop' : e.ui; this.panelR = e.ui === 'shop' || e.ui === 'stash' || e.ui === 'gambler' ? 'inv' : this.touchMode || this.vw < 820 ? null : this.panelR; this.audio.play('open'); this.refresh(true); }
         break;
       case 'save': this.saveNow(); break;
     }
@@ -425,9 +550,12 @@ export class App {
     this.hudCache[key] = text; el.textContent = text;
   }
 
+  /** Pixel density for HUD canvases (orbs, minimap, map). */
+  hudDpr(): number { return Math.min(3, Math.max(1, window.devicePixelRatio || 1)); }
+
   private drawOrb(cv: HTMLCanvasElement, frac: number, col: [string, string, string], t: number): void {
     const c = cv.getContext('2d')!;
-    const W = cv.width, R = W / 2 - 6;
+    const W = cv.width, u = W / 120, R = W / 2 - 6 * u;
     c.clearRect(0, 0, W, W);
     c.save();
     c.beginPath(); c.arc(W / 2, W / 2, R, 0, Math.PI * 2); c.clip();
@@ -437,16 +565,16 @@ export class App {
     g.addColorStop(0, col[0]); g.addColorStop(1, col[1]);
     c.fillStyle = g;
     c.beginPath(); c.moveTo(0, W);
-    for (let x = 0; x <= W; x += 4) c.lineTo(x, level + Math.sin(x / 11 + t * 2.4) * 2.2 + Math.sin(x / 5 - t * 3.1) * 1);
+    for (let x = 0; x <= W; x += 3 * u) c.lineTo(x, level + (Math.sin(x / (11 * u) + t * 2.4) * 2.2 + Math.sin(x / (5 * u) - t * 3.1)) * u);
     c.lineTo(W, W); c.closePath(); c.fill();
-    for (let i = 0; i < 6; i++) { const bx = W / 2 + Math.sin(t * 0.7 + i * 2.1) * R * 0.6, by = level + ((t * 18 + i * 29) % (W - level + 1)); c.fillStyle = col[2]; c.globalAlpha = 0.25; c.beginPath(); c.arc(bx, W - (by - level), 1.8, 0, 7); c.fill(); }
+    for (let i = 0; i < 6; i++) { const bx = W / 2 + Math.sin(t * 0.7 + i * 2.1) * R * 0.6, by = level + ((t * 18 * u + i * 29 * u) % (W - level + 1)); c.fillStyle = col[2]; c.globalAlpha = 0.25; c.beginPath(); c.arc(bx, W - (by - level), 1.8 * u, 0, 7); c.fill(); }
     c.globalAlpha = 1;
-    const hl = c.createRadialGradient(W * 0.38, W * 0.3, 2, W * 0.45, W * 0.4, R);
+    const hl = c.createRadialGradient(W * 0.38, W * 0.3, 2 * u, W * 0.45, W * 0.4, R);
     hl.addColorStop(0, 'rgba(255,255,255,0.35)'); hl.addColorStop(0.4, 'rgba(255,255,255,0.05)'); hl.addColorStop(1, 'rgba(0,0,0,0.35)');
     c.fillStyle = hl; c.fillRect(0, 0, W, W);
     c.restore();
-    c.lineWidth = 5; c.strokeStyle = '#5a4424'; c.beginPath(); c.arc(W / 2, W / 2, R + 2, 0, Math.PI * 2); c.stroke();
-    c.lineWidth = 1.5; c.strokeStyle = '#c8a860'; c.beginPath(); c.arc(W / 2, W / 2, R + 4, 0, Math.PI * 2); c.stroke();
+    c.lineWidth = 5 * u; c.strokeStyle = '#5a4424'; c.beginPath(); c.arc(W / 2, W / 2, R + 2 * u, 0, Math.PI * 2); c.stroke();
+    c.lineWidth = 1.5 * u; c.strokeStyle = '#c8a860'; c.beginPath(); c.arc(W / 2, W / 2, R + 4 * u, 0, Math.PI * 2); c.stroke();
   }
 
   private updateHud(dt: number): void {
@@ -520,15 +648,16 @@ export class App {
       this.hudCache.buffs = bsig;
       const names: Record<string, string> = { warcry: '전쟁의 함성', berserk: '광폭화', evade: '회피', shrineDmg: '전투', shrineArmor: '수호', shrineXp: '경험', shrineMf: '행운', shrineSpeed: '신속' };
       clear(bf);
-      for (const b of hero.buffs) bf.appendChild(h('div', { class: 'buff' }, `${names[b.id] ?? b.id} ${Math.ceil(b.t)}s`));
+      for (const b of hero.buffs) bf.appendChild(h('div', { class: 'buff' }, `${b.name ?? names[b.id] ?? b.id} ${Math.ceil(b.t)}s`));
     }
     // minimap
     this.mapT -= dt;
     if (this.mapT <= 0) {
       this.mapT = 0.2;
       const mm = $('#minimap') as HTMLCanvasElement;
-      if (mm) r.drawMap(mm.getContext('2d')!, g, mm.width, mm.height, 3.2, false);
-      if (this.mapOpen) { const big = $('#mapov canvas') as HTMLCanvasElement; if (big) r.drawMap(big.getContext('2d')!, g, big.width, big.height, 7, true); }
+      const hd = this.hudDpr();
+      if (mm) { const mc = mm.getContext('2d')!; mc.setTransform(hd, 0, 0, hd, 0, 0); r.drawMap(mc, g, mm.width / hd, mm.height / hd, 3.2, false); }
+      if (this.mapOpen) { const big = $('#mapov canvas') as HTMLCanvasElement; if (big) { const bc = big.getContext('2d')!; bc.setTransform(hd, 0, 0, hd, 0, 0); r.drawMap(bc, g, big.width / hd, big.height / hd, 7, true); } }
     }
     // touch interact prompt
     if (this.touchMode) this.updateInteract();
@@ -593,8 +722,8 @@ export class App {
     this.sel = null;
     if (p === 'inv') this.panelR = this.panelR ? null : 'inv';
     else this.panelL = this.panelL === p ? null : p;
-    if ((this.touchMode || window.innerWidth < 820) && p !== 'inv' && this.panelL) this.panelR = null;
-    if ((this.touchMode || window.innerWidth < 820) && p === 'inv' && this.panelR && (this.panelL === 'char' || this.panelL === 'skills')) this.panelL = null;
+    if ((this.touchMode || this.vw < 820) && p !== 'inv' && this.panelL) this.panelR = null;
+    if ((this.touchMode || this.vw < 820) && p === 'inv' && this.panelR && (this.panelL === 'char' || this.panelL === 'skills')) this.panelL = null;
     this.audio.play('open');
     this.refresh(true);
   }
@@ -703,10 +832,10 @@ export class App {
     const price: PriceMode = where === 'shop' ? 'buy' : where === 'inv' && this.panelL === 'shop' ? 'sell' : 'none';
     tip.innerHTML = this.tipHtml(it, price, where === 'equip');
     tip.classList.remove('hidden');
-    const r = anchor.getBoundingClientRect();
+    const r = this.localRect(anchor);
     const tw = tip.offsetWidth, th = tip.offsetHeight;
-    let x = r.left - tw - 8; if (x < 4) x = r.right + 8; if (x + tw > window.innerWidth - 4) x = Math.max(4, window.innerWidth - tw - 4);
-    let y = r.top; if (y + th > window.innerHeight - 4) y = Math.max(4, window.innerHeight - th - 4);
+    let x = r.left - tw - 8; if (x < 4) x = r.right + 8; if (x + tw > this.vw - 4) x = Math.max(4, this.vw - tw - 4);
+    let y = r.top; if (y + th > this.vh - 4) y = Math.max(4, this.vh - th - 4);
     tip.style.left = `${x}px`; tip.style.top = `${y}px`;
   }
   hideTip(): void { $('#tip')?.classList.add('hidden'); }

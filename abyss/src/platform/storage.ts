@@ -30,6 +30,10 @@ function del(key: string): void {
   try { if (storageOk) { localStorage.removeItem(PREFIX + key); localStorage.removeItem(PREFIX + key + '.bak'); } } catch { /* ignore */ }
 }
 
+/** Raw access for other persisted records (profile). */
+export const readKey = (key: string): string | null => get(key);
+export const writeKey = (key: string, v: string): boolean => set(key, v);
+
 function parseHero(raw: string | null): SaveData | null {
   if (!raw) return null;
   try {

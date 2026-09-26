@@ -28,7 +28,7 @@ async function run(name, viewport, opts = {}) {
   await page.screenshot({ path: join(out, `${name}-01-title.png`) });
   const cls = opts.cls ?? 'warrior';
   const idx = { warrior: 0, rogue: 1, sorcerer: 2 }[cls];
-  await page.locator('.ccard').nth(idx).locator('.newrow button').click();
+  await page.locator('.ctile').nth(idx).click(); await page.locator('.detail .newrow button').click();
   await page.waitForSelector('#cv');
   await page.waitForTimeout(800);
   await page.screenshot({ path: join(out, `${name}-02-town.png`) });
@@ -108,8 +108,8 @@ async function flows() {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForSelector('#title');
-  await page.locator('.ccard').nth(0).locator('.namein').fill('테스트');
-  await page.locator('.ccard').nth(0).locator('.newrow button').click();
+  await page.locator('.ctile').nth(0).click(); await page.locator('.detail .namein').fill('테스트');
+  await page.locator('.detail .newrow button').click();
   await page.waitForSelector('#cv');
   await page.waitForTimeout(500);
   const scr = (p) => page.evaluate(({ x, y }) => { const c = window.__app.r.cam; return { x: c.sxOf(x, y), y: c.syOf(x, y) }; }, p);
@@ -219,9 +219,9 @@ async function flows() {
   const lvlBefore = await page.evaluate(() => { const g = window.__app.g; g.hero.level = 7; g.hero.gold = 1234; window.__app.saveNow(); return window.__app.lastSaveOk; });
   await page.reload();
   await page.waitForSelector('#title');
-  const cont = await page.locator('.ccard').nth(0).locator('button.primary').first().innerText();
+  const cont = await page.locator('.detail button.primary').first().innerText();
   L(`flows: saved=${lvlBefore} continue button="${cont.replace(/\n/g, ' ')}"`);
-  await page.locator('.ccard').nth(0).locator('button.primary').first().click();
+  await page.locator('.detail button.primary').first().click();
   await page.waitForTimeout(500);
   const loaded = await page.evaluate(() => ({ lvl: window.__app.g.hero.level, gold: window.__app.g.hero.gold, name: window.__app.g.hero.name, weapon: window.__app.g.hero.equip.weapon?.name }));
   L(`flows: loaded ${JSON.stringify(loaded)}`);

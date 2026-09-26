@@ -230,7 +230,7 @@ export type GEvent =
   | { t: 'death' }
   | { t: 'zone'; floor: number; name: string }
   | { t: 'boss'; id: number; name: string }
-  | { t: 'bossDead'; name: string; final: boolean }
+  | { t: 'bossDead'; name: string; final: boolean; tpl: string; diff: number }
   | { t: 'pickup'; item: Item }
   | { t: 'itemDrop'; rarity: Rarity; x: number; y: number }
   | { t: 'shake'; v: number }

@@ -30,17 +30,19 @@ export class Input {
   get r() { return this.app.r!; }
 
   attach(cv: HTMLCanvasElement): void {
-    cv.addEventListener('mousemove', (e) => { this.mouse.x = e.offsetX; this.mouse.y = e.offsetY; this.mouse.inside = true; this.mouse.shift = e.shiftKey; });
+    // all positions are in app-local css pixels (the app may be rotated to force landscape on phones)
+    cv.addEventListener('mousemove', (e) => { const p = this.app.toLocal(e.clientX, e.clientY); this.mouse.x = p.x; this.mouse.y = p.y; this.mouse.inside = true; this.mouse.shift = e.shiftKey; });
     cv.addEventListener('mouseleave', () => { this.mouse.inside = false; });
     cv.addEventListener('mousedown', (e) => {
       if (performance.now() - this.lastTouchAt < 800) return;
       this.app.unlockAudio();
-      this.mouse.x = e.offsetX; this.mouse.y = e.offsetY; this.mouse.inside = true; this.mouse.shift = e.shiftKey;
+      const p = this.app.toLocal(e.clientX, e.clientY);
+      this.mouse.x = p.x; this.mouse.y = p.y; this.mouse.inside = true; this.mouse.shift = e.shiftKey;
       this.app.hideTip();
       if (e.button === 2) { this.mouse.right = true; this.castAtCursor(this.g.hero.rmbSkill); return; }
       if (e.button !== 0) return;
       this.mouse.down = true;
-      this.clickAt(e.offsetX, e.offsetY, e.shiftKey, true);
+      this.clickAt(p.x, p.y, e.shiftKey, true);
     });
     window.addEventListener('mouseup', (e) => { if (e.button === 0) { this.mouse.down = false; this.mouse.target = null; } if (e.button === 2) this.mouse.right = false; });
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -54,9 +56,8 @@ export class Input {
       this.app.setTouchMode(true);
       e.preventDefault();
       for (const t of Array.from(e.changedTouches)) {
-        const rect = cv.getBoundingClientRect();
-        const x = t.clientX - rect.left, y = t.clientY - rect.top;
-        if (!this.joy.active && x < rect.width * 0.42 && y > rect.height * 0.45) { this.joy = { id: t.identifier, cx: x, cy: y, x, y, active: true }; this.app.showJoy(this.joy); continue; }
+        const { x, y } = this.app.toLocal(t.clientX, t.clientY);
+        if (!this.joy.active && x < this.app.vw * 0.42 && y > this.app.vh * 0.45) { this.joy = { id: t.identifier, cx: x, cy: y, x, y, active: true }; this.app.showJoy(this.joy); continue; }
         this.clickAt(x, y, false, false);
       }
     }, { passive: false });
@@ -64,8 +65,8 @@ export class Input {
       e.preventDefault();
       for (const t of Array.from(e.changedTouches)) {
         if (t.identifier !== this.joy.id) continue;
-        const rect = cv.getBoundingClientRect();
-        this.joy.x = t.clientX - rect.left; this.joy.y = t.clientY - rect.top;
+        const p = this.app.toLocal(t.clientX, t.clientY);
+        this.joy.x = p.x; this.joy.y = p.y;
         this.app.showJoy(this.joy);
       }
     }, { passive: false });
@@ -80,13 +81,12 @@ export class Input {
     el.addEventListener('touchstart', (e) => {
       e.preventDefault(); this.lastTouchAt = performance.now(); this.app.unlockAudio();
       const t = e.changedTouches[0];
-      const rect = this.app.cv!.getBoundingClientRect();
-      const x = t.clientX - rect.left, y = t.clientY - rect.top;
+      const { x, y } = this.app.toLocal(t.clientX, t.clientY);
       this.joy = { id: t.identifier, cx: x, cy: y, x, y, active: true }; this.app.showJoy(this.joy);
     }, { passive: false });
     el.addEventListener('touchmove', (e) => {
       e.preventDefault();
-      for (const t of Array.from(e.changedTouches)) if (t.identifier === this.joy.id) { const rect = this.app.cv!.getBoundingClientRect(); this.joy.x = t.clientX - rect.left; this.joy.y = t.clientY - rect.top; this.app.showJoy(this.joy); }
+      for (const t of Array.from(e.changedTouches)) if (t.identifier === this.joy.id) { const p = this.app.toLocal(t.clientX, t.clientY); this.joy.x = p.x; this.joy.y = p.y; this.app.showJoy(this.joy); }
     }, { passive: false });
     const end = (e: TouchEvent) => { for (const t of Array.from(e.changedTouches)) if (t.identifier === this.joy.id) { this.joy.active = false; this.app.showJoy(null); this.g?.setIntent(null); } };
     el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
