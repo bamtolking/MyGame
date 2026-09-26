@@ -63,7 +63,7 @@ export const CHARACTERS: CharacterDef[] = [
     id: 'eomuk', name: '어묵이', title: '뜨끈한 국물', shape: 'fishcake',
     desc: '국물 방울막이 다음 장애물 한 번을 막아 줘요. 출발할 때부터 차 있어요.',
     skillName: '국물 방울막', skillDesc: '35초마다 방울막 1개 (장애물 피격 1회 막음, 구덩이는 제외)',
-    maxHp: 85, drainMul: 1, maxJumps: 2, glide: 0, magnetR: 0, revive: 0,
+    maxHp: 80, drainMul: 1, maxJumps: 2, glide: 0, magnetR: 0, revive: 0,
     skill: { kind: 'shield', every: 35, startCharged: true }, unlock: { kind: 'rank', n: 12 },
     palette: { body: '#f0c98a', shade: '#c99a5a', accent: '#7a5a3a', cheek: '#ffab9a' },
   },
