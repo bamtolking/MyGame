@@ -25,7 +25,7 @@ export interface ChunkDef {
 }
 
 export type HazardKind = 'spike' | 'tall' | 'hang';
-export type PickupKind = 'jelly' | 'big' | 'coin' | 'slotP' | 'slotQ' | 'slotL';
+export type PickupKind = 'jelly' | 'big' | 'coin' | 'slotP' | 'slotQ' | 'slotL' | 'slotB';
 
 export interface Solid { x0: number; x1: number; top: number; ground: boolean }
 export interface HazardGeom { kind: HazardKind; x0: number; x1: number; y0: number; y1: number }
@@ -40,7 +40,7 @@ export interface ParsedChunk {
   pickups: PickupGeom[];
 }
 
-const VALID = new Set(['=', '.', ' ', '-', '^', 'A', 'v', 'o', 'O', 'c', 'P', '?', 'L']);
+const VALID = new Set(['=', '.', ' ', '-', '^', 'A', 'v', 'o', 'O', 'c', 'P', '?', 'L', 'B']);
 
 export function parseChunk(def: ChunkDef): ParsedChunk {
   if (def.rows.length !== ROWS) throw new Error(`chunk ${def.id}: needs ${ROWS} rows, has ${def.rows.length}`);
@@ -78,6 +78,7 @@ export function parseChunk(def: ChunkDef): ParsedChunk {
         case 'P': pickups.push({ kind: 'slotP', x: cx, y: r * TILE + TILE / 2 }); break;
         case '?': pickups.push({ kind: 'slotQ', x: cx, y: r * TILE + TILE / 2 }); break;
         case 'L': pickups.push({ kind: 'slotL', x: cx, y: r * TILE + TILE / 2 }); break;
+        case 'B': pickups.push({ kind: 'slotB', x: cx, y: r * TILE + TILE / 2 }); break;
       }
     }
   }

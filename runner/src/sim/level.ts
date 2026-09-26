@@ -20,7 +20,7 @@ export function newLevel(stageLen: number): Level {
   return {
     chunks: [], solids: [], hazards: [], pickups: [], genX: 0, recent: [], nextId: 1,
     potionDebt: POTION_GAP_M * 0.6, powerDebt: POWER_GAP_M * 0.5, letterDebt: LETTER_GAP_M * 0.5,
-    chunksPlaced: 0, potionsPlaced: 0, retiredGroundM: 0, stageLen, finishX: Infinity, hazardRun: 0,
+    chunksPlaced: 0, potionsPlaced: 0, pouchesPlaced: 0, retiredGroundM: 0, stageLen, finishX: Infinity, hazardRun: 0,
   };
 }
 
@@ -90,6 +90,10 @@ export function placeChunk(s: RunState, p: ParsedChunk, tier: number, biome: str
           const kinds: PowerKind[] = ['giant', 'dash', 'magnet'];
           lv.pickups.push({ ...base, type: 'power', power: kinds[rngInt(s.rng, kinds.length)] });
         } else lv.pickups.push({ ...base, type: 'big' });
+        break;
+      case 'slotB':
+        if (s.mode === 'stage' && !sky) lv.pickups.push({ ...base, type: 'pouch', pouch: lv.pouchesPlaced++ });
+        else lv.pickups.push({ ...base, type: 'coin' });
         break;
       case 'slotL':
         if (!sky && lv.letterDebt >= LETTER_GAP_M && s.mode !== 'tutorial' && s.bonusStage === 'none' && s.letters.some(v => !v)) {

@@ -15,6 +15,7 @@ export const LOW_HP_FRAC = 0.2;
 
 // ---- Items ----
 export const POTION_HEAL = 14;
+export const MINI_POTION_HEAL = 8;       // 꿀물 한 방울 (companion 깍순이)
 export const BIG_POTION_HEAL = 32;
 export const POTION_GAP_M = 170;        // a potion slot is filled once this many metres passed since the last potion
 export const BIG_POTION_EVERY = 4;      // every Nth potion is a big one
@@ -27,7 +28,7 @@ export const MAGNET_R = 190;
 export const MAGNET_PULL_V = 1100;
 
 // ---- Bonus time ----
-export const BONUS_WORD = ['보', '너', '스', '타', '임'];
+export const BONUS_WORD = ['보', '름', '달', '잔', '치'];   // 보름달 잔치 (full-moon feast)
 export const BONUS_T = 10;
 export const SUPER_BONUS_MUL = 1.5;     // entering bonus below LOW_HP_FRAC lasts longer…
 export const SUPER_BONUS_HEAL = 0.15;   // …and heals this fraction of max HP at the end
@@ -40,6 +41,7 @@ export const FLY_MAX_V = 700;
 // ---- Scoring (flat — nothing is ever upgraded) ----
 export const SCORE = {
   jelly: 10, big: 60, coin: 5, letter: 50, bonusJelly: 20, smash: 30, nearMiss: 25, perMeter: 1,
+  moonCake: 500, line: 100, pouch: 200,
 } as const;
 export const STREAK_STEP = 10;          // every 10 hazards cleared without a hit…
 export const STREAK_BONUS = 0.1;        // …jelly score +10 %,

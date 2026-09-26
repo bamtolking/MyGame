@@ -10,7 +10,7 @@ import { CHAR_BY_ID, type CharacterDef } from '../data/characters';
 import { STAGES } from '../data/stages';
 import { BIOME_ORDER } from '../data/biomes';
 import { seedRng } from './rng';
-import { newBody, stepBody, hurtbox, boxesOverlap } from './body';
+import { newBody, stepBody, hurtbox, hazardOverlap } from './body';
 import { newLevel, ensureLevel, chunkAt, restartStreamAt, placeChunk, PARSED_BY_ID } from './level';
 import type { RunState, RunInput, PowerKind, Pickup, Hazard, Mode, SimEvent } from './types';
 
@@ -164,8 +164,8 @@ function collideHazards(s: RunState): void {
       continue;
     }
     if (h.passed) continue;
-    if (!boxesOverlap(near, h)) continue;
-    if (!boxesOverlap(hb, h)) { if (s.iframes <= 0) h.near = true; continue; }
+    if (!hazardOverlap(near, h)) continue;
+    if (!hazardOverlap(hb, h)) { if (s.iframes <= 0) h.near = true; continue; }
     if (powered) {
       h.broken = true; s.stats.smashed++; s.score += SCORE.smash;
       emit(s, { t: 'smash', kind: h.kind, x: (h.x0 + h.x1) / 2, y: Math.max(h.y0, 0) + 20 });

@@ -1,6 +1,6 @@
 // Player kinematics — the ONE implementation used by both the live run and the fairness validator.
 import {
-  GROUND_Y, GRAVITY, JUMP_V, DJUMP_V, FASTFALL_MUL, MAX_FALL_V, COYOTE_T, JUMP_BUFFER_T,
+  SPIKE_TIP_W, GROUND_Y, GRAVITY, JUMP_V, DJUMP_V, FASTFALL_MUL, MAX_FALL_V, COYOTE_T, JUMP_BUFFER_T,
   STAND_W, STAND_H, SLIDE_W, SLIDE_H, FOOT_W,
 } from '../data/physics';
 import type { Solid } from './chunk';
@@ -112,4 +112,15 @@ export function stepBody(b: Body, inp: BodyInput, dx: number, dt: number, q: Sol
 
 export function boxesOverlap(a: { x0: number; x1: number; y0: number; y1: number }, b: { x0: number; x1: number; y0: number; y1: number }): boolean {
   return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+}
+
+/** Hazard collision shared by the run and the validator. Spikes are two stacked boxes (wide base + narrow
+ *  tip) so the empty corners beside the triangle never hit; everything else is its AABB. */
+export interface HazBox { x0: number; x1: number; y0: number; y1: number; kind?: string }
+export function hazardOverlap(a: { x0: number; x1: number; y0: number; y1: number }, h: HazBox): boolean {
+  if (!(a.x0 < h.x1 && a.x1 > h.x0 && a.y0 < h.y1 && a.y1 > h.y0)) return false;
+  if (h.kind !== 'spike') return true;
+  const mid = (h.y0 + h.y1) / 2; const cx = (h.x0 + h.x1) / 2;
+  if (a.y1 > mid) return true;                                   // base: full width (already overlapping x)
+  return a.x0 < cx + SPIKE_TIP_W / 2 && a.x1 > cx - SPIKE_TIP_W / 2; // tip: narrow
 }

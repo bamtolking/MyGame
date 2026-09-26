@@ -5,10 +5,10 @@
 // ground and speed only changes at those boundaries, any sequence of proven chunks is crossable hit-free.
 // The balance bot reuses `solve` as its planner.
 import { DT, TILE, GROUND_Y, VALIDATE_PAD, VALIDATE_INPUT_STEP, PICK_PAD, MAX_JUMPS } from '../data/physics';
-import { newBody, stepBody, hurtbox, boxesOverlap, type Body, type BodyCaps } from './body';
+import { newBody, stepBody, hurtbox, hazardOverlap, type Body, type BodyCaps } from './body';
 import type { ParsedChunk, Solid } from './chunk';
 
-export interface Box { x0: number; x1: number; y0: number; y1: number }
+export interface Box { x0: number; x1: number; y0: number; y1: number; kind?: string }
 export interface Decision { jump: boolean; slide: boolean }
 export const CHOICES: Decision[] = [
   { jump: false, slide: false }, { jump: true, slide: false }, { jump: false, slide: true }, { jump: true, slide: true },
@@ -63,7 +63,7 @@ export function solve(solids: readonly Solid[], hazards: readonly Box[], start: 
         explored++;
         if (b.y > GROUND_Y + 160) { dead = true; break; }
         const hb = hurtbox(b, pad);
-        for (const h of hazards) if (h.x1 > hb.x0 && h.x0 < hb.x1 && boxesOverlap(hb, h)) { dead = true; break; }
+        for (const h of hazards) if (h.x1 > hb.x0 && h.x0 < hb.x1 && hazardOverlap(hb, h)) { dead = true; break; }
         if (dead) break;
         if (!got && must) {
           const pb = hurtbox(b, PICK_PAD - pad);

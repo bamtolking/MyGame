@@ -12,7 +12,8 @@ export interface Pose {
   alpha: number;
 }
 export interface Palette { body: string; shade: string; accent: string; cheek: string }
-export type Shape = 'disc' | 'fish' | 'square' | 'skewer' | 'star' | 'ball' | 'oval';
+export type { Shape } from '../data/characters';
+import type { Shape } from '../data/characters';
 
 export function drawCharacter(c: CanvasRenderingContext2D, shape: Shape, pal: Palette, p: Pose): void {
   c.save();
@@ -76,7 +77,7 @@ function bodyPath(c: CanvasRenderingContext2D, shape: Shape, pal: Palette, cy: n
       for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { c.beginPath(); c.arc(-12 + i * 8, cy - 2 + j * 9, 4, 0.2 * Math.PI, 0.8 * Math.PI); c.stroke(); }
       break;
     }
-    case 'square': { // 인절미: soft rounded square dusted with bean powder
+    case 'fishcake': { // 어묵 (placeholder: wavy block): soft rounded square dusted with bean powder
       c.fillStyle = pal.body; rr(c, -25, cy - 25, 50, 48, 14); c.fill(); c.stroke();
       c.fillStyle = pal.shade; for (let i = 0; i < 14; i++) { const a = i * 2.4; c.beginPath(); c.arc(Math.cos(a) * (8 + i), cy + Math.sin(a) * (6 + i * 0.9), 1.4, 0, Math.PI * 2); c.fill(); }
       break;
@@ -96,13 +97,13 @@ function bodyPath(c: CanvasRenderingContext2D, shape: Shape, pal: Palette, cy: n
       c.fillStyle = 'rgba(255,255,255,0.18)'; c.beginPath(); c.arc(-9, cy - 12, 7, 0, Math.PI * 2); c.fill();
       break;
     }
-    case 'ball': { // 꿀떡: glossy ball with honey sheen
+    case 'potato': { // 군고구마 (placeholder): glossy ball with honey sheen
       c.fillStyle = pal.body; c.beginPath(); c.arc(0, cy + 2, 25, 0, Math.PI * 2); c.fill(); c.stroke();
       c.fillStyle = pal.shade; c.beginPath(); c.arc(0, cy + 2, 25, 0.1 * Math.PI, 0.9 * Math.PI); c.fill();
       c.fillStyle = 'rgba(255,255,255,0.45)'; c.beginPath(); c.ellipse(-10, cy - 10, 7, 4, -0.6, 0, Math.PI * 2); c.fill();
       break;
     }
-    case 'oval': default: { // 계란빵: oval bread with an egg on top
+    default: { // fallback: oval bread with an egg on top
       c.fillStyle = pal.body; c.beginPath(); c.ellipse(0, cy + 2, 24, 26, 0, 0, Math.PI * 2); c.fill(); c.stroke();
       c.fillStyle = '#fff8e6'; c.beginPath(); c.ellipse(0, cy - 16, 17, 9, 0, 0, Math.PI * 2); c.fill();
       c.fillStyle = '#ffb627'; c.beginPath(); c.arc(3, cy - 17, 6, 0, Math.PI * 2); c.fill();

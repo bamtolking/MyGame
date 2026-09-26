@@ -33,7 +33,8 @@ export const PICK_PAD = 16;             // pickups are collected this far outsid
 export const GIANT_SCALE = 2.1;
 
 // ---- Hazard geometry (relative to its grid cell; bottom-aligned unless noted) ----
-export const SPIKE_W = 30, SPIKE_H = 36;      // '^' single jump
+export const SPIKE_W = 30, SPIKE_H = 36;      // '^' single jump — compound hitbox: base 30×18 + tip 12×18
+export const SPIKE_TIP_W = 12;                // (no invisible hit area beside the triangle's tip)
 export const TALL_W = 34, TALL_H = 176;       // 'A' taller than a single-jump apex → needs the air jump
 export const HANG_W = 40, HANG_BOTTOM_INSET = 6; // 'v' hangs from above; bottom = cell bottom − 6 (row 9 → y 394)
 export const PLATFORM_THICK = 18;             // '-' one-way shelf, drawn thickness only
@@ -41,7 +42,6 @@ export const PLATFORM_THICK = 18;             // '-' one-way shelf, drawn thickn
 // ---- Speed tiers (px/s). Difficulty tier t runs at SPEED_TIERS[t]. ----
 export const SPEED_TIERS = [420, 460, 500, 545, 590, 640] as const;
 export const MAX_TIER = SPEED_TIERS.length - 1;
-export const SPEED_EASE = 60;           // px/s² — how fast actual speed approaches the target
 
 // ---- Fairness validator margins ----
 export const VALIDATE_PAD = 5;          // hurtbox inflated by this on every side while validating

@@ -4,7 +4,7 @@ import type { Body } from './body';
 import type { HazardKind, Solid } from './chunk';
 
 export type PowerKind = 'giant' | 'dash' | 'magnet';
-export type PickupType = 'jelly' | 'big' | 'coin' | 'potion' | 'bigPotion' | 'power' | 'letter' | 'bonusJelly';
+export type PickupType = 'jelly' | 'big' | 'coin' | 'potion' | 'bigPotion' | 'miniPotion' | 'power' | 'letter' | 'bonusJelly' | 'moonCake' | 'pouch';
 export type Mode = 'endless' | 'stage' | 'daily' | 'tutorial';
 export type Phase = 'countdown' | 'run' | 'dying' | 'over' | 'clear';
 export type BonusStage = 'none' | 'lift' | 'sky';
@@ -26,6 +26,7 @@ export interface Pickup {
   x: number; y: number;
   power?: PowerKind;
   letter?: number;       // index into the bonus word
+  pouch?: number;        // golden pouch index 0..2 (stage only)
   taken: boolean;
   pulled: boolean;       // being magnet-pulled
   seen?: boolean;        // counted into jelliesSeen
@@ -55,6 +56,7 @@ export interface Level {
   letterDebt: number;    // m since the last letter was placed
   chunksPlaced: number;
   potionsPlaced: number;
+  pouchesPlaced: number;
   retiredGroundM: number; // ground metres of chunks already pruned behind the player
   stageLen: number;      // m; 0 = endless
   finishX: number;       // world x of the finish line (stage), else Infinity

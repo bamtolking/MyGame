@@ -25,7 +25,7 @@ interface RunCtx {
   s: RunState; cfg: RunConfig;
   ghost: RunState | null; ghostLog: number[]; ghostIdx: number; ghostBits: number;
   acc: number; lastT: number; prevX: number; prevY: number;
-  paused: boolean; ended: boolean; endT: number; reward: RunReward | null; lastCount: number;
+  paused: boolean; ended: boolean; endT: number; reward: RunReward | null; lastCount: number; resumeT: number;
 }
 
 export class App {
@@ -306,7 +306,7 @@ export class App {
       ghost = newRun({ mode: g.mode as Mode, seed: g.seed, charId: g.charId, partnerId: g.partnerId, stageId: g.stageId, assist: g.assist });
       log = g.log;
     }
-    this.run = { s, cfg, ghost, ghostLog: log, ghostIdx: 0, ghostBits: 0, acc: 0, lastT: performance.now(), prevX: s.body.x, prevY: s.body.y, paused: false, ended: false, endT: 0, reward: null, lastCount: -1 };
+    this.run = { s, cfg, ghost, ghostLog: log, ghostIdx: 0, ghostBits: 0, acc: 0, lastT: performance.now(), prevX: s.body.x, prevY: s.body.y, paused: false, ended: false, endT: 0, reward: null, lastCount: -1, resumeT: 0 };
     this.buildRunDom();
     this.input.reset(); this.input.enabled = true;
     const bi = BIOME_BY_ID[s.biome]; if (bi) this.audio.setMusic({ bpm: bi.bpm, key: bi.key });
@@ -395,8 +395,9 @@ export class App {
   private resume(): void {
     const rc = this.run; if (!rc) return;
     this.audio.resume();
-    // short countdown so nothing happens the instant you tap "continue"
-    if (rc.s.phase === 'run') { rc.s.phase = 'countdown'; rc.s.countdown = 1.0; }
+    // short countdown so nothing happens the instant you tap "continue". Done here (not in the sim) so the
+    // input log / ghost replay stays step-exact.
+    if (rc.s.phase === 'run') rc.resumeT = 1.0;
     rc.paused = false; rc.acc = 0; rc.lastT = performance.now();
   }
 
@@ -410,7 +411,9 @@ export class App {
     if (real > 0.25 && !rc.paused && !rc.ended && rc.s.phase === 'run') { this.setPaused(true); real = 0; }
     real = Math.min(real, 0.1);
     const s = rc.s;
-    if (!rc.paused) {
+    if (rc.resumeT > 0 && !rc.paused) { rc.resumeT = Math.max(0, rc.resumeT - real); r.resumeCount = rc.resumeT; if (rc.resumeT === 0) this.audio.play('go'); }
+    else r.resumeCount = 0;
+    if (!rc.paused && rc.resumeT <= 0) {
       rc.acc += real * Math.max(0.5, Math.min(1, this.p.settings.gameSpeed || 1));
       let n = 0;
       while (rc.acc >= DT && n < MAX_STEPS) {
