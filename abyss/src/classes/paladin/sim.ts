@@ -8,7 +8,7 @@ import {
   meleeTargets, monstersNear, registerSkills, roll, sfx, shake, spawnProj, swingFx,
   type Game, type Monster, type SkillCtx,
 } from '../../sim/kit';
-import { AURA, CHARGE, HAMMER, JUDGMENT, ZEAL_AT } from './shared';
+import { AURA, CHARGE, HAMMER, JUDGMENT, ZEAL_AT, chargeEase } from './shared';
 
 const TAU = Math.PI * 2;
 const dist = (m: { x: number; y: number }, x: number, y: number): number => Math.hypot(m.x - x, m.y - y);
@@ -42,7 +42,7 @@ function zealCatchUp(c: SkillCtx, upTo: number): void {
 
 // ------------------------------------------------------------------ blessed hammer
 // The hammer's spiral state lives in p.data: centre (cx, cy), start angle (a0), swept angle (th), spin (+1/-1).
-PROJ_MOTION.pl_hammer = (_g, p, dt) => {
+PROJ_MOTION.pl_hammer = (g, p, dt) => {
   const d = p.data;
   if (!d || dt <= 0) return;
   const total = HAMMER.turns * TAU;
@@ -52,8 +52,12 @@ PROJ_MOTION.pl_hammer = (_g, p, dt) => {
   d.th = Math.min(total, (d.th ?? 0) + (HAMMER.speed * dt) / Math.max(0.9, radius(d.th ?? 0)));
   const r = radius(d.th), ang = d.a0 + d.spin * d.th;
   const tx = d.cx + Math.cos(ang) * r, ty = d.cy + Math.sin(ang) * r;
+  // the engine ends any hero projectile that enters a barrel/crate tile; the spectral hammer smashes them
+  // along its path instead and keeps spinning (0.35 + 0.4 covers the whole tile the prop stands on)
+  const step = Math.hypot(tx - p.x, ty - p.y), n = Math.max(1, Math.ceil(step / 0.25));
+  for (let i = 1; i <= n; i++) breakPropsNear(g, p.x + ((tx - p.x) * i) / n, p.y + ((ty - p.y) * i) / n, 0.35);
   p.vx = (tx - p.x) / dt; p.vy = (ty - p.y) / dt;
-  if (d.th >= total) p.life = Math.min(p.life, dt * 0.5);
+  if (d.th >= total && !d.end) { d.end = 1; p.life = Math.min(p.life, dt * 0.5); fx(g, 'pl_hammerEnd', tx, ty); }
 };
 PROJ_HIT.pl_hammer = (g, p, m) => {
   fx(g, 'pl_hammerHit', m.x, m.y, { x2: p.x, y2: p.y });
@@ -70,10 +74,33 @@ function ensureAura(g: Game): void {
   addArea(g, 'pl_auraRing', 'hero', h.x, h.y, r, b.t, emptyDmg(), { follow: true, tick: AURA.tick, tickT: AURA.tick, data: { noDmg: 1, pct: b.v } });
 }
 
+/**
+ * The buff outlives the floor but its ring does not, and the engine has no per-tick hero hook (see engineRequests).
+ * Every world change (stairs, waypoint, portal, town) goes through Game.placeHero, so the first aura cast wraps it
+ * on the live game's prototype to re-light the ring as soon as the paladin arrives. Idempotent; a no-op when the
+ * engine renames the method (the ring then comes back on the next attack, as before).
+ */
+const PLACE_HOOK = Symbol.for('abyss.pl_aura.placeHero');
+function hookWorldChange(g: Game): void {
+  const proto = Object.getPrototypeOf(g) as Record<string | symbol, unknown>;
+  const orig = proto.placeHero;
+  if (proto[PLACE_HOOK] || typeof orig !== 'function') return;
+  proto[PLACE_HOOK] = true;
+  proto.placeHero = function (this: Game, ...args: unknown[]): unknown {
+    const r = (orig as (...a: unknown[]) => unknown).apply(this, args);
+    ensureAura(this);
+    return r;
+  };
+}
+
 AREA_TICK.pl_auraRing = (g, a) => {
   const h = g.hero;
-  // the ring lives exactly as long as the buff (death, recast or expiry end it)
-  if (h.dead || !h.buffs.some((b) => b.id === 'pl_aura')) { a.t = a.dur + 1; return; }
+  // the ring lives exactly as long as the buff (death or expiry end it; a recast, even while this ring sat
+  // frozen on a floor the paladin had left, renews its time and burn strength)
+  const b = h.buffs.find((q) => q.id === 'pl_aura');
+  if (h.dead || !b) { a.t = a.dur + 1; return; }
+  a.dur = a.t + b.t;
+  if (b.v > 1) a.data.pct = b.v;
   for (const m of monstersNear(g, a.x, a.y, a.r)) {
     hurtMonster(g, m, roll(g, a.data.pct, 'fire', 'spell'));
     fx(g, 'pl_auraBurn', m.x, m.y);
@@ -179,6 +206,7 @@ registerSkills({
   // ---- holy aura: armour / resistances / regeneration for 15 s, and a burning ring around the hero
   pl_aura: {
     apply({ g, h, def, rank }) {
+      hookWorldChange(g);
       addBuff(g, 'pl_aura', '신성한 오라', AURA.dur, { armorPct: 30 + 3 * rank, resAll: 10, hpRegen: 1 + 0.3 * rank }, '#ffd870');
       // the burn strength rides on the buff (v is unused for class buffs) so the ring can be restored on a new floor
       const b = h.buffs.find((q) => q.id === 'pl_aura');
@@ -191,11 +219,16 @@ registerSkills({
     },
   },
 
-  // ---- charge: dash (built-in movement) that bowls enemies aside, then a heavy landing burst
+  // ---- charge: a shield-first rush to the dash point (moved here, not by the engine's ghostly dash act) that
+  //      bowls enemies aside, then a heavy landing burst
   pl_charge: {
     tick(c) {
       const { g, h, a } = c;
       const d = (a.data ??= {});
+      const kk = chargeEase(a.t / Math.max(1e-3, a.dur));
+      h.x = a.fx + (a.tx - a.fx) * kk; h.y = a.fy + (a.ty - a.fy) * kk;
+      if (Math.hypot(a.tx - a.fx, a.ty - a.fy) > 0.01) h.facing = Math.atan2(a.ty - a.fy, a.tx - a.fx);
+      if (!d.f) fx(g, 'pl_chargeStart', a.fx, a.fy, { x2: a.tx, y2: a.ty, r: a.dur });
       for (const m of g.world.monsters) {
         if (m.dead || a.ids?.includes(m.id)) continue;
         if (dist(m, h.x, h.y) <= h.r + CHARGE.contact + m.r) chargeHit(c, m);
@@ -206,6 +239,7 @@ registerSkills({
     },
     apply(c) {
       const { g, h, a } = c;
+      h.x = a.tx; h.y = a.ty;
       ensureAura(g);
       let n = a.ids?.length ?? 0;
       for (const m of monstersNear(g, h.x, h.y, CHARGE.burst)) if (!a.ids?.includes(m.id)) { chargeHit(c, m); n++; }

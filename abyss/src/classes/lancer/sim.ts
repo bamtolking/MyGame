@@ -41,13 +41,25 @@ function weaponTier(g: Game): number {
 }
 
 // ------------------------------------------------------------------ lightning javelin
-// Detects the end of the flight (range or a wall) so the renderer can burst the spear into sparks there.
+// Detects the end of the flight so the renderer can burst the spear into sparks there: its range, a wall, or a
+// barrel / crate (the core projectile update smashes those and stops the spear). Walks the same 0.2-tile sub-steps.
+const smashable = (g: Game, x: number, y: number): boolean => {
+  const tx = Math.floor(x), ty = Math.floor(y);
+  return g.world.props.some((q) => !q.used && q.blocks && (q.kind === 'barrel' || q.kind === 'crate') && Math.floor(q.x) === tx && Math.floor(q.y) === ty);
+};
 PROJ_MOTION.ln_javelin = (g, p, dt) => {
   const d = (p.data ??= {});
   if (d.end) return;
-  const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
-  const wall = !clear(g, p.x, p.y, nx, ny);
-  if (wall || p.life <= 0) { d.end = 1; fx(g, 'ln_javelinEnd', wall ? p.x : nx, wall ? p.y : ny, { x2: p.x + p.vx, y2: p.y + p.vy, n: wall ? 1 : 0 }); }
+  const end = (x: number, y: number, hard: number): void => { d.end = 1; fx(g, 'ln_javelinEnd', x, y, { x2: x + p.vx, y2: y + p.vy, n: hard }); };
+  if (p.life <= 0) { end(p.x, p.y, 0); return; } // out of range: it does not move this tick
+  const n = Math.max(1, Math.ceil((Math.hypot(p.vx, p.vy) * dt) / 0.2));
+  let x = p.x, y = p.y;
+  for (let s = 1; s <= n; s++) {
+    const nx = p.x + (p.vx * dt * s) / n, ny = p.y + (p.vy * dt * s) / n;
+    if (!clear(g, x, y, nx, ny)) { end(x, y, 1); return; }
+    if (smashable(g, nx, ny)) { end(nx, ny, 1); return; }
+    x = nx; y = ny;
+  }
 };
 // Every enemy the spear passes through sends lightning to the two nearest other enemies around it.
 PROJ_HIT.ln_javelin = (g, p, m) => {

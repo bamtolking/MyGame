@@ -49,7 +49,8 @@ export const PALADIN: ClassPack = {
     {
       id: 'pl_charge', cls: 'paladin', name: '돌진', icon: 'pl_charge', req: 10, kind: 'move', range: 7, elem: 'phys', move: 'dash',
       mana: () => 8, cd: (r) => Math.max(2, 4 - 0.15 * r), pct: (r) => 180 + 20 * r,
-      timing: { kind: 'dash', dur: 0.32, hitAt: 0.99, invuln: 0.3 },
+      // 'skill' (not 'dash'): sim.ts moves the hero itself, so the knight stays solid instead of the ghostly dash look
+      timing: { kind: 'skill', dur: 0.32, hitAt: 0.99, invuln: 0.3 },
       desc: '방패를 앞세워 돌진하며 부딪히는 적을 밀쳐내고 기절시킵니다.',
       detail: (r) => [pct(180 + 20 * r), '기절 0.8초 · 최대 7칸', `재사용 ${Math.max(2, 4 - 0.15 * r).toFixed(1)}초`],
       ai: { minDist: 3, maxDist: 7 },

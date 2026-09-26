@@ -32,18 +32,27 @@ function forceCrit(g: Game, d: Dmg): Dmg {
 /** Nearest free spot on the line hero → (x,y) that the hero can see (sentries are tossed, not teleported). */
 function tossSpot(g: Game, x: number, y: number): { x: number; y: number } {
   const h = g.hero, w = g.world;
-  const dx = x - h.x, dy = y - h.y, d = Math.hypot(dx, dy);
+  let dx = x - h.x, dy = y - h.y, d = Math.hypot(dx, dy);
   if (!Number.isFinite(d)) return { x: h.x, y: h.y };
-  if (d < 0.05) return { x: h.x + Math.cos(h.facing) * 0.8, y: h.y + Math.sin(h.facing) * 0.8 };
+  // aimed at the hero's own feet: toss it a step ahead
+  if (d < 0.05) { dx = Math.cos(h.facing) * 0.9; dy = Math.sin(h.facing) * 0.9; d = 0.9; }
   let best = { x: h.x, y: h.y };
   for (let s = 0.25; s <= d + 1e-6; s += 0.25) {
     const px = h.x + (dx / d) * s, py = h.y + (dy / d) * s;
     if (!circleFree(w, px, py, 0.3) || !los(w, h.x, h.y, px, py)) break;
     best = { x: px, y: py };
   }
-  if (best.x === h.x && best.y === h.y) {
-    const nw = nearestWalkable(w, h.x + Math.cos(h.facing) * 0.6, h.y + Math.sin(h.facing) * 0.6, 1.5);
-    if (nw) best = nw;
+  if (Math.hypot(best.x - h.x, best.y - h.y) < 0.7) {
+    // blocked right away (wall, doorway): set it down beside the hero instead of under its feet
+    const a0 = Math.atan2(dy, dx);
+    for (const off of [0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9, Math.PI]) {
+      const px = h.x + Math.cos(a0 + off) * 0.9, py = h.y + Math.sin(a0 + off) * 0.9;
+      if (circleFree(w, px, py, 0.3) && los(w, h.x, h.y, px, py)) return { x: px, y: py };
+    }
+    if (best.x === h.x && best.y === h.y) {
+      const nw = nearestWalkable(w, h.x + Math.cos(h.facing) * 0.6, h.y + Math.sin(h.facing) * 0.6, 1.5);
+      if (nw) best = nw;
+    }
   }
   return best;
 }
@@ -112,6 +121,11 @@ registerSkills({
 
   // ---- shadow step: blink behind the target, then a guaranteed critical strike
   as_shadow: {
+    // only a target the assassin can actually see (no blinking through walls into the next room)
+    canCast(g, _x, _y, targetId) {
+      const m = g.world.monsters.find((q) => q.id === targetId && !q.dead);
+      return !!m && los(g.world, g.hero.x, g.hero.y, m.x, m.y);
+    },
     tick({ g, h, a }) {
       const st = (a.data ??= {});
       if (st.moved) return;

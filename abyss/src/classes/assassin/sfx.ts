@@ -28,7 +28,7 @@ registerSfx('as_stab', (r) => lay(0.55,
   [whoosh(r, 0.08, 1300, 6200, 2.2), 0, 0.8],
   [click(r, 0.004, 3600), 0.06, 0.6],
   [shing(r, 0.45, r.range(2900, 3300)), 0.065, 0.3],
-  [squelch(r, 0.1), 0.07, 0.4]), M(0.5, { ...COMBAT, cd: 40 }));
+  [squelch(r, 0.1), 0.07, 0.4]), M(0.6, { ...COMBAT, cd: 40 }));
 
 // ---- throwing knives: leather rustle, then a flurry of light blade whooshes
 registerSfx('cast_as_knives', (r) => {
@@ -85,11 +85,17 @@ registerSfx('as_sentryDeploy', (r) => {
   for (let i = 0; i < 3; i++) mix(b, tick(r, 3400), 0.27 + i * 0.035, 0.55);
   mix(b, svf(osc(0.6, 'saw', glide(90, 440, 0.5), swell(0.3, 0.25)), 'bp', glide(600, 2600, 0.5), 2), 0.32, 0.35);
   return b;
-}, M(0.5, { v: 2, cd: 100, verb: 0.2 }));
-registerSfx('as_sentryShot', (r) => lay(0.2,
+}, M(0.62, { v: 2, cd: 100, verb: 0.2 }));
+// each shot carries a short tail of the spinning blade ring; at one shot per 0.3 s the tails join into a steady whirr
+const whirr = (r: Rand, d: number): Float32Array => {
+  const f = r.range(150, 175), rate = r.range(32, 40);
+  return svf(osc(d, 'saw', f, (t) => (0.55 + 0.45 * Math.sin(t * Math.PI * 2 * rate)) * Math.min(1, t / 0.03) * Math.max(0, 1 - t / d)), 'bp', 1500, 1.4);
+};
+registerSfx('as_sentryShot', (r) => lay(0.34,
   [tick(r, 2600), 0, 0.8],
   [whoosh(r, 0.09, 1600, 6000, 2.2), 0.005, 0.7],
-  [svf(osc(0.12, 'saw', glide(520, 380, 0.1), perc(0.004, 0.1)), 'bp', 1800, 2), 0, 0.25]), M(0.2, { v: 4, pj: 0.06, cd: 45, max: 3 }));
+  [svf(osc(0.12, 'saw', glide(520, 380, 0.1), perc(0.004, 0.1)), 'bp', 1800, 2), 0, 0.25],
+  [whirr(r, 0.33), 0, 0.2]), M(0.2, { v: 4, pj: 0.06, cd: 45, max: 3 }));
 registerSfx('as_sentryBreak', (r) => {
   const b = lay(0.6,
     [svf(osc(0.4, 'saw', glide(400, 70, 0.35), perc(0.01, 0.35)), 'bp', glide(2000, 500, 0.35), 2), 0, 0.3],

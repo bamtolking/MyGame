@@ -35,7 +35,7 @@ export const MONK: ClassPack = {
       id: 'mk_wave', cls: 'monk', name: '기공파', icon: 'mk_wave', req: 3, kind: 'proj', range: 9, elem: 'phys', anim: 'attack',
       mana: (r) => 5 + Math.floor(r * 0.35), cd: () => 0, pct: (r) => 120 + 14 * r,
       desc: '기를 모아 넓은 파동을 내뿜습니다. 파동은 모든 적을 뚫고 나아갑니다.',
-      detail: (r) => [`${pct(120 + 14 * r)} · 모두 관통`],
+      detail: (r) => [`${pct(120 + 14 * r)} · 모두 관통`, '사거리 9칸 · 폭 약 2칸 · 벽에 막힘'],
       ai: { crowd: 2 },
     },
     {
@@ -49,8 +49,9 @@ export const MONK: ClassPack = {
     {
       id: 'mk_kick', cls: 'monk', name: '비연각', icon: 'mk_kick', req: 10, kind: 'move', range: 6, elem: 'phys', move: 'dash',
       mana: () => 7, cd: (r) => Math.max(1.5, 3.5 - 0.2 * r), pct: (r) => 160 + 18 * r,
-      timing: { kind: 'dash', dur: 0.3, hitAt: 0.99, invuln: 0.3 },
-      desc: '제비처럼 날아 차며 지나가는 길의 모든 적을 걷어찹니다.',
+      // 'skill' (not 'dash'): sim.ts flies the monk itself so he stays solid in his kick pose (no ghostly dash look)
+      timing: { kind: 'skill', dur: 0.3, hitAt: 0.99, invuln: 0.3 },
+      desc: '제비처럼 날아 차며 지나가는 길의 모든 적을 걷어찹니다. 날아가는 동안에는 공격받지 않습니다.',
       detail: (r) => [`${pct(160 + 18 * r)} · 경로 위 모든 적`, '최대 6칸 · 밀쳐내기', `재사용 ${Math.max(1.5, 3.5 - 0.2 * r).toFixed(1)}초`],
       ai: { minDist: 2, maxDist: 6 },
     },
@@ -58,8 +59,8 @@ export const MONK: ClassPack = {
       id: 'mk_seven', cls: 'monk', name: '칠성권', icon: 'mk_seven', req: 15, kind: 'target', range: 8, elem: 'phys',
       mana: () => 18, cd: () => 7, pct: (r) => 200 + 22 * r,
       timing: { kind: 'channel', dur: 0.95, hitAt: 0.99, invuln: 1 },
-      desc: '모습을 감추고 목표 주변의 적 최대 일곱 명 사이를 번개처럼 오가며 한 방씩 꽂습니다. 그동안 공격받지 않습니다.',
-      detail: (r) => [`최대 7회 × ${pct(200 + 22 * r)}`, '목표 반경 5칸', '재사용 7초'],
+      desc: '모습을 감추고 목표 주변의 적들 사이를 번개처럼 오가며 일곱 번 꽂습니다. 적이 적으면 같은 적을 거듭 칩니다. 그동안 공격받지 않습니다.',
+      detail: (r) => [`7회 × ${pct(200 + 22 * r)}`, '목표 반경 5칸 · 적마다 고르게 나눠 침', '재사용 7초'],
       ai: { crowd: 3, boss: true },
     },
   ],

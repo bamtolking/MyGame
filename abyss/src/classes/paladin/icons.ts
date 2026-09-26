@@ -1,5 +1,4 @@
 // paladin: hand-drawn skill icons (64×64, origin at the centre).
-import { drawWeapon } from '../../render/actors';
 import { SKILL_ICON } from '../../render/registry';
 import { emblem, shieldFace } from './look';
 import { hammerShape, holyStar, runeRing } from './vfx';
@@ -32,39 +31,83 @@ function crescent(c: C2D, x: number, y: number, r: number, a0: number, a1: numbe
   c.closePath(); c.fill();
 }
 
+/**
+ * A flanged war mace drawn along +y from the grip (origin): pommel, leather grip, gilded collar, steel haft and a
+ * six-flanged head seen from the side. `len` = grip to head centre.
+ */
+function flangedMace(c: C2D, len: number, s = 1, hs = s): void {
+  const steel = (x0: number, x1: number) => { const g = c.createLinearGradient(x0, 0, x1, 0); g.addColorStop(0, '#fbf6ea'); g.addColorStop(0.45, '#c9ccd4'); g.addColorStop(1, '#5d6070'); return g; };
+  // haft
+  c.fillStyle = steel(-1.6 * s, 1.6 * s); c.fillRect(-1.5 * s, -2 * s, 3 * s, len - 4 * s);
+  // grip wrap + pommel
+  c.fillStyle = '#5a3418'; c.fillRect(-1.9 * s, -9 * s, 3.8 * s, 9 * s);
+  c.strokeStyle = '#2e1a0a'; c.lineWidth = 0.7 * s;
+  for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(-1.9 * s, (-8 + i * 2.2) * s); c.lineTo(1.9 * s, (-7 + i * 2.2) * s); c.stroke(); }
+  const gold = c.createLinearGradient(-3 * s, 0, 3 * s, 0); gold.addColorStop(0, '#fff2b8'); gold.addColorStop(0.5, '#e2b44a'); gold.addColorStop(1, '#7a5418');
+  c.fillStyle = gold; c.beginPath(); c.arc(0, -10.5 * s, 2.6 * s, 0, TAU); c.fill();
+  c.fillRect(-2.8 * s, -0.5 * s, 5.6 * s, 2 * s);
+  // collar under the head
+  c.fillRect(-2.6 * hs, len - 9 * hs, 5.2 * hs, 2.2 * hs);
+  // head: six flanges (three visible each side) around a core
+  const hy = len;
+  c.fillStyle = steel(-7 * hs, 7 * hs);
+  c.beginPath(); c.ellipse(0, hy, 3.4 * hs, 7 * hs, 0, 0, TAU); c.fill();
+  for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
+    const y0 = hy - 6.5 * hs + i * 1.2 * hs, y1 = hy + 6.5 * hs - (2 - i) * 1.2 * hs, out = (7.8 - i * 1.6) * hs * side;
+    c.fillStyle = i === 0 ? (side < 0 ? '#f2eee2' : '#6a6e7c') : i === 1 ? (side < 0 ? '#d8dbe2' : '#8a8e9a') : '#b6bac4';
+    c.beginPath(); c.moveTo(side * 1.5 * hs, y0); c.quadraticCurveTo(out, y0 + 1.5 * hs, out, hy); c.quadraticCurveTo(out, y1 - 1.5 * hs, side * 1.5 * hs, y1); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(30,30,40,0.55)'; c.lineWidth = 0.5 * hs; c.stroke();
+  }
+  // gilded crown and finial on the head
+  c.fillStyle = gold; c.fillRect(-3 * hs, hy - 8.6 * hs, 6 * hs, 1.8 * hs); c.fillRect(-3 * hs, hy + 6.8 * hs, 6 * hs, 1.8 * hs);
+  c.beginPath(); c.moveTo(-1.6 * hs, hy + 8.6 * hs); c.lineTo(0, hy + 12 * hs); c.lineTo(1.6 * hs, hy + 8.6 * hs); c.fill();
+  // a small cross engraved on the core
+  c.fillStyle = '#fff6d0'; c.fillRect(-0.45 * hs, hy - 3 * hs, 0.9 * hs, 6 * hs); c.fillRect(-1.8 * hs, hy - 1.4 * hs, 3.6 * hs, 0.9 * hs);
+}
+
 SKILL_ICON.pl_strike = {
   tint: ['#5e4a30', '#0e0a06'],
   draw(c, glow) {
-    // a mace crashing down with a burst of holy light
+    // a flanged mace crashing down onto a burst of holy light
     c.save();
     c.globalCompositeOperation = 'lighter';
-    softGlow(c, 14, 15, 18, '255,200,90', 0.75);
+    softGlow(c, 12, 14, 22, '255,200,90', 0.8);
     c.restore();
-    c.save(); glow('#ffd070', 8); rays(c, 14, 15, 9, 20, 12, '#ffe6a0', 2.2, 0.2); c.restore();
+    c.save(); glow('#ffd070', 8); rays(c, 12, 14, 8, 24, 14, '#ffe6a0', 2, 0.2); c.restore();
+    // impact cracks
+    c.save(); c.strokeStyle = 'rgba(40,24,8,0.7)'; c.lineWidth = 1.3;
+    c.beginPath(); c.moveTo(12, 16); c.lineTo(22, 22); c.lineTo(27, 21); c.moveTo(12, 16); c.lineTo(6, 26); c.moveTo(12, 16); c.lineTo(24, 11); c.stroke(); c.restore();
     c.save();
-    glow('rgba(0,0,0,0.85)', 5);
-    c.translate(-24, -24); c.rotate(-Math.PI / 4);
-    drawWeapon(c, 'mace', 0, 0, 0, 3, '#e8e4dc', undefined, 1.55);
+    glow('rgba(0,0,0,0.85)', 6);
+    c.translate(-18, -20); c.rotate(-0.72);
+    flangedMace(c, 30, 1, 1.45);
     c.restore();
-    c.save(); c.globalCompositeOperation = 'lighter'; holyStar(c, 15, 16, 7, 1); c.restore();
+    c.save(); c.globalCompositeOperation = 'lighter'; holyStar(c, 13, 15, 8, 1);
+    c.fillStyle = '#fff0c0'; for (const [x, y] of [[24, 4], [28, 14], [4, 24], [20, 26]] as [number, number][]) { c.beginPath(); c.arc(x, y, 1.1, 0, TAU); c.fill(); }
+    c.restore();
   },
 };
 
 SKILL_ICON.pl_zeal = {
   tint: ['#7a2416', '#140402'],
   draw(c, glow) {
-    // three quick strikes: stacked golden crescents with sparks
+    // three quick blows: stacked golden crescents cut by a flanged mace, with sparks
     c.save();
     glow('#ffb640', 10);
-    crescent(c, -9, -6, 21, -2.75, -1.05, 7);
-    crescent(c, 1, 3, 21, -2.55, -0.8, 7.5);
-    crescent(c, 10, 12, 21, -2.35, -0.55, 8);
+    crescent(c, -7, -8, 22, -2.8, -1.05, 7);
+    crescent(c, 3, 1, 22, -2.6, -0.8, 7.5);
+    crescent(c, 12, 10, 22, -2.4, -0.55, 8);
+    c.restore();
+    c.save();
+    glow('rgba(0,0,0,0.8)', 5);
+    c.translate(-22, 22); c.rotate(-2.35);
+    flangedMace(c, 24, 0.8, 1.05);
     c.restore();
     c.save();
     c.globalCompositeOperation = 'lighter';
-    holyStar(c, 21, 6, 6, 1); holyStar(c, 11, -3, 4.5, 0.9); holyStar(c, 1, -12, 3.5, 0.8);
+    holyStar(c, 23, 5, 6, 1); holyStar(c, 13, -4, 4.5, 0.9); holyStar(c, 3, -13, 3.5, 0.8);
     c.fillStyle = '#ffe6a0';
-    for (const [x, y] of [[24, 16], [26, -2], [17, 20], [-20, -18]] as [number, number][]) { c.beginPath(); c.arc(x, y, 1.1, 0, TAU); c.fill(); }
+    for (const [x, y] of [[26, 16], [27, -4], [18, 22], [-8, -24]] as [number, number][]) { c.beginPath(); c.arc(x, y, 1.1, 0, TAU); c.fill(); }
     c.restore();
   },
 };

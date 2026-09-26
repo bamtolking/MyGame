@@ -39,6 +39,9 @@ registerSfx('pl_hammerHit', (r) => lay(0.45,
 
 // ---- holy aura: choir swell, rising bells, a warm drone and a breath of holy fire
 registerSfx('cast_pl_aura', (r) => lay(2.4,
+  [bell(1318.5, 1.3), 0, 0.14], [sparkle(r, 0.4, 6, 3000, 7500, 0.2), 0, 0.18],
+  // the ring igniting at the paladin's feet (the aura takes hold 0.25 s into the cast)
+  [thud(120, 55, 0.35, 1.6), 0.24, 0.4], [low(r, 0.6, 700, perc(0.01, 0.5), 'pink'), 0.24, 0.3],
   [chord(r, 2.1, [261.6, 329.6, 392, 523.3], 'a', 0.35), 0, 0.7],
   [bell(784, 1.8), 0.04, 0.22], [bell(1046.5, 1.6), 0.14, 0.18], [bell(1568, 1.4), 0.24, 0.14],
   [osc(2.1, 'sin', 65.4, swell(0.3, 1.6)), 0, 0.4],
@@ -65,6 +68,10 @@ registerSfx('pl_chargeImpact', (r) => lay(1.3,
 
 // ---- heavenly judgment: the choir rises as the sky opens; each pillar strikes like a struck bell
 registerSfx('cast_pl_judgment', (r) => lay(2.6,
+  // instant feedback as the weapon is raised: a bright struck chime and a rush of air upward
+  [bell(1760, 1.1), 0, 0.2], [ring(0.9, [[2637, 0.5, 0.6], [3951, 0.3, 0.4]]), 0.004, 0.14],
+  [whoosh(r, 0.45, 350, 3200, 1.1), 0, 0.35],
+  [sparkle(r, 0.5, 8, 3500, 8500, 0.2), 0.01, 0.22],
   [chord(r, 2.3, [220, 277.2, 329.6, 440, 554.4], 'a', 0.3), 0, 0.8],
   [amp(band(r, 1.4, glide(400, 3200, 1.4), 1.2, 1, 'pink'), (t) => Math.min(1, t / 1.4) ** 2), 0, 0.22],
   [bell(880, 2), 0.18, 0.2], [bell(1318.5, 1.8), 0.34, 0.15],

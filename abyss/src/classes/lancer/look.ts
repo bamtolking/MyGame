@@ -54,6 +54,12 @@ interface LnState {
   wt: number;
   /** Rarity glow of the lance, if any. */
   wg?: string;
+  /**
+   * The aim as the side-view rig can show it: screen pitch of the facing below the horizontal (+ toward the viewer,
+   * − away from it, clamped) and the foreshortened length of a level lance along it (1 across the screen … 0.5 straight
+   * toward / away from the viewer, clamped). Level lances (thrusts, storm jabs, the javelin) tilt along it.
+   */
+  pitch: number; fore: number;
 }
 type LnLook = Look & { ln?: LnState };
 
@@ -78,6 +84,12 @@ CLASS_LOOK.lancer = (h, common, ct) => {
   if (lance && act === 'javelin') weapon = 'ln_gripThrow';
   else if (lance && act === 'dragon') weapon = 'ln_gripDive';
   const bt = slotTier(h, 'boots');
+  // screen direction of the aim (render/iso: x−y across, (x+y)/2 down) → pitch of a level lance and its length.
+  // Only while acting: portraits (class select) animate attacks without an act and stay in pure side view.
+  const f = a && Number.isFinite(h.facing) ? h.facing : -Math.PI / 4;
+  const fx = Math.cos(f) - Math.sin(f), fy = (Math.cos(f) + Math.sin(f)) * 0.5;
+  const pitch = Math.max(-AIM.pitch, Math.min(AIM.pitch, Math.atan2(fy, Math.abs(fx))));
+  const fore = Math.max(AIM.fore, Math.min(1, Math.hypot(fx, fy) / Math.SQRT2));
   const L: LnLook = {
     skin: '#e2b896', hair: '#1c2231', eyes: '#3e7cc0', beard: undefined,
     body, body2: arm, legs,
@@ -87,7 +99,7 @@ CLASS_LOOK.lancer = (h, common, ct) => {
     offhand: 'ln_rig', offTier: 0,
     armorTier: t === 1 ? 1 : -1, trim: undefined,
     decor: 'ln_dragoon', decorColor: trim, decorColor2: CLOAK[t + 1],
-    ln: { act, k, at: a ? a.t : 0, ct: t, ht, gt: slotTier(h, 'gloves'), wt, wg: common.wGlow },
+    ln: { act, k, at: a ? a.t : 0, ct: t, ht, gt: slotTier(h, 'gloves'), wt, wg: common.wGlow, pitch, fore },
   };
   if (ht >= 1) L.hair = undefined;
   return L;
@@ -138,6 +150,11 @@ function handAt(a: RigAnchors, arm: { a: number; fa: number }): { ex: number; ey
   return { ex, ey, hx: ex + Math.sin(arm.fa) * armL * 0.5, hy: ey + Math.cos(arm.fa) * armL * 0.5 };
 }
 
+/** Dragon's descent pose timeline (fractions of the leap): arm up by `up`, lance upright until k0, plunged by k1. */
+const DIVE = { up: 0.16, k0: 0.56, k1: 0.72, upright: 2.62 };
+/** Aim tilt limits: the most a level lance tilts toward / away from the viewer, and its shortest foreshortened length. */
+const AIM = { pitch: 1.1, fore: 0.6 };
+
 // ================================================================ pose remap (engine has no per-skill pose hook)
 /**
  * Rewrites p.atk (and p.block, which the rig uses to bring the back arm forward: here the second hand on the shaft)
@@ -164,8 +181,11 @@ function remapPose(p: Pose, s: LnState): void {
       if (p.atk >= 0) p.atk = k < 0.4 ? 0.4 * ease(k / 0.4) : k < 0.5 ? 0.4 + ((k - 0.4) / 0.1) * 0.07 : 0.47 + ((k - 0.5) / 0.5) * 0.53;
       break;
     case 'dragon':
-      // leap: the renderer gives no attack pose. Raise the lance overhead going up, drive it down coming down.
-      p.atk = k < 0.18 ? 0.36 * ease(k / 0.18) : k < 0.56 ? 0.36 + (k - 0.18) * 0.08 : k < 0.72 ? 0.39 + ease((k - 0.56) / 0.16) * 0.13 : 0.52;
+      // leap: the renderer gives no attack pose. Going up the arm comes forward to shoulder height and carries the
+      // lance upright (heavy-slash windup t = 0.2: arm level); over the top it is driven down in front (t 0.488 →
+      // 0.52 lowers the arm from that same level angle to forward-down). The hand never goes overhead: at the top of
+      // the leap an overhead lance would leave the renderer's actor box (see actorBox).
+      p.atk = k < DIVE.up ? 0.2 * ease(k / DIVE.up) : k < DIVE.k0 ? 0.2 : k < DIVE.k1 ? 0.488 + ease((k - DIVE.k0) / (DIVE.k1 - DIVE.k0)) * 0.032 : 0.52;
       if (k > 0.6) p.block = 1;
       break;
     case 'storm':
@@ -729,13 +749,29 @@ function helm(c: C2D, p: Pose, a: RigAnchors, s: LnState, L: LnLook): void {
   if (ht >= 4) { c.save(); c.globalCompositeOperation = 'lighter'; c.strokeStyle = `rgba(138,216,255,${0.6 + 0.3 * Math.sin(p.t * 4)})`; c.lineWidth = 0.5; c.stroke(); c.restore(); }
   if (!p.back) {
     if (ht === 1) {
-      // nasal bar
-      c.fillStyle = mid; c.fillRect(x + r * 0.62, y - r * 0.1, r * 0.24, r * 0.95);
+      // nasal: a tapered steel bar down the nose ridge from the brow band
+      c.fillStyle = mid;
+      c.beginPath(); c.moveTo(x + r * 0.8, y + r * 0.02); c.lineTo(x + r * 1.04, y + r * 0.0); c.lineTo(x + r * 1.2, y + r * 0.46); c.lineTo(x + r * 1.04, y + r * 0.52); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 0.3; c.beginPath(); c.moveTo(x + r * 0.88, y + r * 0.04); c.lineTo(x + r * 1.08, y + r * 0.48); c.stroke();
     } else if (ht === 2) {
-      // T-visor with cheek guards
-      c.fillStyle = mid; c.beginPath(); c.moveTo(x + r * 0.2, y + r * 0.1); c.lineTo(x + r * 1.15, y + r * 0.1); c.lineTo(x + r * 1.0, y + r * 1.05); c.lineTo(x + r * 0.2, y + r * 1.15); c.closePath(); c.fill();
-      c.fillStyle = '#0a0e16'; c.fillRect(x + r * 0.35, y + r * 0.12, r * 0.75, r * 0.18); c.fillRect(x + r * 0.62, y + r * 0.12, r * 0.18, r * 0.6);
-      c.strokeStyle = SILVER; c.lineWidth = 0.4; c.beginPath(); c.moveTo(x + r * 0.2, y + r * 1.15); c.lineTo(x + r * 1.0, y + r * 1.05); c.stroke();
+      // barbute faceplate: a shaped steel mask from brow to chin (brow ridge forward, chin swept back) with a T slot
+      const g = c.createLinearGradient(x, y, x + r * 1.2, y + r * 1.1);
+      g.addColorStop(0, hi); g.addColorStop(0.55, mid); g.addColorStop(1, dk);
+      c.fillStyle = g;
+      c.beginPath(); c.moveTo(x + r * 0.15, y + r * 0.05); c.lineTo(x + r * 1.12, y + r * 0.02);
+      c.quadraticCurveTo(x + r * 1.24, y + r * 0.5, x + r * 1.02, y + r * 0.78); c.quadraticCurveTo(x + r * 0.9, y + r * 1.12, x + r * 0.55, y + r * 1.2);
+      c.lineTo(x + r * 0.15, y + r * 1.14); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(12,18,34,0.6)'; c.lineWidth = 0.4; c.stroke();
+      // T slot: a slim eye slit and a tapering breath slot, dark with a lit lower lip
+      c.fillStyle = '#070a12';
+      c.beginPath(); c.moveTo(x + r * 0.38, y + r * 0.16); c.lineTo(x + r * 1.16, y + r * 0.14); c.lineTo(x + r * 1.15, y + r * 0.27); c.lineTo(x + r * 0.84, y + r * 0.28);
+      c.lineTo(x + r * 0.8, y + r * 0.78); c.quadraticCurveTo(x + r * 0.74, y + r * 0.84, x + r * 0.68, y + r * 0.78); c.lineTo(x + r * 0.66, y + r * 0.29); c.lineTo(x + r * 0.38, y + r * 0.3); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(235,245,255,0.55)'; c.lineWidth = 0.3;
+      c.beginPath(); c.moveTo(x + r * 0.4, y + r * 0.32); c.lineTo(x + r * 0.64, y + r * 0.31); c.moveTo(x + r * 0.86, y + r * 0.3); c.lineTo(x + r * 1.12, y + r * 0.29); c.stroke();
+      // rivets along the rim, silver edge at the chin
+      c.fillStyle = SILVER;
+      for (const [u, v] of [[0.25, 0.2], [0.25, 0.95], [0.98, 0.6]]) { c.beginPath(); c.arc(x + r * u, y + r * v, r * 0.06, 0, TAU); c.fill(); }
+      c.strokeStyle = SILVER; c.lineWidth = 0.4; c.beginPath(); c.moveTo(x + r * 0.15, y + r * 1.14); c.lineTo(x + r * 0.55, y + r * 1.2); c.quadraticCurveTo(x + r * 0.9, y + r * 1.12, x + r * 1.02, y + r * 0.78); c.stroke();
     } else {
       // dragon-snout visor
       const g = c.createLinearGradient(x, y, x + r * 1.9, y + r * 0.8);
@@ -766,15 +802,37 @@ function helm(c: C2D, p: Pose, a: RigAnchors, s: LnState, L: LnLook): void {
 }
 
 // ================================================================ the lance in the hand
-/** Lance direction (rig angle convention) for the current pose. */
-function lanceAngle(p: Pose, s: LnState, arm: { a: number; fa: number }): number {
+/**
+ * How much the lance follows the aim (0 … 1) in the current pose: level thrusts and storm jabs fully, the javelin
+ * partly (it is thrown from overhead), the guard, whirl and dive not at all.
+ */
+function aimWeight(p: Pose, s: LnState): number {
+  switch (s.act) {
+    case 'javelin': return 0.6;
+    case 'storm': return 1;
+    case 'dragon': case 'sweep': return 0;
+    default: {
+      if (p.atk < 0) return 0;
+      const t = p.atk;
+      return t < 0.3 ? ease(t / 0.3) : t < 0.75 ? 1 : 1 - ease((t - 0.75) / 0.25);
+    }
+  }
+}
+
+/** Lance direction (rig angle convention) for the current pose, tilted along the aim by `aim` (see aimWeight). */
+function lanceAngle(p: Pose, s: LnState, arm: { a: number; fa: number }, aim: number): number {
+  return lanceAngle0(p, s, arm) - s.pitch * aim;
+}
+
+function lanceAngle0(p: Pose, s: LnState, arm: { a: number; fa: number }): number {
   const guard = (p.moving ? 2.25 : 2.35) + Math.sin(p.t * 1.7) * 0.03;
   switch (s.act) {
     case 'javelin': return lerp(2.05, 1.72, ease(s.k / 0.45));
     case 'dragon': {
-      const k = s.k;
-      if (k < 0.45) return lerp(guard, 2.75, ease(k / 0.3));
-      if (k < 0.7) return lerp(2.75, 0.32, ease((k - 0.45) / 0.25));
+      // raised upright while soaring (a slight sway in the wind), then swung point-down in front for the plunge
+      const k = s.k, up = DIVE.upright + Math.sin(p.t * 2.6) * 0.04;
+      if (k < DIVE.k0) return lerp(guard, up, ease(k / DIVE.up));
+      if (k < DIVE.k1) return lerp(up, 0.32, ease((k - DIVE.k0) / (DIVE.k1 - DIVE.k0)));
       return 0.32;
     }
     case 'storm': {
@@ -802,6 +860,52 @@ function chargeOf(s: LnState): number {
   }
 }
 
+// ================================================================ the renderer's offscreen actor box
+/**
+ * In high quality the renderer paints each actor into a detached offscreen canvas and copies only a fixed box of it:
+ * ±72 rig units around the feet for tall rigs, 128 above and 14 below, with the leap lift inside the box
+ * (render/renderer drawActorAt). A lance at full reach pokes out of that box and would be sliced off, so on that
+ * canvas the lance's reach along its axis is capped (reachCap). The class-select portraits (ui/app: canvases
+ * .bigportrait and .tport, about ±30 rig units wide) crop the same way, so there the portrait canvas is the box.
+ * Everywhere else (low quality, which draws straight to the screen around a centred hero, icons) nothing is capped.
+ */
+const BOX = { w: 144, h: 142, root: 72, pad: 1.5 };
+/** Room kept past the lance tip for the head's glow (rig units). */
+const TIP_GLOW = 6;
+/**
+ * The box in rig units: the canvas transform m (rig → device px), its scale s, the box size w × h, and how far the
+ * lance may slide back through the grip to fit (the small portraits need much more than the actor box).
+ */
+interface ActorBox { m: DOMMatrix; s: number; w: number; h: number; slack: number }
+
+function actorBox(c: C2D, a: RigAnchors): ActorBox | null {
+  const cv = c.canvas as HTMLCanvasElement | undefined;
+  if (!cv || typeof c.getTransform !== 'function') return null;
+  // (the tile portraits are painted once, before their grid joins the page: recognise them by class, not by isConnected)
+  const portrait = !!cv.classList && (cv.classList.contains('bigportrait') || cv.classList.contains('tport'));
+  if (cv.isConnected !== false && !portrait) return null;
+  const m = c.getTransform();
+  const s = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));
+  if (!(s > 0)) return null;
+  if (portrait) return { m, s, w: cv.width / s, h: cv.height / s, slack: 32 };
+  // sanity check: the hip pivot sits on the box's centre line (± the attack lunge), in its lower half
+  const bx = (m.c * a.hipY + m.e) / s, by = (m.d * a.hipY + m.f) / s;
+  if (Math.abs(bx - BOX.root) > 9 || by < 40 || by > 125) return null;
+  return { m, s, w: BOX.w, h: BOX.h, slack: 12 };
+}
+
+/** How far (rig units) the lance may reach from (x,y) along the unit direction (dx,dy) and stay inside the box. */
+function reachCap(b: ActorBox | null, x: number, y: number, dx: number, dy: number): number {
+  if (!b) return Infinity;
+  const { m, s, w, h } = b;
+  const bx = (m.a * x + m.c * y + m.e) / s, by = (m.b * x + m.d * y + m.f) / s;
+  const vx = (m.a * dx + m.c * dy) / s, vy = (m.b * dx + m.d * dy) / s;
+  let t = Infinity;
+  if (vx > 1e-4) t = Math.min(t, (w - BOX.pad - bx) / vx); else if (vx < -1e-4) t = Math.min(t, (BOX.pad - bx) / vx);
+  if (vy > 1e-4) t = Math.min(t, (h - BOX.pad - by) / vy); else if (vy < -1e-4) t = Math.min(t, (BOX.pad - by) / vy);
+  return t;
+}
+
 /** Rig angle the whirl starts from (vfx.ts starts the blade-path effect at the same heading). */
 export const WHIRL0 = -0.35;
 
@@ -809,20 +913,23 @@ export const WHIRL0 = -0.35;
  * The whirl: the lance swings a full circle around the hand on a flat (iso) plane, foreshortened as it turns.
  * While it points away from the viewer it is painted in the back layer (behind the body), otherwise in front.
  */
-function lanceSweep(c: C2D, hx: number, hy: number, s: LnState, L: LnLook, t: number, half: 'far' | 'near', low: boolean): void {
+function lanceSweep(c: C2D, hx: number, hy: number, s: LnState, L: LnLook, t: number, half: 'far' | 'near', low: boolean, box: ActorBox | null): void {
   const k = clamp01((s.k - SWEEP.k0) / (SWEEP.k1 - SWEEP.k0));
   const phi = WHIRL0 + ease(k) * TAU * 1.08;
   const dx = Math.cos(phi), dy = Math.sin(phi);
   if ((half === 'near') !== (dy >= 0)) return;
   const speed = Math.sin(k * Math.PI);
-  const sx = dx, sy = dy * 0.45 - 0.12, len = Math.max(0.3, Math.hypot(sx, sy));
+  const sx = dx, sy = dy * 0.45 - 0.12, len0 = Math.max(0.3, Math.hypot(sx, sy));
   const th = Math.atan2(sx, sy); // rig convention: direction (sin th, cos th)
   const sp = LANCE[tierOf(s.wt)];
+  // foreshorten a little more if the tip would leave the actor box
+  const len = Math.max(0.3, Math.min(len0, reachCap(box, hx, hy, sx / len0, sy / len0) / (sp.tip + TIP_GLOW)));
+  const fit = len / len0;
   // motion trail: pale tapered strokes along the previous headings of the tip
   if (!low && speed > 0.2) {
     c.save(); c.lineCap = 'round';
     for (let i = 1; i <= 3; i++) {
-      const pa = phi - i * 0.22 * speed, px = Math.cos(pa), py = Math.sin(pa) * 0.45 - 0.12;
+      const pa = phi - i * 0.22 * speed, px = Math.cos(pa) * fit, py = (Math.sin(pa) * 0.45 - 0.12) * fit;
       if ((half === 'near') !== (Math.sin(pa) >= 0)) continue;
       c.strokeStyle = `rgba(200,235,255,${0.22 * speed * (1 - i * 0.25)})`; c.lineWidth = 3 - i * 0.6;
       c.beginPath(); c.moveTo(hx + px * 10, hy + py * 10); c.lineTo(hx + px * sp.tip, hy + py * sp.tip); c.stroke();
@@ -834,17 +941,20 @@ function lanceSweep(c: C2D, hx: number, hy: number, s: LnState, L: LnLook, t: nu
   c.restore();
 }
 
-function heldLance(c: C2D, p: Pose, a: RigAnchors, s: LnState, L: LnLook, arm: { a: number; fa: number }, low: boolean): void {
+function heldLance(c: C2D, p: Pose, a: RigAnchors, s: LnState, L: LnLook, arm: { a: number; fa: number }, low: boolean, box: ActorBox | null): void {
   if (s.wt < 0) return;
   const hx = a.fhx, hy = a.fhy;
-  if (s.act === 'sweep' && p.atk >= 0) { lanceSweep(c, hx, hy, s, L, p.t, 'near', low); return; }
+  if (s.act === 'sweep' && p.atk >= 0) { lanceSweep(c, hx, hy, s, L, p.t, 'near', low, box); return; }
   let alpha = 1;
   if (s.act === 'javelin' && s.k >= 0.5) {
     // thrown: a new lance crackles into the hand at the end of the act
     if (s.k < 0.8) return;
     alpha = ease((s.k - 0.8) / 0.2);
   }
-  const th = lanceAngle(p, s, arm);
+  const aim = aimWeight(p, s);
+  const th = lanceAngle(p, s, arm, aim);
+  // a lance aimed toward / away from the viewer is foreshortened along its axis
+  const fs = lerp(1, s.fore, aim);
   const charge = chargeOf(s);
   // slide the lance forward through the grip at the strike (the thrust reaches further than the arm)
   let slide = 0;
@@ -857,13 +967,16 @@ function heldLance(c: C2D, p: Pose, a: RigAnchors, s: LnState, L: LnLook, arm: {
     const e = u < 0.4 ? -0.5 * ease(u / 0.4) : u < 0.6 ? -0.5 + 1.5 * ease((u - 0.4) / 0.2) : 1 - ease((u - 0.6) / 0.4);
     slide = e * 8 * big; jab = Math.max(0, e);
   }
+  // keep the tip (and its glow) inside the actor box: at full reach the lance slides back through the grip instead
+  const sp = LANCE[tierOf(s.wt)];
+  slide = Math.min(slide, Math.max(-(box?.slack ?? 0), reachCap(box, hx, hy, Math.sin(th), Math.cos(th)) / fs - sp.tip - TIP_GLOW));
   c.save();
   c.translate(hx, hy); c.rotate(-th);
+  if (fs < 0.999) c.scale(1, fs);
   if (alpha < 1) c.globalAlpha = alpha;
   c.translate(0, slide);
   // motion streak behind the tip while thrusting
   if ((p.atk >= 0.38 && p.atk <= 0.7 && s.act !== 'dragon' && s.act !== 'storm') || jab > 0.3) {
-    const sp = LANCE[tierOf(s.wt)];
     const f = s.act === 'storm' ? jab : Math.sin(clamp01((p.atk - 0.38) / 0.32) * Math.PI);
     c.save(); c.globalCompositeOperation = 'lighter';
     const g = c.createLinearGradient(0, sp.tip - 26, 0, sp.tip + 2);
@@ -875,8 +988,8 @@ function heldLance(c: C2D, p: Pose, a: RigAnchors, s: LnState, L: LnLook, arm: {
   c.restore();
   if (alpha < 1 && !low) {
     // re-forming crackle: a few sparks of lightning knitting the new lance together
-    c.save(); c.translate(hx, hy); c.rotate(-th);
-    crackle(c, (n: number) => n, LANCE[tierOf(s.wt)], p.t, 2, 1 - alpha);
+    c.save(); c.translate(hx, hy); c.rotate(-th); if (fs < 0.999) c.scale(1, fs);
+    crackle(c, (n: number) => n, sp, p.t, 2, 1 - alpha);
     c.restore();
   }
   // storm: faint afterimage lances fanned through the cone (the thrusts are too fast to see)
@@ -887,9 +1000,10 @@ function heldLance(c: C2D, p: Pose, a: RigAnchors, s: LnState, L: LnLook, arm: {
       const age = s.at - (i + 0.5) / 7;
       const f = clamp01(1 - age / 0.35);
       if (f <= 0) continue;
-      c.save(); c.translate(hx, hy); c.rotate(-(1.52 + STORM_FAN[i] * 0.55)); c.translate(0, 8 * f);
+      const ta = 1.52 + STORM_FAN[i] * 0.55 - s.pitch;
+      const out = Math.min(8 * f, reachCap(box, hx, hy, Math.sin(ta), Math.cos(ta)) / fs - sp.tip - 4);
+      c.save(); c.translate(hx, hy); c.rotate(-ta); if (fs < 0.999) c.scale(1, fs); c.translate(0, out);
       c.globalAlpha = 0.35 * f;
-      const sp = LANCE[tierOf(s.wt)];
       c.fillStyle = '#bfe6ff'; c.beginPath(); c.moveTo(-1.2, sp.butt + 10); c.lineTo(1.2, sp.butt + 10); c.lineTo(0, sp.tip + 3); c.closePath(); c.fill();
       c.restore();
     }
@@ -971,7 +1085,7 @@ DECOR.ln_dragoon = (c, L0, p, a, layer) => {
     // the far half of the whirling lance passes behind the body
     if (s.act === 'sweep' && p.atk >= 0 && s.wt >= 0) {
       const arm = frontArm(p, 'thrust', true), hp = handAt(a, arm);
-      lanceSweep(c, hp.hx, hp.hy, s, L, p.t, 'far', low);
+      lanceSweep(c, hp.hx, hp.hy, s, L, p.t, 'far', low, low ? null : actorBox(c, a));
     }
     return;
   }
@@ -986,7 +1100,7 @@ DECOR.ln_dragoon = (c, L0, p, a, layer) => {
   const armW = 3.8 * a.build;
   pauldron(c, a, arm.a, s, L);
   forearm(c, hp.ex, hp.ey, a.fhx, a.fhy, armW, s, false);
-  heldLance(c, p, a, s, L, arm, low);
+  heldLance(c, p, a, s, L, arm, low, low ? null : actorBox(c, a));
   // the fist closes over the shaft
   if (s.wt >= 0 && !(s.act === 'javelin' && s.k >= 0.5 && s.k < 0.8)) {
     const col = GLOVE[Math.max(-1, Math.min(4, Math.max(s.gt, s.ct >= 3 ? 2 : -1))) + 1];

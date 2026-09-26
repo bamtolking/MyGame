@@ -7,6 +7,7 @@ import { drawWeapon, type Look, type Pose } from '../../render/actors';
 import { shade } from '../../render/iso';
 import { CLASS_LOOK, DECOR, OFFHAND_ART, type RigAnchors } from '../../render/registry';
 import { ZEAL_AT } from './shared';
+import { hammerShape } from './vfx';
 
 const TAU = Math.PI * 2;
 const ease = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x));
@@ -25,10 +26,25 @@ type PlLook = Look & { pl?: PlState };
 export const GOLD = '#e2b44a', GOLD_HI = '#fff0b0', GOLD_DK = '#8a6420';
 const CLOTH = '#efe8d6';
 /** Armour colour by chest tier (-1 none, 0 quilted/leather, 1 chain, 2 plate, 3 gothic, 4 holy). */
-const ARMOR = ['#a8987a', '#8c7454', '#9ea4ae', '#c4c9d2', '#b3b9c7', '#e6dcbc'];
+const ARMOR = ['#a8987a', '#8c7454', '#9ea4ae', '#c4c9d2', '#b3b9c7', '#dfe1ea'];
 const armorOf = (ct: number) => ARMOR[Math.max(-1, Math.min(4, ct)) + 1];
-const STEEL = ['#8a6a48', '#b8bec8', '#c8cdd6', '#c0c6d2', '#ece2c2'];
+const STEEL = ['#8a6a48', '#b8bec8', '#c8cdd6', '#c0c6d2', '#e4e6ee'];
+/** Weapon steel by weapon tier. */
+const WSTEEL = ['#a9a59b', '#c2c6ce', '#d3d7df', '#e0d3aa', '#eedc9e'];
 const steelOf = (t: number) => STEEL[Math.max(0, Math.min(4, t))];
+
+/**
+ * Zeal: the rig leans the torso through a single swing cycle over the whole act, so each of the three blows
+ * gets its own forward lurch through the posture (hunch) instead — peaking just as that strike lands.
+ */
+function zealLean(k: number): number {
+  let v = 0;
+  for (const at of ZEAL_AT) {
+    const d = (k - at) / 0.12;                   // about ±0.12 of the act around each strike
+    if (d > -1.6 && d < 1) v = Math.max(v, d < 0 ? 1 - (d / -1.6) ** 2 : 1 - d * d);
+  }
+  return 0.24 * v;
+}
 
 function tierOf(h: Hero, slot: 'gloves' | 'head' | 'offhand'): number {
   const it = h.equip[slot];
@@ -51,7 +67,12 @@ CLASS_LOOK.paladin = (h, common, ct) => {
     boots: ct >= 2 ? shade(armor, -0.42) : common.boots ?? '#3a2a1c',
     helm: -1,
     offhand: 'pl_shield', offTier: common.offTier ?? 0,
+    // the order's own maces (weapons.ts) instead of the generic spiked ball
+    weapon: common.weapon === 'mace' ? 'pl_mace' : common.weapon,
+    // the order's arms brighten with tier (iron → polished steel → gold-washed → gilded) instead of darkening
+    wColor: common.wColor ?? WSTEEL[Math.max(0, Math.min(4, common.wTier ?? 0))],
     wGlow: common.wGlow ?? (aura || act === 'judgment' || act === 'zeal' ? '#ffd46a' : undefined),
+    hunch: act === 'charge' ? 0.3 : act === 'zeal' ? zealLean(pl.k) : undefined,
     trim: ct >= 2 ? GOLD : undefined,
     armorTier: ct,
     glow: '#ffd070',
@@ -129,9 +150,12 @@ function remapPose(p: Pose, s: PlState): void {
     const n = ZEAL_AT.length;
     p.atk = Math.min(0.999, (p.atk * n) % 1);
   } else if (s.act === 'charge') {
-    // shield forward, mace cocked back, slammed down as the charge lands
+    // running flat out behind the raised shield: legs pumping, body leaning in, mace trailing low behind
+    // (the follow-through part of the swing pose leans the torso forward without the weapon smear)
     p.block = 1;
-    p.atk = s.k < 0.72 ? 0.3 + s.k * 0.06 : 0.34 + ((s.k - 0.72) / 0.28) * 0.4;
+    p.moving = true;
+    p.walk = s.k * 2.8;
+    p.atk = 0.68 + 0.1 * s.k;
   } else if (s.act === 'judgment') {
     // weapon raised straight to the sky (the windup peak of the swing, held; just below the smear window)
     p.cast = -1;
@@ -330,7 +354,7 @@ function helm(c: CanvasRenderingContext2D, p: Pose, a: RigAnchors, s: PlState): 
   }
   // great helm (3) / gilded crowned helm (4): covers the whole head
   const gild = t >= 4;
-  const base = gild ? '#e8dcb8' : st;
+  const base = gild ? '#e6e8f0' : st;
   const top = y - r * 1.2, bot = y + r * 1.34, lx = x - r * 1.14, rx = x + r * 1.3;
   c.fillStyle = mg(lx, rx, base);
   c.beginPath();
@@ -358,7 +382,7 @@ function helm(c: CanvasRenderingContext2D, p: Pose, a: RigAnchors, s: PlState): 
     if (gild || s.aura) {
       c.save(); c.globalCompositeOperation = 'lighter';
       const eg = c.createRadialGradient(x + r * 0.75, sy + r * 0.12, 0, x + r * 0.75, sy + r * 0.12, r * 0.75);
-      eg.addColorStop(0, gild ? 'rgba(255,236,160,0.7)' : 'rgba(255,220,130,0.45)'); eg.addColorStop(1, 'rgba(255,200,80,0)');
+      eg.addColorStop(0, gild ? 'rgba(255,226,140,0.5)' : 'rgba(255,220,130,0.45)'); eg.addColorStop(1, 'rgba(255,200,80,0)');
       c.fillStyle = eg; c.fillRect(x - r * 0.1, sy - r * 0.7, r * 1.8, r * 1.6);
       c.restore();
     }
@@ -438,19 +462,33 @@ function frontArm(c: CanvasRenderingContext2D, L: PlLook, p: Pose, a: RigAnchors
       for (let i = 0; i < 4; i++) { const aa = p.t * 5 + (i * TAU) / 4; c.beginPath(); c.moveTo(tx + Math.cos(aa) * R * 0.3, ty + Math.sin(aa) * R * 0.3); c.lineTo(tx + Math.cos(aa) * R * 0.95, ty + Math.sin(aa) * R * 0.95); c.stroke(); }
     }
     if (s.act === 'judgment' && s.k > 0.3) {
-      // a thread of light rising to the sky
-      const bh = 60, lg = c.createLinearGradient(tx, ty - bh, tx, ty);
+      // a thread of light rising to the sky (short enough to fade out inside the actor's offscreen box)
+      const bh = Math.min(40, Math.max(8, ty + 100)), lg = c.createLinearGradient(tx, ty - bh, tx, ty);
       lg.addColorStop(0, 'rgba(255,240,190,0)'); lg.addColorStop(1, `rgba(255,240,190,${0.8 * k})`);
       c.fillStyle = lg; c.fillRect(tx - 1.4, ty - bh, 2.8, bh);
     }
     c.restore();
+    if (s.act === 'hammer' && s.k < 0.52) {
+      // the blessed hammer takes shape, spinning, above the raised weapon before it is loosed (sim: at half the act)
+      const g = ease(s.k / 0.4), out = s.k > 0.44 ? 1 - (s.k - 0.44) / 0.08 : 1;
+      c.save();
+      c.globalAlpha = Math.max(0, out);
+      c.translate(tx, ty - 5 - 3 * g);
+      c.globalCompositeOperation = 'lighter';
+      const hg = c.createRadialGradient(0, 0, 0, 0, 0, 11);
+      hg.addColorStop(0, `rgba(255,240,190,${0.7 * g})`); hg.addColorStop(1, 'rgba(255,190,70,0)');
+      c.fillStyle = hg; c.beginPath(); c.arc(0, 0, 11, 0, TAU); c.fill();
+      c.globalCompositeOperation = 'source-over';
+      hammerShape(c, p.t * 14, 0.35 + 0.35 * g, false);
+      c.restore();
+    }
   }
 }
 
 /** Layered shoulder guard following the upper arm (sx,sy shoulder, a arm angle in the rig's sin/cos convention). */
 function spaulder(c: CanvasRenderingContext2D, sx: number, sy: number, a: number, armW: number, s: PlState): void {
   if (s.ct < 1) return;
-  const col = s.ct >= 4 ? '#eee2c0' : armorOf(s.ct);
+  const col = s.ct >= 4 ? '#eceef5' : armorOf(s.ct);
   const trim = s.ct >= 3 ? GOLD : shade(col, -0.5);
   const lames = s.ct >= 2 ? 3 : 2;
   const W = armW * (s.ct >= 3 ? 0.95 : 0.82);
@@ -531,6 +569,36 @@ export function shieldFace(c: CanvasRenderingContext2D, tier: number, t: number,
   c.restore();
 }
 
+/** The shield's inner side (seen when the knight faces away): planks, leather straps, a padded grip and rivets. */
+function shieldBack(c: CanvasRenderingContext2D, tier: number): void {
+  c.save();
+  const rim = tier >= 2 ? GOLD : '#9a9ca4';
+  const wood = (x0: number, x1: number) => { const g = c.createLinearGradient(x0, 0, x1, 0); g.addColorStop(0, '#8a6038'); g.addColorStop(0.5, '#6a4424'); g.addColorStop(1, '#3e2612'); return g; };
+  if (tier <= 0) {
+    c.fillStyle = wood(-7, 7); c.beginPath(); c.arc(0, 0, 7, 0, TAU); c.fill();
+    c.strokeStyle = 'rgba(30,16,6,0.6)'; c.lineWidth = 0.5; for (const x of [-3.5, 0, 3.5]) { c.beginPath(); c.moveTo(x, -6.5); c.lineTo(x, 6.5); c.stroke(); }
+    c.strokeStyle = rim; c.lineWidth = 1.3; c.beginPath(); c.arc(0, 0, 6.8, 0, TAU); c.stroke();
+    c.fillStyle = '#3a2412'; c.fillRect(-4.2, -1.1, 8.4, 2.2);
+    c.fillStyle = '#b0b4bc'; for (const x of [-4, 4]) { c.beginPath(); c.arc(x, 0, 0.7, 0, TAU); c.fill(); }
+    c.restore(); return;
+  }
+  const w = tier >= 3 ? 8 : 7.2, top = tier >= 3 ? -10.5 : -9.5, bot = tier >= 3 ? 14 : 12.5;
+  const path = () => { c.beginPath(); c.moveTo(-w, top); c.quadraticCurveTo(0, top - 1.6, w, top); c.lineTo(w, 1.5); c.quadraticCurveTo(w * 0.8, bot * 0.7, 0, bot); c.quadraticCurveTo(-w * 0.8, bot * 0.7, -w, 1.5); c.closePath(); };
+  path(); c.fillStyle = wood(-w, w); c.fill();
+  c.save(); path(); c.clip();
+  c.strokeStyle = 'rgba(30,16,6,0.55)'; c.lineWidth = 0.5;
+  for (let x = -w + 2.4; x < w; x += 2.4) { c.beginPath(); c.moveTo(x, top - 2); c.lineTo(x, bot); c.stroke(); }
+  // leather straps (enarmes) and the padded grip
+  c.strokeStyle = '#3a2412'; c.lineWidth = 1.8; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(-w * 0.7, -3.5); c.lineTo(w * 0.7, -5.5); c.moveTo(-w * 0.6, 4); c.lineTo(w * 0.6, 2.2); c.stroke();
+  c.fillStyle = '#5a3a1e'; c.fillRect(-1.6, -4.2, 3.2, 7.4);
+  c.restore();
+  path(); c.strokeStyle = shade(rim, -0.35); c.lineWidth = 2.1; c.stroke(); c.strokeStyle = rim; c.lineWidth = 1.2; c.stroke();
+  c.fillStyle = tier >= 2 ? GOLD : '#b0b4bc';
+  for (const [x, y] of [[-w * 0.7, -3.5], [w * 0.7, -5.5], [-w * 0.6, 4], [w * 0.6, 2.2]] as [number, number][]) { c.beginPath(); c.arc(x, y, 0.65, 0, TAU); c.fill(); }
+  c.restore();
+}
+
 OFFHAND_ART.pl_shield = {
   draw(c, x, y, tier, p) {
     const r = rig;
@@ -544,7 +612,27 @@ OFFHAND_ART.pl_shield = {
     c.save();
     c.translate(x + 3, y - 3 - (p.block ?? 0) * 6);
     c.scale(0.92, 1);
-    shieldFace(c, tier, p.t);
+    const charging = r?.s.act === 'charge';
+    const ck = charging ? Math.min(1, r!.s.k * 5) : 0;
+    if (charging) {
+      // holy light gathering behind the shield
+      c.save(); c.globalCompositeOperation = 'lighter';
+      const g = c.createRadialGradient(2, 1, 0, 2, 1, 20);
+      g.addColorStop(0, `rgba(255,240,190,${0.55 * ck})`); g.addColorStop(0.5, `rgba(255,200,90,${0.25 * ck})`); g.addColorStop(1, 'rgba(255,180,60,0)');
+      c.fillStyle = g; c.beginPath(); c.arc(2, 1, 20, 0, TAU); c.fill();
+      c.restore();
+    }
+    if (p.back) shieldBack(c, tier); else shieldFace(c, tier, p.t);
+    if (charging) {
+      // a bow wave of light parting in front of the shield
+      c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
+      const wob = Math.sin(p.t * 40) * 0.6;
+      for (const [R, w, a] of [[14, 2.6, 0.75], [18.5, 1.6, 0.45], [23, 1, 0.25]] as [number, number, number][]) {
+        c.strokeStyle = `rgba(255,236,170,${a * ck})`; c.lineWidth = w;
+        c.beginPath(); c.arc(-4 + wob, 1, R, -0.95, 0.95); c.stroke();
+      }
+      c.restore();
+    }
     c.restore();
   },
   icon(c, tier) { shieldFace(c, tier, 0, 1.9); },

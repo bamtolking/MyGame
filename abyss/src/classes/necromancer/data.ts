@@ -36,14 +36,14 @@ export const NECROMANCER: ClassPack = {
       timing: { dur: 0.45, hitAt: 0.5 },
       desc: '목표 근처의 시체를 최대 3구까지 터뜨립니다. 시체의 최대 생명력에 비례한 화염·물리 피해를 줍니다. 시체가 없으면 쓸 수 없습니다.',
       detail: (r) => [`시체 최대 생명력의 40% + ${pct(60 + 8 * r)}`, '폭발 반경 2.6칸 · 시체 3구까지'],
-      ai: { crowd: 2 },
+      ai: { crowd: 4 },
     },
     {
       id: 'nc_mage', cls: 'necromancer', name: '해골 마법사', icon: 'nc_mage', req: 6, kind: 'target', range: 8, elem: 'cold',
       mana: () => 12, cd: () => 1, pct: (r) => 70 + 8 * r,
       timing: { dur: 0.5, hitAt: 0.6 },
-      desc: '땅에서 해골 마법사를 일으킵니다. 14초 동안 제자리에서 가까운 적에게 냉기 뼈 화살을 쏩니다. 최대 3구.',
-      detail: (r) => [`0.8초마다 ${pct(70 + 8 * r)} (냉기)`, '지속 14초 · 사거리 7칸 · 최대 3구'],
+      desc: '땅에서 해골 마법사를 일으킵니다. 14초 동안 제자리에서 가까운 적에게 냉기 뼈 화살을 쏘아 둔화시킵니다. 최대 3구.',
+      detail: (r) => [`0.8초마다 ${pct(70 + 8 * r)} (냉기 · 둔화)`, '지속 14초 · 사거리 7칸 · 최대 3구'],
       ai: { crowd: 1 },
     },
     {
@@ -52,7 +52,7 @@ export const NECROMANCER: ClassPack = {
       timing: { dur: 0.45, hitAt: 0.5 },
       desc: '12초간 뼈 갑옷을 두릅니다. 받는 피해가 줄고, 근접 공격한 적에게 뼈 조각이 박힙니다.',
       detail: (r) => [`받는 피해 -${Math.min(40, Math.round(20 + 1.5 * r))}%`, `피해 반사 +${10 + 3 * r}`, '재사용 18초'],
-      ai: { buff: true, crowd: 2 },
+      ai: { buff: true, crowd: 1 },
     },
     {
       id: 'nc_plague', cls: 'necromancer', name: '역병 폭풍', icon: 'nc_plague', req: 15, kind: 'target', range: 10, elem: 'poison',

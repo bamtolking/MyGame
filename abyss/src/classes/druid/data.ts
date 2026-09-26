@@ -35,14 +35,14 @@ export const DRUID: ClassPack = {
       mana: (r) => 8 + Math.floor(r * 0.4), cd: () => 1, pct: (r) => 35 + 4 * r,
       timing: { dur: 0.45, hitAt: 0.55 },
       desc: '목표 지역에 가시 덩굴을 피워 4초 동안 적을 묶어 둔화시키고 독 피해를 줍니다.',
-      detail: (r) => [`0.5초마다 ${pct(35 + 4 * r)} (독)`, '반경 2.6칸 · 4초 · 둔화'],
+      detail: (r) => [`0.5초마다 ${pct(35 + 4 * r)} (독)`, '반경 2.6칸 · 4초', '처음 닿으면 0.5초 속박 · 안에서는 이동 속도 절반'],
       ai: { crowd: 2 },
     },
     {
       id: 'dr_wolves', cls: 'druid', name: '늑대 영혼', icon: 'dr_wolves', req: 6, kind: 'proj', range: 11, elem: 'phys',
       mana: (r) => 10 + Math.floor(r * 0.4), cd: () => 0, pct: (r) => 85 + 9 * r,
       desc: '늑대의 영혼을 풀어놓습니다. 영혼들은 스스로 적을 쫓아가 물어뜯습니다.',
-      detail: (r) => [`늑대 ${r >= 6 ? 4 : 3}마리 × ${pct(85 + 9 * r)}`, '적을 추적'],
+      detail: (r) => [`늑대 ${r >= 6 ? 4 : 3}마리 × ${pct(85 + 9 * r)}`, '적을 추적해 한 번씩 물어뜯음'],
       ai: {},
     },
     {

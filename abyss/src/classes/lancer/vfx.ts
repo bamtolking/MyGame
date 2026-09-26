@@ -18,6 +18,8 @@ const BLUE = '120,190,255', PALE = '190,232,255', WHITE = '240,250,255';
 const ELEM: Record<string, string> = { phys: '200,228,255', fire: '255,150,60', cold: '150,215,255', light: '255,245,150', poison: '150,255,120' };
 /** Height of the lance at the hero's chest (iso px at zoom 1, rig × actor scale) and at a target's centre. */
 const CHEST = 44, TARGET = 32;
+/** Screen length of one tile along the ground at zoom 1, measured before foreshortening (√2 · TW/2). */
+const TILE_PX = Math.SQRT2 * 32;
 
 /** Seeded jitter generator for flickering bolts (stable within one frame). */
 function rng(seed: number): () => number {
@@ -92,9 +94,21 @@ EFFECT_ART.ln_pierce = {
     const { c, cam, z, k } = d;
     const [x0, y0] = scr(cam, e.x, e.y, 0, z), [x1, y1] = scr(cam, e.x2 ?? e.x, e.y2 ?? e.y, 0, z);
     const a = (1 - k) * 0.55;
-    c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
-    c.strokeStyle = `rgba(${BLUE},${a * 0.5})`; c.lineWidth = 9 * z; c.beginPath(); c.moveTo(lerp(x0, x1, 0.15), lerp(y0, y1, 0.15)); c.lineTo(x1, y1); c.stroke();
-    c.strokeStyle = `rgba(${PALE},${a})`; c.lineWidth = 2 * z; c.stroke();
+    const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1;
+    // side offset on the floor plane (screen normal, squashed like the iso ground)
+    const nx = -dy / l, ny = (dx / l) * 0.5;
+    const sx = lerp(x0, x1, 0.12), sy = lerp(y0, y1, 0.12), mx = lerp(x0, x1, 0.8), my = lerp(y0, y1, 0.8);
+    const W = (4 + 5 * k) * z;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    // a tapered gouge of light: hair-thin at the lancer, widest near the end, pointed at the tip
+    const g = c.createLinearGradient(sx, sy, x1, y1);
+    g.addColorStop(0, `rgba(${BLUE},0)`); g.addColorStop(0.6, `rgba(${BLUE},${a * 0.45})`); g.addColorStop(1, `rgba(${PALE},${a * 0.8})`);
+    c.fillStyle = g;
+    c.beginPath(); c.moveTo(sx, sy); c.lineTo(mx + nx * W, my + ny * W); c.lineTo(x1, y1); c.lineTo(mx - nx * W, my - ny * W); c.closePath(); c.fill();
+    const g2 = c.createLinearGradient(sx, sy, x1, y1);
+    g2.addColorStop(0, `rgba(${PALE},0)`); g2.addColorStop(1, `rgba(255,255,255,${a})`);
+    c.strokeStyle = g2; c.lineWidth = 1.4 * z; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(sx, sy); c.lineTo(x1, y1); c.stroke();
     c.restore();
   },
   air(e, d) {
@@ -261,6 +275,9 @@ PROJ_ART.ln_javelin = {
     const tier = p.data?.tier ?? 2;
     const th = Math.PI / 2 - ang; // rig convention: local +y along the flight
     const fadeIn = Math.min(1, p.age / 0.05);
+    // flying toward / away from the viewer the spear is foreshortened (screen length of the world heading)
+    const sp = Math.hypot(p.vx, p.vy) || 1;
+    const fore = Math.max(0.55, Math.hypot(p.vx - p.vy, (p.vx + p.vy) * 0.5) / (Math.SQRT2 * sp));
     const rnd = rng(p.id * 131 + Math.floor(time * 30) * 17);
     const arc = (w: number, a: number): void => {
       const x0 = (-40 + rnd() * 24) * z, x1 = x0 + (20 + rnd() * 16) * z;
@@ -271,18 +288,22 @@ PROJ_ART.ln_javelin = {
     };
     c.save(); c.translate(sx, sy);
     // electric haze and arcs behind the spear
-    c.save(); c.rotate(ang); c.globalCompositeOperation = 'lighter'; c.lineJoin = 'round'; c.lineCap = 'round';
+    c.save(); c.rotate(ang); c.scale(fore, 1); c.globalCompositeOperation = 'lighter'; c.lineJoin = 'round'; c.lineCap = 'round';
     const g = c.createRadialGradient(0, 0, 2 * z, 0, 0, 34 * z);
     g.addColorStop(0, `rgba(210,240,255,${0.3 * fadeIn})`); g.addColorStop(0.45, `rgba(${BLUE},${0.16 * fadeIn})`); g.addColorStop(1, 'rgba(60,110,255,0)');
     c.fillStyle = g; c.beginPath(); c.ellipse(-6 * z, 0, 36 * z, 10 * z, 0, 0, TAU); c.fill();
     for (let i = 0; i < (fx.low ? 1 : 3); i++) arc(1, fadeIn);
     c.restore();
     // the spear itself, tip slightly ahead of the projectile point
-    c.save(); c.rotate(-th); c.scale(z, z); c.translate(0, -30);
+    c.save(); c.rotate(-th); c.scale(z, z * fore); c.translate(0, -30);
+    // just released: the shaft slides out of the hand instead of reaching back through the lancer's body
+    // (local units along the flight: TILE_PX per tile, whatever the foreshortening; spawned 0.4 tiles ahead)
+    const back = 30 - (0.4 + p.age * sp) * TILE_PX + 4;
+    if (back > -26) { c.beginPath(); c.rect(-12, back, 24, 90 - back); c.clip(); }
     drawLance(c, tier, 1, { charge: 1, t: time, low: true });
     c.restore();
     // one arc crossing in front of the shaft
-    if (!fx.low) { c.save(); c.rotate(ang); c.globalCompositeOperation = 'lighter'; c.lineJoin = 'round'; c.lineCap = 'round'; arc(0.8, fadeIn); c.restore(); }
+    if (!fx.low) { c.save(); c.rotate(ang); c.scale(fore, 1); c.globalCompositeOperation = 'lighter'; c.lineJoin = 'round'; c.lineCap = 'round'; arc(0.8, fadeIn); c.restore(); }
     c.restore();
     if (Math.random() < (fx.low ? 0.25 : 0.8)) {
       fx.add({ x: p.x + (Math.random() - 0.5) * 0.4, y: p.y + (Math.random() - 0.5) * 0.4, z: 40 + (Math.random() - 0.5) * 12, vx: -p.vx * 0.08 + (Math.random() - 0.5) * 2, vy: -p.vy * 0.08 + (Math.random() - 0.5) * 2, vz: (Math.random() - 0.5) * 40 - 30, color: Math.random() < 0.5 ? '#eaf8ff' : '#8ad8ff', kind: Math.random() < 0.5 ? 'glint' : 'spark', size: 1 + Math.random() * 0.6, life: 0.2 + Math.random() * 0.15, add: true });
