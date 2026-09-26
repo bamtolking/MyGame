@@ -398,7 +398,33 @@ export function drawScene(g: CanvasRenderingContext2D, placed: Placed, prep: Pre
     d: pts.head.d + 0.5,
     fn: (c) => drawHead(c, { c: sk.p.head, M: sk.axes.head, P, toCam: toCamera(cam), R: DIM.headR }, S, pal),
   });
-  // 밴드·수건은 몸 앞쪽에
+  // 밴드·수건은 몸 앞쪽에 (to 가 없으면 벽·기둥 고정점에 묶인 밴드)
+  props.forEach((pr, pi) => {
+    const fixed = (pr.kind === 'band' || pr.kind === 'towel') && pr.at && !pr.to ? prep.propAt[pi] : undefined;
+    if (fixed && pr.at) {
+      const a = pts[pr.at], b = P(fixed);
+      list.push({
+        d: Math.max(a.d, b.d) + 0.2,
+        fn: (c) => {
+          c.lineCap = 'round';
+          c.strokeStyle = 'rgba(0,0,0,0.18)';
+          c.lineWidth = 2.2 * S;
+          c.beginPath();
+          c.moveTo(a.x, a.y);
+          c.lineTo(b.x, b.y);
+          c.stroke();
+          c.strokeStyle = pr.kind === 'band' ? pal.band : pal.seat.f;
+          c.lineWidth = 1.5 * S;
+          c.stroke();
+          // 고정점(문고리·기둥)
+          c.fillStyle = pal.frame;
+          c.beginPath();
+          c.arc(b.x, b.y, 2 * S, 0, Math.PI * 2);
+          c.fill();
+        },
+      });
+    }
+  });
   for (const pr of props) {
     if ((pr.kind === 'band' || pr.kind === 'towel') && pr.at && pr.to) {
       const a = pts[pr.at], b = pts[pr.to];
@@ -914,14 +940,26 @@ export function prepare(spec0: AnimSpec, w: number, h: number, mirror = false, y
   const b = boundsOf(frames, cam, spec.props);
   const chairSk = spec.props?.some((p) => p.kind === 'chair') ? frames[0].sk : undefined;
   const propAt = (spec.props ?? []).map((p) => {
-    if ((p.kind !== 'step' && p.kind !== 'table') || !p.at) return undefined;
-    const sk = place(poseAt(spec0, keyTime(spec, p.key ?? 0), mirror), spec).sk;
-    return sk.p[p.at];
+    if (!p.at) return undefined;
+    const fixedBand = (p.kind === 'band' || p.kind === 'towel') && !p.to;
+    if (p.kind !== 'step' && p.kind !== 'table' && !fixedBand) return undefined;
+    const j = place(poseAt(spec0, keyTime(spec, p.key ?? 0), mirror), spec).sk.p[p.at];
+    if (!fixedBand) return j;
+    const o = p.off ?? [0, 0, 30];
+    return [j[0] + o[0], j[1] + o[1], j[2] + o[2]] as V3;
   });
-  // 받침대도 화면 안에 들어오게
+  // 받침대·밴드 고정점도 화면 안에 들어오게
   for (const [i, at] of propAt.entries()) {
     if (!at) continue;
     const pr = spec.props![i];
+    if (pr.kind === 'band' || pr.kind === 'towel') {
+      const p = project(at, cam);
+      b.minX = Math.min(b.minX, p.x - 3);
+      b.maxX = Math.max(b.maxX, p.x + 3);
+      b.minY = Math.min(b.minY, p.y - 3);
+      b.maxY = Math.max(b.maxY, p.y + 3);
+      continue;
+    }
     const size = pr.size ?? (pr.kind === 'step' ? [30, 0, 26] : [60, 0, 34]);
     const off = pr.off ?? [0, 0, 0];
     for (const sx of [-1, 1])

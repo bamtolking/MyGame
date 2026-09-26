@@ -118,7 +118,9 @@ anim: {
   엉덩이 `{a:'pelvis', b:'hipR', side:'back', r:4}`, 고관절 굴곡근 `{a:'waist', b:'hipR', side:'front'}`, 손목 굽힘근 `{a:'elR', b:'wrR', side:'front'}`.
 - 받침: `{ kind: 'step', at: 'heelL', key: 0 }` 은 키 0 에서 왼발 뒤꿈치 높이에 윗면이 오는 계단, `{ kind: 'table', at: 'haR', key: 1, off: [0,0,10] }` 은 손 높이의 탁자.
   발이 계단 위에 있으면 `ground: { joints: ['heelL','toeL'], y: 20 }` 으로 그 발을 높이 20에 맞춰요(나머지 발은 바닥 0 이상이어야 함).
-- 밴드·수건: `{ kind: 'band', at: 'haL', to: 'haR' }` (두 관절 사이 선).
+- 밴드·수건: `{ kind: 'band', at: 'haL', to: 'haR' }` (두 관절 사이 선). 문고리·기둥에 묶은 밴드는 `to` 없이
+  `{ kind: 'band', at: 'haR', off: [40, 0, 0], key: 0 }` — 키 0 의 오른손 위치에서 `off` 만큼 떨어진 고정점까지 이어져요.
+- 리그 한계: 손가락·발가락·아래팔 비틀기(회내·회외)·발목 안쪽/바깥쪽 꺾기는 표현할 수 없어요. 이런 동작은 보이는 큰 움직임만 그리고 문구로 설명하세요.
 
 자세는 관절 각도(도)로 적어요. 기본 자세 모음 `src/figure/poses.ts`: `STAND` `SIT` `HOOK`(무릎 세워 누움) `SUPINE` `PRONE` `QUAD`(네발) `SIDE_LYING`(왼쪽으로 누움)
 `HALF_KNEEL` `WALL` `HANDS_BEHIND_HEAD` `HANDS_ON_HIPS` `ARMS_CROSSED`. 파일 안에서 쓰는 자세는 파일 안에 상수로 만들어도 돼요(공용 파일은 고치지 마세요).
