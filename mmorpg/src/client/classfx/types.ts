@@ -31,6 +31,10 @@ export interface HitEv { x: number; y: number; x2?: number; y2?: number }
 export interface ClassFx {
   /** Attack pose duration in seconds (atk0 → atk1 → atk2). */
   atkDur: number;
+  /** Build this class's custom textures ahead of time (called in idle frames when the class first shows up). */
+  warm?(): void;
+  /** Forget per-caster state (called when a new world/FxSystem starts; fx.time restarts at 0). */
+  reset?(): void;
   /** Radius of the generic ult magic circle (default 170). */
   ultR?: number;
   /** Basic attack visuals + sound. `ang` points from the caster to the target. */

@@ -42,6 +42,7 @@ function clone(c: FxCtx, mx: number, my: number, delay: number, dir: number): vo
 }
 
 export const assassin: ClassFx = {
+  warm: () => { cutT(); },
   atkDur: 0.22, ultR: 160,
   atk: (c, e, ang) => {
     const dir = c.n % 2 ? 1 : -1; const q = e.tid ? c.entPos('m', e.tid) : null; const hx = q?.x ?? e.tx, hy = q ? q.y - 2 : e.ty - 16;

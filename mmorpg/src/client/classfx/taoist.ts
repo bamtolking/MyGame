@@ -73,6 +73,7 @@ function spark(c: FxCtx, x: number, y: number, first: boolean): void {
 }
 
 export const taoist: ClassFx = {
+  warm: () => { arrayTex(); talTex(); },
   atkDur: 0.3, ultR: 150,
   atk: (c, e, ang) => {
     // bolt leaves the flicked talismans in front of the chest (atk1 frame) → target → each chain jump in order

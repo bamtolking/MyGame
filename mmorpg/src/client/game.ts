@@ -74,6 +74,7 @@ export class Game {
         this.fx = new FxSystem({ entPos: (k, id) => this.entPos(k, id), serverTime: () => this.serverTime(), me: () => this.hasPos ? { x: this.predX + this.corrX, y: this.predY + this.corrY } : null, solidAt: (x, y) => !isWalkable(this.map, x, y), players: () => this.visiblePlayers() }, this.r.art);
         this.r.fx = this.fx; this.fx.shakeOn = this.set.shake; this.r.setQuality(this.set.quality);
         this.r.art.prewarm([m.me.cls], MONSTERS.filter(d => d.zone === (m.me.zone || 1)).map(d => d.key));
+        for (const f of Object.values(CLASS_FX)) f.reset?.(); this.warmed.clear(); this.warmClasses([m.me.cls, ...m.roster.map(r => r.cls)]);
         this.players.clear(); this.mons.clear(); this.pending = []; this.hasPos = false; this.evq = []; this.visLag = 0;
         this.wb = m.wb; this.ready = true; this.hooks.onWelcome(); this.hooks.onWb(this.wb); break;
       }
@@ -84,7 +85,7 @@ export class Game {
         this.hooks.onMe(ch); break;
       }
       case 'ev': for (const e of m.e) this.queueEv(m.tick, e); break;
-      case 'roster': { for (const r of m.add ?? []) this.roster.set(r.id, r); for (const id of m.del ?? []) { this.roster.delete(id); this.players.delete(id); } this.hooks.onRoster(); break; }
+      case 'roster': { for (const r of m.add ?? []) this.roster.set(r.id, r); for (const id of m.del ?? []) { this.roster.delete(id); this.players.delete(id); } this.warmClasses((m.add ?? []).map(r => r.cls)); this.hooks.onRoster(); break; }
       case 'chat': { this.hooks.onChat(m.name, m.text, !!m.sys, m.id); const p = this.players.get(m.id); if (p) p.bubble = { text: m.text, until: performance.now() + 4500 }; break; }
       case 'ann': this.hooks.onAnn(m.text, m.kind); if (m.kind === 'legend') this.snd.play('legend'); else if (m.kind === 'boss' && m.text.includes('핏빛')) { this.snd.play('horn'); this.snd.duck(0.5, 2); } break;
       case 'boss': this.boss = m.b; this.hooks.onBoss(m.b); break;
@@ -123,6 +124,12 @@ export class Game {
       this.predX = x; this.predY = y; this.prevX = x; this.prevY = y;
     }
   }
+  private warmed = new Set<ClassId>(); private myAtkT = -1e9;
+  /** First sight of a class: bake its sprites and effect textures in idle frames instead of mid-fight. */
+  private warmClasses(cls: ClassId[]): void {
+    if (!this.r) return; const art = this.r.art;
+    for (const c of cls) { if (this.warmed.has(c) || !CLASS_FX[c]) continue; this.warmed.add(c); art.prewarm([c], []); const f = CLASS_FX[c]; if (f.warm) art.idle(() => f.warm!()); }
+  }
   private speed(): number { const st = this.me.stats; return (st?.move ?? 150) * ((this.me.ultT ?? 0) > 0 ? CLASSES[this.me.cls]?.ultMove ?? 1 : 1); }
 
   // ---------- per-frame ----------
@@ -149,10 +156,10 @@ export class Game {
     for (const e of this.players.values()) this.interp(e, rt);
     for (const [id, e] of this.mons) { this.interp(e, rt); if (e.dieT > 0) { e.dieT += vdt; if (e.dieT > DIE_T) this.mons.delete(id); } }
     // events whose time has come
-    if (this.evq.length) { const keep: typeof this.evq = []; for (const q of this.evq) { if (q.tick <= rt + 0.5) this.playEv(q.e); else keep.push(q); } this.evq = keep; }
+    if (this.evq.length) { const due = this.evq.filter(q => q.tick <= rt + 0.5); this.evq = this.evq.filter(q => q.tick > rt + 0.5); for (const q of due) { try { this.playEv(q.e); } catch (err) { console.warn('event failed', q.e.k, err); } } }
     const alpha = this.acc / DT; const mx = this.prevX + (this.predX - this.prevX) * alpha + this.corrX, my = this.prevY + (this.predY - this.prevY) * alpha + this.corrY;
     const mine = this.players.get(this.myId);
-    if (mine && this.hasPos && !(mine.f & PF.DOWN) && !this.me.auto) { mine.x = mx; mine.y = my; if (this.input.x || this.input.y) mine.face = ((Math.atan2(this.input.y, this.input.x) / (Math.PI * 2) * 255) + 256) % 256; }
+    if (mine && this.hasPos && !(mine.f & PF.DOWN) && !this.me.auto) { mine.x = mx; mine.y = my; if ((this.input.x || this.input.y) && performance.now() - this.myAtkT > 400) mine.face = ((Math.atan2(this.input.y, this.input.x) / (Math.PI * 2) * 255) + 256) % 256; } // like the server, attacking holds the facing for 0.4 s
     if (this.combo > 0 && (this.comboT -= dt) <= 0) this.combo = 0;
     this.fx.update(vdt, dt);
     const meX = mine?.x ?? this.predX, meY = mine?.y ?? this.predY;
@@ -231,7 +238,7 @@ export class Game {
     switch (e.k) {
       case 'atk': {
         const p = this.players.get(e.p); const r = this.roster.get(e.p); if (!p || !r) return;
-        const ang = Math.atan2(e.ty - p.y, e.tx - p.x); p.face = ((ang / (Math.PI * 2) * 255) + 256) % 256;
+        const ang = Math.atan2(e.ty - p.y, e.tx - p.x); p.face = ((ang / (Math.PI * 2) * 255) + 256) % 256; if (e.p === this.myId) this.myAtkT = performance.now();
         const cf = CLASS_FX[r.cls] ?? CLASS_FX.sword; this.r.anim.attack(e.p, cf.atkDur);
         cf.atk(this.fxCtx(e.p, r.cls, p.x, p.y, true), e, ang);
         return;
@@ -290,7 +297,7 @@ export class Game {
         return;
       }
       case 'cls': {
-        const p = this.players.get(e.p); const x = p?.x ?? 0, y = p?.y ?? 0; const col = hexCol(CLASSES[e.c].color);
+        const p = this.players.get(e.p); if (!p) return; const x = p.x, y = p.y; const col = hexCol(CLASSES[e.c].color);
         fx.pillar(x, y, col, 1.3, 64, 420); fx.sigil(x, y, 120, col, 1.6, 'sigil', 1.8, 0.7); fx.ring(x, y, 10, 150, 0.8, col, true, 0);
         fx.burst(x, y - 30, 26, [col, 0xffffff], 260, 8, 0.9, 'star'); fx.light(x, y, 300, col, 1.2, 1);
         if (e.p === this.myId) { snd.play('cls_change'); snd.duck(0.4, 1.2); fx.flash(col, 0.18); fx.wave(x, y, 240, 12, 0.7); this.r.art.prewarm([e.c], []); }

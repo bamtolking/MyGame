@@ -15,7 +15,7 @@ export const shaman: ClassFx = {
     c.fx.later(0.35, () => {
       c.fx.ring(e.x, e.y, 30, 340, 0.55, 0xffe07a, false, 0); c.fx.glow(e.x, e.y - 30, 240, 0xffe07a, 0.5, c.mine ? 0.32 : 0.16); c.fx.burst(e.x, e.y - 20, c.mine ? 44 : 20, [0xffe07a, 0xff7ab8, 0xffffff], 460, 8, 0.8);
       c.fx.debris(e.x, e.y - 20, 24, 'petal', [0xff9ac8, 0xffe07a, 0xffffff], 320, 8, 1.4); c.fx.stamp(e.x, e.y - 50, 110, 0.9);
-      if (c.mine) { c.fx.shake(0.6); c.fx.wave(e.x, e.y, 360, 26, 0.9); c.fx.flash(0xfff0c0, 0.3); } c.snd.play('boom', 0.8, e.x, e.y);
+      if (c.mine) { c.fx.shake(0.6); c.fx.wave(e.x, e.y, 360, 26, 0.9); c.fx.flash(0xfff0c0, 0.3); } c.snd.play('boom', c.mine ? 0.8 : c.vol, e.x, e.y);
     });
   },
 };

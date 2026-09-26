@@ -213,7 +213,7 @@ export class FxSystem {
     for (const t of this.tele) {
       const k = Math.max(0, Math.min(1, (now - t.t0) / Math.max(0.05, t.due - t.t0))); const col = TELE_COL[t.s] ?? TELE_COL[0]; const pulse = 0.75 + 0.25 * Math.sin(this.time * 18);
       if (t.sh === 0) {
-        const s = (t.r * 2) / 128; const sy = s * 0.62;
+        const s = (t.r * 2) / 128; const sy = s; // a true circle: the server tests plain distance, so what you see is exactly what hits
         p.draw(EMIT, disc, t.x, t.y, s, sy, 0, col, 0.13, 1);
         p.draw(EMIT, disc, t.x, t.y, s * k, sy * k, 0, col, 0.2 + k * 0.2, 1);
         p.draw(EMIT, ring, t.x, t.y, s, sy, 0, col, 0.75 * pulse, 1);

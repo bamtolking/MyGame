@@ -78,7 +78,7 @@ const rigs = new Map<number, Rig>();
 function boom(c: FxCtx, x: number, y: number): void {
   const soft = c.art.fx('soft');
   c.fx.add(1, 0.45, (p, k) => { const e = 1 - (1 - k) ** 3; p.draw(EMIT, soft, x, y - 18, 0.8 + e * 1.5, 0.7 + e * 1.3, 0, 0xff4a12, 0.26 * (1 - k) ** 1.4, 1); if (k < 0.3) p.draw(EMIT, soft, x, y - 16, 0.5 + e * 0.9, 0.45 + e * 0.8, 0, 0xffb060, 0.26 * (1 - k / 0.3), 1); });
-  c.fx.ring(x, y, 10, 72, 0.42, 0xff7a30, false, 0, 0.5);
+  c.fx.ring(x, y, 10, 72, 0.42, 0xff7a30, false, 1, 0.5); // pass 1 = a true circle, like the server's blast radius
   for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + rnd(-1.3, 1.3); c.fx.part({ tex: 'flame', x: x + rnd(-16, 16), y: y - rnd(4, 16), vx: Math.cos(a) * rnd(40, 120), vy: Math.sin(a) * rnd(60, 150), drag: 0.9, life: rnd(0.3, 0.5), size: rnd(13, 19), grow: -20, col: [0xff4a14, 0xff7424, 0xff9a30][i % 3], a: 0.45, rot: rnd(-0.3, 0.3) }); }
   c.fx.burst(x, y - 14, 9, [0xffb040, 0xff6a20, 0xffc870], 360, 6, 0.55, 'spark', 380, 0.012);
   c.fx.debris(x, y - 6, 4, 'shard', [0x2a201a, 0x5a4432], 250, 6, 0.8);
@@ -112,15 +112,16 @@ function rocket(c: FxCtx, ax: number, ay: number, bx: number, by: number, T: num
 }
 
 export const gunner: ClassFx = {
-  atkDur: 0.34, ultR: 190,
+  atkDur: 0.34, ultR: 190, warm: () => { rocketTex(); hwachaTex(); }, reset: () => rigs.clear(),
   atk: (c, e, ang) => {
     // the muzzle of the recoil frame (sprite faces the shot horizontally)
     const f = Math.cos(ang) < 0 ? -1 : 1, mx = c.x + f * 21, my = c.y - 34;
-    const q0 = e.tid ? c.entPos('m', e.tid) : null; const tx = q0?.x ?? e.tx, ty = q0?.y ?? e.ty - 16;
-    let ux = tx - mx, uy = ty - my; const d = Math.hypot(ux, uy);
-    if (d < 40) { ux = Math.cos(ang); uy = Math.sin(ang); } else { ux /= d; uy /= d; }
-    const a2 = Math.atan2(uy, ux), L = Math.max(CLASSES.gunner.range - 12, d + 20);
-    c.fx.later(0.05, () => { // lands on the recoil frame
+    const q0 = e.tid ? c.entPos('m', e.tid) : null; const tx = q0?.x ?? e.tx, ty = q0?.y ?? e.ty - 16; const d = Math.hypot(tx - mx, ty - my);
+    // the tracer follows the server's pierce line (from the feet along `ang`, full range), raised to body height
+    const R = CLASSES.gunner.range, ex = c.x + Math.cos(ang) * R, ey = c.y + Math.sin(ang) * R - 22;
+    let ux = ex - mx, uy = ey - my; const L = Math.hypot(ux, uy) || 1; ux /= L; uy /= L;
+    const a2 = Math.atan2(uy, ux);
+    c.fx.later(0.075, () => { // lands on the recoil frame (atk1 starts at 22% of atkDur)
       muzzle(c, mx, my, a2); tracer(c, mx, my, ux, uy, L); c.snd.play('musket', c.vol, c.x, c.y);
       c.fx.later(d / ATK.bulletSpeed, () => { const q = e.tid ? c.entPos('m', e.tid) : null; blast(c, q?.x ?? tx, q?.y ?? ty, a2); });
       if (c.mine) { c.fx.zoomPunch(0.006); c.fx.shake(0.04); }

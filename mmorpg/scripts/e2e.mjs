@@ -47,7 +47,7 @@ async function classFlow(page, name) {
     w.teleport(p, w.map.spawn.x, w.map.spawn.y + 60); p.prof.level = Math.max(p.prof.level, 8); w.recompute(p); p.questVer++; w.emitTo(p, { k: 'unlock', c: 'spear' }); return at; });
   let card = false; for (let i = 0; i < 20 && !card; i++) { await page.waitForTimeout(100); card = await page.evaluate(() => !!document.querySelector('.bosscard.unlock.show')); }
   await page.waitForFunction(() => window.__app.g.me.zone === 0 && window.__app.g.me.level >= 8, null, { timeout: 5000 }).catch(() => null);
-  const badge = await page.evaluate(() => document.querySelector('.tr .menu button[data-k="settings"]').classList.contains('badge'));
+  let badge = false; for (let i = 0; i < 20 && !badge; i++) { badge = await page.evaluate(() => document.querySelector('.tr .menu button[data-k="settings"]').classList.contains('badge')); if (!badge) await page.waitForTimeout(100); } // the HUD refreshes badges every 100 ms
   check(card && badge, `new-class unlock shows a card and a menu badge (card ${card}, badge ${badge})`);
   await page.screenshot({ path: `e2e-out/${name}-07-unlock.png` });
   await tapUntil(page, '.tr .menu button[data-k="settings"]', () => !!document.querySelector('#sheet:not(.hidden) .clsbtn'));

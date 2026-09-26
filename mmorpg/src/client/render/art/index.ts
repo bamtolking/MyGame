@@ -66,5 +66,7 @@ export class Art {
     for (const cls of classes) for (const f of FRAME_NAMES) this.queue.push(() => { this.player(cls, f); });
     for (const k of mons) { const a = MON_ART[k]; if (!a) continue; for (let f = 0; f < a.frames; f++) for (const s of MON_STATES[k] ?? 'm') this.queue.push(() => { this.mon(k, f, s); }); }
   }
+  /** Run `fn` in idle time (shares the prewarm queue). */
+  idle(fn: () => void): void { this.queue.push(fn); }
   pending(): number { return this.queue.length; }
 }

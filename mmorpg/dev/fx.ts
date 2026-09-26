@@ -49,7 +49,7 @@ function ult(): void {
   if (cls === 'taoist') for (let k = 0; k < 12; k++) later(0.15 + k * 0.2, () => { const m = mons[k % mons.length]; H({ x: m.x, y: m.y }); hitReact(m); });
   if (cls === 'gunner') for (let k = 0; k < 16; k++) later(k * 0.1, () => { const m = mons[k % mons.length]; H({ x: me.x, y: me.y, x2: m.x + (Math.random() - 0.5) * 40, y2: m.y + (Math.random() - 0.5) * 40 }); });
   if (cls === 'musician') for (const s of [0.2, 1.7, 3.2, 4.7]) later(s, () => H({ x: me.x, y: me.y }));
-  if (cls === 'painter') for (let k = 0; k < 3; k++) later(0.3 + k * 0.6, () => { const a = k * 2.1 + 0.4; H({ x: me.x - Math.cos(a) * 210, y: me.y - Math.sin(a) * 160, x2: me.x + Math.cos(a) * 210, y2: me.y + Math.sin(a) * 160 }); });
+  if (cls === 'painter') for (let k = 0; k < 3; k++) later(0.3 + k * 0.6, () => { const a = k * 2.1 + 0.4; H({ x: me.x - Math.cos(a) * 60, y: me.y - Math.sin(a) * 60, x2: me.x + Math.cos(a) * 360, y2: me.y + Math.sin(a) * 360 }); }); // like the server: 60 behind → 360 ahead
 }
 let last = performance.now(), atkT = 0.5, ultDone = false;
 function frame(now: number): void {

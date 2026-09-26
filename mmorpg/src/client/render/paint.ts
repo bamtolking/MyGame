@@ -47,7 +47,7 @@ export class CanvasPainter implements Painter {
   W = 1; H = 1; dpr = 1; stats = { draws: 0, quads: 0, uploads: 0 };
   private c: Ctx; private lcv = canvas(1, 1); private lc: Ctx; private emit: Cmd[] = [];
   private m = [1, 0, 0, 1, 0, 0]; private lm = [1, 0, 0, 1, 0, 0];
-  private flashCache = new Map<number, HTMLCanvasElement>(); private tintCache = new Map<string, HTMLCanvasElement>();
+  private flashCache = new Map<string, HTMLCanvasElement>(); private tintCache = new Map<string, HTMLCanvasElement>();
   private vig: HTMLCanvasElement | null = null;
   constructor(cv: HTMLCanvasElement) { this.canvas = cv; this.c = cv.getContext('2d', { alpha: false })!; this.lc = this.lcv.getContext('2d')!; }
   resize(W: number, H: number, dpr: number): void {
@@ -64,7 +64,8 @@ export class CanvasPainter implements Painter {
     const f = (v: number) => Math.round(Math.min(1, v) * 255); lc.fillStyle = `rgb(${f(ambient[0])},${f(ambient[1])},${f(ambient[2])})`; lc.fillRect(0, 0, this.lcv.width, this.lcv.height);
   }
   private src(t: Tex, col: number, flash: number): HTMLCanvasElement {
-    if (flash > 0.5) { let f = this.flashCache.get(t.id); if (!f) { f = silhouette(t); this.flashCache.set(t.id, f); if (this.flashCache.size > 400) this.flashCache.clear(); } return f; }
+    // full flash = solid silhouette, tinted like the GL shader does (white unless a colour is given)
+    if (flash > 0.5) { const key = t.id + ':' + (col & 0xffffff); let f = this.flashCache.get(key); if (!f) { f = silhouette(t, hex(col)); this.flashCache.set(key, f); if (this.flashCache.size > 400) this.flashCache.clear(); } return f; }
     if ((col & 0xffffff) === 0xffffff) return t.cv;
     const key = t.id + ':' + col; let v = this.tintCache.get(key);
     if (!v) { v = tinted(t, hex(col)); this.tintCache.set(key, v); if (this.tintCache.size > 300) this.tintCache.clear(); }

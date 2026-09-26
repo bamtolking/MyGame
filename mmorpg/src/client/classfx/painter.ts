@@ -157,8 +157,8 @@ function pool(c: FxCtx, x: number, y: number, r: number, dur: number, v = Math.r
   const A = tex(), P = v ? A.pool1 : A.pool0, Rm = v ? A.rim1 : A.rim0; const s = r / 44, flip = Math.random() < 0.5 ? -1 : 1;
   c.fx.add(0, dur, (p, k, t) => {
     const g = t < 0.14 ? 0.5 + 0.5 * (1 - (1 - t / 0.14) ** 3) : 1, a = k > 0.55 ? (1 - k) / 0.45 : 1, sx = s * g;
-    p.draw(SCENE, P, x, y, sx * flip, sx * 0.62, 0, 0xffffff, 0.86 * a, 0);
-    p.draw(EMIT, Rm, x, y, sx * flip, sx * 0.62, 0, IVORY, (t < 0.25 ? 0.4 - t * 0.8 : 0.2) * a, 1);
+    p.draw(SCENE, P, x, y, sx * flip, sx * 0.9, 0, 0xffffff, 0.86 * a, 0); // nearly round: the pool hurts everything within inkR
+    p.draw(EMIT, Rm, x, y, sx * flip, sx * 0.9, 0, IVORY, (t < 0.25 ? 0.4 - t * 0.8 : 0.2) * a, 1);
   });
 }
 /** Splash where the ink blob lands: pool, crown of droplets, pale ring, a little light; then the two damage ticks ripple. */
@@ -203,6 +203,7 @@ function claw(c: FxCtx, x: number, y: number, rot: number, size: number): void {
 // ---------------- class fx ----------------
 const scrolls = new Map<number, { x: number; y: number; until: number }>();
 export const painter: ClassFx = {
+  warm: () => { tex(); utex(); }, reset: () => scrolls.clear(),
   atkDur: 0.32, ultR: 190,
   atk: (c, e, ang) => { lob(c, e.tx, e.ty, e.tid, ang); c.snd.play('brush', c.vol, c.x, c.y); },
   ult: (c, e) => {

@@ -93,6 +93,7 @@ function groundRing(p: Painter, tex: Tex, x: number, y: number, r: number, col: 
 }
 
 export const guardian: ClassFx = {
+  warm: () => { waveTex(); domeTex(); ringTex(); cellTex(); },
   atkDur: 0.32, ultR: PUSH_R,
   atk: (c, e, ang) => {
     const x = c.x, y = c.y, ca = Math.cos(ang), sa = Math.sin(ang), big = c.ult ? 1.12 : 1;

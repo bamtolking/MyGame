@@ -43,6 +43,7 @@ function note(c: FxCtx, x: number, y: number, vx: number, vy: number, life: numb
 }
 
 export const musician: ClassFx = {
+  warm: () => { stageTex(); }, reset: () => castAt.clear(),
   atkDur: 0.3, ultR: PULSE_R,
   atk: (c, _e, ang) => {
     const ox = c.x + Math.cos(ang) * 8, oy = c.y - 22; const beam = c.art.fx('beam'); const col = c.ult ? GOLD : ORANGE; const alt = c.n % 2;
@@ -74,9 +75,10 @@ export const musician: ClassFx = {
         const k = (t - i * 0.11) / 0.75; if (k <= 0 || k >= 1) continue;
         const r = 20 + (PULSE_R - 20) * out3(k) * (1 - i * 0.13), a = (1 - k) ** 1.3 * f;
         const s1 = (r * 2) / 128 / (58 / 64), s2 = (r * 2) / 128 / (55 / 64);
-        if (i === 0) p.draw(EMIT, soft, x, y, s2, s2 * 0.62, 0, GOLD, a * 0.34, 1);
-        p.draw(EMIT, ring, x, y, s1, s1 * 0.62, 0, i ? (i === 1 ? GOLD : ORANGE) : CREAM, a * (i ? 0.4 : 0.6), 1);
-        if (i === 0 && k < 0.4) { const sd = (r * 2) / 128; p.draw(EMIT, disc, x, y, sd, sd * 0.62, 0, GOLD, 0.07 * (1 - k / 0.4), 1); }
+        // true circles: the server hits everything within PULSE_R by plain distance
+        if (i === 0) p.draw(EMIT, soft, x, y, s2, s2, 0, GOLD, a * 0.34, 1);
+        p.draw(EMIT, ring, x, y, s1, s1, 0, i ? (i === 1 ? GOLD : ORANGE) : CREAM, a * (i ? 0.4 : 0.6), 1);
+        if (i === 0 && k < 0.4) { const sd = (r * 2) / 128; p.draw(EMIT, disc, x, y, sd, sd, 0, GOLD, 0.07 * (1 - k / 0.4), 1); }
       }
     });
     if (f === 1) { c.fx.glow(x, y - 28, 56, GOLD, 0.4, 0.16); c.fx.light(x, y, 280, GOLD, 0.28, 0.5); }

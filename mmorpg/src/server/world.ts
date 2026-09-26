@@ -212,8 +212,9 @@ export class World {
     const idle = this.time - p.lastHurtT;
     if (z === TOWN) this.healPlayer(p, p.stats.maxHp * 0.15 * DT, false);
     else if (idle > 5) this.healPlayer(p, p.stats.maxHp * 0.02 * DT, false);
-    if (p.ultT > 0) p.ultT -= DT;
-    if (p.buffT > 0) p.buffT -= DT;
+    // count down to exactly 0 (float residue would give one extra boosted tick the client can't predict)
+    if (p.ultT > 0) { p.ultT -= DT; if (p.ultT < 1e-6) p.ultT = 0; }
+    if (p.buffT > 0) { p.buffT -= DT; if (p.buffT < 1e-6) p.buffT = 0; }
   }
   /** Attack-speed multiplier from auras and buffs (musician passive/ult, assassin ult). */
   aspdMul(p: Player): number {

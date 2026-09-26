@@ -73,7 +73,10 @@ function dragonThrust(c: FxCtx, x0: number, y0: number, x1: number, y1: number):
   });
 }
 
+const auraPts: number[] = []; let auraT = 0;
+const auraTh = (i: number) => auraT * 4.2 - (16 - i) * 0.21, auraDim = (i: number) => (Math.sin(auraTh(i)) > 0 ? 1 : 0.45);
 export const spear: ClassFx = {
+  warm: () => { dragonHead(); },
   atkDur: 0.3, ultR: 190,
   atk: (c, _e, ang) => {
     const ux = Math.cos(ang), uy = Math.sin(ang), len = CLASSES.spear.range - 10;
@@ -123,9 +126,10 @@ export const spear: ClassFx = {
   aura: (p, art, t, x, y) => {
     p.draw(EMIT, art.fx('ringSoft'), x, y, 0.95, 0.95 * 0.62, 0, JADE, 0.3 + Math.sin(t * 7) * 0.08, 1);
     // a jade dragon circling the spearman (the half behind him is dimmer)
-    const M = 16, pts: number[] = [], th = (i: number) => t * 4.2 - (M - i) * 0.21;
-    for (let i = 0; i <= M; i++) { const a = th(i); pts.push(x + Math.cos(a) * 44, y - 26 + Math.sin(a) * 18 + Math.sin(a * 2 + t * 3) * 5); }
-    drawBody(p, art, pts, 16, 0.9, i => Math.sin(th(i)) > 0 ? 1 : 0.45);
-    drawHead(p, pts[M * 2], pts[M * 2 + 1], Math.atan2(pts[M * 2 + 1] - pts[M * 2 - 1], pts[M * 2] - pts[M * 2 - 2]), 0.55, Math.sin(th(M)) > 0 ? 1 : 0.55);
+    // runs every frame per spearman in ult: reuse one scratch array and one dimming function
+    const M = 16, pts = auraPts; pts.length = 0; auraT = t;
+    for (let i = 0; i <= M; i++) { const a = auraTh(i); pts.push(x + Math.cos(a) * 44, y - 26 + Math.sin(a) * 18 + Math.sin(a * 2 + t * 3) * 5); }
+    drawBody(p, art, pts, 16, 0.9, auraDim);
+    drawHead(p, pts[M * 2], pts[M * 2 + 1], Math.atan2(pts[M * 2 + 1] - pts[M * 2 - 1], pts[M * 2] - pts[M * 2 - 2]), 0.55, Math.sin(auraTh(M)) > 0 ? 1 : 0.55);
   },
 };
