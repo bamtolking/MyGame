@@ -42,7 +42,7 @@ export class App implements AppApi {
   el: Record<string, HTMLElement> = {};
   pendingHello: { name: string; cls: ClassId } | null = null;
   /** Class unlocks already shown to the player (localStorage 'moonlit.seenCls'); `clsNew` = the ones flagged NEW in the open 직업 sheet. */
-  private seenCls = new Set<string>(store.seenClasses().length ? store.seenClasses() : STARTER_CLASSES); private clsNew = new Set<ClassId>();
+  private seenCls = new Set<string>([...STARTER_CLASSES, ...store.seenClasses()]); private clsNew = new Set<ClassId>();
 
   constructor(root: HTMLElement) {
     this.root = root; this.snd.setVolumes(this.set.sfx, this.set.bgm);
@@ -187,7 +187,7 @@ export class App implements AppApi {
     window.onkeydown = (e) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       const k = e.key.toLowerCase();
-      if (k === ' ') { this.useUlt(); e.preventDefault(); } else if (k === 'b' || k === 'i') this.toggleSheet('bag'); else if (k === 't') this.toggleSheet('tal'); else if (k === 'q' || k === 'j') this.toggleSheet('quest'); else if (k === 'm') this.toggleSheet('map'); else if (k === 'enter') this.openSheet('chat'); else if (k === 'escape') { this.closeModal(); this.closeSheet(); }
+      if (k === ' ') { this.useUlt(); e.preventDefault(); } else if (k === 'b' || k === 'i') this.toggleSheet('bag'); else if (k === 't') this.toggleSheet('tal'); else if (k === 'q' || k === 'j') this.toggleSheet('quest'); else if (k === 'm') this.toggleSheet('map'); else if (k === 'c') this.toggleSheet('cls'); else if (k === 'enter') this.openSheet('chat'); else if (k === 'escape') { this.closeModal(); this.closeSheet(); }
     };
   }
   private renderStatic(): void {

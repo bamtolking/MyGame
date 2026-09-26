@@ -88,7 +88,11 @@ select { width: auto; min-height: 40px; }
 .cform button { flex: none; padding: 8px 24px; font-size: 16px; }
 .cdwrap { min-height: 0; overflow-y: auto; touch-action: pan-y; background: rgba(14, 16, 34, 0.72); border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; }
 .shake { animation: shake 0.35s; } @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
-@container app (min-height: 540px) { .classcard b { font-size: 16px; } .classcard .role { font-size: 11.5px; } .chead h2 { font-size: 22px; } .unlockhint, .chead .hint { font-size: 12.5px; } }
+@container app (min-height: 540px) {
+  #create { grid-template-columns: minmax(0, 780px) clamp(260px, 30cqw, 380px); grid-template-rows: minmax(0, 620px); justify-content: center; align-content: center; gap: 16px; }
+  .classcard img { width: min(96px, 13cqh); height: min(96px, 13cqh); } .classcard b { font-size: 16px; } .classcard .role { font-size: 11.5px; } .chead h2 { font-size: 22px; } .unlockhint, .chead .hint { font-size: 12.5px; }
+}
+@container app (max-height: 340px) { .unlockhint { display: none; } .classcard .role { -webkit-line-clamp: 1; } }
 /* class detail (create screen and the 직업 sheet) */
 .clsdetail { display: flex; flex-direction: column; gap: 8px; }
 .cdhead { display: flex; gap: 10px; align-items: center; }
@@ -171,7 +175,7 @@ select { width: auto; min-height: 40px; }
 .ann { background: rgba(10, 12, 30, 0.85); border-left: 3px solid var(--gold); padding: 5px 10px; border-radius: 8px; font-size: 12px; line-height: 1.35; animation: slidein 0.3s ease-out; }
 @keyframes slidein { from { opacity: 0; transform: translateY(-8px); } }
 /* toasts: just below the player (newest on top), clear of all four HUD corners */
-.toasts { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); display: flex; flex-direction: column-reverse; align-items: center; gap: 5px; width: min(400px, 46cqw); pointer-events: none; }
+.toasts { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); display: flex; flex-direction: column-reverse; align-items: center; gap: 5px; width: min(380px, 40cqw); pointer-events: none; }
 .toast { background: rgba(10, 12, 30, 0.88); border: 1px solid; border-left-width: 4px; border-radius: 10px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; text-align: center; animation: toastin 0.25s ease-out; }
 .toast:nth-last-child(n+4) { display: none; }
 .toast.big { font-size: 14px; padding: 8px 16px; background: linear-gradient(180deg, rgba(60, 44, 10, 0.95), rgba(30, 22, 6, 0.95)); color: #ffe9a8; }
@@ -183,7 +187,7 @@ select { width: auto; min-height: 40px; }
 .lvlup { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); font-size: 44px; font-weight: 900; color: #ffe08a; text-shadow: 0 0 24px rgba(255, 200, 80, 0.9), 0 3px 0 #7a4a10; opacity: 0; pointer-events: none; white-space: nowrap; }
 .lvlup.show { animation: lvl 1.8s ease-out; } @keyframes lvl { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } 30% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -70%); } }
 /* bottom-left: chat */
-.bl { position: absolute; left: calc(8px + var(--sal)); bottom: calc(10px + var(--sab)); width: 210px; }
+.bl { position: absolute; left: calc(8px + var(--sal)); bottom: calc(10px + var(--sab)); width: 200px; }
 .chatlog { display: flex; flex-direction: column; gap: 2px; font-size: 11px; line-height: 1.35; margin-bottom: 4px; }
 .chatlog div { background: rgba(8, 10, 24, 0.6); padding: 2px 7px; border-radius: 6px; transition: opacity 1s; word-break: break-all; }
 .chatlog div.old { opacity: 0; } .chatlog .sys { color: #ffe9a8; } .chatlog b { color: var(--sky); }
@@ -212,7 +216,7 @@ select { width: auto; min-height: 40px; }
 @keyframes autoglow { to { box-shadow: 0 0 16px rgba(95, 150, 255, 0.8); } }
 .xpbar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, 0.5); }
 .xpbar i { display: block; height: 100%; background: linear-gradient(90deg, #ffd36b, #fff3c0); box-shadow: 0 0 8px #ffd36b; transition: width 0.3s; }
-.downed { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(12, 12, 28, 0.9); border: 1px solid #ff8a8a; border-radius: 16px; padding: 12px 18px; display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; width: min(300px, 60cqw); pointer-events: auto; }
+.downed { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(12, 12, 28, 0.9); border: 1px solid #ff8a8a; border-radius: 16px; padding: 12px 18px; display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; width: min(300px, 60cqw); }
 .downed b { font-size: 20px; color: #ffb0b0; } .downed small { color: var(--muted); }
 .bar { position: relative; height: 16px; background: rgba(0, 0, 0, 0.5); border-radius: 8px; overflow: hidden; width: 100%; margin: 6px 0; }
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #3fbf8a, #7dffb0); }
@@ -227,7 +231,7 @@ select { width: auto; min-height: 40px; }
   #hud { --tlw: 196px; --trw: 206px; }
   .tr .menu button { width: 38px; height: 38px; } .tr .menu button span { font-size: 15px; }
   .minimap, .minimap canvas { width: 78px; height: 78px; }
-  .bl { width: 190px; }
+  .bl { width: 186px; }
 }
 /* tall screens (tablets, desktop): roomier HUD */
 @container app (min-height: 540px) {
@@ -239,7 +243,6 @@ select { width: auto; min-height: 40px; }
   .tr .menu { gap: 5px; } .tr .menu button { width: 48px; height: 46px; } .tr .menu button span { font-size: 18px; } .tr .menu button small { font-size: 10px; }
   .bl { width: 250px; } .bl .chatlog div:nth-last-child(n+4) { display: block; } .chatlog { font-size: 12px; }
   .toast:nth-last-child(n+4) { display: block; } .toast { font-size: 13px; padding: 7px 12px; }
-  .tutorial { top: auto; bottom: 22%; }
 }
 /* ---------------- sheets (side panel from the right) & modals ---------------- */
 #sheet { position: absolute; inset: 0; z-index: 20; display: flex; align-items: stretch; justify-content: flex-end; background: rgba(0, 0, 0, 0.28); pointer-events: auto; }
