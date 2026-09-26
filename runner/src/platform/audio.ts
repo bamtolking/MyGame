@@ -207,6 +207,11 @@ const SFX: Record<string, [number, number]> = {
   warn: [3, 0.15],
 };
 export const SFX_NAMES = Object.keys(SFX);
+/** 점프 소리 꾸미기: cosmetic id (src/meta/achievements.ts COSMETICS, kind 'jumpSound') → the arg of play('jump' | 'jump2', arg).
+ *  Index 0 ('' = nothing equipped) is the default sound; an unknown id (indexOf = -1) also plays the default. */
+export const JUMP_SOUND_IDS: readonly string[] = ['', 'jump_bell', 'jump_drum', 'jump_gayageum', 'jump_pop'];
+/** jump-skin levels (voice gain), tuned against the default jump with an OfflineAudioContext render */
+const JS = { bell: 0.14, bellAir: 0.11, bellRattle: 0.02, dung: 0.17, duk: 0.15, gaya: 0.156, pop: 0.2, popBlip: 0.21 };
 
 // ------------------------------------------------------------------------------------------------ engine types
 interface Env {
@@ -665,12 +670,14 @@ export class Audio {
     const K = this.sfxRoot(); const F = (s: number) => mtof(K + s);
     const arp = (semis: number[], dt: number, fn: (f: number, at: number, k: number) => void) => semis.forEach((s, k) => fn(F(s), t + k * dt, k));
     switch (name) {
-      // ---- movement
+      // ---- movement (arg = JUMP_SOUND_IDS index: 0 = the default sounds below, 1–4 = 점프 소리 꾸미기)
       case 'jump':
+        if (this.jumpSkin(Math.round(arg), false, v, t, F)) break;
         this.osc(v, t, 300, 'triangle', 0.21, 0.13, { f1: 620, g: 0.09 });
         this.osc(v, t + 0.012, 600, 'sine', 0.07, 0.08, { f1: 1000, g: 0.07 });
         break;
       case 'jump2':   // 휙
+        if (this.jumpSkin(Math.round(arg), true, v, t, F)) break;
         this.noise(v, t, 0.17, 0.2, 'bandpass', 700, { f1: 3400, q: 1.4, a: 0.02 });
         this.osc(v, t, 520, 'sine', 0.09, 0.13, { f1: 1150, g: 0.11 });
         break;
@@ -880,4 +887,54 @@ export class Audio {
         break;
     }
   }
+
+  /** 점프 소리 꾸미기 (GDD §9.6): skin 1 방울, 2 장구, 3 가야금, 4 뻥튀기; air = the 2단 점프 variant. Pitched in the
+   *  music key, every node stops within 180 ms, peak and loudness at or under the default jump. false = not a skin
+   *  (0 or out of range), the caller then plays the default sound. */
+  private jumpSkin(skin: number, air: boolean, v: AudioNode, t: number, F: (s: number) => number): boolean {
+    switch (skin) {
+      case 1:   // 방울: a small bright bell '딸랑' (sol → do'), air: a higher shake climbing do' → mi' → sol'
+        (air ? [24, 28, 31] : [19, 24]).forEach((s, k, a) => this.bell(v, t + k * (air ? 0.024 : 0.036), F(s),
+          (air ? JS.bellAir : JS.bell) * (k === a.length - 1 ? 1 : 0.7), air && k === 2 ? 0.075 : 0.085, 3.5, 1.2));
+        this.noise(v, t, 0, JS.bellRattle, 'highpass', 6500, { a: 0.001, d: 0.009 });   // the pellet rattling inside
+        return true;
+      case 2:   // 장구
+        if (!air) {   // 덩: the round low 궁편 tone on the key root (a little pitch sag, one membrane overtone) + a hint of 채편
+          const f = F(0);
+          this.osc(v, t, f, 'sine', JS.dung, 0, { a: 0.003, d: 0.026, f1: f * 0.94, g: 0.09 });
+          this.osc(v, t, f * 1.59, 'sine', JS.dung * 0.35, 0, { a: 0.002, d: 0.014, f1: f * 1.59 * 0.94, g: 0.06 });
+          this.osc(v, t, F(12), 'triangle', JS.dung * 0.2, 0, { a: 0.002, d: 0.012 });
+          this.noise(v, t, 0, JS.dung * 0.3, 'lowpass', 900, { a: 0.001, d: 0.007 });
+        } else {      // 덕: the dry 채편 rim click, its wood ringing on do' with a fifth above
+          const f = F(24);
+          this.osc(v, t, f, 'sine', JS.duk, 0, { a: 0.001, d: 0.014, f1: f * 0.86, g: 0.03 });
+          this.osc(v, t, F(31), 'triangle', JS.duk * 0.25, 0, { a: 0.001, d: 0.02 });
+          this.noise(v, t, 0, JS.duk * 0.7, 'bandpass', 2800, { q: 3, a: 0.001, d: 0.009 });
+        }
+        return true;
+      case 3:   // 가야금: the market lead's pluck (closing filter, bend-in); air = '싸랭', two strings la → do' in a flick
+        if (!air) this.pluck(v, t, F(19), JS.gaya, 0.026);
+        else { this.pluck(v, t, F(21), JS.gaya * 0.5, 0.018); this.pluck(v, t + 0.03, F(24), JS.gaya * 0.85, 0.022); }
+        return true;
+      case 4: {   // 뻥튀기: a short puff of noise and a rising blip (do → do'); air: a fifth higher plus a tiny second pop
+        const lo = air ? 19 : 12;
+        this.noise(v, t, 0, air ? JS.pop * 0.8 : JS.pop, 'bandpass', air ? 1900 : 1300, { q: 0.9, a: 0.001, d: 0.008 });
+        this.osc(v, t + 0.008, F(lo), 'triangle', JS.popBlip, 0, { a: 0.002, d: 0.024, f1: F(lo + 12), g: 0.05 });
+        if (air) {
+          this.noise(v, t + 0.06, 0, JS.pop * 0.4, 'bandpass', 3200, { q: 1.2, a: 0.001, d: 0.005 });
+          this.osc(v, t + 0.06, F(36), 'sine', JS.popBlip * 0.3, 0, { a: 0.001, d: 0.012 });
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+  /** gayageum pluck like the market lead: square + triangle through a closing resonant lowpass, bending in from below */
+  private pluck(dest: AudioNode, t: number, f: number, vol: number, d: number): void {
+    const lp = this.ctx!.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 2;
+    lp.frequency.setValueAtTime(4200, t); lp.frequency.setTargetAtTime(1200, t, 0.05); lp.connect(dest);
+    this.osc(lp, t, f, 'square', vol * 0.28, 0, { a: 0.003, d: d * 0.6, scoop: -60 });
+    this.osc(lp, t, f, 'triangle', vol, 0, { a: 0.003, d, scoop: -60, drop: [lp] });   // ends last: takes the filter down
+  }
 }
+

@@ -8,7 +8,7 @@
 import { TILE, GROUND_Y, PX_PER_M, VIEW_W, SPEED_TIERS, MAX_TIER } from '../data/physics';
 import {
   POTION_GAP_M, BIG_POTION_EVERY, POWER_GAP_M, LETTER_GAP_M, NO_REPEAT, TIER_EVERY_M, BIOME_EVERY_M, BONUS_WORD,
-  POWER_WEIGHTS, LINE_MIN_JELLIES, COOLDOWN_CHUNKS, BREATHER_AFTER, BREATHER_T, SETPIECE_T,
+  POWER_WEIGHTS, LINE_MIN_JELLIES, COOLDOWN_CHUNKS, BREATHER_AFTER, BREATHER_T, SETPIECE_T, OPEN_COIN_EVERY,
 } from '../data/tuning';
 import { CHUNKS } from '../data/chunks';
 import { BIOME_ORDER } from '../data/biomes';
@@ -144,12 +144,17 @@ export function placeChunk(s: RunState, p: ParsedChunk, tier: number, biome: str
   for (const h of p.hazards) lv.hazards.push({ id: lv.nextId++, kind: h.kind, x0: h.x0 + x, x1: h.x1 + x, y0: h.y0, y1: h.y1, biome, broken: false, passed: false });
   const m = p.width / PX_PER_M;
   if (!sky) { g.potionDebt += m; g.powerDebt += m; g.letterDebt += m; }
+  const thinCoins = s.mode === 'endless' || s.mode === 'daily';
+  let coinK = main ? g.mainIndex : 0;               // per-chunk parity: independent of input (bonus teleports, pickups)
   for (const pk of p.pickups) {
     const base: Omit<Pickup, 'type'> = { id: lv.nextId++, x: pk.x + x, y: pk.y, taken: false, pulled: false, chunk: pc.serial };
     switch (pk.kind) {
       case 'jelly': lv.pickups.push({ ...base, type: sky ? 'bonusJelly' : 'jelly' }); break;
       case 'big': lv.pickups.push({ ...base, type: 'big' }); break;
-      case 'coin': lv.pickups.push({ ...base, type: 'coin' }); break;
+      case 'coin':
+        if (thinCoins && coinK++ % OPEN_COIN_EVERY !== 0) lv.pickups.push({ ...base, type: sky ? 'bonusJelly' : 'jelly' });
+        else lv.pickups.push({ ...base, type: 'coin' });
+        break;
       case 'slotP':
         if (!sky && g.potionDebt >= POTION_GAP_M && s.mode !== 'tutorial') {
           g.potionDebt = 0; g.potionsPlaced++;

@@ -17,7 +17,7 @@ import { HAT_IDS, type HatId } from '../render/characters';
 import { Audio } from '../platform/audio';
 import * as store from '../platform/storage';
 import { applyRun, dailySeed, dailyChar, dailyCompanion, dailyArchive, todayKey, featureOpen, ghostKeyFor, type Progress, type RunReward, type GhostRec } from '../meta/progress';
-import { MISSION_BY_ID, missionText } from '../meta/missions';
+import { MISSION_BY_ID, missionText, liveMissionProgress } from '../meta/missions';
 import { InputState, keyZone, bindSurface, evTime, type Zone } from './input';
 import { CONTENT_HASH } from '../sim/content';
 import { h, clear } from './dom';
@@ -479,16 +479,16 @@ export class App {
       if (pct < LOW_HP_FRAC) { rc.lowT -= real; if (rc.lowT <= 0) { rc.lowT = 2.5; this.audio.play('lowhp'); } } else rc.lowT = 0;
     }
     rc.missionT -= real;
-    if (rc.missionT <= 0 && !s.trial && s.mode !== 'tutorial') {
+    if (rc.missionT <= 0 && featureOpen(this.p, 'missions')) {
       rc.missionT = 0.5;
-      for (const m of this.p.missions) {
-        if (rc.toasted.has(m.id)) continue;
-        const t = MISSION_BY_ID[m.id]; if (!t) continue;
-        try {
-          if (t.when && !t.when(s)) continue;
-          const v = t.measure(s); const prog = t.scope === 'run' ? Math.max(m.progress, v) : m.progress + v;
-          if (prog >= m.target) { rc.toasted.add(m.id); this.toast(`미션 완료! ${missionText(m)}`, 'good', 1.5); }
-        } catch { rc.toasted.add(m.id); }
+      // same filters as booking (mode, trial, tutorial, end-only) — never toasts a mission this run cannot move
+      const live = liveMissionProgress(this.p.missions, s);
+      for (let i = 0; i < live.length; i++) {
+        const m = this.p.missions[i]; const l = live[i];
+        if (!m || rc.toasted.has(m.id) || !l.done || m.progress >= m.target) continue;
+        const t = MISSION_BY_ID[m.id];
+        try { if (t?.when && !t.when(s)) continue; } catch { continue; }
+        rc.toasted.add(m.id); this.toast(`미션 완료! ${missionText(m)}`, 'good', 1.5);
       }
     }
   }

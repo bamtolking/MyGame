@@ -89,7 +89,7 @@ export const MISSIONS: MissionTemplate[] = [
   { id: 'jelly_run', scope: 'run', verb: 'candy', text: n => `한 판에 별사탕 ${fmt(n)}개 먹기`, targets: [150, 350, 600], measure: s => s.stats.jellies, quick: 3, stageLevels: 1, quickStage: 1 },
   { id: 'dist_run', scope: 'run', verb: 'run', text: n => `한 판에 ${m(n)} 달리기`, targets: [400, 900, 1600], measure: dist, requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },
   { id: 'dist_nofall', scope: 'run', verb: 'run', text: n => `구덩이에 안 빠지고 ${m(n)} 달리기`, targets: [300, 700, 1200], measure: s => runTrace(s).noFall, quick: 2, stageLevels: 1, quickStage: 1 },
-  { id: 'streak', scope: 'run', verb: 'dodge', text: n => `위험물을 ${n}번 연달아 피하기`, targets: [10, 25, 45], measure: s => s.stats.bestStreak, quick: 3, stageLevels: 1, quickStage: 0 },
+  { id: 'streak', scope: 'run', verb: 'dodge', text: n => `위험물을 ${n}번 연달아 피하기`, targets: [10, 25, 45], measure: s => s.stats.bestStreak, quick: 2, stageLevels: 1, quickStage: 0 },
   { id: 'near', scope: 'run', verb: 'dodge', text: n => `한 판에 아슬아슬 ${n}번`, targets: [3, 6, 9], measure: s => s.stats.nearMisses, requires: 'long', quick: 1, stageLevels: 0, quickStage: 0 },   // GDD→ [3, 8, 15]
   { id: 'airjump', scope: 'run', verb: 'jump', text: n => `한 판에 2단 점프 ${n}번`, targets: [15, 25, 35], measure: s => s.stats.airJumps, requires: 'long', quick: 2, stageLevels: 0, quickStage: 0 },   // GDD→ [15, 35, 60]
   { id: 'slide', scope: 'run', verb: 'slide', text: n => `한 판에 슬라이드 ${n}번`, targets: [8, 13, 18], measure: s => s.stats.slides, requires: 'long', quick: 1, stageLevels: 0, quickStage: 0 },   // GDD→ [10, 25, 45]

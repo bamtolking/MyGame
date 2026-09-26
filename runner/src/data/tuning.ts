@@ -56,6 +56,8 @@ export const BREATHER_AFTER = 4;        // force a breather after this many haza
 export const BREATHER_T = 25;           // …or after this many seconds of course without one
 export const SETPIECE_T = 50;           // a biome set piece roughly this often (s of course)
 export const POWER_WEIGHTS = { giant: 35, dash: 30, magnet: 35 } as const;
+/** endless/daily keep 1 of every N 엽전 glyphs (the rest become 별사탕): economy target ≈ one unlock per 10–40 min */
+export const OPEN_COIN_EVERY = 2;
 export const LINE_MIN_JELLIES = 12;     // 한 줄 완성: all star candies of a chunk with ≥ this many
 export const SCORE_CAP = 999999;
 export const SCORE_VERSION = 1;
