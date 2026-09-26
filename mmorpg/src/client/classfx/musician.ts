@@ -8,6 +8,8 @@ const RANGE = CLASSES.musician.range, HALF = ATK.waveHalf, PULSE_R = 240;
 const ORANGE = 0xffa640, GOLD = 0xffd070, CREAM = 0xfff4dc, NOTES = [0xffd070, 0xffa640, 0xfff4dc, 0xff9ac0];
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const out3 = (k: number) => 1 - (1 - k) ** 3;
+/** Visual time of each caster's last ult cast: the first pulse lands on the generic cast flourish, so it is toned down. */
+const castAt = new Map<number, number>();
 
 /** Ground "stage": 삼태극 swirl inside a ring of 율명 (黃太仲林南) glyphs; coloured, drawn untinted. */
 let stage: Tex | null = null;
@@ -57,6 +59,7 @@ export const musician: ClassFx = {
   },
   ult: (c, e) => {
     const x = e.x, y = e.y;
+    castAt.set(c.id, c.fx.time); if (castAt.size > 64) castAt.clear();
     // festive burst: 색동 confetti and a spiral of notes rising from the gayageum
     c.fx.debris(x, y - 30, c.mine ? 22 : 10, 'petal', [0xe0344d, 0xf2c84b, 0x3fb07a, 0x4a7bd8, 0xfff4dc], 340, 7, 1.5, EMIT);
     for (let i = 0; i < 12; i++) c.fx.later(i * 0.04, () => { const a = (i / 12) * Math.PI * 2; note(c, x + Math.cos(a) * 18, y - 28 + Math.sin(a) * 8, Math.cos(a) * 170, -150 + Math.sin(a) * 60, 1.3, 9, NOTES[i % 4]); });
@@ -64,23 +67,22 @@ export const musician: ClassFx = {
     c.fx.add(0, 0.7, (p, k) => { const s = (2 * 92 / st.w) * (0.4 + out3(k) * 0.9); p.draw(EMIT, st, x, y, s, s * 0.62, 0, 0xffffff, 0.45 * (1 - k), 1); });
   },
   uhit: (c) => {
-    const x = c.x, y = c.y; const ring = c.art.fx('ring'), soft = c.art.fx('ringSoft'), disc = c.art.fx('disc');
+    const x = c.x, y = c.y; const ring = c.art.fx('ring'), soft = c.art.fx('ringSoft'), disc = c.art.fx('disc'); const f = c.fx.time - (castAt.get(c.id) ?? -9) < 0.5 ? 0.65 : 1;
     // the big pulse on the ground (ring texture radii: ring 58/64, ringSoft ~55/64 of the half size)
     c.fx.add(0, 0.95, (p, _k, t) => {
       for (let i = 0; i < 3; i++) {
         const k = (t - i * 0.11) / 0.75; if (k <= 0 || k >= 1) continue;
-        const r = 20 + (PULSE_R - 20) * out3(k) * (1 - i * 0.13), a = (1 - k) ** 1.3;
+        const r = 20 + (PULSE_R - 20) * out3(k) * (1 - i * 0.13), a = (1 - k) ** 1.3 * f;
         const s1 = (r * 2) / 128 / (58 / 64), s2 = (r * 2) / 128 / (55 / 64);
         if (i === 0) p.draw(EMIT, soft, x, y, s2, s2 * 0.62, 0, GOLD, a * 0.34, 1);
         p.draw(EMIT, ring, x, y, s1, s1 * 0.62, 0, i ? (i === 1 ? GOLD : ORANGE) : CREAM, a * (i ? 0.4 : 0.6), 1);
         if (i === 0 && k < 0.4) { const sd = (r * 2) / 128; p.draw(EMIT, disc, x, y, sd, sd * 0.62, 0, GOLD, 0.07 * (1 - k / 0.4), 1); }
       }
     });
-    c.fx.glow(x, y - 28, 56, GOLD, 0.4, 0.16);
-    c.fx.light(x, y, 280, GOLD, 0.28, 0.5);
+    if (f === 1) { c.fx.glow(x, y - 28, 56, GOLD, 0.4, 0.16); c.fx.light(x, y, 280, GOLD, 0.28, 0.5); }
     const n = c.mine ? 14 : 8;
     for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + rnd(-0.15, 0.15), s = rnd(260, 380); note(c, x + Math.cos(a) * 34, y - 26 + Math.sin(a) * 20, Math.cos(a) * s, Math.sin(a) * s * 0.62 - 30, rnd(0.9, 1.3), rnd(8, 10), NOTES[i % 4]); }
-    for (let i = 0; i < (c.mine ? 8 : 4); i++) { const a = (i / 8) * Math.PI * 2 + 0.3; c.fx.part({ tex: 'spark', x: x + Math.cos(a) * 40, y: y - 6 + Math.sin(a) * 25, vx: Math.cos(a) * 560, vy: Math.sin(a) * 560 * 0.62, drag: 0.86, life: 0.28, size: 8, col: ORANGE, a: 0.8, stretch: 0.003, face: true }); }
+    const ns = c.mine ? 8 : 4; for (let i = 0; i < ns; i++) { const a = (i / ns) * Math.PI * 2 + 0.3; c.fx.part({ tex: 'spark', x: x + Math.cos(a) * 40, y: y - 6 + Math.sin(a) * 25, vx: Math.cos(a) * 560, vy: Math.sin(a) * 560 * 0.62, drag: 0.86, life: 0.28, size: 8, col: ORANGE, a: 0.8, stretch: 0.003, face: true }); }
     if (c.mine) { c.fx.wave(x, y - 16, 280, 16, 0.65); c.fx.shake(0.16); c.fx.zoomPunch(0.02); }
     c.snd.play('strum', c.vol, x, y); c.snd.play('bell', c.vol * 0.5, x, y);
   },

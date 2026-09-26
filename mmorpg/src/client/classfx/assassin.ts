@@ -35,7 +35,7 @@ function clone(c: FxCtx, mx: number, my: number, delay: number, dir: number): vo
   c.fx.add(1, 0.42, (p, k) => {
     const r = 46 - easeOut(Math.min(1, k * 4)) * 24 + (k > 0.6 ? (k - 0.6) * 24 : 0), a = k < 0.1 ? k / 0.1 : 1 - (k - 0.1) / 0.9;
     const px = mx + d * r, py = my + 2;
-    p.draw(EMIT, spr, px + d * 9, py, fl, 1, 0, TEAL, a * 0.34, 1, 1);
+    p.draw(EMIT, spr, px + d * 16, py, fl, 1, 0, TEAL, a * 0.1, 1, 1); p.draw(EMIT, spr, px + d * 7, py, fl, 1, 0, TEAL, a * 0.2, 1, 1);
     p.draw(SCENE, spr, px, py, fl, 1, 0, SHADOW, a * 0.85, 0);
   }, undefined, delay);
   c.fx.later(delay + 0.05, () => { strike(c, mx, hy, d > 0 ? Math.PI : 0, dir, 40); c.fx.smoke(mx + d * 30, my - 18, 2, SHADOW, 40, 18, 0.45, 0.45); });
