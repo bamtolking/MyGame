@@ -101,7 +101,7 @@ export class FxSystem {
   /** Rotating magic circle on the ground. */
   sigil(x: number, y: number, r: number, col: number, dur: number, tex = 'sigil', spin = 0.8, a = 0.9): void {
     const t = this.art.fx(tex);
-    this.add(0, dur, (p, k, tt) => { const s = (r * 2) / t.w * (k < 0.15 ? easeOut(k / 0.15) : 1); const al = a * (k < 0.15 ? k / 0.15 : k > 0.7 ? (1 - k) / 0.3 : 1); p.draw(EMIT, t, x, y, s, s * 0.62, tt * spin, col, al, 1); });
+    this.add(0, dur, (p, k, tt) => { const s = (r * 2) / t.w * (k < 0.15 ? easeOut(k / 0.15) : 1); const al = a * (k < 0.15 ? k / 0.15 : k > 0.7 ? (1 - k) / 0.3 : 1); p.draw(EMIT, t, x, y, s, s, tt * spin, col, al, 1, 0, 0, 0.62); });
   }
   /** Brush-stroke crescent slash. dir: +1 clockwise sweep, -1 counter-clockwise. */
   slash(x: number, y: number, ang: number, range: number, col: number, big = false, dir = 1): void {

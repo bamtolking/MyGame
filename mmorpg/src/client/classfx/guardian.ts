@@ -123,14 +123,14 @@ export const guardian: ClassFx = {
     // ground slam: shockwave to the push radius, then a soft ring out to the ally-shield radius
     c.fx.add(0, 0.62, (p, k) => { const r = 26 + (PUSH_R - 26) * out3(k); groundRing(p, ring, x, y, r, GOLD, 0.7 * (1 - k) ** 1.2); groundRing(p, ringSoft, x, y, r * 0.97, AMBER, 0.2 * (1 - k), true); });
     c.fx.add(0, 1, (p, k) => { groundRing(p, ringSoft, x, y, 60 + (ALLY_R - 60) * out3(k), CREAM, 0.22 * (1 - k) * Math.min(1, k * 5), true); }, undefined, 0.1);
-    c.fx.add(0, 1.3, (p, k) => { const s = (2 * (DOME_R + 8)) / 256 * (0.6 + 0.4 * out3(Math.min(1, k * 3))); p.draw(EMIT, wr, x, y, s, s * 0.62, 0, GOLD, 0.32 * (k < 0.7 ? 1 : (1 - k) / 0.3), 1); });
+    c.fx.add(0, 1.3, (p, k) => { const s = (2 * (DOME_R + 8)) / 256 * (0.6 + 0.4 * out3(Math.min(1, k * 3))); p.draw(EMIT, wr, x, y, s, s * 0.62, 0, GOLD, 0.26 * (k < 0.7 ? 1 : (1 - k) / 0.3), 1); });
     // the hex dome rises (overshoot), holds, then bursts outward into shards
     c.fx.add(1, 1.12, (p, _k, t) => {
       const rise = t < 0.26 ? Math.max(0.02, easeBack(t / 0.26)) : 1, b = t > 0.8 ? Math.min(1, (t - 0.8) / 0.32) : 0;
       const s = (DOME_R * rise * (1 + b * 0.3)) / D_R, a = Math.min(1, t / 0.32) ** 1.5 * (1 - b) ** 1.5; // fades in as the generic cast flash dies down
-      p.draw(EMIT, dome, x, y, s, s, 0, GOLD, 0.32 * a, 1);
+      p.draw(EMIT, dome, x, y, s, s, 0, GOLD, 0.28 * a, 1);
     });
-    c.fx.later(0.8, () => { shards(c, x, y, DOME_R, Math.round(18 * big)); c.fx.light(x, y, 260, GOLD, 0.35, 0.4); if (c.mine) c.fx.wave(x, y - 40, DOME_R * 1.4, 10, 0.45); c.snd.play('guard', c.vol * 0.8, x, y); });
+    c.fx.later(0.8, () => { shards(c, x, y, DOME_R, Math.round(18 * big)); c.fx.light(x, y, 240, GOLD, 0.15, 0.4); if (c.mine) c.fx.wave(x, y - 40, DOME_R * 1.4, 10, 0.45); c.snd.play('guard', c.vol * 0.8, x, y); });
     // dust ring, rubble, sparks, cracks
     for (let i = 0, n = Math.round(16 * big); i < n; i++) {
       const a = (i / n) * Math.PI * 2 + rnd(-0.15, 0.15), v = rnd(280, 360);
@@ -139,21 +139,21 @@ export const guardian: ClassFx = {
     c.fx.debris(x, y - 6, Math.round(10 * big), 'shard', [0x6a5a48, 0x3a3028, 0x8a7a60], 280, 7, 0.9);
     c.fx.sparks(x, y - 26, Math.round(14 * big), GOLD, 640);
     c.fx.decal(x, y, 'crack', 170, 0x1a1208, 2.4, 0.55); c.fx.decal(x, y, 'scorch', 150, 0x2a1c08, 1.6, 0.3);
-    c.fx.light(x, y, 320, GOLD, 0.4, 0.9);
+    c.fx.light(x, y, 300, GOLD, 0.2, 0.9);
     if (c.mine) { c.fx.wave(x, y - 8, PUSH_R, 24, 0.7); c.fx.shake(0.2); }
     c.snd.play('slam', c.vol, x, y);
   },
   aura: (p, art, t, x, y) => {
     // ward circle on the ground with six hex runes travelling around it
     const wr = ringTex(), cell = cellTex(), soft = art.fx('soft'), R = 70, s = (2 * R) / 256 * 1.04;
-    p.draw(EMIT, wr, x, y, s, s * 0.62, 0, GOLD, 0.26 + 0.06 * Math.sin(t * 3.2), 1);
+    p.draw(EMIT, wr, x, y, s, s * 0.62, 0, GOLD, 0.22 + 0.05 * Math.sin(t * 3.2), 1);
     for (let i = 0; i < 6; i++) { const a = t * 0.7 + (i / 6) * Math.PI * 2; p.draw(EMIT, cell, x + Math.cos(a) * R * 0.63, y + Math.sin(a) * R * 0.63 * 0.62, 0.3, 0.3 * 0.62, 0, GOLD, 0.55, 1); }
     // faint hex barrier around the guardian
-    p.draw(EMIT, domeTex(), x, y + 1, 50 / D_R, 50 / D_R, 0, GOLD, 0.15 + 0.04 * Math.sin(t * 5), 1);
+    p.draw(EMIT, domeTex(), x, y + 1, 50 / D_R, 50 / D_R, 0, GOLD, 0.12 + 0.03 * Math.sin(t * 5), 1);
     // shield runes orbiting at chest height (dimmer behind the body)
     for (let i = 0; i < 4; i++) {
-      const a = t * 1.9 + (i / 4) * Math.PI * 2, front = Math.sin(a), px = x + Math.cos(a) * 40, py = y - 24 + front * 12, al = front > 0 ? 0.95 : 0.35, sc = 0.36 + front * 0.05;
-      p.draw(EMIT, soft, px, py, 0.5, 0.5, 0, GOLD, 0.22 * al, 1); p.draw(EMIT, cell, px, py, sc * Math.max(0.35, Math.abs(Math.cos(a * 1.5))), sc, 0, i % 2 ? CREAM : GOLD, al, 1);
+      const a = t * 1.9 + (i / 4) * Math.PI * 2, front = Math.sin(a), px = x + Math.cos(a) * 46, py = y - 24 + front * 13, al = front > 0 ? 0.7 : 0.28, sc = 0.33 + front * 0.05;
+      p.draw(EMIT, soft, px, py, 0.45, 0.45, 0, GOLD, 0.1 * al, 1); p.draw(EMIT, cell, px, py, sc * Math.max(0.35, Math.abs(Math.cos(a * 1.5))), sc, 0, i % 2 ? CREAM : GOLD, al, 1);
     }
     // motes rising from the ward
     const dot = art.fx('dot');

@@ -37,8 +37,9 @@ export function knownChar(kind: 'offline' | 'online'): KnownChar | null { try { 
 export function rememberChar(kind: 'offline' | 'online', c: KnownChar | null): void { if (c) set('char.' + kind, JSON.stringify(c)); else del('char.' + kind); }
 
 /** Classes whose unlock the player has already seen in the 직업 sheet (drives the "NEW" badges). */
-export function seenClasses(): string[] { try { const a = JSON.parse(get('seenCls') ?? 'null'); return Array.isArray(a) ? a.filter(x => typeof x === 'string') : []; } catch { return []; } }
-export function saveSeenClasses(ids: string[]): void { set('seenCls', JSON.stringify(ids)); }
+/** Class unlocks the player has already been shown, per mode (offline/online character). */
+export function seenClasses(mode: 'offline' | 'online'): string[] { try { const a = JSON.parse(get('seenCls.' + mode) ?? 'null'); return Array.isArray(a) ? a.filter(x => typeof x === 'string') : []; } catch { return []; } }
+export function saveSeenClasses(mode: 'offline' | 'online', ids: string[]): void { set('seenCls.' + mode, JSON.stringify(ids)); }
 
 /** Character store for the in-browser (offline) world. Keeps one backup copy. */
 export class LocalProfileStore implements ProfileStore {

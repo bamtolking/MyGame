@@ -15,7 +15,8 @@ export function applyOrient(force = false): void {
 export function initOrient(): void {
   applyOrient(true);
   window.addEventListener('resize', () => applyOrient());
-  window.addEventListener('orientationchange', () => { applyOrient(); setTimeout(() => applyOrient(), 350); }); // iOS reports the new size late
+  // a real rotation always re-lays out, even while typing (only keyboard-driven resizes are ignored); iOS reports the new size late
+  window.addEventListener('orientationchange', () => { applyOrient(true); setTimeout(() => applyOrient(true), 350); });
   document.addEventListener('focusout', () => setTimeout(() => applyOrient(), 80));
 }
 /** Called after the layout (rotation or size) changed. */

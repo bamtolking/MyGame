@@ -175,7 +175,7 @@ describe('review fixes', () => {
   it('a stun cancels a charge that is being wound up', () => {
     const [w, p, at] = setup('guardian'); const m = w.spawnMonster(MON_IDX.clubber, at[0] + 150, at[1], 5)!; m.maxHp = m.hp = 1e7; w.spatial.rebuild(w.mons.values());
     m.tgt = p.id; m.st = 'chase'; m.atkT = 0; let wound = false;
-    for (let i = 0; i < 40 && !wound; i++) { p.atkT = 99; w.step(); wound = m.st === 'wind'; }
+    for (let i = 0; i < 40 && !wound; i++) { p.atkT = 99; w.step(); wound = (m.st as string) === 'wind'; }
     expect(wound).toBe(true); expect(w.hazards.some(h => h.src === m.id)).toBe(true);
     stun(w, m, 1.5); expect(m.st).toBe('recover'); expect(w.hazards.some(h => h.src === m.id)).toBe(false);
     const hp0 = p.hp, x0 = m.x; for (let i = 0; i < 20; i++) { p.atkT = 99; w.step(); }

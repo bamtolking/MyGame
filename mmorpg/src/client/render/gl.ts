@@ -207,11 +207,11 @@ export class GLPainter implements Painter {
     f[o + 18] = x3; f[o + 19] = y3; f[o + 20] = u0; f[o + 21] = v1; u[o + 22] = ca; u[o + 23] = p;
     L.n++;
   }
-  draw(layer: number, t: Tex, x: number, y: number, sx: number, sy: number, rot: number, col: number, a: number, add: number, flash = 0, dis = 0): void {
+  draw(layer: number, t: Tex, x: number, y: number, sx: number, sy: number, rot: number, col: number, a: number, add: number, flash = 0, dis = 0, gy = 1): void {
     if (a <= 0.002 || dis >= 1) return; const e = this.entry(t); if (!e) return;
     const w = t.w * sx, h = t.h * sy, ox = -t.ax * w, oy = -t.ay * h;
     const cs = rot ? Math.cos(rot) : 1, sn = rot ? Math.sin(rot) : 0;
-    const x0 = ox * cs - oy * sn + x, y0 = ox * sn + oy * cs + y, wx = w * cs, wy = w * sn, hx = -h * sn, hy = h * cs;
+    const x0 = ox * cs - oy * sn + x, y0 = (ox * sn + oy * cs) * gy + y, wx = w * cs, wy = w * sn * gy, hx = -h * sn, hy = h * cs * gy;
     const c = pack(col, a, add, layer === LIGHT ? 0.5 : 1);
     this.quad(this.layers[layer], x0, y0, x0 + wx, y0 + wy, x0 + wx + hx, y0 + wy + hy, x0 + hx, y0 + hy, e.u0, e.v0, e.u1, e.v1, c, c, params(flash, dis, e.page, 0));
     if (dis > 0 && layer === SCENE) { const g = pack(this.edgeCol, a, 1); this.quad(this.layers[EMIT], x0, y0, x0 + wx, y0 + wy, x0 + wx + hx, y0 + wy + hy, x0 + hx, y0 + hy, e.u0, e.v0, e.u1, e.v1, g, g, params(0, dis, e.page, 1)); }

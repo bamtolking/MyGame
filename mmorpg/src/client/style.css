@@ -13,6 +13,9 @@ body { position: fixed; inset: 0; width: 100%; height: 100dvh; touch-action: non
 /* #app is the size container: use cqw/cqh (not vw/vh, which describe the unrotated viewport) and @container, never @media (orientation) */
 #app { position: absolute; inset: 0; overflow: hidden; container: app / size; }
 html.rot #app { inset: auto; left: 0; top: 0; width: var(--vh, 100dvh); height: var(--vw, 100vw); transform: translateX(var(--vw, 100vw)) rotate(90deg); transform-origin: 0 0; }
+/* touch-action is evaluated in screen space: rotated, a content-vertical swipe is a horizontal swipe on the glass */
+html.rot #title, html.rot .cdwrap, html.rot .sheet-card .body, html.rot .modal-card, html.rot .clsside { touch-action: pan-x pan-y; }
+html.rot input[type=range] { touch-action: none; }
 button { font: inherit; color: inherit; background: var(--panel2); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 12px; padding: 8px 12px; min-height: 44px; cursor: pointer; touch-action: manipulation; }
 button:active { transform: scale(0.97); filter: brightness(1.2); }
 button:disabled { opacity: 0.45; }
@@ -175,7 +178,7 @@ select { width: auto; min-height: 40px; }
 .ann { background: rgba(10, 12, 30, 0.85); border-left: 3px solid var(--gold); padding: 5px 10px; border-radius: 8px; font-size: 12px; line-height: 1.35; animation: slidein 0.3s ease-out; }
 @keyframes slidein { from { opacity: 0; transform: translateY(-8px); } }
 /* toasts: just below the player (newest on top), clear of all four HUD corners */
-.toasts { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); display: flex; flex-direction: column-reverse; align-items: center; gap: 5px; width: min(380px, 40cqw); pointer-events: none; }
+.toasts { position: absolute; left: 50%; bottom: calc(88px + var(--sab)); transform: translateX(-50%); display: flex; flex-direction: column-reverse; align-items: center; gap: 5px; width: min(380px, 40cqw); max-height: 36cqh; overflow: hidden; pointer-events: none; }
 .toast { background: rgba(10, 12, 30, 0.88); border: 1px solid; border-left-width: 4px; border-radius: 10px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; text-align: center; animation: toastin 0.25s ease-out; }
 .toast:nth-last-child(n+4) { display: none; }
 .toast.big { font-size: 14px; padding: 8px 16px; background: linear-gradient(180deg, rgba(60, 44, 10, 0.95), rgba(30, 22, 6, 0.95)); color: #ffe9a8; }
@@ -321,7 +324,11 @@ label.set input[type=range] { width: 50%; } label.set input[type=checkbox] { wid
 .clsrow .st.lock { color: var(--muted); font-weight: 600; padding: 0; border-radius: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .clsrow.locked img { filter: grayscale(1) brightness(0.55); } .clsrow.locked .nm b { color: var(--muted); } .clsrow.locked .nm small { color: #8a86aa; }
 .clsrow.sel { border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, rgba(20, 22, 48, 0.9)); box-shadow: 0 0 0 1px var(--c) inset, 0 0 14px color-mix(in srgb, var(--c) 30%, transparent); }
-.clsside { position: sticky; top: 0; background: rgba(10, 12, 28, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 10px; }
+.clsside { position: sticky; top: 0; max-height: calc(100cqh - 96px - var(--sat) - var(--sab)); overflow-y: auto; touch-action: pan-y; background: rgba(10, 12, 28, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 10px; }
+.clsside .clsact { position: sticky; bottom: -10px; margin: 0 -10px; padding: 8px 10px 0; background: linear-gradient(180deg, rgba(10, 12, 28, 0), rgba(10, 12, 28, 0.95) 30%); }
+/* rotated phone: the on-screen keyboard rises from content-right, so the chat panel moves to the other side */
+html.rot #sheet[data-name="chat"] { justify-content: flex-start; }
+html.rot #sheet[data-name="chat"] .sheet-card { border-radius: 0 18px 18px 0; border-right: 1px solid var(--line); border-left: none; }
 .clsside .wide { margin-top: 2px; }
 
 /* ---------------- combat juice: combo, ultimate cut-in, boss title card ---------------- */

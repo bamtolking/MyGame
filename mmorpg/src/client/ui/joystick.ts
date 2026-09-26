@@ -1,6 +1,7 @@
 // Floating virtual joystick (touch/mouse drag anywhere on the play area) + keyboard.
 // All maths runs in #app-local coordinates (toLocal), so it also works when the layout is rotated (see orient.ts).
 import { toLocal } from './orient.ts';
+import { typingKey } from './dom.ts';
 
 export class Joystick {
   x = 0; y = 0; active = false; private id = -1; private ox = 0; private oy = 0; private t0 = 0; private moved = 0;
@@ -24,10 +25,12 @@ export class Joystick {
       if (this.moved < 10 && performance.now() - this.t0 < 350) this.onTap(e.clientX, e.clientY);
     };
     area.addEventListener('pointerup', end); area.addEventListener('pointercancel', end);
-    window.addEventListener('keydown', (e) => { if ((e.target as HTMLElement)?.tagName === 'INPUT') return; this.keys.add(e.key.toLowerCase()); });
+    window.addEventListener('keydown', (e) => { if (typingKey(e)) return; this.keys.add(e.key.toLowerCase()); });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => this.keys.clear());
   }
+  /** Drop the current drag (e.g. the layout rotated under the finger: its origin is in the old coordinate space). */
+  cancel(): void { this.id = -1; this.active = false; this.x = 0; this.y = 0; this.base.classList.remove('on'); }
   /** Place the stick at an #app-local point (the base's parent fills #app). */
   private show(x: number, y: number) { const p = this.base.parentElement!; this.base.style.left = `${x - p.offsetLeft}px`; this.base.style.top = `${y - p.offsetTop}px`; this.base.classList.add('on'); this.knob.style.transform = 'translate(0,0)'; }
   /** Stick vector (keyboard overrides when held). */

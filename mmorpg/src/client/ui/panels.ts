@@ -221,7 +221,7 @@ export function clsPanel(a: AppApi, pick: ClassId | null): HTMLElement {
   const ok = open(sel); const cur = sel === me.cls;
   const act = cur ? h('button', { class: 'wide', disabled: true }, '현재 직업입니다')
     : !ok ? lockBox(sel)
-    : h('div', {}, h('button', { class: 'primary wide cls-go', disabled: me.zone !== 0, onclick: () => a.send({ t: 'cls', cls: sel }) }, `${ro(CLASSES[sel].name)} 전직하기`),
+    : h('div', { class: 'clsact' }, h('button', { class: 'primary wide cls-go', disabled: me.zone !== 0, onclick: () => a.send({ t: 'cls', cls: sel }) }, `${ro(CLASSES[sel].name)} 전직하기`),
       me.zone !== 0 ? h('small', { class: 'hint block center' }, '마을에서만 전직할 수 있어요') : null);
   return h('div', { class: 'clsgrid' },
     h('div', {}, h('div', { class: 'npc' }, h('img', { src: npcIcon('priest'), alt: '' }), h('div', {}, h('b', {}, '신당 무당 월선'), h('p', {}, '"새 길이 열렸군요. 걸어갈 길을 고르세요."'))),

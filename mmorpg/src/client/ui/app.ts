@@ -17,7 +17,8 @@ import { Sound } from '../audio/engine.ts';
 import * as store from '../storage.ts';
 import { h, $, clear, fmtTime } from './dom.ts';
 import { Joystick } from './joystick.ts';
-import { initOrient, onOrient, toLocal, goLandscape } from './orient.ts';
+import { initOrient, onOrient, toLocal, goLandscape, rotated } from './orient.ts';
+import { typingKey } from './dom.ts';
 import { bagPanel, itemModal, smithPanel, talPanel, questPanel, mapPanel, rosterPanel, chatPanel, codexPanel, clsPanel, classCard, classDetail, lockBox } from './panels.ts';
 import { classIcon, talIcon } from '../render/art/icons.ts';
 
@@ -32,6 +33,19 @@ type Mode = 'offline' | 'online';
 /** `me` fields each sheet displays (a change re-renders it). */
 const SHEET_KEYS: Record<string, string[]> = { bag: ['inv', 'equip', 'gold', 'shards', 'stats', 'autoSell', 'zone'], tal: ['tals', 'slots', 'gold', 'shards', 'zone', 'level'], smith: ['equip', 'gold', 'zone'], quest: ['quest', 'lstats'], map: ['shrines'], cls: ['cls', 'level', 'lstats', 'zone'] };
 
+/** Native range inputs can't be dragged once the layout is rotated (the browser cancels the gesture): drive them by hand. */
+function rotRange(el: HTMLInputElement): HTMLInputElement {
+  const setFrom = (e: PointerEvent) => {
+    const r = el.getBoundingClientRect(); const [x] = toLocal(e.clientX, e.clientY); const [a] = toLocal(r.left, r.top), [b] = toLocal(r.right, r.bottom);
+    const lo = Math.min(a, b), hi = Math.max(a, b); if (hi - lo < 1) return;
+    const min = Number(el.min || 0), max = Number(el.max || 1), step = Number(el.step || 0.01); const k = Math.max(0, Math.min(1, (x - lo) / (hi - lo)));
+    const v = Math.round((min + k * (max - min)) / step) * step; if (String(v) !== el.value) { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }
+  };
+  el.addEventListener('pointerdown', (e) => { if (!rotated()) return; e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ } setFrom(e); });
+  el.addEventListener('pointermove', (e) => { if (rotated() && el.hasPointerCapture?.(e.pointerId)) setFrom(e); });
+  return el;
+}
+
 export class App implements AppApi {
   root: HTMLElement; set = store.loadSettings(); snd = new Sound();
   g: Game | null = null; tr: Transport | null = null; mode: Mode = 'offline'; joy: Joystick | null = null;
@@ -42,12 +56,12 @@ export class App implements AppApi {
   el: Record<string, HTMLElement> = {};
   pendingHello: { name: string; cls: ClassId } | null = null;
   /** Class unlocks already shown to the player (localStorage 'moonlit.seenCls'); `clsNew` = the ones flagged NEW in the open 직업 sheet. */
-  private seenCls = new Set<string>([...STARTER_CLASSES, ...store.seenClasses()]); private clsNew = new Set<ClassId>();
+  private seenCls = new Set<string>(STARTER_CLASSES); private clsNew = new Set<ClassId>();
 
   constructor(root: HTMLElement) {
     this.root = root; this.snd.setVolumes(this.set.sfx, this.set.bgm);
     (window as any).__app = this;
-    initOrient(); onOrient(() => { this.g?.resize(); if (this.sheet?.name === 'map') this.renderSheet(); });
+    initOrient(); onOrient(() => { this.g?.resize(); this.joy?.cancel(); if (this.sheet?.name === 'map') this.renderSheet(); });
     this.showTitle();
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { this.snd.suspend(); if (this.tr instanceof LocalTransport) this.tr.saveNow(); }
@@ -108,6 +122,8 @@ export class App implements AppApi {
   start(mode: Mode, create: { name: string; cls: ClassId } | null): void {
     goLandscape(); this.snd.unlock(); this.mode = mode; this.retry = 0;
     if (mode === 'offline' && create) { const lt = new store.LocalProfileStore(); lt.wipe(store.token('offline')); }
+    if (create) store.saveSeenClasses(mode, []); // a new character hasn't seen any unlock yet
+    this.seenCls = new Set<string>([...STARTER_CLASSES, ...store.seenClasses(mode)]);
     this.pendingHello = create ?? { name: store.knownChar(mode)?.name ?? '퇴마사', cls: store.knownChar(mode)?.cls ?? 'sword' };
     this.buildGameDom(); this.connect();
   }
@@ -186,7 +202,7 @@ export class App implements AppApi {
     this.joy = new Joystick(E.touch, E.joyBase, E.joyKnob);
     this.joy.onTap = (x, y) => this.tapWorld(x, y);
     window.onkeydown = (e) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      if (typingKey(e)) return;
       const k = e.key.toLowerCase();
       if (k === ' ') { this.useUlt(); e.preventDefault(); } else if (k === 'b' || k === 'i') this.toggleSheet('bag'); else if (k === 't') this.toggleSheet('tal'); else if (k === 'q' || k === 'j') this.toggleSheet('quest'); else if (k === 'm') this.toggleSheet('map'); else if (k === 'c') this.toggleSheet('cls'); else if (k === 'enter') this.openSheet('chat'); else if (k === 'escape') { this.closeModal(); this.closeSheet(); }
     };
@@ -388,9 +404,9 @@ export class App implements AppApi {
   openSheet(name: string, arg: unknown = null): void { if (!this.g?.ready) return; this.snd.play('click'); if (name === 'cls' && this.sheet?.name !== 'cls') this.clsNew.clear(); this.sheet = { name, arg }; this.renderSheet(); }
   closeSheet(): void { this.sheet = null; this.sheetPointer = false; const el = $('#sheet'); if (el) { el.classList.add('hidden'); clear(el); } }
   private renderSheet(): void {
-    const s = this.sheet; const el = $('#sheet'); if (!s || !el) return;
+    const s = this.sheet; const el = $('#sheet'); if (!s || !el) return; el.dataset.name = s.name;
     const titles: Record<string, string> = { bag: '가방', tal: '부적', quest: '퀘스트', map: '지도 · 신당 이동', settings: '메뉴', roster: '접속자', chat: '채팅', smith: '대장간', codex: '요괴 도감', cls: '직업 · 전직소' };
-    if (s.name === 'cls') { const fresh = this.unseenClasses(); if (fresh.length) { for (const id of fresh) { this.clsNew.add(id); this.seenCls.add(id); } store.saveSeenClasses([...this.seenCls]); } }
+    if (s.name === 'cls') { const fresh = this.unseenClasses(); if (fresh.length) { for (const id of fresh) { this.clsNew.add(id); this.seenCls.add(id); } store.saveSeenClasses(this.mode, [...this.seenCls]); } }
     let body: HTMLElement;
     switch (s.name) {
       case 'bag': body = bagPanel(this); break; case 'tal': body = talPanel(this, s.arg as number | null); break; case 'quest': body = questPanel(this); break;
@@ -407,7 +423,7 @@ export class App implements AppApi {
   }
   settingsPanel(onTitle: boolean): HTMLElement {
     const S = this.set; const save = () => { store.saveSettings(S); this.snd.setVolumes(S.sfx, S.bgm); this.g?.applySettings(); };
-    const slider = (label: string, key: 'sfx' | 'bgm') => h('label', { class: 'set' }, h('span', {}, label), h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: S[key], oninput: (e: Event) => { S[key] = Number((e.target as HTMLInputElement).value); save(); } }));
+    const slider = (label: string, key: 'sfx' | 'bgm') => h('label', { class: 'set' }, h('span', {}, label), rotRange(h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: S[key], oninput: (e: Event) => { S[key] = Number((e.target as HTMLInputElement).value); save(); } }) as HTMLInputElement));
     const QL: [store.Quality, string][] = [['high', '고화질'], ['mid', '보통'], ['low', '저사양']];
     const quality = h('div', { class: 'seg' }, ...QL.map(([q, label]) => h('button', { class: S.quality === q ? 'on' : '', onclick: (e: Event) => { S.quality = q; save(); for (const b of quality.children) b.classList.toggle('on', b === e.currentTarget); } }, label)));
     const toggle = (label: string, key: 'dmgNums' | 'shake' | 'names') => h('label', { class: 'set' }, h('span', {}, label), h('input', { type: 'checkbox', checked: S[key], onchange: (e: Event) => { S[key] = (e.target as HTMLInputElement).checked; save(); } }));

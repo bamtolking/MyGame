@@ -22,7 +22,8 @@ export interface Painter {
   begin(cam: Cam, ambient: [number, number, number], bg: number): void;
   /** Texture anchored at (x, y). sx/sy scale the texture's world size (negative flips), col is a 0xRRGGBB tint,
    *  add = 1 blends additively, flash whitens (0..1), dis dissolves (0..1, glowing edge on EMIT). */
-  draw(layer: number, t: Tex, x: number, y: number, sx: number, sy: number, rot: number, col: number, a: number, add: number, flash?: number, dis?: number): void;
+  /** `gy` squashes vertically after the rotation: a flat decal spinning on the ground plane (a circle stays the same ellipse). */
+  draw(layer: number, t: Tex, x: number, y: number, sx: number, sy: number, rot: number, col: number, a: number, add: number, flash?: number, dis?: number, gy?: number): void;
   /** Texture stretched from (x0, y0) to (x1, y1), w world units thick. */
   beam(layer: number, t: Tex, x0: number, y0: number, x1: number, y1: number, w: number, col: number, a: number, add: number): void;
   /** Band along an arc (radius r, thickness w) from angle a0 to a1; alpha ramps up from the a0 end. */
@@ -38,7 +39,7 @@ export const css = (col: number, a = 1): string => `rgba(${(col >> 16) & 255},${
 const hex = (col: number): string => '#' + (col & 0xffffff).toString(16).padStart(6, '0');
 
 type Ctx = CanvasRenderingContext2D;
-interface Cmd { t: Tex; x: number; y: number; sx: number; sy: number; rot: number; col: number; a: number; add: number; flash: number; dis: number; kind: 0 | 1 | 2; x1: number; y1: number; w: number }
+interface Cmd { t: Tex; x: number; y: number; sx: number; sy: number; rot: number; col: number; a: number; add: number; flash: number; dis: number; kind: 0 | 1 | 2; x1: number; y1: number; w: number; gy: number }
 
 /** Canvas2D fallback. Scene draws go straight to the canvas, light to a quarter-res canvas multiplied on top, emit is replayed last. */
 export class CanvasPainter implements Painter {
@@ -73,7 +74,7 @@ export class CanvasPainter implements Painter {
     const { t, x, y, sx, sy, rot } = cmd; let a = cmd.a; if (cmd.dis > 0) a *= 1 - cmd.dis;
     if (a <= 0.003) return;
     const cs = Math.cos(rot), sn = Math.sin(rot);
-    const la = sx * cs, lb = sx * sn, lc = -sy * sn, ld = sy * cs;
+    const la = sx * cs, lb = sx * sn * cmd.gy, lc = -sy * sn, ld = sy * cs * cmd.gy;
     c.setTransform(m[0] * la + m[2] * lb, m[1] * la + m[3] * lb, m[0] * lc + m[2] * ld, m[1] * lc + m[3] * ld, m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]);
     c.globalAlpha = Math.min(1, a); c.globalCompositeOperation = cmd.add ? 'lighter' : 'source-over';
     const dx = -t.ax * t.w, dy = -t.ay * t.h; const sc = cmd.dis > 0 ? 1 + cmd.dis * 0.25 : 1;
@@ -96,14 +97,14 @@ export class CanvasPainter implements Painter {
     if (layer === LIGHT) { cmd.add = 1; this.run(cmd, this.lc, this.lm); return; }
     this.run(cmd, this.c, this.m);
   }
-  draw(layer: number, t: Tex, x: number, y: number, sx: number, sy: number, rot: number, col: number, a: number, add: number, flash = 0, dis = 0): void {
-    this.cmd(layer, { t, x, y, sx, sy, rot, col, a, add, flash, dis, kind: 0, x1: 0, y1: 0, w: 0 });
+  draw(layer: number, t: Tex, x: number, y: number, sx: number, sy: number, rot: number, col: number, a: number, add: number, flash = 0, dis = 0, gy = 1): void {
+    this.cmd(layer, { t, x, y, sx, sy, rot, col, a, add, flash, dis, kind: 0, x1: 0, y1: 0, w: 0, gy });
   }
   beam(layer: number, t: Tex, x0: number, y0: number, x1: number, y1: number, w: number, col: number, a: number, add: number): void {
-    this.cmd(layer, { t, x: x0, y: y0, sx: 1, sy: 1, rot: 0, col, a, add, flash: 0, dis: 0, kind: 1, x1, y1, w });
+    this.cmd(layer, { t, x: x0, y: y0, sx: 1, sy: 1, rot: 0, col, a, add, flash: 0, dis: 0, kind: 1, x1, y1, w, gy: 1 });
   }
   arc(layer: number, t: Tex, x: number, y: number, r: number, w: number, a0: number, a1: number, col: number, a: number, add: number): void {
-    this.cmd(layer, { t, x, y, sx: 1, sy: 1, rot: a0, col, a, add, flash: 0, dis: 0, kind: 2, x1: a1, y1: r, w });
+    this.cmd(layer, { t, x, y, sx: 1, sy: 1, rot: a0, col, a, add, flash: 0, dis: 0, kind: 2, x1: a1, y1: r, w, gy: 1 });
   }
   image(cv: HTMLCanvasElement, sx: number, sy: number, sw: number, sh: number, dx: number, dy: number, dw: number, dh: number): void {
     const c = this.c, m = this.m; c.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';

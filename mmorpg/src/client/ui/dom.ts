@@ -12,6 +12,11 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<s
   const add = (c: Child) => { if (c == null || c === false) return; if (Array.isArray(c)) c.forEach(add); else el.append(c instanceof Node ? c : document.createTextNode(String(c))); };
   kids.forEach(add); return el;
 }
+/** A key press meant for a text field or a browser shortcut (copy, select all…), not for the game. */
+export function typingKey(e: KeyboardEvent): boolean {
+  const t = e.target as HTMLElement | null;
+  return e.ctrlKey || e.metaKey || e.altKey || !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+}
 export const $ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = document): T => root.querySelector(sel) as T;
 export function clear(el: Element): void { while (el.firstChild) el.removeChild(el.firstChild); }
 export const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
