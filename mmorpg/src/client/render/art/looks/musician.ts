@@ -51,7 +51,7 @@ function sleeve(c: Ctx, P: Pal, back: boolean): void {
 /** Motion trail of the plucking hand from arm angle a0 to a1 (around the front shoulder). */
 function swoosh(c: Ctx, a0: number, a1: number, k: number): void {
   const b0 = Math.PI / 2 - a0, b1 = Math.PI / 2 - a1, n = 8;
-  for (let i = 0; i < n; i++) { const t = i / n; c.beginPath(); c.arc(6, -20, 19, b0 + (b1 - b0) * t, b0 + (b1 - b0) * (t + 1 / n) + 0.02, b1 < b0); c.strokeStyle = `rgba(255,${Math.round(200 + 40 * t)},${Math.round(110 + 90 * t)},${(0.25 + 0.75 * t) * k})`; c.lineWidth = 1.4 + t * 5.6; c.stroke(); }
+  for (let i = 0; i < n; i++) { const t = i / n; c.beginPath(); c.arc(6, -20, 19, b0 + (b1 - b0) * t, b0 + (b1 - b0) * (t + 1 / n) + 0.02, b1 < b0); c.strokeStyle = `rgba(255,${Math.round(190 + 50 * t)},${Math.round(80 + 110 * t)},${(0.3 + 0.7 * t) * k})`; c.lineWidth = 2 + t * 6.5; c.stroke(); }
 }
 function hand(c: Ctx, P: Pal, open: boolean): void {
   circle(c, 0, 17, 3.4); vol(c, P.skin, -3, 14, 3, 20, 1.6);
