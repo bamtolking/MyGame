@@ -2,13 +2,13 @@
 import { CLASSES, SKILLS } from '../data/classes';
 import { addArea, breakPropsNear, emptyDmg, heroRoll, hurtHero, hurtMonster, scaleDmg, spawnProj } from './combat';
 import { circleFree, los, moveCircle, nearestWalkable } from './path';
-import { AREA_TICK, PROJ_HIT, PROJ_MOTION, SKILL_IMPL, type SkillCtx, type SkillImpl } from './registry';
+import { AREA_TICK, ON_ENTER_WORLD, PROJ_HIT, PROJ_MOTION, SKILL_IMPL, type SkillCtx, type SkillImpl } from './registry';
 import { fireArrow, hitProp, meleeTargets, nearestMonster, rankOf, swingElem } from './skills';
 import type { Game } from './game';
 import type { Area, BuffMods, Dmg, Elem, Monster, Proj } from './types';
 
 export {
-  CLASSES, SKILLS, SKILL_IMPL, PROJ_MOTION, PROJ_HIT, AREA_TICK,
+  CLASSES, SKILLS, SKILL_IMPL, PROJ_MOTION, PROJ_HIT, AREA_TICK, ON_ENTER_WORLD,
   addArea, breakPropsNear, emptyDmg, heroRoll, hurtHero, hurtMonster, scaleDmg, spawnProj,
   circleFree, los, moveCircle, nearestWalkable,
   fireArrow, hitProp, meleeTargets, nearestMonster, rankOf, swingElem,

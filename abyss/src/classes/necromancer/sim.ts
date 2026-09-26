@@ -252,7 +252,7 @@ registerSkills({
       ensureArmorRing(g);
       const p = floorSpot(g, a.tx, a.ty);
       addArea(g, 'nc_plague', 'hero', p.x, p.y, PLAGUE.r, PLAGUE.dur, emptyDmg(), {
-        tick: PLAGUE.tick, tickT: 0.15, data: { noDmg: 1, chill: PLAGUE.chill, pct: def.pct(rank) },
+        tick: PLAGUE.tick, tickT: 0.15, data: { noDmg: 1, slow: PLAGUE.slow, pct: def.pct(rank) },
       });
       fx(g, 'nc_plagueCast', h.x, h.y, { x2: p.x, y2: p.y, r: PLAGUE.r });
       sfx(g, 'nc_plagueBurst', p.x, p.y);

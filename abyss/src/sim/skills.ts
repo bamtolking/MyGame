@@ -107,7 +107,12 @@ function moveDest(g: Game, def: SkillDef, x: number, y: number): { x: number; y:
   const h = g.hero, w = g.world;
   let dx = x - h.x, dy = y - h.y;
   let d = Math.hypot(dx, dy);
-  if (d < 0.3) { dx = Math.cos(h.facing); dy = Math.sin(h.facing); d = 1; if (def.move === 'dash') { x = h.x + dx * def.range; y = h.y + dy * def.range; } else return null; }
+  if (d < 0.3) {
+    // a leap aimed at the hero's own feet (enemy hugging the hero) slams in place
+    if (def.move === 'leap') return { x: h.x, y: h.y };
+    dx = Math.cos(h.facing); dy = Math.sin(h.facing); d = 1;
+    if (def.move === 'dash') { x = h.x + dx * def.range; y = h.y + dy * def.range; } else return null;
+  }
   const maxR = def.range;
   if (d > maxR) { x = h.x + (dx / d) * maxR; y = h.y + (dy / d) * maxR; d = maxR; }
   if (def.move === 'dash') {

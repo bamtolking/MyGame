@@ -81,7 +81,7 @@ export function hurtMonster(g: Game, m: Monster, d: Dmg): number {
     if (h.st.lifeSteal > 0) h.hp = Math.min(h.st.maxHp, h.hp + Math.min(total * h.st.lifeSteal / 100, h.st.maxHp * 0.08));
     if (h.st.manaSteal > 0) h.mp = Math.min(h.st.maxMp, h.mp + Math.min(total * h.st.manaSteal / 100, h.st.maxMp * 0.08));
   }
-  if (total >= 0.5 || d.crit) g.emit({ t: 'dmg', x: m.x, y: m.y, v: Math.round(total), kind: d.crit ? 'crit' : 'normal', elem: dominant(d) });
+  if (total >= 0.5) g.emit({ t: 'dmg', x: m.x, y: m.y, v: Math.round(total), kind: d.crit ? 'crit' : 'normal', elem: dominant(d) });
   if (d.src === 0 && (total > 0 || d.stun || d.freeze)) {
     let dx = m.x - (d.srcX ?? h.x), dy = m.y - (d.srcY ?? h.y);
     const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
@@ -539,6 +539,7 @@ function genericAreaTick(g: Game, a: Area): void {
     for (const m of w.monsters) {
       if (m.dead || Math.hypot(m.x - a.x, m.y - a.y) > a.r + m.r) continue;
       if (d.chill) m.chillT = Math.max(m.chillT, d.chill);
+      if (d.slow) m.slowT = Math.max(m.slowT, d.slow);
       if (d.fear && m.rank !== 'boss') m.fleeT = Math.max(m.fleeT, d.fear);
       if (d.pull && m.rank !== 'boss') {
         const dx = a.x - m.x, dy = a.y - m.y, l = Math.hypot(dx, dy);

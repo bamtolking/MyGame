@@ -4,7 +4,7 @@
 // buff whose ring burns adjacent enemies), charge (shield-first dash that bowls enemies aside and stuns them)
 // and heavenly judgment (seven pillars of light falling one after another on enemies inside a seal).
 import {
-  AREA_TICK, PROJ_HIT, PROJ_MOTION, SKILLS, addArea, addBuff, breakPropsNear, emptyDmg, fx, hitProp, hurtMonster,
+  AREA_TICK, ON_ENTER_WORLD, PROJ_HIT, PROJ_MOTION, SKILLS, addArea, addBuff, breakPropsNear, emptyDmg, fx, hitProp, hurtMonster,
   meleeTargets, monstersNear, registerSkills, roll, sfx, shake, spawnProj, swingFx,
   type Game, type Monster, type SkillCtx,
 } from '../../sim/kit';
@@ -74,24 +74,8 @@ function ensureAura(g: Game): void {
   addArea(g, 'pl_auraRing', 'hero', h.x, h.y, r, b.t, emptyDmg(), { follow: true, tick: AURA.tick, tickT: AURA.tick, data: { noDmg: 1, pct: b.v } });
 }
 
-/**
- * The buff outlives the floor but its ring does not, and the engine has no per-tick hero hook (see engineRequests).
- * Every world change (stairs, waypoint, portal, town) goes through Game.placeHero, so the first aura cast wraps it
- * on the live game's prototype to re-light the ring as soon as the paladin arrives. Idempotent; a no-op when the
- * engine renames the method (the ring then comes back on the next attack, as before).
- */
-const PLACE_HOOK = Symbol.for('abyss.pl_aura.placeHero');
-function hookWorldChange(g: Game): void {
-  const proto = Object.getPrototypeOf(g) as Record<string | symbol, unknown>;
-  const orig = proto.placeHero;
-  if (proto[PLACE_HOOK] || typeof orig !== 'function') return;
-  proto[PLACE_HOOK] = true;
-  proto.placeHero = function (this: Game, ...args: unknown[]): unknown {
-    const r = (orig as (...a: unknown[]) => unknown).apply(this, args);
-    ensureAura(this);
-    return r;
-  };
-}
+// the buff outlives the floor but its ring does not: re-light it as soon as the paladin arrives somewhere new
+ON_ENTER_WORLD.push(ensureAura);
 
 AREA_TICK.pl_auraRing = (g, a) => {
   const h = g.hero;
@@ -206,7 +190,6 @@ registerSkills({
   // ---- holy aura: armour / resistances / regeneration for 15 s, and a burning ring around the hero
   pl_aura: {
     apply({ g, h, def, rank }) {
-      hookWorldChange(g);
       addBuff(g, 'pl_aura', '신성한 오라', AURA.dur, { armorPct: 30 + 3 * rank, resAll: 10, hpRegen: 1 + 0.3 * rank }, '#ffd870');
       // the burn strength rides on the buff (v is unused for class buffs) so the ring can be restored on a new floor
       const b = h.buffs.find((q) => q.id === 'pl_aura');

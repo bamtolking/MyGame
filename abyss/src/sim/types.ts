@@ -137,6 +137,8 @@ export interface Monster extends Entity {
   act: MonAct | null; atkCd: number; aiT: number;
   facing: number; anim: number; moving: boolean;
   hitT: number; stunT: number; freezeT: number; chillT: number;
+  /** Plain 50% slow without the frost look (smoke, vines, plague). */
+  slowT: number;
   poison: { dps: number; t: number } | null; burn: { dps: number; t: number } | null;
   kbx: number; kby: number; fleeT: number;
   packId: number; leaderId: number; homeX: number; homeY: number;
@@ -193,7 +195,7 @@ export type AreaKind = 'rain' | 'meteor' | 'burn' | 'nova' | 'poisonCloud' | 'fi
  *  - follow: stays centred on the hero
  *  - proj: sentry — each tick fires this projectile kind at the nearest enemy within data.range (default 7)
  *  - data.heal: hero heals this much per tick while inside · data.pull: pulls enemies toward the centre (tiles/s)
- *  - data.chill / data.fear: seconds of chill / flee applied to enemies inside each tick
+ *  - data.chill / data.slow / data.fear: seconds of chill (frost-tinted) / plain slow / flee applied to enemies inside each tick
  *  - custom per-tick logic: sim/registry AREA_TICK[kind]
  */
 export interface Area {

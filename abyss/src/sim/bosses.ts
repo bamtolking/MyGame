@@ -65,7 +65,7 @@ export function updateBoss(g: Game, m: Monster, dt: number, dist: number): void 
   }
   if (h.dead) { m.moving = false; return; }
   const frac = m.hp / m.maxHp;
-  const sp = m.speed * (m.chillT > 0 ? 0.6 : 1) * (m.phase > 0 && m.tpl === 'gromak' ? 1.35 : 1) * (m.phase > 1 && m.tpl === 'malegath' ? 1.2 : 1);
+  const sp = m.speed * (m.chillT > 0 || m.slowT > 0 ? 0.6 : 1) * (m.phase > 0 && m.tpl === 'gromak' ? 1.35 : 1) * (m.phase > 1 && m.tpl === 'malegath' ? 1.2 : 1);
   const t = MONSTERS[m.tpl];
 
   // in-progress action

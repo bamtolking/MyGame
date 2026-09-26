@@ -29,3 +29,6 @@ export const PROJ_MOTION: Record<string, (g: Game, p: Proj, dt: number) => void>
 export const PROJ_HIT: Record<string, (g: Game, p: Proj, m: Monster) => void> = {};
 /** Custom area logic by Area.kind, called on every area tick (see Area docs for the generic behaviour). */
 export const AREA_TICK: Record<string, (g: Game, a: Area) => void> = {};
+/** Called after the hero arrives in a new world (stairs, waypoint, portal, town, respawn): re-create hero-bound
+ *  areas that the old world took with it, e.g. an aura ring whose buff is still running. */
+export const ON_ENTER_WORLD: ((g: Game) => void)[] = [];

@@ -32,7 +32,7 @@ export function makeMonster(w: World, tplId: string, lvl: number, rank: MonsterR
     awake: false, dead: false, deadT: 0,
     act: null, atkCd: rng.range(0.2, 1), aiT: rng.range(0, 1),
     facing: rng.range(0, Math.PI * 2), anim: rng.range(0, 10), moving: false,
-    hitT: 0, stunT: 0, freezeT: 0, chillT: 0, poison: null, burn: null,
+    hitT: 0, stunT: 0, freezeT: 0, chillT: 0, slowT: 0, poison: null, burn: null,
     kbx: 0, kby: 0, fleeT: 0,
     packId: 0, leaderId: 0, homeX: x, homeY: y,
     timers: { special: t.special ? rng.range(1, t.special) : 0 },

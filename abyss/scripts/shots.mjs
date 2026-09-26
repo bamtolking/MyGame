@@ -6,10 +6,10 @@ import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const out = join(root, 'e2e-out');
+const out = resolve(process.env.OUTDIR ?? join(root, 'e2e-out'));
 mkdirSync(out, { recursive: true });
 const exe = process.env.CHROME_PATH || ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium'].find((p) => existsSync(p));
-const url = 'file://' + resolve(root, 'play/index.html') + (process.env.ADAPTIVE ? '' : '?hq');
+const url = 'file://' + resolve(process.env.PAGE ?? join(root, 'play/index.html')) + (process.env.ADAPTIVE ? '' : '?hq');
 const log = [];
 const L = (m) => { console.log(m); log.push(m); };
 const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--use-gl=swiftshader', '--autoplay-policy=no-user-gesture-required'] });

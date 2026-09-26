@@ -17,9 +17,9 @@ export const MAGE = { dur: 14, every: 0.8, rise: 0.6, range: 7, speed: 12, max: 
 /** Bone armor: buff length and the sampling interval of the ring that watches for melee hits (thorn shards). */
 export const ARMOR = { dur: 12, watch: 0.05 };
 
-/** Plague: cloud radius, lifetime, damage tick, chill per tick (the slow) and how long the poison lingers after
+/** Plague: cloud radius, lifetime, damage tick, slow per tick and how long the poison lingers after
  *  the last tick (the cloud keeps refreshing it while an enemy stays inside). */
-export const PLAGUE = { r: 3.4, dur: 5, tick: 0.5, chill: 0.6, linger: 1 };
+export const PLAGUE = { r: 3.4, dur: 5, tick: 0.5, slow: 0.6, linger: 1 };
 
 /** Share of the poison roll that drives the engine's 3 s poison so it drains `pct` every tick while refreshed. */
 export const PLAGUE_POISON_MULT = 3 / PLAGUE.tick;

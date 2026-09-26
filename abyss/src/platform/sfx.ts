@@ -283,4 +283,6 @@ export const ALL_SFX = Object.keys(RECIPES);
 export function registerSfx(name: string, recipe: Recipe, meta: SfxMeta): void { RECIPES[name] = [recipe, meta]; }
 /** Plays an existing sound under another name (e.g. 'cast_pl_zeal' → 'swingHeavy'); '' silences it. */
 export function aliasSfx(name: string, to: string): void { ALIAS[name] = to; }
+/** Every sound a class module registered under its id prefix (e.g. 'pl_'), so they can be rendered ahead of use. */
+export function classSfx(prefix: string): string[] { return Object.keys(RECIPES).filter((n) => n.startsWith(prefix)); }
 export { M, COMBAT, click, thud, band, low, high, whoosh, squelch, boom, debris, sparkle, zap, fireRoar, metal, twang, env3, growl, chord, bones, hitBody };

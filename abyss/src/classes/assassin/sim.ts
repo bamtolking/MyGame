@@ -111,7 +111,7 @@ registerSkills({
     apply({ g, h, def, rank }) {
       const dodge = Math.min(70, def.pct(rank));
       addBuff(g, 'as_smoke', '연막', SMOKE_DUR, { dodge }, '#b39ad8');
-      addArea(g, 'as_smoke', 'hero', h.x, h.y, def.range, SMOKE_DUR, emptyDmg(), { tick: 0.2, data: { chill: 0.45, noDmg: 1 } });
+      addArea(g, 'as_smoke', 'hero', h.x, h.y, def.range, SMOKE_DUR, emptyDmg(), { tick: 0.2, data: { slow: 0.45, noDmg: 1 } });
       capAreas(g, 'as_smoke', 2);
       fx(g, 'as_smokeBomb', h.x, h.y, { r: def.range });
       shake(g, 0.15);

@@ -5,6 +5,7 @@ import { LAST_FLOOR, MAX_POTIONS } from '../src/data/zones';
 import { DT, Game } from '../src/sim/game';
 import { baseOf, canEquipClass } from '../src/sim/items';
 import { los, walkable } from '../src/sim/path';
+import { SKILL_IMPL } from '../src/sim/registry';
 import { rankOf } from '../src/sim/skills';
 import { computeStats, sheetDps } from '../src/sim/stats';
 import type { ClassId, EquipSlot, Hero, Item, Monster } from '../src/sim/types';
@@ -22,6 +23,9 @@ function genericPick(g: Game, m: Monster, crowd: number, d: number, ok: (s: numb
     if (!ok(s)) continue;
     const def = SKILLS[c.skills[s]];
     const ai = def.ai ?? {};
+    // e.g. corpse explosion without corpses: the game would refuse it anyway
+    const impl = SKILL_IMPL[def.id];
+    if (impl?.canCast && !impl.canCast(g, m.x, m.y, m.id, rankOf(g, s))) continue;
     if (ai.maxDist !== undefined && d > ai.maxDist) continue;
     if (ai.minDist !== undefined && d < ai.minDist) continue;
     if (ai.lowHp !== undefined && h.hp > h.st.maxHp * ai.lowHp && !(ai.crowd !== undefined && crowd >= ai.crowd + 1)) continue;
@@ -170,6 +174,9 @@ export function runBot(cls: ClassId, seed: number, opts: { maxFloor?: number; ma
   let focusId = 0;
   let victory = false;
   const tries = new Map<number, number>();
+  // exploration jitter when stuck: seeded so a run is reproducible per seed
+  let rs = (seed * 2654435761) >>> 0 || 1;
+  const rnd = () => { rs ^= rs << 13; rs >>>= 0; rs ^= rs >>> 17; rs ^= rs << 5; rs >>>= 0; return rs / 4294967296; };
   let t = 0;
   while (t < maxTime) {
     for (const e of g.drain()) {
@@ -246,7 +253,7 @@ export function runBot(cls: ClassId, seed: number, opts: { maxFloor?: number; ma
     // stuck check
     if (Math.hypot(h.x - lastX, h.y - lastY) < 0.05) stuckT += 0.1; else stuckT = 0;
     lastX = h.x; lastY = h.y;
-    if (stuckT > 4) { res.stuck++; stuckT = 0; exploreGoal = { x: h.x + (Math.random() - 0.5) * 8, y: h.y + (Math.random() - 0.5) * 8 }; }
+    if (stuckT > 4) { res.stuck++; stuckT = 0; exploreGoal = { x: h.x + (rnd() - 0.5) * 8, y: h.y + (rnd() - 0.5) * 8 }; }
     // explore or descend
     const aliveNear = w.monsters.filter((m) => !m.dead).length;
     const wantDown = w.down && !w.downSealed && (floorT > 240 || aliveNear < 12 || !frontier(g));

@@ -1,15 +1,15 @@
 // Balance sweep: the headless bot plays every class on several seeds through all 12 floors (normal).
-// Writes docs/balance-results.md. Run: npm run abyss:balance
+// Writes docs/balance-results.md. Run: npm run abyss:balance  (CLS=warrior,monk / SEEDS=11,22 to narrow it)
 import { describe, expect, it } from 'vitest';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runBot, type BotResult } from './bot';
-import type { ClassId } from '../src/sim/types';
+import { CLASS_IDS, type ClassId } from '../src/sim/types';
 
 const DOCS = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs');
 const SEEDS = (process.env.SEEDS ?? '11,22,33').split(',').map(Number);
-const CLASSES: ClassId[] = ['warrior', 'rogue', 'sorcerer'];
+const CLASSES: ClassId[] = process.env.CLS ? (process.env.CLS.split(',') as ClassId[]) : [...CLASS_IDS];
 
 describe('balance sweep (normal difficulty)', () => {
   it('every class can finish the game; deaths stay reasonable', () => {
@@ -33,5 +33,5 @@ describe('balance sweep (normal difficulty)', () => {
       expect(rs.some((r) => r.won), `${cls} should beat the final boss at least once`).toBe(true);
       for (const r of rs) expect(r.reached, `${cls} #${r.seed} reached`).toBeGreaterThanOrEqual(9);
     }
-  });
+  }, 3600000);
 });

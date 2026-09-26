@@ -10,6 +10,7 @@ import { rankOf } from '../sim/skills';
 import { computeStats } from '../sim/stats';
 import type { ClassId, EquipSlot, GEvent, Item } from '../sim/types';
 import { Audio } from '../platform/audio';
+import { classSfx } from '../platform/sfx';
 import * as store from '../platform/storage';
 import { isUnlocked, loadProfile, record, saveProfile, unlockProgress, type Profile } from '../platform/profile';
 import { drawBiped, type Look } from '../render/actors';
@@ -295,7 +296,9 @@ export class App {
     this.panelL = null; this.panelR = null; this.modal = null; this.mapOpen = false; this.sel = null; this.deadShown = false; this.victoryPending = 0;
     this.wpDiff = this.g.diff;
     this.buildGameDom();
-    this.audio.prepare(CLASSES[cls].skills.map((id) => `cast_${id}`));
+    // cast sounds first, then the class module's impact/extra sounds (pl_*, nc_*, …) so none renders mid-fight
+    const pre = /^[a-z]{2}_/.exec(CLASSES[cls].skills[0])?.[0];
+    this.audio.prepare([...CLASSES[cls].skills.map((id) => `cast_${id}`), ...(pre ? classSfx(pre) : [])]);
     if (!save) this.saveNow();
     this.emitIntro();
     this.lastT = performance.now();

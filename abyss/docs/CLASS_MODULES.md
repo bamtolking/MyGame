@@ -44,7 +44,7 @@ kit 도우미: `roll`, `heroRoll`, `hurtMonster`, `shoot(g, kind, ang, dmg, opts
 - 투사체(`Proj`): `pierce`, `homing`+`targetId`, `aoe`(폭발), `rehit`(같은 적을 N초마다 다시 때림), `ghost`(벽 통과),
   `motion`(PROJ_MOTION 키: 매 틱 속도/위치 조정), `onHit`(PROJ_HIT 키), `data`(자유).
 - 장판(`Area`): 기본 동작 — `tick>0`이면 매 틱 안의 적 전원 피해(0이면 1회), `follow`(영웅을 따라다님),
-  `proj`(파수꾼: 틱마다 가장 가까운 적에게 그 투사체 발사, `data.range/speed/life/pierce/homing`), `data.heal`, `data.pull`, `data.chill`, `data.fear`, `data.noDmg`.
+  `proj`(파수꾼: 틱마다 가장 가까운 적에게 그 투사체 발사, `data.range/speed/life/pierce/homing`), `data.heal`, `data.pull`, `data.chill`(냉기 둔화, 파란 색조), `data.slow`(색조 없는 둔화), `data.fear`, `data.noDmg`.
   추가 로직은 `AREA_TICK[kind] = (g, a) => {...}`.
 - 버프 `mods`: `dmgPct, ias, armorPct, armor, lifeSteal, manaSteal, dodge, ms, hpRegen, mpRegen, crit, critDmg, resAll, block, thorns, dmgTaken`(받는 피해 % 감소).
 - 원소: `phys | fire | cold | light | poison` (독은 3초 지속 피해). `via`: 'melee' | 'proj' | 'spell' (타격 연출·효과음 결정).

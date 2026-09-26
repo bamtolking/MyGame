@@ -201,6 +201,7 @@ export function updateMonster(g: Game, m: Monster, dt: number): void {
   if (m.stunT > 0) m.stunT -= dt;
   if (m.freezeT > 0) m.freezeT -= dt;
   if (m.chillT > 0) m.chillT -= dt;
+  if (m.slowT > 0) m.slowT -= dt;
   if (m.fleeT > 0) m.fleeT -= dt;
   m.atkCd -= dt;
   m.aiT -= dt;
@@ -218,7 +219,7 @@ export function updateMonster(g: Game, m: Monster, dt: number): void {
   if (t.ai === 'boss') { updateBoss(g, m, dt, dist); return; }
   if (h.dead) { idleWander(g, m, dt); return; }
   if (m.act) { runAct(g, m, dt); return; }
-  const sp = m.speed * (m.chillT > 0 ? 0.5 : 1);
+  const sp = m.speed * (m.chillT > 0 || m.slowT > 0 ? 0.5 : 1);
   if (m.fleeT > 0) { moveAway(g, m, sp * 1.1, dt); return; }
 
   if (m.mods.includes('teleport')) {

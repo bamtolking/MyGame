@@ -8,6 +8,7 @@ import { generateFloor, generateTown } from './dungeon';
 import { baseOf, buyPrice, canEquipClass, genItem, sellPrice } from './items';
 import { astar, circleFree, computeFlow, los, moveCircle, nearestWalkable, walkLine } from './path';
 import { Rng } from './rng';
+import { ON_ENTER_WORLD } from './registry';
 import { tryCast, updateAct } from './skills';
 import { computeStats } from './stats';
 import '../classes/sim';
@@ -149,6 +150,7 @@ export class Game {
     h.intent = null; h.path = null; h.act = null; h.moving = false;
     this.world.flowTile = -1; this.exploredTile = -1; this.flowTimer = 0;
     this.world.projs = [];
+    for (const f of ON_ENTER_WORLD) f(this);
   }
 
   enterTown(at: 'stairs' | 'waypoint' | 'portal' | 'spawn'): void {

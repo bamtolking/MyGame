@@ -42,6 +42,8 @@ const pull = () => page.evaluate(() => {
   const ms = g.world.monsters.filter((m) => !m.dead && m.rank !== 'boss').slice(0, 6);
   ms.forEach((m, i) => { m.x = h.x + 2.2 + (i % 3) * 0.9; m.y = h.y + 0.6 + Math.floor(i / 3) * 0.9 - 0.4; m.awake = true; m.hp = Math.max(m.hp, m.maxHp); });
   h.hp = h.st.maxHp; h.mp = h.st.maxMp; h.cds = [0, 0, 0, 0, 0]; h.act = null;
+  // drop a held attack intent too, or the next skill key comes back 'busy'
+  h.intent = null; h.path = null;
 });
 const aim = () => page.evaluate(() => {
   const a = window.__app, g = a.g, h = g.hero;
