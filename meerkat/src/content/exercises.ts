@@ -38,6 +38,13 @@ export const REGION_FILES: Record<string, Exercise[]> = {
 
 export const EXERCISES: Exercise[] = Object.values(REGION_FILES).flat();
 
+/** 새로 추가된 동작 (라이브러리에 NEW 표시) */
+export const NEW_IDS = new Set(
+  Object.entries(REGION_FILES)
+    .filter(([k]) => k.endsWith('-plus'))
+    .flatMap(([, list]) => list.map((e) => e.id)),
+);
+
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
 
 export function exercise(id: string): Exercise | undefined {

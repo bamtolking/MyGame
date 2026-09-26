@@ -1854,3 +1854,40 @@ input[type='range'].slider {
   display: grid;
   gap: 4px;
 }
+
+.seg-chip {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.seg-chip.on {
+  background: var(--text);
+  color: var(--surface);
+}
+
+.badge-new {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  vertical-align: 2px;
+  letter-spacing: 0.02em;
+}
+
+.new-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand);
+  display: inline-block;
+}

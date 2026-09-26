@@ -3,7 +3,7 @@ import { Briefcase, Camera, Heart, Search } from 'lucide-preact';
 import { ExerciseThumb } from '../components/ExerciseThumb';
 import { Chip, TopBar } from '../components/ui';
 import { doseText } from '../content/format';
-import { EXERCISES, PHASE_LABEL, REGION_LABEL, type Region } from '../content/exercises';
+import { EXERCISES, NEW_IDS, PHASE_LABEL, PHASE_ORDER, REGION_LABEL, type Phase, type Region } from '../content/exercises';
 import { L, tr } from '../i18n';
 import { nav } from '../lib/router';
 import { activeRoutine, focusRoutine } from '../state/derived';
@@ -13,7 +13,8 @@ const REGIONS: Region[] = ['neck', 'shoulder', 'upperBack', 'chest', 'lowBack', 
 
 export function Library() {
   const [q, setQ] = useState('');
-  const [region, setRegion] = useState<Region | 'fav' | 'desk' | 'ai' | null>(null);
+  const [region, setRegion] = useState<Region | 'fav' | 'desk' | 'ai' | 'new' | null>(null);
+  const [phase, setPhase] = useState<Phase | null>(null);
   const favs = progression.value.favorites;
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -21,11 +22,13 @@ export function Library() {
       if (region === 'fav' && !favs.includes(e.id)) return false;
       if (region === 'desk' && !e.desk) return false;
       if (region === 'ai' && !e.coach) return false;
-      if (region && !['fav', 'desk', 'ai'].includes(region) && !e.regions.includes(region as Region)) return false;
+      if (region === 'new' && !NEW_IDS.has(e.id)) return false;
+      if (region && !['fav', 'desk', 'ai', 'new'].includes(region) && !e.regions.includes(region as Region)) return false;
+      if (phase && e.phase !== phase) return false;
       if (!s) return true;
       return [e.name.ko, e.name.en, e.muscles.ko, e.muscles.en].some((t) => t.toLowerCase().includes(s));
     });
-  }, [q, region, favs.length]);
+  }, [q, region, phase, favs.length]);
 
   return (
     <div class="screen with-tabbar">
@@ -40,6 +43,11 @@ export function Library() {
         <Chip on={region === null} onClick={() => setRegion(null)}>
           {tr('전체', 'All')}
         </Chip>
+        {NEW_IDS.size > 0 && (
+          <Chip on={region === 'new'} onClick={() => setRegion('new')}>
+            <span class="new-dot" /> {tr('새 동작', 'New')}
+          </Chip>
+        )}
         <Chip on={region === 'fav'} onClick={() => setRegion('fav')}>
           <Heart size={14} /> {tr('즐겨찾기', 'Saved')}
         </Chip>
@@ -55,7 +63,14 @@ export function Library() {
           </Chip>
         ))}
       </div>
-      {region && !['fav', 'desk', 'ai'].includes(region) && (
+      <div class="row" style={{ gap: 6, overflowX: 'auto', margin: '6px -20px 0', padding: '0 20px 4px' }}>
+        {PHASE_ORDER.map((p) => (
+          <button key={p} class={`seg-chip${phase === p ? ' on' : ''}`} onClick={() => setPhase(phase === p ? null : p)}>
+            {L(PHASE_LABEL[p])}
+          </button>
+        ))}
+      </div>
+      {region && !['fav', 'desk', 'ai', 'new'].includes(region) && (
         <button
           class="btn soft block"
           style={{ margin: '10px 0 4px' }}
@@ -75,7 +90,10 @@ export function Library() {
           <button key={e.id} class="list-item" onClick={() => nav(`/exercise/${e.id}`)}>
             <ExerciseThumb ex={e} size={60} still />
             <div class="grow">
-              <div class="h3">{L(e.name)}</div>
+              <div class="h3">
+                {L(e.name)}
+                {NEW_IDS.has(e.id) && <span class="badge-new">NEW</span>}
+              </div>
               <div class="caption">
                 {L(PHASE_LABEL[e.phase])} · {doseText(e.dose)}
               </div>

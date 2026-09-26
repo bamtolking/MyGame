@@ -154,6 +154,16 @@ export function Player() {
       }
     } else if (phase === 'work') {
       const cues = LA(ex.cues);
+      // 단계 안내: 자세가 바뀔 때 자막을 읽어 줌 (호흡 운동은 매 주기, 나머지는 첫 회만)
+      const labels = ex.anim.labels ?? [];
+      if (labels.length > 1 && !useCoach) {
+        const cyc = cycleLength(ex.anim);
+        const at = dose.kind === 'hold' ? Math.min(elapsed, arriveTime(ex.anim, holdKeyOf(ex.anim))) : dose.kind === 'reps' ? ((elapsed % period) / period) * cyc : elapsed;
+        const k = keyAt(ex.anim, at).key;
+        const every = ex.phase === 'breath' && dose.kind === 'time';
+        const firstPass = dose.kind === 'reps' ? elapsed < period : dose.kind === 'hold' || at < cyc;
+        if (every || firstPass) say(every ? `k${idx}:${Math.floor(at / cyc)}:${k}` : `k${idx}:${k}`, L(labels[k]));
+      }
       if (dose.kind === 'reps' && !useCoach) {
         const n = Math.floor(elapsed / period);
         if (n >= 1 && n <= dose.value && !spoken.current.has(`c${idx}:${n}`)) {
@@ -277,6 +287,7 @@ export function Player() {
   if (phase === 'work') {
     if (dose.kind === 'hold') figTime = Math.min(elapsed, into);
     else if (dose.kind === 'reps' && !useCoach) figTime = ((elapsed % period) / period) * cycleLength(anim);
+    else if (dose.kind === 'time') figTime = elapsed;
   } else if (phase === 'rest') figTime = 0;
   if (dose.kind === 'reps' && useCoach) figSpeed = cycleLength(anim) / period;
 
