@@ -121,14 +121,14 @@ export const guardian: ClassFx = {
   ult: (c, e) => {
     const x = e.x, y = e.y, big = c.mine ? 1 : 0.55; const A = c.art, ring = A.fx('ring'), ringSoft = A.fx('ringSoft'), dome = domeTex(), wr = ringTex();
     // ground slam: shockwave to the push radius, then a soft ring out to the ally-shield radius
-    c.fx.add(0, 0.62, (p, k) => { const r = 26 + (PUSH_R - 26) * out3(k); groundRing(p, ring, x, y, r, GOLD, 0.7 * (1 - k) ** 1.2); groundRing(p, ringSoft, x, y, r * 0.97, AMBER, 0.3 * (1 - k), true); });
-    c.fx.add(0, 1, (p, k) => { groundRing(p, ringSoft, x, y, 60 + (ALLY_R - 60) * out3(k), CREAM, 0.3 * (1 - k) * Math.min(1, k * 5), true); }, undefined, 0.1);
-    c.fx.add(0, 1.3, (p, k) => { const s = (2 * (DOME_R + 8)) / 256 * (0.6 + 0.4 * out3(Math.min(1, k * 3))); p.draw(EMIT, wr, x, y, s, s * 0.62, 0, GOLD, 0.38 * (k < 0.7 ? 1 : (1 - k) / 0.3), 1); });
+    c.fx.add(0, 0.62, (p, k) => { const r = 26 + (PUSH_R - 26) * out3(k); groundRing(p, ring, x, y, r, GOLD, 0.7 * (1 - k) ** 1.2); groundRing(p, ringSoft, x, y, r * 0.97, AMBER, 0.2 * (1 - k), true); });
+    c.fx.add(0, 1, (p, k) => { groundRing(p, ringSoft, x, y, 60 + (ALLY_R - 60) * out3(k), CREAM, 0.22 * (1 - k) * Math.min(1, k * 5), true); }, undefined, 0.1);
+    c.fx.add(0, 1.3, (p, k) => { const s = (2 * (DOME_R + 8)) / 256 * (0.6 + 0.4 * out3(Math.min(1, k * 3))); p.draw(EMIT, wr, x, y, s, s * 0.62, 0, GOLD, 0.32 * (k < 0.7 ? 1 : (1 - k) / 0.3), 1); });
     // the hex dome rises (overshoot), holds, then bursts outward into shards
     c.fx.add(1, 1.12, (p, _k, t) => {
       const rise = t < 0.26 ? Math.max(0.02, easeBack(t / 0.26)) : 1, b = t > 0.8 ? Math.min(1, (t - 0.8) / 0.32) : 0;
-      const s = (DOME_R * rise * (1 + b * 0.3)) / D_R, a = Math.min(1, t / 0.06) * (1 - b) ** 1.5;
-      p.draw(EMIT, dome, x, y, s, s, 0, GOLD, 0.3 * a, 1); if (t < 0.3) p.draw(EMIT, dome, x, y, s, s, 0, CREAM, 0.1 * (1 - t / 0.3), 1);
+      const s = (DOME_R * rise * (1 + b * 0.3)) / D_R, a = Math.min(1, t / 0.32) ** 1.5 * (1 - b) ** 1.5; // fades in as the generic cast flash dies down
+      p.draw(EMIT, dome, x, y, s, s, 0, GOLD, 0.32 * a, 1);
     });
     c.fx.later(0.8, () => { shards(c, x, y, DOME_R, Math.round(18 * big)); c.fx.light(x, y, 260, GOLD, 0.35, 0.4); if (c.mine) c.fx.wave(x, y - 40, DOME_R * 1.4, 10, 0.45); c.snd.play('guard', c.vol * 0.8, x, y); });
     // dust ring, rubble, sparks, cracks

@@ -88,10 +88,10 @@ export const taoist: ClassLook = {
   },
   front: (c, _P, p) => {
     if (p.extra < 1) return; // atk1: three talismans flicked forward past the raised sword, crackling (the chain bolt starts here)
-    glowDot(c, 31, -28, 13, 'rgba(176,136,255,0.62)');
-    for (const [x0, y0, x1, y1] of [[18, -25, 24, -25.3], [20, -32.5, 26, -32.8], [22, -28.8, 28, -29]]) line(c, [x0, y0, x1, y1], 'rgba(236,228,255,0.75)', 1);
-    for (const [x, y, r] of [[29.5, -25, 1.52], [31, -32.5, 1.4], [33, -28.8, 1.62]]) { c.save(); c.translate(x, y); c.rotate(r); c.translate(0, 4.6); talisman(c, 4, 9.2); c.restore(); }
-    line(c, [34.5, -36, 36.5, -32.5, 34.8, -31, 37.5, -27.5], '#f4ecff', 1.1);
+    glowDot(c, 29.5, -28, 13, 'rgba(176,136,255,0.62)');
+    for (const [x0, y0, x1, y1] of [[17, -25, 23, -25.3], [19, -32.5, 25, -32.8], [21, -28.8, 27, -29]]) line(c, [x0, y0, x1, y1], 'rgba(236,228,255,0.75)', 1);
+    for (const [x, y, r] of [[28, -25, 1.52], [29.5, -32.5, 1.4], [31.5, -28.8, 1.62]]) { c.save(); c.translate(x, y); c.rotate(r); c.translate(0, 4.6); talisman(c, 4, 9.2); c.restore(); }
+    line(c, [33, -36, 35, -32.5, 33.3, -31, 36, -27.5], '#f4ecff', 1.1);
   },
   weaponIcon: (c, tc) => {
     // talisman on a red cord from the pommel, then the diagonal peach-wood sword over it

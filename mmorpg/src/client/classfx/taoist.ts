@@ -30,9 +30,9 @@ const arrayTex = (): Tex => arrT ??= makeTex('fx:taoArray', 256, 256, 0.5, 0.5, 
   for (let i = 0; i < 8; i++) { circle(c, ...V(112, i), 3.4); c.fill(); c.save(); c.rotate((i / 8) * Math.PI * 2 + Math.PI / 8 + Math.PI / 2); bars(c, TRI[i], 0, -96, 22, 3.2, 2.6); c.restore(); }
   c.font = 'bold 15px serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
   [...'天澤火雷風水山地'].forEach((g, i) => { c.save(); c.rotate((i / 8) * Math.PI * 2 + Math.PI / 8 + Math.PI / 2); c.fillText(g, 0, -42); c.restore(); });
-  // 太極: filled yin half with the small counter-dots
-  c.beginPath(); c.arc(0, 0, 24, -Math.PI / 2, Math.PI / 2); c.arc(0, 12, 12, Math.PI / 2, -Math.PI / 2, true); c.arc(0, -12, 12, Math.PI / 2, -Math.PI / 2); c.fill();
-  c.globalCompositeOperation = 'destination-out'; circle(c, 0, -12, 3.6); c.fill(); c.globalCompositeOperation = 'source-over'; circle(c, 0, 12, 3.6); c.fill();
+  // 太極 (faint fill: the caster stands on it and the generic ult sigil already has a bright one)
+  c.beginPath(); c.arc(0, 0, 24, -Math.PI / 2, Math.PI / 2); c.arc(0, 12, 12, Math.PI / 2, -Math.PI / 2, true); c.arc(0, -12, 12, Math.PI / 2, -Math.PI / 2);
+  c.globalAlpha = 0.3; c.fill(); c.globalAlpha = 1; c.lineWidth = 1.2; c.stroke(); circle(c, 0, 12, 3.6); c.fill(); circle(c, 0, -12, 3.6); c.stroke();
 });
 /** Floating 부적 for the array: yellow slip, red border, red seal scrawl and an ink trigram (full colour, drawn untinted). */
 let talT: Tex[] | null = null;
@@ -94,7 +94,7 @@ export const taoist: ClassFx = {
   ult: (c, e) => {
     // 12 strikes at 0.15 + k·0.2 s → the array holds until the last bolt has faded
     const x = e.x, y = e.y, R = 230, DUR = 2.8; const arr = arrayTex(), tals = talTex(), soft = c.art.fx('soft'), beam = c.art.fx('beam');
-    const V = (i: number, r = R * 0.95): [number, number] => { const a = (i / 8) * Math.PI * 2; return [x + Math.cos(a) * r, y + Math.sin(a) * r * SQ]; };
+    const V = (i: number, r: number): [number, number] => { const a = (i / 8) * Math.PI * 2; return [x + Math.cos(a) * r, y + Math.sin(a) * r * SQ]; };
     let arc: number[] = [], nextArc = 0;
     c.fx.add(0, DUR, (p, k, t) => {
       const g = k < 0.09 ? easeOut(k / 0.09) : 1, al = k < 0.06 ? k / 0.06 : k > 0.86 ? (1 - k) / 0.14 : 1, s = (R * 2) / arr.w * (0.55 + 0.45 * g), pulse = 0.85 + 0.15 * Math.sin(t * 9);
@@ -121,12 +121,10 @@ export const taoist: ClassFx = {
       }, undefined, d);
       c.fx.later(d, () => c.fx.sparks(gx, gy - 24, 3, LILAC, 180, -Math.PI / 2, 1.2, 7));
     }
-    // activation: bolts from the talismans into the caster's raised sword, a violet charge and rising sparks
-    for (let i = 0; i < 8; i += c.fx.low ? 2 : 1) {
-      const [gx, gy] = V(i, R * 0.87), a = Math.atan2(gy - 40 - (y - 44), gx - x); // stop short of the sword so the eight bolts do not pile up into a white blob
-      zap(c, gx, gy - 40, x + Math.cos(a) * 18, y - 44 + Math.sin(a) * 12, 1.1, 0.24, 0, 0.12 + i * 0.025, 0);
-    }
-    c.fx.later(0.14, () => { c.fx.glow(x, y - 42, 40, VIO, 0.4, 0.22); c.fx.burst(x, y - 40, c.mine ? 12 : 6, [VIO, LILAC], 280, 6, 0.5, 'spark', 0, 0.006); });
+    // activation: lightning runs round the talismans and seals the array; a violet charge and sparks rise from the caster
+    for (let i = 0; i < 8; i += c.fx.low ? 2 : 1) { const [ax, ay] = V(i, R * 0.87), [bx, by] = V(i + (c.fx.low ? 2 : 1), R * 0.87); zap(c, ax, ay - 38, bx, by - 38, 1.3, 0.3, 1, 0.16 + i * 0.03, 0); }
+    c.fx.glow(x, y - 40, 34, VIO, 0.4, 0.2);
+    c.fx.burst(x, y - 36, c.mine ? 12 : 6, [VIO, LILAC], 260, 6, 0.55, 'spark', -200, 0.006);
     c.fx.later(DUR - 0.4, () => { c.fx.ring(x, y, R * 0.8, R * 1.1, 0.45, VIO, true, 0, 0.6); c.fx.burst(x, y - 20, c.mine ? 14 : 6, [VIO, LILAC], 240, 6, 0.6); });
   },
   uhit: (c, e) => {
