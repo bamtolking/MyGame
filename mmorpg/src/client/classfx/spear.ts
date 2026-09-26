@@ -48,8 +48,8 @@ function drawBody(p: Painter, art: Art, pts: number[], w: number, a: number, dim
   const beam = art.fx('beam'), petal = art.fx('petal'); const n = pts.length / 2 - 1;
   for (let i = 0; i < n; i++) {
     const u = (i + 0.5) / n, x0 = pts[i * 2], y0 = pts[i * 2 + 1], x1 = pts[i * 2 + 2], y1 = pts[i * 2 + 3]; const al = a * (dim ? dim(i) : 1) * (0.35 + 0.65 * u), ww = w * (0.3 + 0.7 * u);
-    p.beam(EMIT, beam, x0, y0, x1, y1, ww * 1.9, JADE, al * 0.55, 1); p.beam(EMIT, beam, x0, y0, x1, y1, ww * 0.55, PALE, al * 0.85, 1);
-    if (i % 2 === 1) p.draw(EMIT, petal, (x0 + x1) / 2, (y0 + y1) / 2, ww / 14, ww / 20, Math.atan2(y1 - y0, x1 - x0) + Math.PI / 2, PALE, al * 0.7, 1);
+    p.beam(EMIT, beam, x0, y0, x1, y1, ww * 1.9, JADE, al * 0.6, 1); p.beam(EMIT, beam, x0, y0, x1, y1, ww * 0.45, PALE, al * 0.65, 1);
+    if (i % 2 === 1) p.draw(EMIT, petal, (x0 + x1) / 2, (y0 + y1) / 2, ww / 11, ww / 16, Math.atan2(y1 - y0, x1 - x0) + Math.PI / 2, PALE, al * 0.7, 1);
   }
 }
 
@@ -57,17 +57,17 @@ function drawBody(p: Painter, art: Art, pts: number[], w: number, a: number, dim
 function dragonThrust(c: FxCtx, x0: number, y0: number, x1: number, y1: number): void {
   const A = c.art, streak = A.fx('streak'), soft = A.fx('soft');
   const L = Math.hypot(x1 - x0, y1 - y0) || 1, ang = Math.atan2(y1 - y0, x1 - x0), ux = (x1 - x0) / L, uy = (y1 - y0) / L, nx = -uy, ny = ux;
-  const side = Math.random() < 0.5 ? -1 : 1, BL = L * 0.85, SEG = 32, pts: number[] = [];
+  const side = Math.random() < 0.5 ? -1 : 1, BL = L * 0.85, SEG = c.fx.low ? 16 : 32, pts: number[] = [];
   c.fx.add(1, 0.38, (p, k, t) => {
     const h = easeOut(Math.min(1, k / 0.26)), fade = k < 0.34 ? 1 : 1 - (k - 0.34) / 0.66, len = L * h, hx = x0 + ux * len, hy = y0 + uy * len;
     p.draw(EMIT, streak, hx, hy, len / 64, 24 / 8, ang, LIME, 0.45 * fade, 1); p.draw(EMIT, streak, hx, hy, len / 64, 5 / 8, ang, 0xffffff, 0.9 * fade, 1);
     // the dragon: tail → head, winding around the lance
     pts.length = 0; const tail = Math.max(0, len - BL * Math.min(1, h * 1.6));
     for (let i = 0; i <= SEG; i++) {
-      const u = i / SEG, d = tail + (len - tail) * u, env = Math.sin(Math.PI * Math.min(1, u * 1.08)) ** 0.8, off = Math.sin(d / 90 * Math.PI * 2 - t * 22) * 18 * env * side;
+      const u = i / SEG, d = tail + (len - tail) * u, env = Math.sin(Math.PI * Math.min(1, u * 1.08)) ** 0.8, off = Math.sin(d / 120 * Math.PI * 2 - t * 22) * 20 * env * side;
       pts.push(x0 + ux * d + nx * off, y0 + uy * d + ny * off);
     }
-    drawBody(p, A, pts, 17, fade);
+    drawBody(p, A, pts, 22, fade);
     p.draw(EMIT, soft, hx, hy, 1.5, 1.5, 0, JADE, 0.35 * fade, 1);
     drawHead(p, hx + ux * 8, hy + uy * 8, ang, 0.78, fade);
   });
@@ -96,7 +96,7 @@ export const spear: ClassFx = {
   },
   ult: (c, e) => {
     const A = c.art, pts: number[] = [];
-    c.fx.ring(e.x, e.y, 20, 240, 0.55, JADE, false, 0); c.fx.glow(e.x, e.y - 40, 110, JADE, 0.6, 0.35);
+    c.fx.ring(e.x, e.y, 10, 150, 0.45, PALE, true, 0); c.fx.decal(e.x, e.y, 'crack', 150, 0x0c1f16, 1.6, 0.55); c.fx.glow(e.x, e.y - 40, 110, JADE, 0.6, 0.35);
     c.fx.burst(e.x, e.y - 30, c.mine ? 26 : 12, [JADE, LIME, 0xffffff], 420, 8, 0.6, 'spark', 0, 0.004);
     c.fx.light(e.x, e.y - 40, 260, JADE, 0.9, 1);
     // a jade dragon bursts from the ground and coils up around the spearman

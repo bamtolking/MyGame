@@ -23,7 +23,7 @@ function drawSpear(c: Ctx, g: number, dx: number, dy: number, blade = '#8fdc62',
   // socket collar
   rrect(c, bb - 3.6, -2.2, 4, 4.4, 1.2); fillC(c, '#e0bc54', INK, 1.2);
   // leaf-shaped jade blade with a centre ridge
-  c.beginPath(); c.moveTo(bb, -1.7); c.quadraticCurveTo(bb + 4, -3.9, g, 0); c.quadraticCurveTo(bb + 4, 3.9, bb, 1.7); c.closePath();
+  c.beginPath(); c.moveTo(bb, -1.8); c.quadraticCurveTo(bb + 4, -4.6, g, 0); c.quadraticCurveTo(bb + 4, 4.6, bb, 1.8); c.closePath();
   const gr = c.createLinearGradient(0, -3, 0, 3); gr.addColorStop(0, shade(blade, 0.6)); gr.addColorStop(0.45, blade); gr.addColorStop(1, shade(blade, -0.45));
   c.fillStyle = gr; c.fill(); c.strokeStyle = INK; c.lineWidth = 1.4; c.stroke();
   line(c, [bb + 0.5, 0, g - 1.5, 0], 'rgba(255,255,255,0.85)', 0.8);

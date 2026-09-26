@@ -1,5 +1,5 @@
-// Real-browser test (headless Chromium, touch emulation). Offline flow on 3 phone viewports (WebGL high/mid and the
-// Canvas2D fallback) + 2-player online session.
+// Real-browser test (headless Chromium, touch emulation). Offline flow on 3 phone viewports — two landscape (WebGL high and
+// the Canvas2D fallback) and one portrait phone, where the game rotates itself into landscape — + 2-player online session.
 // Needs a build first (npm run build). Screenshots → e2e-out/, log → e2e-out/report.txt
 import { chromium } from 'playwright-core';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
@@ -38,7 +38,37 @@ const tapUntil = async (page, sel, cond, tries = 3) => {
 };
 const state = (page) => page.evaluate(() => { const g = window.__app.g; if (!g?.ready) return null; return { lvl: g.me.level, xp: g.me.xp, hp: g.me.hp, zone: g.me.zone, kills: g.me.lstats.kills, quest: g.me.quest.main, auto: g.me.auto, players: g.players.size, mons: g.mons.size, fps: Math.round(g.fps), roster: g.roster.size, humans: [...g.roster.values()].filter(r => !r.bot).length, pos: g.myPos() }; });
 
-async function offline(name, viewport, quality) {
+/** Locked classes, the unlock card and a class change through the 직업 sheet, driven through the in-page offline server. */
+async function classFlow(page, name) {
+  await page.evaluate(() => { window.__pilotOff = true; window.__app.joy.x = 0; window.__app.joy.y = 0; });
+  const srv = () => page.evaluate(() => { const w = window.__app.tr.gs.worlds[0]; return { w: !!w, p: !!w?.players.get(window.__app.g.myId) }; });
+  const ok = await srv(); if (!ok.p) { check(false, 'in-page server player found'); return; }
+  const back = await page.evaluate(() => { const w = window.__app.tr.gs.worlds[0]; const p = w.players.get(window.__app.g.myId); const at = { x: p.x, y: p.y };
+    w.teleport(p, w.map.spawn.x, w.map.spawn.y + 60); p.prof.level = Math.max(p.prof.level, 8); w.recompute(p); p.questVer++; w.emitTo(p, { k: 'unlock', c: 'spear' }); return at; });
+  let card = false; for (let i = 0; i < 20 && !card; i++) { await page.waitForTimeout(100); card = await page.evaluate(() => !!document.querySelector('.bosscard.unlock.show')); }
+  await page.waitForFunction(() => window.__app.g.me.zone === 0 && window.__app.g.me.level >= 8, null, { timeout: 5000 }).catch(() => null);
+  const badge = await page.evaluate(() => document.querySelector('.tr .menu button[data-k="settings"]').classList.contains('badge'));
+  check(card && badge, `new-class unlock shows a card and a menu badge (card ${card}, badge ${badge})`);
+  await page.screenshot({ path: `e2e-out/${name}-07-unlock.png` });
+  await tapUntil(page, '.tr .menu button[data-k="settings"]', () => !!document.querySelector('#sheet:not(.hidden) .clsbtn'));
+  await tapUntil(page, '#sheet .clsbtn', () => document.querySelectorAll('.clsrow').length > 0);
+  const rows = await page.evaluate(() => [...document.querySelectorAll('.clsrow')].map(r => ({ id: r.dataset.cls, locked: r.textContent.includes('🔒') })));
+  check(rows.length === 10 && rows.filter(r => r.locked).length === 6, `직업 sheet lists 10 classes, 6 still locked at Lv8 (${rows.filter(r => r.locked).map(r => r.id).join(',')})`);
+  await tapUntil(page, '.clsrow[data-cls="spear"]', () => !!document.querySelector('.cls-go:not([disabled])'));
+  await page.screenshot({ path: `e2e-out/${name}-08-cls.png` });
+  await tapUntil(page, '.cls-go', () => window.__app.g.me.cls === 'spear');
+  const st = await page.evaluate(() => ({ cls: window.__app.g.me.cls, glyph: window.__app.el.ultGlyph.textContent, roster: window.__app.g.roster.get(window.__app.g.myId)?.cls }));
+  check(st.cls === 'spear' && st.glyph === '槍' && st.roster === 'spear', `class change to 창술사 in town (me ${st.cls}, ult ${st.glyph}, roster ${st.roster})`);
+  await tapUntil(page, '#sheet .close', () => document.getElementById('sheet').classList.contains('hidden'));
+  // fight as the new class
+  const k0 = (await state(page)).kills;
+  await page.evaluate((at) => { const w = window.__app.tr.gs.worlds[0]; const p = w.players.get(window.__app.g.myId); w.teleport(p, at.x, at.y); window.__pilotOff = false; }, back);
+  await page.waitForTimeout(9000);
+  const s = await state(page); check(s.kills > k0, `the new class fights (+${s.kills - k0} kills in 9 s)`);
+  await page.screenshot({ path: `e2e-out/${name}-09-spear.png` });
+}
+
+async function offline(name, viewport, quality, classes = false) {
   log(`\n[offline] ${name} ${viewport.width}x${viewport.height}, graphics ${quality}`);
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const page = await ctx.newPage(); const errors = []; watch(page, errors);
@@ -49,7 +79,11 @@ async function offline(name, viewport, quality) {
   await page.evaluate((q) => localStorage.setItem('moonlit.settings', JSON.stringify({ quality: q })), quality);
   await page.reload(); await page.waitForSelector('#title');
   await page.screenshot({ path: `e2e-out/${name}-01-title.png` });
+  const rot = await page.evaluate(() => document.documentElement.classList.contains('rot'));
+  check(rot === viewport.height > viewport.width, `layout is landscape${rot ? ' (portrait screen: rotated 90°)' : ''}`);
   await page.tap('text=모험 시작'); await page.waitForSelector('#create');
+  const cc = await page.evaluate(() => [...document.querySelectorAll('.classcard')].map(c => c.textContent.includes('🔒')));
+  check(cc.length === 10 && cc.filter(Boolean).length === 8 && !cc[0] && !cc[1], `create screen: 10 classes, only 검객·궁사 selectable (${cc.filter(Boolean).length} locked)`);
   await page.tap('.classcard >> nth=1'); await page.fill('#create input', '이투이');
   await page.screenshot({ path: `e2e-out/${name}-02-create.png` });
   await page.tap('text=퇴마 시작!'); await page.waitForFunction(() => window.__app?.g?.ready, null, { timeout: 8000 });
@@ -62,10 +96,12 @@ async function offline(name, viewport, quality) {
   const p0 = s.pos; const box = await page.locator('#touch').boundingBox();
   const cx = box.x + box.width / 2, cy = box.y + box.height * 0.6;
   const cdp = await ctx.newCDPSession(page);
+  // content-right is screen-right, or screen-down when the layout is rotated
+  const [ux, uy] = rot ? [0, 1] : [1, 0];
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx, y: cy }] });
-  for (let i = 1; i <= 10; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cx + i * 6, y: cy }] }); await page.waitForTimeout(40); }
+  for (let i = 1; i <= 10; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cx + ux * i * 6, y: cy + uy * i * 6 }] }); await page.waitForTimeout(40); }
   await page.waitForTimeout(900); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  s = await state(page); check(s.pos.x > p0.x + 30, `touch-drag joystick moved the player (+${Math.round(s.pos.x - p0.x)}px)`);
+  s = await state(page); check(s.pos.x > p0.x + 30 && Math.abs(s.pos.y - p0.y) < 30, `touch-drag joystick moved the player right on screen (+${Math.round(s.pos.x - p0.x)}px, Δy ${Math.round(s.pos.y - p0.y)})`);
   // hunt with an autopilot for 30 s
   await page.evaluate(AUTOPILOT); await page.evaluate(() => { window.__fx = { parts: 0, combo: 0, waves: 0 }; setInterval(() => { const g = window.__app.g; const f = window.__fx; f.parts = Math.max(f.parts, g.fx.parts.length); f.combo = Math.max(f.combo, g.combo); f.waves = Math.max(f.waves, g.fx.waves.length); }, 100); });
   await page.waitForTimeout(30000);
@@ -93,6 +129,7 @@ async function offline(name, viewport, quality) {
   await page.screenshot({ path: `e2e-out/${name}-06-auto.png` });
   await page.evaluate(() => { window.__app.joy.x = 1; }); await page.waitForTimeout(700); await page.evaluate(() => { window.__app.joy.x = 0; });
   check(!(await state(page)).auto, 'touching the joystick turns AUTO off');
+  if (classes) await classFlow(page, name);
   // save & resume
   const before = await state(page);
   await page.evaluate(() => window.__app.tr.saveNow());
@@ -113,10 +150,10 @@ async function online() {
   await new Promise(res => srv.stdout.on('data', d => { if (String(d).includes('서버')) res(); }));
   const pages = [];
   for (const [i, nm] of [[0, '온라인하나'], [1, '온라인둘']]) {
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     const page = await ctx.newPage(); const errors = []; watch(page, errors);
     await page.goto(`http://127.0.0.1:${port}/`); await page.waitForSelector('.online-box button', { timeout: 6000 });
-    await page.tap('.online-box button'); await page.waitForSelector('#create'); await page.tap(`.classcard >> nth=${i * 2}`); await page.fill('#create input', nm); await page.tap('text=퇴마 시작!');
+    await page.tap('.online-box button'); await page.waitForSelector('#create'); await page.tap(`.classcard >> nth=${i}`); await page.fill('#create input', nm); await page.tap('text=퇴마 시작!');
     await page.waitForFunction(() => window.__app?.g?.ready, null, { timeout: 8000 }); pages.push({ page, errors, ctx });
   }
   await pages[0].page.waitForTimeout(1500);
@@ -134,9 +171,9 @@ async function online() {
 }
 
 const only = process.env.E2E_ONLY;
-if (!only || only === 'phone') await offline('phone-390x844', { width: 390, height: 844 }, 'high');
-if (!only || only === 'small') await offline('small-360x640', { width: 360, height: 640 }, 'low');
-if (!only || only === 'land') await offline('landscape-844x390', { width: 844, height: 390 }, 'mid');
+if (!only || only === 'land') await offline('landscape-844x390', { width: 844, height: 390 }, 'high', true);
+if (!only || only === 'small') await offline('small-667x375', { width: 667, height: 375 }, 'low');
+if (!only || only === 'rot') await offline('portrait-390x844', { width: 390, height: 844 }, 'mid');
 if (!only || only === 'online') await online();
 await browser.close();
 log(failures ? `\nE2E FAILED (${failures})` : '\nE2E OK'); writeFileSync('e2e-out/report.txt', report.join('\n'));
