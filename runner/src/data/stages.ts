@@ -61,7 +61,7 @@ export const STAGES: StageDef[] = [
   // 2-1: one-way platforms (tut_5_platform sign), air-jump review at the end. ① shelf-top arc ② set-piece bench B ③ bench route
   { id: '2-1', world: 2, index: 1, name: '평상 위로', intro: '평상 위로 뛰어올라요', biome: 'riverside', seed: 2101, tiers: [1, 1], length: 500,
     course: ['tut_5_platform', 'plat_low', 'bench_to_slide', 'twin_shelves', 'bench_row', 'rest_float', 'high_shelf', 'pit_plat', 'plat_over_spikes', 'bonus_float', 'set_river_benches', 'fork_spike_easy', 'pit_bridge', 'spike_fork_easy', 'pit_tower', 'fork_twice'],
-    pouches: [{ slot: 3, col: 13, row: 5 }, { slot: 4, col: 19, row: 8 }], stars: { jellyPct: 65 } },
+    pouches: [{ slot: 3, col: 13, row: 5 }, { slot: 4, col: 19, row: 8 }], stars: { jellyPct: 70 } },
   // 2-2: stairs (benches, tent steps, stone steps over pits). ① top step ② set-piece bench B ③ stair route over the pit
   { id: '2-2', world: 2, index: 2, name: '천막 사다리', intro: '천막 계단을 밟고 올라가요', biome: 'riverside', seed: 2102, tiers: [1, 2], length: 550,
     course: ['bench_pyramid', 'stairs_gentle', 'fork_single', 'plat_over_spikes', 'twin_shelves', 'pit_hop_row', 'bridge_spike', 'stairs_pit', 'bench_boost', 'pit_tower', 'fork_bench', 'set_river_benches', 'stairs_up', 'bonus_float', 'stairs_spikes', 'two_lanes', 'stone_steps', 'tall_slide'],
