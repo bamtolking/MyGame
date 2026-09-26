@@ -1,6 +1,6 @@
 // Item tooltip HTML (Diablo-style), with a stat comparison against what is currently equipped.
 import { CLASSES } from '../data/classes';
-import { BASE_BY_ID, CAT_NAMES, RARITY_COLOR, RARITY_NAME, UNIQUE_BY_ID, modText } from '../data/items';
+import { BASE_BY_ID, CAT_NAMES, RARITY_COLOR, RARITY_NAME, UNIQUE_BY_ID, baseForClass, modText } from '../data/items';
 import { baseOf, buyPrice, canEquipClass, itemArmor, sellPrice, weaponDamage } from '../sim/items';
 import { computeStats, sheetDps } from '../sim/stats';
 import type { Game } from '../sim/game';
@@ -32,7 +32,7 @@ export function itemTooltipHtml(g: Game, it: Item, opts: { price?: PriceMode; eq
   const lines: string[] = [];
   lines.push(`<div class="tt-name" style="color:${col}">${esc(it.name)}</div>`);
   if (it.rarity === 'rare' || it.rarity === 'unique') lines.push(`<div class="tt-base" style="color:${col}">${esc(b.name)}</div>`);
-  lines.push(`<div class="tt-sub">${RARITY_NAME[it.rarity]} ${CAT_NAMES[b.cat]}${b.twoHanded ? ' · 양손' : ''}${b.cls ? ` · ${CLASSES[b.cls].name} 전용` : ''}</div>`);
+  lines.push(`<div class="tt-sub">${RARITY_NAME[it.rarity]} ${CAT_NAMES[b.cat]}${b.twoHanded ? ' · 양손' : ''}${b.cls ? ` · ${(Array.isArray(b.cls) ? b.cls : [b.cls]).map((c) => CLASSES[c].name).join('·')} 전용` : ''}</div>`);
   if (it.dmg) {
     const [lo, hi] = weaponDamage(it);
     const boosted = lo !== it.dmg[0] || hi !== it.dmg[1];
@@ -45,7 +45,7 @@ export function itemTooltipHtml(g: Game, it: Item, opts: { price?: PriceMode; eq
   if (it.block) lines.push(`<div class="tt-main">막기 확률: <b>${it.block}%</b></div>`);
   const reqOk = h.level >= it.req;
   if (it.req > 1) lines.push(`<div class="tt-req" style="color:${reqOk ? '#c8c0b0' : '#ff5050'}">요구 레벨: ${it.req}</div>`);
-  if (b.cls && b.cls !== h.cls) lines.push(`<div class="tt-req" style="color:#ff5050">${CLASSES[b.cls].name}만 사용할 수 있습니다</div>`);
+  if (b.cls && !baseForClass(b, h.cls)) lines.push(`<div class="tt-req" style="color:#ff5050">${(Array.isArray(b.cls) ? b.cls : [b.cls]).map((c) => CLASSES[c].name).join('·')}만 사용할 수 있습니다</div>`);
   const imp = b.implicit?.length ?? 0;
   it.mods.forEach((m, i) => {
     if (m.k === 'ed' || m.k === 'armorPct') { /* shown via blue numbers too, but list for clarity */ }

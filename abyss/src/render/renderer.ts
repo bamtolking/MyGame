@@ -1,6 +1,6 @@
 // Main renderer: isometric floor/walls, depth-sorted props & actors (offscreen-shaded with rim light and
 // hit tints), combat effects, darkness with light sources, color grading, labels, picking and the automap.
-import { CLASSES } from '../data/classes';
+import { CLASSES, skillAnim } from '../data/classes';
 import { BASE_BY_ID, RARITY_COLOR } from '../data/items';
 import { MONSTERS } from '../data/monsters';
 import { SHRINES, ZONES } from '../data/zones';
@@ -12,6 +12,8 @@ import { Camera, RX, TH, TW, WALL_H, screenDir, shade } from './iso';
 import { drawProp, flame, TALL_PROPS } from './props';
 import { S, setTexScale, zoneTex } from './textures';
 import { itemIcon } from './icons';
+import { AREA_ART, BUFF_ART, CLASS_LOOK, EFFECT_ART, FX_EVENT, ITEM_KIND, PROJ_ART, type FxHost } from './registry';
+import '../classes/art';
 
 export type Hover =
   | { kind: 'monster'; id: number; x: number; y: number }
@@ -36,18 +38,21 @@ export function heroLook(h: Hero): Look {
   const chest = b('chest'), head = b('head'), wpn = b('weapon'), off = b('offhand');
   const ct = chest ? chest.tier : -1;
   const armor = ['#6a4a2a', '#8a8f96', '#b0b4bc', '#4e525e', '#5a1a1a'];
-  const wCat: Record<string, WeaponKind> = { sword: 'sword', axe: 'axe', mace: 'mace', sword2h: 'sword2h', axe2h: 'axe2h', bow: 'bow', staff: 'staff', wand: 'wand' };
+  const wCat: Record<string, WeaponKind> = { sword: 'sword', axe: 'axe', mace: 'mace', sword2h: 'sword2h', axe2h: 'axe2h', bow: 'bow', staff: 'staff', wand: 'wand', ...ITEM_KIND };
   const wIt = h.equip.weapon;
   const glow = wIt?.rarity === 'unique' ? '#e0b050' : wIt?.rarity === 'rare' ? '#f0e070' : wIt?.rarity === 'magic' ? '#7c8cff' : undefined;
   const common: Partial<Look> = {
     weapon: wpn ? wCat[wpn.cat] : 'none', wTier: wpn?.tier ?? 0, wGlow: glow,
-    offhand: off ? (off.cat === 'shield' ? 'shield' : off.cat === 'quiver' ? 'quiver' : 'orb') : null, offTier: off?.tier ?? 0,
+    offhand: off ? (off.cat === 'shield' ? 'shield' : off.cat === 'quiver' ? 'quiver' : off.cat === 'orb' ? 'orb' : ITEM_KIND[off.cat] ?? off.cat) : null, offTier: off?.tier ?? 0,
     helm: head ? Math.min(4, head.tier) : -1,
     offColor: off?.cat === 'orb' ? ['#80c0ff', '#a0a0ff', '#c080ff', '#ff80c0', '#ff6060'][off.tier] : undefined,
     boots: h.equip.boots ? '#3a2a1e' : undefined,
     trim: ct >= 3 ? '#d8b050' : undefined,
     armorTier: ct,
   };
+  const custom = CLASS_LOOK[h.cls];
+  if (custom) return custom(h, common, ct);
+  if (h.cls !== 'warrior' && h.cls !== 'rogue' && h.cls !== 'sorcerer') return { skin: '#d8a888', hair: '#3a2a1a', body: ct >= 0 ? armor[ct] : '#6a5a4a', body2: '#3a2a1a', legs: '#3a3228', head: 'human', build: 1.05, ...common } as Look;
   if (h.cls === 'warrior') return { skin: '#d8a888', hair: '#4a2a1a', body: ct >= 0 ? armor[ct] : '#7a5a3a', body2: '#4a3020', legs: ct >= 2 ? shade(armor[ct], -0.25) : '#4a3a2a', head: 'human', build: 1.18, ...common } as Look;
   if (h.cls === 'rogue') return { skin: '#e0b898', hair: '#a86a30', body: ct >= 0 ? shade(armor[ct], -0.1) : '#5a4a30', body2: '#3a2a1a', legs: '#3a3024', head: common.helm !== undefined && common.helm >= 0 ? 'human' : 'hood', robe: '#2e4a2a', cloak: '#2e4a2a', build: 0.95, ...common, armorTier: Math.min(1, ct), eyes: undefined } as Look;
   const robe = ct >= 0 ? ['#2a3a7a', '#3a3a6a', '#4a4a8a', '#2a2a4a', '#4a1a2a'][ct] : '#2a3a7a';
@@ -235,6 +240,7 @@ export class Renderer {
   spawnFx(e: Extract<GEvent, { t: 'fx' }>): void {
     const fx = this.fx;
     const low = this.quality === 0;
+    this.fxHost.fx = fx; this.fxHost.low = low || this.lowFx;
     switch (e.kind) {
       case 'splinters':
         fx.burst(e.x, e.y, e.n ?? 14, { color: '#6a4a2a', kind: 'shard', size: 2.2, speed: 3.5, up: 90, grav: 240, life: 1, z: 10 });
@@ -294,8 +300,16 @@ export class Renderer {
         }
         break;
       }
+      default: FX_EVENT[e.kind]?.(e, this.fxHost);
     }
   }
+
+  /** What class FX handlers may touch. */
+  private readonly fxHost: FxHost = {
+    fx: null as never, low: false,
+    shake: (v: number) => { this.shakeT = 0.32; this.shakeV = Math.max(this.shakeV, v); },
+    delay: (t: number, fn: () => void) => { this.delayed.push({ t, fn }); },
+  };
 
   // ------------------------------------------------------------ helpers
   private wallVisible(w: World): Uint8Array {
@@ -558,6 +572,7 @@ export class Renderer {
     for (const it of list) it.f();
     this.drawTrails();
     // ---------------- air effects & particles
+    this.drawAreasAir(g);
     this.fx.drawAir(c, cam);
     this.fx.drawParticles(c, cam);
     this.spawnAmbient(g, x0, y0, x1, y1, dt);
@@ -687,7 +702,21 @@ export class Renderer {
           if (a.kind === 'lightningRing' && Math.random() < 0.5) { const ang = Math.random() * TAU; this.fx.add({ x: a.x + Math.cos(ang) * a.r * k, y: a.y + Math.sin(ang) * a.r * k, z: 10, vz: 40, color: '#ffffa0', kind: 'glint', size: 1.4, life: 0.25, add: true }); }
           break;
         }
+        default: {
+          const art = AREA_ART[a.kind];
+          if (art) { c.save(); art.draw(a, { c, cam, z, time: this.time, fx: this.fx, sx, sy, rx }); c.restore(); }
+        }
       }
+    }
+  }
+
+  /** Over-actor layer of class areas (clouds, pillars). */
+  private drawAreasAir(g: Game): void {
+    const c = this.c, cam = this.cam, z = cam.zoom;
+    for (const a of g.world.areas) {
+      const art = AREA_ART[a.kind];
+      if (!art?.air) continue;
+      c.save(); art.air(a, { c, cam, z, time: this.time, fx: this.fx, sx: cam.sxOf(a.x, a.y), sy: cam.syOf(a.x, a.y), rx: a.r * RX * z }); c.restore();
     }
   }
 
@@ -743,7 +772,8 @@ export class Renderer {
     let atk = -1, cast = -1;
     if (a) {
       const p = a.t / a.dur;
-      const spell = h.cls === 'sorcerer' && a.skill !== basic;
+      const spell = skillAnim(h.cls, a.skill) === 'cast';
+      void basic;
       if (a.kind === 'leap') atk = -1;
       else if (spell || a.skill === 'warcry' || a.skill === 'berserk') cast = p;
       else atk = p;
@@ -763,6 +793,7 @@ export class Renderer {
       if (Math.random() < 0.5) this.fx.add({ x: h.x + (Math.random() - 0.5) * 0.5, y: h.y + (Math.random() - 0.5) * 0.5, z: 10 + Math.random() * 40, vz: 50, color: '#ff4020', kind: 'ember', size: 1.8, life: 0.6, add: true });
     }
     if (h.buffs.some((b) => b.id === 'warcry')) { c.save(); c.globalCompositeOperation = 'lighter'; c.strokeStyle = 'rgba(255,200,80,0.5)'; c.lineWidth = 1.5 * z; c.beginPath(); c.ellipse(sx, sy, 22 * z, 11 * z, 0, 0, TAU); c.stroke(); c.restore(); }
+    for (const b of h.buffs) BUFF_ART[b.id]?.(c, sx, sy, z, this.time, b, this.fx, h);
     if (h.buffs.some((b) => b.id === 'evade')) { c.save(); c.globalCompositeOperation = 'lighter'; c.strokeStyle = 'rgba(90,200,255,0.4)'; c.lineWidth = 1.2 * z; c.beginPath(); c.ellipse(sx, sy - 24 * z, 16 * z, 32 * z, 0, 0, TAU); c.stroke(); c.restore(); }
     const tintA = h.hitT > 0 ? Math.min(0.5, h.hitT * 2.4) : h.chillT > 0 ? 0.25 : 0;
     this.drawActorAt(sx, sy, z * ACTOR_SCALE, 'biped', L, p, lift, { rim: true, tint: h.hitT > 0 ? '#ff3020' : '#6ab0ff', tintA, light: { x: -0.6, y: -0.8 } });
@@ -875,7 +906,7 @@ export class Renderer {
     c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round'; c.lineJoin = 'round';
     for (const t of this.trails.values()) {
       if (t.pts.length < 4) continue;
-      const [col, wd] = cols[t.kind] ?? ['255,255,255', 2];
+      const [col, wd] = cols[t.kind] ?? PROJ_ART[t.kind]?.trail ?? ['255,255,255', 2];
       const n = t.pts.length / 2;
       for (let i = 1; i < n; i++) {
         const a = i / n;
@@ -896,6 +927,8 @@ export class Renderer {
     const vx = cam.sxOf(p.x + p.vx, p.y + p.vy) - cam.sxOf(p.x, p.y), vy = cam.syOf(p.x + p.vx, p.y + p.vy) - cam.syOf(p.x, p.y);
     const ang = Math.atan2(vy, vx);
     c.fillStyle = 'rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(sx, sy + 18 * z, 5 * z, 2.2 * z, 0, 0, TAU); c.fill();
+    const art = PROJ_ART[p.kind];
+    if (art) { art.draw(p, { c, cam, z, time: this.time, fx: this.fx, sx, sy, ang }); return; }
     c.save();
     c.translate(sx, sy);
     switch (p.kind) {
@@ -1044,6 +1077,8 @@ export class Renderer {
       if (w.tiles[y * w.w + x] === T_LAVA) { light(x + 0.5, y + 0.5, 2.6, 0.7); lavaN++; if (lavaN % 3 === 0) warm.push({ x: x + 0.5, y: y + 0.5, r: 2.5, col: '255,90,20', a: 0.14 }); }
     }
     for (const p of w.projs) {
+      const pl = PROJ_ART[p.kind]?.light;
+      if (pl) { if (pl[0] > 0) { light(p.x, p.y, pl[0], 0.85, 18); warm.push({ x: p.x, y: p.y, r: pl[0] * 0.75, col: pl[1], a: 0.26, lift: 18 }); } continue; }
       const r = p.kind === 'fireball' ? 3.4 : p.kind === 'arrow' ? 0 : 2;
       if (r > 0) { light(p.x, p.y, r, 0.85, 18); warm.push({ x: p.x, y: p.y, r: r * 0.75, col: p.kind === 'fireball' || p.kind === 'firebolt' || p.kind === 'explode' ? '255,140,40' : p.kind === 'coldbolt' ? '120,190,255' : p.kind === 'bolt' ? '170,120,255' : '255,255,160', a: 0.26, lift: 18 }); }
     }
@@ -1056,8 +1091,12 @@ export class Renderer {
       if (e.kind === 'levelup' || e.kind === 'bossDeath') light(e.x, e.y, 6 * (1 - k), 1);
       if (e.kind === 'hitflash' && e.heavy) warm.push({ x: e.x, y: e.y, r: 1.4 * (1 - k), col: e.c, a: 0.35 });
       if (e.kind === 'fireground') { light(e.x, e.y, e.r * 2, 0.6 * (1 - k)); warm.push({ x: e.x, y: e.y, r: e.r * 1.6, col: '255,120,30', a: 0.2 * (1 - k) }); }
+      const el = EFFECT_ART[e.kind]?.light?.(e, k);
+      if (el && el[0] > 0) { light(e.x, e.y, el[0], 0.9); warm.push({ x: e.x, y: e.y, r: el[0] * 0.8, col: el[1], a: 0.3 }); }
     }
     for (const a of w.areas) {
+      const al = AREA_ART[a.kind]?.light?.(a);
+      if (al && al[0] > 0) { light(a.x, a.y, al[0], 0.75); warm.push({ x: a.x, y: a.y, r: al[0] * 0.8, col: al[1], a: 0.24 }); }
       if (a.kind === 'burn' || a.kind === 'firewave' || a.kind === 'lightningRing') { light(a.x, a.y, a.kind === 'burn' ? a.r * 1.4 : a.r * Math.min(1, a.t / a.dur), 0.65); if (a.kind === 'burn') warm.push({ x: a.x, y: a.y, r: a.r * 1.3, col: '255,110,30', a: 0.22 }); }
       if ((a.kind === 'telegraph' || a.kind === 'meteor') && a.side === 'mon') light(a.x, a.y, a.r * 1.2, 0.55);
     }

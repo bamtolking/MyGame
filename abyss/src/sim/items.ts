@@ -1,5 +1,5 @@
 // Item generation: rarity roll, base pick, affix rolls, names, requirements and prices.
-import { AFFIXES, BASES, BASE_BY_ID, RARE_A, RARE_B, UNIQUES, UNIQUE_BY_ID, slotGroups, type AffixDef, type AffixTier, type BaseItem } from '../data/items';
+import { AFFIXES, BASES, BASE_BY_ID, RARE_A, RARE_B, UNIQUES, UNIQUE_BY_ID, baseForClass, slotGroups, type AffixDef, type AffixTier, type BaseItem } from '../data/items';
 import { LOOT } from '../data/zones';
 import type { Rng } from './rng';
 import type { ClassId, Item, Mod, Rarity, Slot } from './types';
@@ -24,7 +24,7 @@ export function pickBase(rng: Rng, ilvl: number, cls: ClassId | undefined, slot?
   const s = slot ?? rng.weighted(SLOT_WEIGHTS, (x) => x[1])[0];
   let pool = BASES.filter((b) => b.slot === s && b.qlvl <= Math.max(1, ilvl));
   if (cls && (s === 'weapon' || s === 'offhand') && rng.chance(LOOT.classBias)) {
-    const own = pool.filter((b) => b.cls === cls);
+    const own = pool.filter((b) => b.cls && baseForClass(b, cls));
     if (own.length) pool = own;
   }
   if (!pool.length) pool = BASES.filter((b) => b.slot === s);
@@ -108,7 +108,7 @@ export function genItem(rng: Rng, uid: number, ilvl: number, o: GenOpts = {}): I
 function pickUnique(rng: Rng, ilvl: number, cls?: ClassId) {
   const pool = UNIQUES.filter((u) => !u.bossOnly && BASE_BY_ID[u.base].qlvl <= ilvl + 2 && u.req <= ilvl + 4);
   if (!pool.length) return null;
-  return rng.weighted(pool, (u) => { const b = BASE_BY_ID[u.base]; return (b.cls && cls && b.cls === cls ? 2 : 1) * Math.exp(-(ilvl - u.req) / 12); });
+  return rng.weighted(pool, (u) => { const b = BASE_BY_ID[u.base]; return (b.cls && cls && baseForClass(b, cls) ? 2 : 1) * Math.exp(-(ilvl - u.req) / 12); });
 }
 
 export function makeUnique(rng: Rng, uid: number, id: string, ilvl: number): Item {
@@ -135,8 +135,7 @@ export const buyPrice = (it: Item) => Math.floor(itemValue(it) * 1.3);
 export function baseOf(it: Item): BaseItem { return BASE_BY_ID[it.base]; }
 
 export function canEquipClass(it: Item, cls: ClassId): boolean {
-  const b = baseOf(it);
-  return !b.cls || b.cls === cls;
+  return baseForClass(baseOf(it), cls);
 }
 
 export function modSum(it: Item, k: string): number {

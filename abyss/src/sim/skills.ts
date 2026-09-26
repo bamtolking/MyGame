@@ -2,6 +2,7 @@
 import { CLASSES, SKILLS, type SkillDef } from '../data/classes';
 import { addArea, breakPropsNear, heroRoll, hurtMonster, scaleDmg, spawnProj, useProp } from './combat';
 import { circleFree, los, nearestWalkable } from './path';
+import { SKILL_IMPL, type SkillCtx } from './registry';
 import { skillRank } from './stats';
 import type { Game } from './game';
 import type { Elem, HeroAct, Monster, Prop } from './types';
@@ -43,6 +44,7 @@ export function tryCast(g: Game, slot: number, x: number, y: number, targetId: n
   if (h.mp < mana) return 'nomana';
   let target: Monster | undefined;
   if (targetId) target = g.world.monsters.find((m) => m.id === targetId && !m.dead);
+  if (def.move === 'behind' && !target) target = nearestMonster(g, x, y, 2.2, true) ?? undefined;
   if (def.kind === 'melee') {
     if (!target) target = nearestMonster(g, x, y, 1.6) ?? undefined;
     const reach = h.st.reach + h.r + (target?.r ?? 0.3);
@@ -51,8 +53,8 @@ export function tryCast(g: Game, slot: number, x: number, y: number, targetId: n
       x = target.x; y = target.y;
     }
   }
-  if (id === 'teleport' || id === 'leap' || id === 'dash') {
-    const dest = moveDest(g, def, x, y);
+  if (def.move) {
+    const dest = def.move === 'behind' ? behindDest(g, def, target) : moveDest(g, def, x, y);
     if (!dest) return 'invalid';
     x = dest.x; y = dest.y;
   }
@@ -60,6 +62,8 @@ export function tryCast(g: Game, slot: number, x: number, y: number, targetId: n
     const d = Math.hypot(x - h.x, y - h.y);
     if (d > def.range) { x = h.x + ((x - h.x) / d) * def.range; y = h.y + ((y - h.y) / d) * def.range; }
   }
+  const impl = SKILL_IMPL[id];
+  if (impl?.canCast && !impl.canCast(g, x, y, target?.id ?? targetId, rank)) return 'invalid';
   h.mp -= mana;
   if (slot >= 0) { const cd = def.cd(rank); if (cd > 0) h.cds[slot] = cd; }
   if (Math.hypot(x - h.x, y - h.y) > 0.01) h.facing = Math.atan2(y - h.y, x - h.x);
@@ -71,20 +75,42 @@ export function tryCast(g: Game, slot: number, x: number, y: number, targetId: n
   if (id === 'teleport') { act.dur = 0.3; act.hitAt = 0.12; }
   if (id === 'strafe') { act.kind = 'channel'; act.dur = 1.5; act.hitAt = 0; act.n = 0; }
   if (id === 'meteor' || id === 'frostnova' || id === 'rain') { act.dur = Math.max(0.4, swing * 0.9); act.hitAt = act.dur * 0.55; }
+  const tm = def.timing;
+  if (tm) {
+    if (tm.kind) act.kind = tm.kind;
+    if (tm.dur !== undefined) act.dur = tm.rel ? swing * tm.dur : tm.dur;
+    act.hitAt = act.dur * (tm.hitAt ?? 0.5);
+    if (tm.invuln) h.invulnT = Math.max(h.invulnT, tm.invuln);
+  } else if (def.move === 'dash' && !act.kind.startsWith('dash')) { act.kind = 'dash'; act.dur = 0.25; act.hitAt = act.dur; }
+  else if (def.move === 'leap' && act.kind !== 'leap') { act.kind = 'leap'; act.dur = 0.55; act.hitAt = act.dur; }
+  if (act.kind === 'channel') act.n = 0;
   h.act = act;
   h.path = null;
   g.emit({ t: 'sfx', id: 'cast_' + id });
   return 'ok';
 }
 
+/** Landing spot behind a monster (seen from the hero), for 'behind' movement skills. */
+function behindDest(g: Game, def: SkillDef, m: Monster | undefined): { x: number; y: number } | null {
+  const h = g.hero, w = g.world;
+  if (!m || Math.hypot(m.x - h.x, m.y - h.y) > def.range + m.r) return null;
+  const a = Math.atan2(m.y - h.y, m.x - h.x);
+  for (const off of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, Math.PI]) {
+    const d = m.r + h.r + 0.15;
+    const px = m.x + Math.cos(a + off) * d, py = m.y + Math.sin(a + off) * d;
+    if (circleFree(w, px, py, h.r)) return { x: px, y: py };
+  }
+  return null;
+}
+
 function moveDest(g: Game, def: SkillDef, x: number, y: number): { x: number; y: number } | null {
   const h = g.hero, w = g.world;
   let dx = x - h.x, dy = y - h.y;
   let d = Math.hypot(dx, dy);
-  if (d < 0.3) { dx = Math.cos(h.facing); dy = Math.sin(h.facing); d = 1; if (def.id === 'dash') { x = h.x + dx * def.range; y = h.y + dy * def.range; } else return null; }
+  if (d < 0.3) { dx = Math.cos(h.facing); dy = Math.sin(h.facing); d = 1; if (def.move === 'dash') { x = h.x + dx * def.range; y = h.y + dy * def.range; } else return null; }
   const maxR = def.range;
   if (d > maxR) { x = h.x + (dx / d) * maxR; y = h.y + (dy / d) * maxR; d = maxR; }
-  if (def.id === 'dash') {
+  if (def.move === 'dash') {
     // dash stops at the first obstacle
     const ux = (x - h.x) / d, uy = (y - h.y) / d;
     let lastOk = { x: h.x, y: h.y };
@@ -99,10 +125,10 @@ function moveDest(g: Game, def: SkillDef, x: number, y: number): { x: number; y:
   for (let k = 0; k < 12; k++) {
     const t = 1 - k * 0.08;
     const px = h.x + (x - h.x) * t, py = h.y + (y - h.y) * t;
-    if (circleFree(w, px, py, h.r) && (def.id === 'teleport' || los(w, h.x, h.y, px, py))) return { x: px, y: py };
+    if (circleFree(w, px, py, h.r) && (def.move === 'teleport' || los(w, h.x, h.y, px, py))) return { x: px, y: py };
   }
   const nw = nearestWalkable(w, x, y, 2);
-  if (nw && (def.id === 'teleport' || los(w, h.x, h.y, nw.x, nw.y))) return nw;
+  if (nw && (def.move === 'teleport' || los(w, h.x, h.y, nw.x, nw.y))) return nw;
   return null;
 }
 
@@ -117,8 +143,8 @@ export function updateAct(g: Game, dt: number): void {
   } else if (a.kind === 'dash') {
     const k = Math.min(1, a.t / a.dur);
     h.x = a.fx + (a.tx - a.fx) * k; h.y = a.fy + (a.ty - a.fy) * k;
-    if (Math.random() < 0.8) g.emit({ t: 'fx', kind: 'shadow', x: h.x, y: h.y });
-  } else if (a.kind === 'channel') {
+    if (a.skill === 'dash' && Math.random() < 0.8) g.emit({ t: 'fx', kind: 'shadow', x: h.x, y: h.y });
+  } else if (a.kind === 'channel' && a.skill === 'strafe') {
     const rank = rankOf(g, 4);
     const total = 10 + rank;
     const interval = a.dur / total;
@@ -131,18 +157,28 @@ export function updateAct(g: Game, dt: number): void {
       fireArrow(g, ang, SKILLS.strafe.pct(rank), 'arrow', 0, 0);
     }
   }
+  const impl = SKILL_IMPL[a.skill];
+  if (impl?.tick && !a.fired) impl.tick(skillCtx(g, a), dt);
+  if (h.act !== a) return;
   if (!a.fired && a.t >= a.hitAt) { a.fired = true; applyAct(g, a); }
-  if (a.t >= a.dur) h.act = null;
+  if (a.t >= a.dur && h.act === a) h.act = null;
 }
 
-function fireArrow(g: Game, ang: number, pct: number, kind: 'arrow' | 'bolt' | 'explode' | 'fireball', aoe: number, pierce: number, conv: 'fire' | null = null): void {
+/** Context handed to class skill implementations. */
+export function skillCtx(g: Game, a: HeroAct): SkillCtx {
+  const h = g.hero;
+  const slot = CLASSES[h.cls].skills.indexOf(a.skill);
+  return { g, h, a, def: SKILLS[a.skill], rank: slot < 0 ? 1 : rankOf(g, slot), ang: Math.atan2(a.ty - h.y, a.tx - h.x) };
+}
+
+export function fireArrow(g: Game, ang: number, pct: number, kind: 'arrow' | 'bolt' | 'explode' | 'fireball', aoe: number, pierce: number, conv: 'fire' | null = null): void {
   const h = g.hero;
   const sp = kind === 'arrow' || kind === 'explode' ? 15 : kind === 'bolt' ? 12 : 10;
   const d = heroRoll(g, pct, conv);
   spawnProj(g, kind, 'hero', h.x + Math.cos(ang) * 0.4, h.y + Math.sin(ang) * 0.4, Math.cos(ang) * sp, Math.sin(ang) * sp, d, { life: 0.9, r: kind === 'fireball' ? 0.28 : 0.2, aoe, pierce, aoeMult: 0.8 });
 }
 
-function meleeTargets(g: Game, a: HeroAct, radius: number, arc: boolean): Monster[] {
+export function meleeTargets(g: Game, a: HeroAct, radius: number, arc: boolean): Monster[] {
   const h = g.hero;
   const out: Monster[] = [];
   const t = g.world.monsters.find((m) => m.id === a.targetId && !m.dead);
@@ -161,7 +197,7 @@ function meleeTargets(g: Game, a: HeroAct, radius: number, arc: boolean): Monste
 }
 
 /** Element tint for weapon trails (from the strongest elemental add on gear). */
-function swingElem(g: Game): Elem {
+export function swingElem(g: Game): Elem {
   const a = g.hero.st.adds;
   const best = (['fire', 'cold', 'light', 'poison'] as const).reduce((b, e) => (a[e][1] > a[b][1] ? e : b), 'fire' as 'fire' | 'cold' | 'light' | 'poison');
   return a[best][1] > 0 ? best : 'phys';
@@ -169,7 +205,7 @@ function swingElem(g: Game): Elem {
 
 const angDiff = (a: number, b: number) => { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; };
 
-function hitProp(g: Game, a: HeroAct): void {
+export function hitProp(g: Game, a: HeroAct): void {
   const p = g.world.props.find((q) => q.id === a.targetId);
   if (p && !p.used && (p.kind === 'barrel' || p.kind === 'crate')) useProp(g, p as Prop);
 }
@@ -312,6 +348,11 @@ function applyAct(g: Game, a: HeroAct): void {
       const d = heroRoll(g, def.pct(rank), 'fire');
       addArea(g, 'meteor', 'hero', a.tx, a.ty, 2.8, 0.01, d, { delay: 0.9, data: { burn: 0.12 } });
       g.emit({ t: 'fx', kind: 'meteorFall', x: a.tx, y: a.ty, r: 2.8 });
+      break;
+    }
+    default: {
+      const impl = SKILL_IMPL[a.skill];
+      if (impl) impl.apply({ g, h, a, def, rank, ang });
       break;
     }
   }

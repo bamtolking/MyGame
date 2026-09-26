@@ -1,10 +1,11 @@
 // Damage rolls and application, deaths, loot, props, projectiles and area effects.
-import { MAX_LEVEL, STAT_PTS_PER_LEVEL, xpToNext } from '../data/classes';
+import { CLASSES, MAX_LEVEL, STAT_PTS_PER_LEVEL, xpToNext } from '../data/classes';
 import { UNIQUES } from '../data/items';
 import { BOSS_LINES, MONSTERS } from '../data/monsters';
 import { LAST_FLOOR, LOOT, MAX_POTIONS, SHRINES } from '../data/zones';
 import { genItem, makeUnique } from './items';
 import { circleFree, los, nearestWalkable, opaque } from './path';
+import { AREA_TICK, PROJ_HIT, PROJ_MOTION } from './registry';
 import { makeMonster } from './spawn';
 import { armorReduction, computeStats } from './stats';
 import type { Game } from './game';
@@ -113,7 +114,7 @@ export function hurtHero(g: Game, d: Dmg, attacker: Monster | null, kind: 'melee
   const lvl = attacker?.lvl ?? g.world.mlvl;
   const phys = d.phys * (1 - armorReduction(st.armor, lvl));
   const el = d.fire * (1 - st.res.fire / 100) + d.cold * (1 - st.res.cold / 100) + d.light * (1 - st.res.light / 100) + d.poison * (1 - st.res.poison / 100);
-  let total = phys + el - st.dmgReduce;
+  let total = (phys + el) * (1 - st.dmgTakenPct / 100) - st.dmgReduce;
   if (total < 1) total = phys + el > 0 ? 1 : 0;
   h.hp -= total;
   h.hitT = 0.25;
@@ -264,7 +265,7 @@ export function monsterDrops(g: Game, m: Monster): void {
   if (rng.chance(LOOT.goldChance[r])) dropGold(g, rng.range(2, 7) * (1 + m.lvl * 0.8) * goldMul * (1 + st.gf / 100), m.x, m.y);
   if (rng.chance(LOOT.potChance[r])) {
     const n = r === 'boss' ? 3 : 1;
-    for (let i = 0; i < n; i++) dropPot(g, rng.chance(g.hero.cls === 'sorcerer' ? 0.5 : 0.68) ? 'hp' : 'mp', m.x, m.y);
+    for (let i = 0; i < n; i++) dropPot(g, rng.chance(CLASSES[g.hero.cls].spell ? 0.5 : 0.68) ? 'hp' : 'mp', m.x, m.y);
   }
   if (rng.chance(r === 'normal' ? 0.012 : 0.2)) dropPot(g, 'scroll', m.x, m.y);
   if (rng.chance(LOOT.itemChance[r])) {
@@ -381,6 +382,7 @@ export function updateProjs(g: Game, dt: number): void {
   const keep: Proj[] = [];
   for (const p of w.projs) {
     p.age += dt; p.life -= dt;
+    if (p.motion) PROJ_MOTION[p.motion]?.(g, p, dt);
     if (p.homing > 0) {
       const t = p.side === 'hero' ? (p.targetId ? w.monsters.find((m) => m.id === p.targetId && !m.dead) : undefined) : h.dead ? undefined : h;
       if (t) {
@@ -398,7 +400,7 @@ export function updateProjs(g: Game, dt: number): void {
       const px = p.x, py = p.y;
       p.x += (p.vx * dt) / n; p.y += (p.vy * dt) / n;
       const tx = Math.floor(p.x), ty = Math.floor(p.y);
-      if (opaque(w, tx, ty) || !los(w, px, py, p.x, p.y)) {
+      if (!p.ghost && (opaque(w, tx, ty) || !los(w, px, py, p.x, p.y))) {
         if (p.aoe > 0) explode(g, p, p.x - (p.vx * dt) / n, p.y - (p.vy * dt) / n, -1);
         else g.emit({ t: 'fx', kind: 'spark', x: p.x, y: p.y, c: p.kind });
         alive = false; break;
@@ -407,12 +409,15 @@ export function updateProjs(g: Game, dt: number): void {
         const pr = propAt(g, p.x, p.y);
         if (pr && (pr.kind === 'barrel' || pr.kind === 'crate')) { useProp(g, pr); if (p.aoe > 0) explode(g, p, p.x, p.y, -1); alive = false; break; }
         for (const m of w.monsters) {
-          if (m.dead || p.hit.includes(m.id)) continue;
+          if (m.dead) continue;
+          if (p.rehit) { const last = p.data?.['h' + m.id]; if (last !== undefined && p.age - last < p.rehit) continue; }
+          else if (p.hit.includes(m.id)) continue;
           const rr = p.r + m.r;
           if (Math.abs(m.x - p.x) > rr || Math.abs(m.y - p.y) > rr) continue;
           if (Math.hypot(m.x - p.x, m.y - p.y) > rr) continue;
-          p.hit.push(m.id);
-          hurtMonster(g, m, p.dmg);
+          if (p.rehit) (p.data ??= {})['h' + m.id] = p.age; else p.hit.push(m.id);
+          hurtMonster(g, m, { ...p.dmg, srcX: p.x - p.vx * 0.05, srcY: p.y - p.vy * 0.05 });
+          if (p.onHit) PROJ_HIT[p.onHit]?.(g, p, m);
           if (p.aoe > 0) explode(g, p, p.x, p.y, m.id);
           else g.emit({ t: 'fx', kind: 'impact', x: p.x, y: p.y, c: p.kind });
           if (p.pierce > 0) { p.pierce--; continue; }
@@ -497,10 +502,54 @@ export function updateAreas(g: Game, dt: number): void {
         }
         break;
       }
+      case 'meteor': case 'stomp': case 'telegraph': case 'bonePrison': case 'strafe': break;
+      default: {
+        // class-skill areas: generic behaviour from fields/data, plus an optional AREA_TICK hook
+        if (a.follow) { a.x = g.hero.x; a.y = g.hero.y; }
+        if (a.tick > 0) {
+          a.tickT -= dt;
+          while (a.tickT <= 0 && a.t <= a.dur + 1e-6) { a.tickT += a.tick; genericAreaTick(g, a); }
+        } else if (!a.data.fired) { a.data.fired = 1; genericAreaTick(g, a); }
+      }
     }
     if (a.t < a.dur) keep.push(a);
   }
   w.areas = keep;
+}
+
+function genericAreaTick(g: Game, a: Area): void {
+  const w = g.world, h = g.hero, d = a.data;
+  AREA_TICK[a.kind]?.(g, a);
+  if (a.side === 'hero') {
+    if (a.proj) {
+      // sentry: shoot the nearest visible enemy in range
+      const range = d.range ?? 7;
+      let best: Monster | null = null, bd = range;
+      for (const m of w.monsters) {
+        if (m.dead) continue;
+        const dist = Math.hypot(m.x - a.x, m.y - a.y);
+        if (dist < bd && los(w, a.x, a.y, m.x, m.y)) { bd = dist; best = m; }
+      }
+      if (best) {
+        const ang = Math.atan2(best.y - a.y, best.x - a.x), sp = d.speed ?? 12;
+        spawnProj(g, a.proj, 'hero', a.x + Math.cos(ang) * 0.3, a.y + Math.sin(ang) * 0.3, Math.cos(ang) * sp, Math.sin(ang) * sp, { ...a.dmg }, { life: d.life ?? 0.9, r: d.pr ?? 0.2, pierce: d.pierce ?? 0, targetId: best.id, homing: d.homing ?? 0 });
+        g.emit({ t: 'fx', kind: 'sentryShot', x: a.x, y: a.y, x2: best.x, y2: best.y, c: a.kind });
+      }
+    } else if (!d.noDmg) areaHit(g, a, a.x, a.y, a.r, a.dmg, a.tick <= 0);
+    for (const m of w.monsters) {
+      if (m.dead || Math.hypot(m.x - a.x, m.y - a.y) > a.r + m.r) continue;
+      if (d.chill) m.chillT = Math.max(m.chillT, d.chill);
+      if (d.fear && m.rank !== 'boss') m.fleeT = Math.max(m.fleeT, d.fear);
+      if (d.pull && m.rank !== 'boss') {
+        const dx = a.x - m.x, dy = a.y - m.y, l = Math.hypot(dx, dy);
+        if (l > 0.4) { const k = Math.min(l, d.pull * Math.max(0.05, a.tick)) * (m.rank === 'unique' || m.rank === 'champion' ? 0.5 : 1); m.kbx += (dx / l) * k * 7; m.kby += (dy / l) * k * 7; }
+      }
+    }
+    if (d.heal && !h.dead && Math.hypot(h.x - a.x, h.y - a.y) <= a.r + h.r) {
+      const v = Math.min(h.st.maxHp - h.hp, d.heal);
+      if (v > 0) { h.hp += v; if (v >= 1) g.emit({ t: 'dmg', x: h.x, y: h.y, v: Math.round(v), kind: 'heal' }); }
+    }
+  } else if (!d.noDmg) areaHit(g, a, a.x, a.y, a.r, a.dmg, a.tick <= 0);
 }
 
 /** Pick up potion/gold drops automatically when walking over them. */

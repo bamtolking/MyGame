@@ -2,6 +2,7 @@
 import { BASE_BY_ID, RARITY_COLOR, type ItemCat } from '../data/items';
 import type { Item } from '../sim/types';
 import { drawWeapon } from './actors';
+import { ITEM_KIND, OFFHAND_ART, SKILL_ICON, WEAPON_ART } from './registry';
 
 const cache = new Map<string, HTMLCanvasElement>();
 const SZ = 64;
@@ -98,6 +99,21 @@ function drawCat(c: CanvasRenderingContext2D, cat: ItemCat, tier: number, rarity
       c.fillStyle = 'rgba(255,255,255,0.6)'; c.fillRect(-2, -12, 3, 3);
       break;
     }
+    case 'spear': case 'claw': case 'knuckle': case 'scythe': {
+      const kind = ITEM_KIND[cat] ?? cat;
+      const art = WEAPON_ART[kind];
+      c.translate(32, 32);
+      if (art?.icon) art.icon(c, tier, gem);
+      else { c.rotate(-Math.PI / 4 - Math.PI); c.translate(0, -16); drawWeapon(c, kind, 0, 0, 0, tier, m, rarity === 'unique' ? '#e0b050' : undefined, 1.25); }
+      break;
+    }
+    case 'pouch': case 'skull': case 'totem': {
+      const art = OFFHAND_ART[ITEM_KIND[cat] ?? cat];
+      c.translate(32, 32);
+      if (art) art.icon(c, tier, gem);
+      else { c.fillStyle = '#6a5040'; c.beginPath(); c.arc(0, 0, 16, 0, 7); c.fill(); c.fillStyle = gem; c.beginPath(); c.arc(0, 0, 5, 0, 7); c.fill(); }
+      break;
+    }
     case 'amulet': {
       c.translate(32, 30);
       c.strokeStyle = '#c8b070'; c.lineWidth = 2; c.beginPath(); c.moveTo(-16, -22); c.quadraticCurveTo(0, 6, 16, -22); c.stroke();
@@ -145,7 +161,8 @@ export function skillIconUrl(icon: string): string {
     arrow: ['#4a5a3a', '#101408'], multishot: ['#5a7a3a', '#0e1606'], explode: ['#a05a20', '#200c02'], rain: ['#6a6a5a', '#141410'], dash: ['#2a3a4a', '#06080e'], strafe: ['#7a7a30', '#161606'],
     bolt: ['#5a3a8a', '#0e0618'], fireball: ['#c05010', '#200600'], frostnova: ['#3a7ab0', '#061020'], chain: ['#b0a020', '#181600'], teleport: ['#5a4ab0', '#0a0620'], meteor: ['#b03010', '#200400'],
   };
-  const [a, bcol] = tint[icon] ?? ['#444', '#111'];
+  const custom = SKILL_ICON[icon];
+  const [a, bcol] = custom?.tint ?? tint[icon] ?? ['#444', '#111'];
   bg.addColorStop(0, a); bg.addColorStop(1, bcol);
   c.fillStyle = bg; c.fillRect(0, 0, 64, 64);
   c.translate(32, 32);
@@ -169,6 +186,7 @@ export function skillIconUrl(icon: string): string {
     case 'frostnova': glow('#80c0ff', 12); c.strokeStyle = '#c0e8ff'; c.lineWidth = 2.5; for (let i = 0; i < 8; i++) { const an = (i / 8) * Math.PI * 2; c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(an) * 24, Math.sin(an) * 24); c.stroke(); c.beginPath(); c.moveTo(Math.cos(an) * 14 + Math.cos(an + 1.2) * 5, Math.sin(an) * 14 + Math.sin(an + 1.2) * 5); c.lineTo(Math.cos(an) * 14, Math.sin(an) * 14); c.lineTo(Math.cos(an) * 14 + Math.cos(an - 1.2) * 5, Math.sin(an) * 14 + Math.sin(an - 1.2) * 5); c.stroke(); } break;
     case 'chain': glow('#ffff60', 14); c.strokeStyle = '#ffffa0'; c.lineWidth = 3; c.beginPath(); c.moveTo(-22, -18); c.lineTo(-6, -4); c.lineTo(-12, 2); c.lineTo(6, 14); c.lineTo(2, 20); c.lineTo(22, 22); c.stroke(); break;
     case 'teleport': glow('#8080ff', 14); c.strokeStyle = '#b0b0ff'; c.lineWidth = 2.5; for (const r of [8, 15, 22]) { c.beginPath(); c.ellipse(0, 0, r, r * 0.45, 0, 0, 7); c.stroke(); } c.fillStyle = '#e0e0ff'; c.fillRect(-2, -24, 4, 24); break;
+    default: custom?.draw(c, glow); break;
     case 'meteor': glow('#ff4010', 18); c.fillStyle = 'rgba(255,120,30,0.6)'; c.beginPath(); c.moveTo(12, -12); c.lineTo(-24, -28); c.lineTo(4, -2); c.fill(); { const g = c.createRadialGradient(10, 6, 1, 10, 6, 14); g.addColorStop(0, '#fff0b0'); g.addColorStop(0.5, '#ff7020'); g.addColorStop(1, '#801000'); c.fillStyle = g; c.beginPath(); c.arc(10, 6, 13, 0, 7); c.fill(); } break;
   }
   u = cv.toDataURL();

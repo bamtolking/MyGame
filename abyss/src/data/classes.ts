@@ -1,6 +1,28 @@
 // Character classes and their skills. All skill damage scales off weapon damage (percent of a weapon hit),
 // so every class cares about weapon upgrades. Numbers here are the only place skill balance lives.
-import type { Attrs, ClassId, Elem } from '../sim/types';
+// The three starting classes live in this file; the seven unlockable classes each have their own folder
+// under src/classes/<id>/ (data.ts here, sim.ts / art.ts / sfx.ts register behaviour, visuals and sounds).
+import type { Attrs, ClassId, Elem, HeroActKind } from '../sim/types';
+import { CLASS_IDS } from '../sim/types';
+import { PALADIN } from '../classes/paladin/data';
+import { ASSASSIN } from '../classes/assassin/data';
+import { LANCER } from '../classes/lancer/data';
+import { NECROMANCER } from '../classes/necromancer/data';
+import { DRUID } from '../classes/druid/data';
+import { MONK } from '../classes/monk/data';
+import { VOIDKNIGHT } from '../classes/voidknight/data';
+
+/** How a locked class is earned (tracked account-wide across all characters). */
+export interface Unlock {
+  /** Defeat this boss template (on difficulty >= diff). */
+  boss?: string;
+  /** Defeat any boss on at least this difficulty (0 normal, 1 nightmare, 2 hell). */
+  diff?: number;
+  /** Reach this hero level with any character. */
+  level?: number;
+  /** Shown on the locked class card. */
+  text: string;
+}
 
 export interface ClassDef {
   id: ClassId; name: string; title: string; desc: string;
@@ -13,43 +35,19 @@ export interface ClassDef {
   startGear: string[];
   skills: string[];
   basic: string;
+  /** null = playable from the start. */
+  unlock: Unlock | null;
+  /** Fights from range (affects AI-free heuristics only: auto-aim, bot). */
+  ranged: boolean;
+  /** Spell caster: spell damage affixes apply, +30% mana regen, more mana potions drop. */
+  spell: boolean;
+  /** Critical chance gained per point of dexterity. */
+  critPerDex: number;
+  /** Extra melee reach (tiles), and extra reach while wielding a two-handed weapon. */
+  reach: number; reach2h: number;
+  /** Example offhand shown in the empty equipment slot ('' = two-handed class). */
+  offhandHint: string;
 }
-
-export const CLASSES: Record<ClassId, ClassDef> = {
-  warrior: {
-    id: 'warrior', name: '전사', title: '강철의 수호자',
-    desc: '두꺼운 갑옷과 방패로 적진 한가운데를 버티며 근접 무기로 적을 쓸어버립니다. 초보자에게 추천.',
-    attrs: { str: 25, dex: 20, vit: 25, ene: 10 }, main: 'str',
-    hpBase: 48, hpLvl: 4, hpVit: 2.5, mpBase: 10, mpLvl: 1, mpEne: 1.2,
-    color: '#8a2a1e', accent: '#e0a060',
-    autoAttr: { str: 2, dex: 1, vit: 2, ene: 0 },
-    startGear: ['shortSword', 'buckler', 'quilted'],
-    skills: ['bash', 'cleave', 'warcry', 'leap', 'berserk'],
-    basic: 'attack',
-  },
-  rogue: {
-    id: 'rogue', name: '레인저', title: '그림자 사냥꾼',
-    desc: '활로 먼 거리에서 적을 꿰뚫습니다. 빠른 발과 회피로 적과 거리를 유지하세요.',
-    attrs: { str: 15, dex: 30, vit: 20, ene: 15 }, main: 'dex',
-    hpBase: 40, hpLvl: 3, hpVit: 2.2, mpBase: 14, mpLvl: 1.5, mpEne: 1.5,
-    color: '#2e5a2a', accent: '#b8d080',
-    autoAttr: { str: 0, dex: 3, vit: 2, ene: 0 },
-    startGear: ['shortBow', 'leatherQuiver', 'leatherCap'],
-    skills: ['multishot', 'explode', 'rain', 'dash', 'strafe'],
-    basic: 'shoot',
-  },
-  sorcerer: {
-    id: 'sorcerer', name: '소서러', title: '원소의 지배자',
-    desc: '불과 얼음, 번개를 다룹니다. 몸은 약하지만 강력한 범위 마법으로 무리를 한꺼번에 태웁니다.',
-    attrs: { str: 10, dex: 15, vit: 20, ene: 35 }, main: 'ene',
-    hpBase: 36, hpLvl: 2.5, hpVit: 2, mpBase: 20, mpLvl: 2, mpEne: 2,
-    color: '#2a3a7a', accent: '#90b0ff',
-    autoAttr: { str: 0, dex: 0, vit: 2, ene: 3 },
-    startGear: ['oakStaff', 'quilted'],
-    skills: ['fireball', 'frostnova', 'chain', 'teleport', 'meteor'],
-    basic: 'bolt',
-  },
-};
 
 export type SkillKind = 'melee' | 'proj' | 'target' | 'self' | 'move';
 
@@ -62,7 +60,67 @@ export interface SkillDef {
   pct: (r: number) => number;
   desc: string;
   detail: (r: number) => string[];
+  /** Hero pose: 'attack' swings/shoots the weapon, 'cast' raises the hands. Default: attack for melee/basic, cast for spell classes. */
+  anim?: 'attack' | 'cast';
+  /** Movement skills: 'teleport' passes walls, 'leap' needs sight, 'dash' stops at obstacles, 'behind' lands behind the target monster. */
+  move?: 'teleport' | 'leap' | 'dash' | 'behind';
+  /** Act timing. dur: seconds (or × attack time when rel), hitAt: fraction of dur, invuln: seconds of invulnerability. */
+  timing?: { kind?: HeroActKind; dur?: number; rel?: boolean; hitAt?: number; invuln?: number };
+  /** Hints for the headless test bot: when is this skill worth pressing. */
+  ai?: { crowd?: number; boss?: boolean; minDist?: number; maxDist?: number; lowHp?: number; buff?: boolean; away?: boolean };
 }
+
+/** What a class module's data.ts exports. */
+export interface ClassPack { def: ClassDef; skills: SkillDef[] }
+
+export const CLASSES: Record<ClassId, ClassDef> = {
+  warrior: {
+    id: 'warrior', name: '전사', title: '강철의 수호자',
+    desc: '두꺼운 갑옷과 방패로 적진 한가운데를 버티며 근접 무기로 적을 쓸어버립니다. 초보자에게 추천.',
+    attrs: { str: 25, dex: 20, vit: 25, ene: 10 }, main: 'str',
+    hpBase: 48, hpLvl: 4, hpVit: 2.5, mpBase: 10, mpLvl: 1, mpEne: 1.2,
+    color: '#8a2a1e', accent: '#e0a060',
+    autoAttr: { str: 2, dex: 1, vit: 2, ene: 0 },
+    startGear: ['shortSword', 'buckler', 'quilted'],
+    skills: ['bash', 'cleave', 'warcry', 'leap', 'berserk'],
+    basic: 'attack',
+    unlock: null, ranged: false, spell: false, critPerDex: 0, reach: 0, reach2h: 0.35, offhandHint: 'kite',
+  },
+  rogue: {
+    id: 'rogue', name: '레인저', title: '그림자 사냥꾼',
+    desc: '활로 먼 거리에서 적을 꿰뚫습니다. 빠른 발과 회피로 적과 거리를 유지하세요.',
+    attrs: { str: 15, dex: 30, vit: 20, ene: 15 }, main: 'dex',
+    hpBase: 40, hpLvl: 3, hpVit: 2.2, mpBase: 14, mpLvl: 1.5, mpEne: 1.5,
+    color: '#2e5a2a', accent: '#b8d080',
+    autoAttr: { str: 0, dex: 3, vit: 2, ene: 0 },
+    startGear: ['shortBow', 'leatherQuiver', 'leatherCap'],
+    skills: ['multishot', 'explode', 'rain', 'dash', 'strafe'],
+    basic: 'shoot',
+    unlock: null, ranged: true, spell: false, critPerDex: 0.03, reach: 0, reach2h: 0, offhandHint: 'hunterQuiver',
+  },
+  sorcerer: {
+    id: 'sorcerer', name: '소서러', title: '원소의 지배자',
+    desc: '불과 얼음, 번개를 다룹니다. 몸은 약하지만 강력한 범위 마법으로 무리를 한꺼번에 태웁니다.',
+    attrs: { str: 10, dex: 15, vit: 20, ene: 35 }, main: 'ene',
+    hpBase: 36, hpLvl: 2.5, hpVit: 2, mpBase: 20, mpLvl: 2, mpEne: 2,
+    color: '#2a3a7a', accent: '#90b0ff',
+    autoAttr: { str: 0, dex: 0, vit: 2, ene: 3 },
+    startGear: ['oakStaff', 'quilted'],
+    skills: ['fireball', 'frostnova', 'chain', 'teleport', 'meteor'],
+    basic: 'bolt',
+    unlock: null, ranged: true, spell: true, critPerDex: 0, reach: 0, reach2h: 0, offhandHint: 'starOrb',
+  },
+  paladin: PALADIN.def,
+  assassin: ASSASSIN.def,
+  lancer: LANCER.def,
+  necromancer: NECROMANCER.def,
+  druid: DRUID.def,
+  monk: MONK.def,
+  voidknight: VOIDKNIGHT.def,
+};
+
+/** Classes in display / unlock order. */
+export const CLASS_ORDER: ClassId[] = CLASS_IDS;
 
 const pctTxt = (v: number) => `무기 피해의 ${Math.round(v)}%`;
 
@@ -104,7 +162,7 @@ export const SKILLS: Record<string, SkillDef> = {
     detail: (r) => [`피해 +${25 + 5 * r}% · 방어 +40%`, `주변 적 기절 ${(1 + 0.1 * r).toFixed(1)}초`, '재사용 16초'],
   },
   leap: {
-    id: 'leap', cls: 'warrior', name: '도약 강타', icon: 'leap', req: 10, kind: 'move', range: 7, elem: 'phys',
+    id: 'leap', cls: 'warrior', name: '도약 강타', icon: 'leap', req: 10, kind: 'move', range: 7, elem: 'phys', move: 'leap',
     mana: () => 10, cd: (r) => Math.max(2.5, 5 - 0.2 * r), pct: (r) => 200 + 25 * r,
     desc: '목표 지점으로 뛰어올라 착지하며 주변 적에게 피해를 주고 밀쳐냅니다.',
     detail: (r) => [pctTxt(200 + 25 * r), '반경 2.4칸 · 최대 7칸', `재사용 ${Math.max(2.5, 5 - 0.2 * r).toFixed(1)}초`],
@@ -136,7 +194,7 @@ export const SKILLS: Record<string, SkillDef> = {
     detail: (r) => [`8회 × ${pctTxt(45 + 6 * r)}`, '반경 2.6칸 · 둔화'],
   },
   dash: {
-    id: 'dash', cls: 'rogue', name: '그림자 질주', icon: 'dash', req: 10, kind: 'move', range: 6, elem: 'phys',
+    id: 'dash', cls: 'rogue', name: '그림자 질주', icon: 'dash', req: 10, kind: 'move', range: 6, elem: 'phys', move: 'dash',
     mana: () => 6, cd: (r) => Math.max(1.8, 4 - 0.2 * r), pct: (r) => 30 + 3 * r,
     desc: '그림자처럼 순식간에 이동하고 3초간 공격을 회피할 확률이 생깁니다.',
     detail: (r) => [`회피 ${Math.min(60, 30 + 3 * r)}% (3초)`, `재사용 ${Math.max(1.8, 4 - 0.2 * r).toFixed(1)}초`],
@@ -168,7 +226,7 @@ export const SKILLS: Record<string, SkillDef> = {
     detail: (r) => [`${pctTxt(150 + 18 * r)} (번개)`, `최대 ${4 + Math.floor(r / 3)}명 연쇄`],
   },
   teleport: {
-    id: 'teleport', cls: 'sorcerer', name: '순간이동', icon: 'teleport', req: 10, kind: 'move', range: 9, elem: 'phys',
+    id: 'teleport', cls: 'sorcerer', name: '순간이동', icon: 'teleport', req: 10, kind: 'move', range: 9, elem: 'phys', move: 'teleport',
     mana: (r) => Math.max(6, 14 - r), cd: () => 0.6, pct: () => 0,
     desc: '목표 지점으로 즉시 이동합니다.',
     detail: (r) => [`최대 9칸`, `마나 ${Math.max(6, 14 - r)}`],
@@ -180,6 +238,18 @@ export const SKILLS: Record<string, SkillDef> = {
     detail: (r) => [`${pctTxt(380 + 40 * r)} (화염)`, '반경 2.8칸 · 불타는 땅 3초', '재사용 5초'],
   },
 };
+
+for (const pack of [PALADIN, ASSASSIN, LANCER, NECROMANCER, DRUID, MONK, VOIDKNIGHT]) for (const sk of pack.skills) SKILLS[sk.id] = sk;
+
+/** The pose a skill uses (see SkillDef.anim). */
+export function skillAnim(cls: ClassId, id: string): 'attack' | 'cast' {
+  const d = SKILLS[id];
+  if (!d) return 'attack';
+  if (d.anim) return d.anim;
+  if (id === 'warcry' || id === 'berserk') return 'cast';
+  if (id === CLASSES[cls].basic || d.kind === 'melee' || d.kind === 'move') return 'attack';
+  return CLASSES[cls].spell ? 'cast' : 'attack';
+}
 
 export const MAX_SKILL_RANK = 10;
 export const MAX_LEVEL = 50;

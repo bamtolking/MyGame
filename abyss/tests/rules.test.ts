@@ -9,6 +9,7 @@ import { armorReduction, computeStats, sheetDps } from '../src/sim/stats';
 import { emptyDmg, giveXp, hurtHero, hurtMonster } from '../src/sim/combat';
 import { makeMonster } from '../src/sim/spawn';
 import { tryCast } from '../src/sim/skills';
+import { CLASS_IDS } from '../src/sim/types';
 import type { ClassId, Item } from '../src/sim/types';
 
 describe('items', () => {
@@ -54,7 +55,7 @@ describe('items', () => {
 
 describe('hero stats & combat', () => {
   it('all classes start alive with sane stats and a weapon', () => {
-    for (const cls of ['warrior', 'rogue', 'sorcerer'] as ClassId[]) {
+    for (const cls of CLASS_IDS) {
       const g = new Game(cls, 't', 1);
       const st = g.hero.st;
       expect(st.maxHp).toBeGreaterThan(50);
@@ -134,7 +135,7 @@ describe('skills', () => {
     expect(tryCast(g, 0, m.x, m.y, m.id)).toBe('nomana');
   });
   it('every class skill can be cast at max rank without errors', () => {
-    for (const cls of ['warrior', 'rogue', 'sorcerer'] as ClassId[]) {
+    for (const cls of CLASS_IDS) {
       const g = new Game(cls, 't', 9);
       g.enterFloor(4, 'start');
       const h = g.hero;
@@ -143,11 +144,35 @@ describe('skills', () => {
       g.refreshStats();
       for (let slot = 0; slot < 5; slot++) {
         h.mp = h.st.maxMp; h.cds = [0, 0, 0, 0, 0]; h.act = null;
-        const target = g.world.monsters.find((m) => !m.dead)!;
-        const r = tryCast(g, slot, h.x + 2, h.y + 1, SKILLS[CLASSES[cls].skills[slot]].kind === 'melee' ? 0 : 0);
+        const r = tryCast(g, slot, h.x + 2, h.y + 1, 0);
         expect(['ok', 'approach', 'invalid']).toContain(r);
         for (let i = 0; i < 120; i++) g.update(DT);
-        void target;
+      }
+    }
+  });
+  it('every class skill works against a pack of monsters next to the hero (and with a corpse nearby)', () => {
+    for (const cls of CLASS_IDS) {
+      const g = new Game(cls, 't', 21);
+      g.enterFloor(2, 'start');
+      const h = g.hero;
+      h.level = 30; h.attrs.vit += 400;
+      for (const id of CLASSES[cls].skills) h.skills[id] = 8;
+      g.refreshStats(); h.hp = h.st.maxHp;
+      // pull a few monsters around the hero; kill one to leave a corpse
+      const pack = g.world.monsters.filter((m) => !m.dead && m.rank !== 'boss').slice(0, 5);
+      pack.forEach((m, i) => { m.x = h.x + 1.1 + (i % 2) * 0.7; m.y = h.y + (i - 2) * 0.6; m.awake = true; });
+      for (let slot = -1; slot < 5; slot++) {
+        const alive = g.world.monsters.filter((m) => !m.dead && Math.hypot(m.x - h.x, m.y - h.y) < 5);
+        if (alive.length < 2) { const more = g.world.monsters.filter((m) => !m.dead && m.rank !== 'boss').slice(0, 3); more.forEach((m, i) => { m.x = h.x + 1.2; m.y = h.y + (i - 1) * 0.7; m.awake = true; }); }
+        const corpse = g.world.monsters.find((m) => !m.dead && m.rank === 'normal' && Math.hypot(m.x - h.x, m.y - h.y) < 4);
+        if (corpse) { corpse.hp = 1; g.hero.st && g.update(DT); }
+        const t = g.world.monsters.find((m) => !m.dead && Math.hypot(m.x - h.x, m.y - h.y) < 4)!;
+        h.mp = h.st.maxMp; h.cds = [0, 0, 0, 0, 0]; h.act = null; h.hp = h.st.maxHp; h.dead = false;
+        const r = tryCast(g, slot, t.x, t.y, t.id);
+        expect(['ok', 'approach', 'invalid'], `${cls} slot ${slot}`).toContain(r);
+        for (let i = 0; i < 150; i++) g.update(DT);
+        expect(Number.isFinite(h.x) && Number.isFinite(h.y), `${cls} slot ${slot} position`).toBe(true);
+        for (const m of g.world.monsters) expect(Number.isFinite(m.hp), `${cls} slot ${slot} monster hp`).toBe(true);
       }
     }
   });

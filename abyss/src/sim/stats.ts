@@ -2,7 +2,7 @@
 import { CLASSES } from '../data/classes';
 import { DIFFICULTIES } from '../data/zones';
 import { baseOf, itemArmor, weaponDamage } from './items';
-import type { Attrs, Elem, EquipSlot, Hero, HeroStats, ModKey } from './types';
+import type { Attrs, BuffMods, Elem, EquipSlot, Hero, HeroStats, ModKey } from './types';
 
 export const MAX_RES = 75;
 
@@ -29,6 +29,13 @@ export function buffVal(h: Hero, id: string): number {
   return v;
 }
 
+/** Sum of all active buffs' stat mods. */
+export function buffMods(h: Hero): Required<BuffMods> {
+  const o: Required<BuffMods> = { dmgPct: 0, ias: 0, armorPct: 0, armor: 0, lifeSteal: 0, manaSteal: 0, dodge: 0, ms: 0, hpRegen: 0, mpRegen: 0, crit: 0, critDmg: 0, resAll: 0, block: 0, thorns: 0, dmgTaken: 0 };
+  for (const b of h.buffs) if (b.mods) for (const k of Object.keys(b.mods) as (keyof BuffMods)[]) o[k] += b.mods[k] ?? 0;
+  return o;
+}
+
 export function effectiveAttrs(h: Hero, s: Record<string, number>): Attrs {
   const all = s.allAttr ?? 0;
   return {
@@ -45,6 +52,7 @@ export function computeStats(h: Hero, diff: number): HeroStats {
   const g = (k: ModKey) => s[k] ?? 0;
   const a = effectiveAttrs(h, s);
   const lvl = h.level;
+  const bm = buffMods(h);
 
   const maxHp = Math.round((c.hpBase + c.hpLvl * (lvl - 1) + a.vit * c.hpVit + g('hp')) * (1 + g('hpPct') / 100));
   const maxMp = Math.round(c.mpBase + c.mpLvl * (lvl - 1) + a.ene * c.mpEne + g('mp'));
@@ -55,10 +63,11 @@ export function computeStats(h: Hero, diff: number): HeroStats {
     if (it && it.req <= h.level) armor += itemArmor(it);
   }
   armor += g('armor') + Math.floor(a.dex / 4);
-  armor *= 1 + (buffVal(h, 'shrineArmor') + (buffVal(h, 'warcry') > 0 ? 40 : 0)) / 100;
+  armor *= 1 + (buffVal(h, 'shrineArmor') + (buffVal(h, 'warcry') > 0 ? 40 : 0) + bm.armorPct) / 100;
+  armor += bm.armor;
 
   const pen = DIFFICULTIES[diff]?.resPenalty ?? 0;
-  const resAll = g('resAll');
+  const resAll = g('resAll') + bm.resAll;
   const res: Record<Elem, number> = {
     phys: 0,
     fire: Math.min(MAX_RES, g('resFire') + resAll - pen),
@@ -70,41 +79,42 @@ export function computeStats(h: Hero, diff: number): HeroStats {
   const w = h.equip.weapon && h.equip.weapon.req <= h.level ? h.equip.weapon : null;
   const wb = w ? baseOf(w) : null;
   let [wMin, wMax] = w ? weaponDamage(w) : [1, 3];
-  const ranged = h.cls !== 'warrior';
+  const ranged = c.ranged;
   if (h.cls === 'rogue' && wb?.cat !== 'bow') { wMin = Math.max(1, Math.round(wMin * 0.3)); wMax = Math.max(2, Math.round(wMax * 0.3)); }
 
   const mainVal = a[c.main];
-  const dmgPct = g('dmgPct') + buffVal(h, 'warcry') + buffVal(h, 'berserk') + buffVal(h, 'shrineDmg');
-  const spellMult = h.cls === 'sorcerer' ? 1 + g('spellDmg') / 100 : 1;
+  const dmgPct = g('dmgPct') + buffVal(h, 'warcry') + buffVal(h, 'berserk') + buffVal(h, 'shrineDmg') + bm.dmgPct;
+  const spellMult = c.spell ? 1 + g('spellDmg') / 100 : 1;
   const dmgMult = (1 + mainVal / 100) * (1 + dmgPct / 100) * spellMult;
 
   const baseSpeed = wb?.speed ?? 1.4;
-  const ias = g('ias') + (buffVal(h, 'berserk') > 0 ? 40 : 0) + buffVal(h, 'shrineSpeed');
+  const ias = g('ias') + (buffVal(h, 'berserk') > 0 ? 40 : 0) + buffVal(h, 'shrineSpeed') + bm.ias;
   const aps = Math.min(3.5, baseSpeed * (1 + ias / 100));
 
-  const crit = Math.min(60, 5 + g('crit') + (h.cls === 'rogue' ? a.dex * 0.03 : 0));
-  const critMult = 1.5 + g('critDmg') / 100;
+  const crit = Math.min(60, 5 + g('crit') + bm.crit + a.dex * c.critPerDex);
+  const critMult = 1.5 + (g('critDmg') + bm.critDmg) / 100;
 
   const off = h.equip.offhand && h.equip.offhand.req <= h.level ? h.equip.offhand : null;
-  const block = off && off.block ? Math.min(50, off.block + g('block') + a.dex * 0.05) : 0;
+  const block = off && off.block ? Math.min(50, off.block + g('block') + bm.block + a.dex * 0.05) : 0;
 
-  const ms = Math.min(60, g('ms') + buffVal(h, 'shrineSpeed'));
+  const ms = Math.min(60, g('ms') + buffVal(h, 'shrineSpeed') + bm.ms);
 
   return {
     str: a.str, dex: a.dex, vit: a.vit, ene: a.ene,
     maxHp, maxMp,
-    hpRegen: 0.3 + a.vit * 0.025 + g('hpRegen'),
-    mpRegen: (1 + a.ene * 0.04 + g('mpRegen')) * (h.cls === 'sorcerer' ? 1.3 : 1),
+    hpRegen: 0.3 + a.vit * 0.025 + g('hpRegen') + bm.hpRegen,
+    mpRegen: (1 + a.ene * 0.04 + g('mpRegen') + bm.mpRegen) * (c.spell ? 1.3 : 1),
     armor: Math.round(armor), res,
     wMin, wMax,
     adds: { fire: s.adds.fire, cold: s.adds.cold, light: s.adds.light, poison: s.adds.poison },
     dmgMult, spellMult, aps, crit, critMult,
-    lifeSteal: g('lifeSteal') + (buffVal(h, 'berserk') > 0 ? 6 : 0),
-    manaSteal: g('manaSteal'), lifeKill: g('lifeKill'), manaKill: g('manaKill'),
+    lifeSteal: g('lifeSteal') + (buffVal(h, 'berserk') > 0 ? 6 : 0) + bm.lifeSteal,
+    manaSteal: g('manaSteal') + bm.manaSteal, lifeKill: g('lifeKill'), manaKill: g('manaKill'),
     moveSpeed: 4.3 * (1 + ms / 100),
-    block, mf: g('mf') + buffVal(h, 'shrineMf'), gf: g('gf'), light: 7 + g('light'), thorns: g('thorns'),
-    skills: g('skills'), dmgReduce: g('dmgReduce'), dodge: buffVal(h, 'evade'),
-    ranged, reach: 1.0 + (wb?.twoHanded && h.cls === 'warrior' ? 0.35 : 0),
+    block, mf: g('mf') + buffVal(h, 'shrineMf'), gf: g('gf'), light: 7 + g('light'), thorns: g('thorns') + bm.thorns,
+    skills: g('skills'), dmgReduce: g('dmgReduce'), dodge: Math.min(75, buffVal(h, 'evade') + bm.dodge),
+    dmgTakenPct: Math.min(60, bm.dmgTaken),
+    ranged, reach: 1.0 + c.reach + (wb?.twoHanded ? c.reach2h : 0),
   };
 }
 

@@ -1,6 +1,7 @@
 // Particles, timed spell/impact effects, persistent floor stains and floating combat text.
 // All positions are in world units; heights (z) are in iso pixels at zoom 1.
 import { Camera, RX, screenDir } from './iso';
+import { EFFECT_ART } from './registry';
 
 export type PKind = 'dot' | 'spark' | 'streak' | 'smoke' | 'ember' | 'shard' | 'bone' | 'star' | 'chunk' | 'drop' | 'ice' | 'ash' | 'glint';
 export interface Particle {
@@ -263,6 +264,7 @@ export class Fx {
           g.addColorStop(0, 'rgba(255,160,50,0.8)'); g.addColorStop(0.5, 'rgba(255,80,10,0.4)'); g.addColorStop(1, 'rgba(255,40,0,0)');
           c.fillStyle = g; c.save(); c.translate(sx, sy); c.scale(1, 0.5); c.beginPath(); c.arc(0, 0, rx, 0, TAU); c.restore(); c.fill(); c.restore(); break;
         }
+        default: { const art = EFFECT_ART[e.kind]; if (art?.ground) { c.save(); art.ground(e, { c, cam, z, time: e.t, fx: this, sx, sy, k, rx }); c.restore(); } }
       }
     }
   }
@@ -379,6 +381,7 @@ export class Fx {
           const w = (30 + k * 60) * z;
           c.fillStyle = g; c.fillRect(sx - w / 2, sy - 400 * z, w, 400 * z); c.restore(); break;
         }
+        default: { const art = EFFECT_ART[e.kind]; if (art?.air) { c.save(); art.air(e, { c, cam, z, time: e.t, fx: this, sx, sy, k, rx }); c.restore(); } }
       }
     }
   }

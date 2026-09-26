@@ -1,6 +1,7 @@
 // Procedural character art: a posable humanoid rig (heroes, NPCs, most monsters) and custom creature bodies.
 // Coordinates: origin at the feet, facing right (+x), up is -y. Units are iso pixels at zoom 1.
 import { shade } from './iso';
+import { DECOR, OFFHAND_ART, WEAPON_ART, type RigAnchors } from './registry';
 
 export interface Pose {
   t: number; walk: number; moving: boolean;
@@ -9,7 +10,7 @@ export interface Pose {
   special?: string; phase?: number; block?: number;
 }
 
-export type WeaponKind = 'sword' | 'axe' | 'mace' | 'sword2h' | 'axe2h' | 'bow' | 'staff' | 'wand' | 'spear' | 'club' | 'cleaver' | 'crozier' | 'claws' | 'hammer' | 'none';
+export type WeaponKind = 'sword' | 'axe' | 'mace' | 'sword2h' | 'axe2h' | 'bow' | 'staff' | 'wand' | 'spear' | 'club' | 'cleaver' | 'crozier' | 'claws' | 'hammer' | 'none' | (string & {});
 
 export interface Look {
   skin: string; body: string; body2?: string; legs: string; boots?: string;
@@ -18,10 +19,14 @@ export interface Look {
   build?: number; height?: number; hunch?: number;
   robe?: string; cloak?: string; apron?: string;
   weapon?: WeaponKind; wTier?: number; wColor?: string; wGlow?: string;
-  offhand?: 'shield' | 'quiver' | 'orb' | null; offTier?: number; offColor?: string;
+  offhand?: 'shield' | 'quiver' | 'orb' | null | (string & {}); offTier?: number; offColor?: string;
   bones?: boolean; eyes?: string; horns?: string; mitre?: boolean; beard?: string; tail?: string; wings?: string;
   feathers?: boolean; digitigrade?: boolean; zombieArms?: boolean; trim?: string; glow?: string; hat?: string;
   armorTier?: number;
+  /** Class decor key (render/registry DECOR). */
+  decor?: string;
+  /** Free-form colours for class decor. */
+  decorColor?: string; decorColor2?: string;
 }
 
 const TAU = Math.PI * 2;
@@ -133,6 +138,7 @@ export function drawWeapon(c: CanvasRenderingContext2D, kind: WeaponKind, x: num
       c.strokeStyle = '#e8e0d0'; c.lineWidth = L(1); for (let i = -1; i <= 1; i++) { c.beginPath(); c.moveTo(i * L(1.5), 0); c.lineTo(i * L(2.2), L(6)); c.stroke(); }
       break;
     }
+    default: WEAPON_ART[kind]?.draw(c, tier, steel, edge, L, glow);
   }
   c.restore();
 }
@@ -264,8 +270,10 @@ export function drawBiped(c: CanvasRenderingContext2D, L: Look, p: Pose): void {
   const armW = (L.bones ? 2 : 3.8) * b;
   const dark = (col: string) => shade(col, -0.3);
   const wk = L.weapon ?? 'none';
-  const heavyW = wk === 'sword2h' || wk === 'axe2h' || wk === 'hammer' || wk === 'club' || wk === 'cleaver';
+  const art = WEAPON_ART[wk];
+  const heavyW = wk === 'sword2h' || wk === 'axe2h' || wk === 'hammer' || wk === 'club' || wk === 'cleaver' || !!art?.heavy;
   const melee = wk !== 'bow' && wk !== 'staff' && wk !== 'crozier' && wk !== 'wand';
+  const style = art?.style ?? (wk === 'spear' ? 'thrust' : 'slash');
   // attack body motion: anticipation lean back, strike lunge forward, recover
   let lean = hunch * 0.15, lunge = 0;
   if (p.atk >= 0 && melee && wk !== 'none') {
@@ -297,6 +305,9 @@ export function drawBiped(c: CanvasRenderingContext2D, L: Look, p: Pose): void {
   c.save();
   c.translate(lunge, 0);
   c.translate(0, hipY); c.rotate(lean); c.translate(0, -hipY);
+  const anch: RigAnchors = { hx: shX + 1.5 + hunch * 5, hy: shY - headR + 0.5 + hunch * 3, headR, shX, shY, hipY, build: b, height: hgt, fhx: shX + 6, fhy: shY + 14, bhx: shX - 4, bhy: shY + 14 };
+  const decor = L.decor ? DECOR[L.decor] : undefined;
+  if (decor) decor(c, L, p, anch, 'back');
   // wings
   if (L.wings) {
     const f = Math.sin(p.t * 3) * 0.2;
@@ -344,7 +355,9 @@ export function drawBiped(c: CanvasRenderingContext2D, L: Look, p: Pose): void {
   const bsx = shX - 2 * b, bsy = shY + 2;
   const [bex, bey] = limb(c, bsx, bsy, backA, armL * 0.52, armW, dark(L.bones ? L.skin : L.body2 ?? L.body));
   const [bhx, bhy] = limb(c, bex, bey, backA + (wk === 'bow' ? 0.2 : 0.35), armL * 0.5, armW * 0.9, dark(L.skin));
+  anch.bhx = bhx; anch.bhy = bhy;
   if (L.offhand === 'shield') drawShield(c, bhx + 3, bhy - 3 - (p.block ?? 0) * 6, L.offTier ?? 0, L.offColor);
+  else if (L.offhand && OFFHAND_ART[L.offhand]) OFFHAND_ART[L.offhand].draw(c, bhx, bhy, L.offTier ?? 0, p, L.offColor);
   if (L.offhand === 'orb') {
     const oy = bhy - 5 + Math.sin(p.t * 3) * 1.5;
     c.save(); c.globalCompositeOperation = 'lighter';
@@ -427,6 +440,13 @@ export function drawBiped(c: CanvasRenderingContext2D, L: Look, p: Pose): void {
   const armAt = (t: number): number => {
     if (wk === 'bow') return 1.55;
     if (wk === 'staff' || wk === 'crozier' || wk === 'wand') return 0.5 + Math.sin(ease(t) * Math.PI) * 1.2;
+    if (style === 'thrust' || style === 'punch') {
+      // pull back, snap straight out, return
+      const out = style === 'thrust' ? 1.45 : 1.6;
+      if (t < 0.4) return armRest + 0.5 - ease(t / 0.4) * 0.35;
+      if (t < 0.6) return armRest + 0.15 + ease((t - 0.4) / 0.2) * (out - armRest - 0.15);
+      return out - ease((t - 0.6) / 0.4) * (out - armRest);
+    }
     // windup high behind, snap through, follow-through low
     if (t < 0.4) return armRest + ease(t / 0.4) * (heavyW ? 2.9 : 2.6);
     if (t < 0.6) return armRest + (heavyW ? 2.9 : 2.6) - ease((t - 0.4) / 0.2) * (heavyW ? 3.4 : 3.1);
@@ -448,12 +468,14 @@ export function drawBiped(c: CanvasRenderingContext2D, L: Look, p: Pose): void {
   }
   const [ex, ey] = limb(c, fsx, fsy, a, armL * 0.52, armW, L.bones ? L.skin : L.body2 ?? L.body);
   const fa = a + (wk === 'bow' ? 0.05 : 0.3);
-  const [hx2, hy2] = limb(c, ex, ey, fa, armL * 0.5, armW * 0.9, L.skin);
+  const [hx2, hy2] = limb(c, ex, ey, style === 'thrust' && p.atk >= 0 ? a + 0.05 : fa, armL * 0.5, armW * 0.9, L.skin);
+  anch.fhx = hx2; anch.fhy = hy2;
   if (wk === 'bow') drawBow(c, hx2 + 1, hy2, p.atk >= 0 ? Math.sin(Math.min(1, p.atk * 1.8) * Math.PI / 2) * (p.atk < 0.55 ? 1 : 0) : 0.15, L.wTier ?? 0);
   else if (wk === 'staff' || wk === 'crozier') drawWeapon(c, wk, hx2, hy2, 0, L.wTier ?? 0, L.wColor, L.wGlow);
-  else if (wk !== 'none') drawWeapon(c, wk, hx2, hy2, fa + 0.35, L.wTier ?? 0, L.wColor, L.wGlow);
+  else if (wk !== 'none') drawWeapon(c, wk, hx2, hy2, style === 'thrust' ? (p.atk >= 0 ? a + 0.05 : fa + 0.35) : fa + 0.35, L.wTier ?? 0, L.wColor, L.wGlow);
   if (wk === 'none' && L.zombieArms) { c.fillStyle = L.skin; c.beginPath(); c.arc(hx2, hy2, 2, 0, TAU); c.fill(); }
   if (p.cast >= 0 && (wk === 'staff' || wk === 'crozier')) handGlow(c, hx2, hy2 - 30, L.wGlow ?? L.glow ?? '#9ab0ff', 3 + p.cast * 4, p.t);
+  if (decor) decor(c, L, p, anch, 'front');
   c.restore();
 }
 

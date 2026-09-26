@@ -4,7 +4,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const dist = join(root, 'dist');
+// DIST / OUT env vars let parallel work build into private folders (OUT set = no artifact variant).
+const dist = process.env.DIST ?? join(root, 'dist');
 let html = readFileSync(join(dist, 'index.html'), 'utf8');
 const assets = join(dist, 'assets');
 for (const f of readdirSync(assets)) {
@@ -13,6 +14,11 @@ for (const f of readdirSync(assets)) {
   if (f.endsWith('.css')) html = html.replace(new RegExp(`<link[^>]*href="[^"]*${f}"[^>]*>`), () => `<style>${content}</style>`);
 }
 html = html.replace(/<link rel="modulepreload"[^>]*>/g, '');
+if (process.env.OUT) {
+  writeFileSync(process.env.OUT, html);
+  console.log(process.env.OUT, 'written:', (html.length / 1024).toFixed(0), 'KB');
+  process.exit(0);
+}
 mkdirSync(join(root, 'play'), { recursive: true });
 writeFileSync(join(root, 'play', 'index.html'), html);
 console.log('play/index.html written:', (html.length / 1024).toFixed(0), 'KB');

@@ -376,7 +376,7 @@ export class App {
       case 'sfx': this.audio.play(e.id, 1, e.x, e.y); break;
       case 'impact': {
         const a = this.audio;
-        const magic = g.hero.cls === 'sorcerer';
+        const magic = CLASSES[g.hero.cls].spell;
         const id = e.elem === 'fire' ? 'hitFire' : e.elem === 'cold' ? 'hitCold' : e.elem === 'light' ? 'hitLight' : e.elem === 'poison' ? 'hitPoison'
           : e.via === 'proj' ? (magic ? 'hitMagic' : 'hitArrow') : e.via === 'spell' ? 'hitMagic' : e.crit || e.power > 0.3 || e.kill ? 'hitHeavy' : 'hit';
         a.play(id, 0.75 + Math.min(0.5, e.power), e.x, e.y);

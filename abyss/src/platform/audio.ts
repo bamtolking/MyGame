@@ -4,6 +4,7 @@
 import { Rand, SR } from './dsp';
 import { renderNote, trackFor, type Inst, type Music, type NoteOut, type TrackDef } from './music';
 import { WARM_CORE, renderSfx, resolveSfx, sfxMeta, type SfxMeta } from './sfx';
+import '../classes/sfx';
 
 export type { Music };
 

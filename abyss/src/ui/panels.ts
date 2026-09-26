@@ -166,10 +166,11 @@ export function gamblerPanel(app: App): HTMLElement {
   const g = app.g!;
   const price = g.gamblePrice();
   const cats: [string, 'weapon' | 'offhand' | 'head' | 'chest' | 'gloves' | 'boots' | 'belt' | 'ring' | 'amulet', string][] = [
-    ['무기', 'weapon', CLASSES[g.hero.cls].startGear[0]], ['보조', 'offhand', g.hero.cls === 'warrior' ? 'kite' : g.hero.cls === 'rogue' ? 'hunterQuiver' : 'starOrb'], ['투구', 'head', 'helm'], ['갑옷', 'chest', 'chainMail'], ['장갑', 'gloves', 'chainGloves'], ['신발', 'boots', 'steelBoots'], ['허리띠', 'belt', 'leatherBelt'], ['반지', 'ring', 'ring'], ['목걸이', 'amulet', 'amulet']];
+    ['무기', 'weapon', CLASSES[g.hero.cls].startGear[0]], ['보조', 'offhand', CLASSES[g.hero.cls].offhandHint], ['투구', 'head', 'helm'], ['갑옷', 'chest', 'chainMail'], ['장갑', 'gloves', 'chainGloves'], ['신발', 'boots', 'steelBoots'], ['허리띠', 'belt', 'leatherBelt'], ['반지', 'ring', 'ring'], ['목걸이', 'amulet', 'amulet']];
+  const shown = cats.filter((c) => c[2]);
   return h('div', { class: 'panel' }, npcHeader(app, 'gambler', app.npcLine),
     h('div', { class: 'dim small' }, `무엇이 나올지 모르는 물건을 삽니다. 마법 이상 확정, 희귀·고유 등급이 나올 수도! (개당 ${fmt(price)} 금화)`),
-    h('div', { class: 'gamble' }, ...cats.map(([label, slot, base]) => h('button', { class: 'gbtn', disabled: g.hero.gold < price, onclick: () => { const it = g.gamble(slot); if (it) { app.lastGamble = it; app.refresh(true); } } },
+    h('div', { class: 'gamble' }, ...shown.map(([label, slot, base]) => h('button', { class: 'gbtn', disabled: g.hero.gold < price, onclick: () => { const it = g.gamble(slot); if (it) { app.lastGamble = it; app.refresh(true); } } },
       h('img', { src: itemIconUrl({ uid: 0, base, rarity: 'normal', ilvl: 1, req: 1, name: '', mods: [] }), alt: '' }), label))),
     app.lastGamble ? h('div', { class: 'gres' }, h('div', { class: 'tt', html: app.tipHtml(app.lastGamble, 'none') })) : null,
     h('div', { class: 'pfoot' }, h('span', { class: 'gold' }, `💰 ${fmt(g.hero.gold)}`)));

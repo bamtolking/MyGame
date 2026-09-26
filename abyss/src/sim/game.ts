@@ -1,6 +1,6 @@
 // Game: owns the hero, the current world and all player-facing commands. Advances with fixed steps.
 import { CLASSES, MAX_SKILL_RANK, SKILLS } from '../data/classes';
-import { BASE_BY_ID } from '../data/items';
+import { BASE_BY_ID, OFFHAND_WITH_2H } from '../data/items';
 import { INV_SIZE, LAST_FLOOR, MAX_POTIONS, MAX_SCROLLS, PRICES, STASH_SIZE, floorMonsterLevel, floorName } from '../data/zones';
 import { separate, updateMonster } from './ai';
 import { autoPickup, updateAreas, updateProjs, useProp, wake } from './combat';
@@ -10,6 +10,7 @@ import { astar, circleFree, computeFlow, los, moveCircle, nearestWalkable, walkL
 import { Rng } from './rng';
 import { tryCast, updateAct } from './skills';
 import { computeStats } from './stats';
+import '../classes/sim';
 import {
   EQUIP_SLOTS, type Attrs, type ClassId, type EquipSlot, type GEvent, type Hero, type Intent, type Item, type Prop, type Rarity, type World,
 } from './types';
@@ -289,7 +290,7 @@ export class Game {
     if (!canEquipClass(it, h.cls)) return `${CLASSES[h.cls].name}은(는) 사용할 수 없는 물건이다.`;
     if (it.req > h.level) return `레벨 ${it.req} 이상이어야 사용할 수 있다.`;
     const b = baseOf(it);
-    if (b.slot === 'offhand' && b.cat !== 'quiver' && h.equip.weapon && baseOf(h.equip.weapon).twoHanded) return '양손 무기를 들고 있어 함께 쓸 수 없다.';
+    if (b.slot === 'offhand' && !OFFHAND_WITH_2H.has(b.cat) && h.equip.weapon && baseOf(h.equip.weapon).twoHanded) return '양손 무기를 들고 있어 함께 쓸 수 없다.';
     return null;
   }
   equipFromInv(i: number, slotOverride?: EquipSlot): boolean {
@@ -300,7 +301,7 @@ export class Game {
     if (err) { this.msg(err, '#ff8080'); this.emit({ t: 'sfx', id: 'error' }); return false; }
     const b = baseOf(it);
     const slot = slotOverride && (b.slot === 'ring') && (slotOverride === 'ring1' || slotOverride === 'ring2') ? slotOverride : this.equipSlotFor(it);
-    if (slot === 'weapon' && b.twoHanded && h.equip.offhand && baseOf(h.equip.offhand).cat !== 'quiver') {
+    if (slot === 'weapon' && b.twoHanded && h.equip.offhand && !OFFHAND_WITH_2H.has(baseOf(h.equip.offhand).cat)) {
       const free = h.inv.findIndex((x, j) => x === null && j !== i);
       if (free < 0 && h.equip.weapon) { this.msg('방패를 넣을 가방 공간이 없다.', '#ff8080'); return false; }
       const off = h.equip.offhand; h.equip.offhand = null;

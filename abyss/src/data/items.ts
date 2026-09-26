@@ -3,44 +3,48 @@ import type { ClassId, ModKey, Mod, Slot } from '../sim/types';
 
 export type ItemCat =
   | 'sword' | 'axe' | 'mace' | 'sword2h' | 'axe2h' | 'bow' | 'staff' | 'wand'
-  | 'shield' | 'quiver' | 'orb'
+  | 'spear' | 'claw' | 'knuckle' | 'scythe'
+  | 'shield' | 'quiver' | 'orb' | 'pouch' | 'skull' | 'totem'
   | 'helm' | 'chest' | 'gloves' | 'boots' | 'belt' | 'ring' | 'amulet';
 
 export interface BaseItem {
   id: string; name: string; slot: Slot; cat: ItemCat; qlvl: number;
   dmg?: [number, number]; speed?: number; twoHanded?: boolean;
   armor?: [number, number]; block?: number;
-  cls?: ClassId;
+  /** Classes that may equip it (none = everyone). */
+  cls?: ClassId | ClassId[];
+  /** Spell weapon/offhand: can roll caster affixes (mana, spell damage, energy…). */
+  caster?: boolean;
   implicit?: Mod[];
   /** Visual tier 0-4 (icon / sprite detail). */
   tier: number;
 }
 
-const W = (id: string, name: string, cat: ItemCat, qlvl: number, dmg: [number, number], speed: number, cls: ClassId, tier: number, extra: Partial<BaseItem> = {}): BaseItem =>
+const W = (id: string, name: string, cat: ItemCat, qlvl: number, dmg: [number, number], speed: number, cls: ClassId | ClassId[], tier: number, extra: Partial<BaseItem> = {}): BaseItem =>
   ({ id, name, slot: 'weapon', cat, qlvl, dmg, speed, cls, tier, ...extra });
 const A = (id: string, name: string, slot: Slot, cat: ItemCat, qlvl: number, armor: [number, number], tier: number, extra: Partial<BaseItem> = {}): BaseItem =>
   ({ id, name, slot, cat, qlvl, armor, tier, ...extra });
 
 export const BASES: BaseItem[] = [
   // warrior one-handers
-  W('shortSword', '짧은 검', 'sword', 1, [2, 6], 1.5, 'warrior', 0),
-  W('longSword', '장검', 'sword', 6, [5, 12], 1.45, 'warrior', 1),
-  W('bastard', '바스타드 소드', 'sword', 12, [9, 20], 1.4, 'warrior', 2),
-  W('runeSword', '룬 검', 'sword', 19, [14, 30], 1.45, 'warrior', 3),
-  W('demonBlade', '악마의 칼날', 'sword', 27, [21, 43], 1.5, 'warrior', 4),
+  W('shortSword', '짧은 검', 'sword', 1, [2, 6], 1.5, ['warrior', 'paladin'], 0),
+  W('longSword', '장검', 'sword', 6, [5, 12], 1.45, ['warrior', 'paladin'], 1),
+  W('bastard', '바스타드 소드', 'sword', 12, [9, 20], 1.4, ['warrior', 'paladin'], 2),
+  W('runeSword', '룬 검', 'sword', 19, [14, 30], 1.45, ['warrior', 'paladin'], 3),
+  W('demonBlade', '악마의 칼날', 'sword', 27, [21, 43], 1.5, ['warrior', 'paladin'], 4),
   W('hatchet', '손도끼', 'axe', 2, [3, 7], 1.4, 'warrior', 0),
   W('battleAxe', '전투 도끼', 'axe', 8, [6, 15], 1.35, 'warrior', 1),
   W('berserkAxe', '광전사 도끼', 'axe', 16, [12, 27], 1.35, 'warrior', 3),
   W('execAxe', '처형자의 도끼', 'axe', 25, [19, 41], 1.35, 'warrior', 4),
-  W('club', '곤봉', 'mace', 1, [2, 7], 1.3, 'warrior', 0),
-  W('flail', '철퇴', 'mace', 7, [6, 13], 1.3, 'warrior', 1),
-  W('morningStar', '모닝스타', 'mace', 14, [10, 23], 1.3, 'warrior', 2),
-  W('warHammer', '전쟁 망치', 'mace', 22, [17, 38], 1.25, 'warrior', 3),
+  W('club', '곤봉', 'mace', 1, [2, 7], 1.3, ['warrior', 'paladin'], 0),
+  W('flail', '철퇴', 'mace', 7, [6, 13], 1.3, ['warrior', 'paladin'], 1),
+  W('morningStar', '모닝스타', 'mace', 14, [10, 23], 1.3, ['warrior', 'paladin'], 2),
+  W('warHammer', '전쟁 망치', 'mace', 22, [17, 38], 1.25, ['warrior', 'paladin'], 3),
   // warrior two-handers
-  W('greatSword', '대검', 'sword2h', 4, [8, 18], 1.1, 'warrior', 1, { twoHanded: true }),
-  W('greatAxe', '거대 도끼', 'axe2h', 12, [16, 35], 1.05, 'warrior', 2, { twoHanded: true }),
-  W('headsman', '참수자의 대검', 'sword2h', 21, [27, 56], 1.05, 'warrior', 3, { twoHanded: true }),
-  W('doomAxe', '파멸의 전투 도끼', 'axe2h', 29, [38, 78], 1.05, 'warrior', 4, { twoHanded: true }),
+  W('greatSword', '대검', 'sword2h', 4, [8, 18], 1.1, ['warrior', 'voidknight'], 1, { twoHanded: true }),
+  W('greatAxe', '거대 도끼', 'axe2h', 12, [16, 35], 1.05, ['warrior', 'voidknight'], 2, { twoHanded: true }),
+  W('headsman', '참수자의 대검', 'sword2h', 21, [27, 56], 1.05, ['warrior', 'voidknight'], 3, { twoHanded: true }),
+  W('doomAxe', '파멸의 전투 도끼', 'axe2h', 29, [38, 78], 1.05, ['warrior', 'voidknight'], 4, { twoHanded: true }),
   // rogue bows (two-handed, quiver allowed)
   W('shortBow', '짧은 활', 'bow', 1, [2, 5], 1.55, 'rogue', 0, { twoHanded: true }),
   W('huntBow', '사냥 활', 'bow', 5, [4, 10], 1.5, 'rogue', 1, { twoHanded: true }),
@@ -48,25 +52,61 @@ export const BASES: BaseItem[] = [
   W('compBow', '합성궁', 'bow', 18, [13, 28], 1.5, 'rogue', 3, { twoHanded: true }),
   W('shadowBow', '그림자 활', 'bow', 26, [20, 42], 1.5, 'rogue', 4, { twoHanded: true }),
   // sorcerer
-  W('oakStaff', '참나무 지팡이', 'staff', 1, [3, 6], 1.25, 'sorcerer', 0, { twoHanded: true, implicit: [{ k: 'spellDmg', v: 10 }] }),
-  W('runeStaff', '룬 지팡이', 'staff', 9, [7, 14], 1.25, 'sorcerer', 1, { twoHanded: true, implicit: [{ k: 'spellDmg', v: 18 }] }),
-  W('archStaff', '대마법사 지팡이', 'staff', 18, [13, 26], 1.25, 'sorcerer', 3, { twoHanded: true, implicit: [{ k: 'spellDmg', v: 26 }] }),
-  W('abyssStaff', '심연의 지팡이', 'staff', 27, [21, 41], 1.25, 'sorcerer', 4, { twoHanded: true, implicit: [{ k: 'spellDmg', v: 35 }] }),
-  W('boneWand', '뼈 완드', 'wand', 3, [2, 6], 1.4, 'sorcerer', 0, { implicit: [{ k: 'mp', v: 10 }] }),
-  W('crystalWand', '수정 완드', 'wand', 12, [6, 13], 1.4, 'sorcerer', 2, { implicit: [{ k: 'mp', v: 20 }] }),
-  W('lichWand', '망자의 완드', 'wand', 23, [12, 25], 1.4, 'sorcerer', 3, { implicit: [{ k: 'mp', v: 30 }] }),
+  W('oakStaff', '참나무 지팡이', 'staff', 1, [3, 6], 1.25, ['sorcerer', 'druid'], 0, { caster: true, twoHanded: true, implicit: [{ k: 'spellDmg', v: 10 }] }),
+  W('runeStaff', '룬 지팡이', 'staff', 9, [7, 14], 1.25, ['sorcerer', 'druid'], 1, { caster: true, twoHanded: true, implicit: [{ k: 'spellDmg', v: 18 }] }),
+  W('archStaff', '대마법사 지팡이', 'staff', 18, [13, 26], 1.25, ['sorcerer', 'druid'], 3, { caster: true, twoHanded: true, implicit: [{ k: 'spellDmg', v: 26 }] }),
+  W('abyssStaff', '심연의 지팡이', 'staff', 27, [21, 41], 1.25, ['sorcerer', 'druid'], 4, { caster: true, twoHanded: true, implicit: [{ k: 'spellDmg', v: 35 }] }),
+  W('graveWand', '무덤 완드', 'wand', 1, [2, 5], 1.4, 'necromancer', 0, { caster: true, implicit: [{ k: 'mp', v: 6 }] }),
+  W('boneWand', '뼈 완드', 'wand', 3, [2, 6], 1.4, ['sorcerer', 'necromancer'], 0, { caster: true, implicit: [{ k: 'mp', v: 10 }] }),
+  W('crystalWand', '수정 완드', 'wand', 12, [6, 13], 1.4, ['sorcerer', 'necromancer'], 2, { caster: true, implicit: [{ k: 'mp', v: 20 }] }),
+  W('lichWand', '망자의 완드', 'wand', 23, [12, 25], 1.4, ['sorcerer', 'necromancer'], 3, { caster: true, implicit: [{ k: 'mp', v: 30 }] }),
+  // lancer spears (two-handed; the lancer's reach makes them strike from further away)
+  W('pike', '장창', 'spear', 1, [3, 8], 1.35, 'lancer', 0, { twoHanded: true }),
+  W('partisan', '파르티잔', 'spear', 7, [7, 16], 1.35, 'lancer', 1, { twoHanded: true }),
+  W('glaive', '글레이브', 'spear', 14, [12, 27], 1.3, 'lancer', 2, { twoHanded: true }),
+  W('dragonLance', '용기병의 창', 'spear', 21, [19, 41], 1.3, 'lancer', 3, { twoHanded: true }),
+  W('stormLance', '폭풍의 창', 'spear', 29, [28, 58], 1.3, 'lancer', 4, { twoHanded: true }),
+  // assassin claws (fast)
+  W('katar', '카타르', 'claw', 1, [2, 5], 1.75, 'assassin', 0),
+  W('bladeClaw', '칼날 발톱', 'claw', 8, [5, 11], 1.75, 'assassin', 1),
+  W('hookClaw', '갈고리 발톱', 'claw', 15, [9, 19], 1.7, 'assassin', 2),
+  W('viperClaw', '독사 발톱', 'claw', 22, [14, 29], 1.75, 'assassin', 3, { implicit: [{ k: 'poisonDmg', v: 12 }] }),
+  W('shadowClaw', '그림자 발톱', 'claw', 29, [20, 40], 1.8, 'assassin', 4),
+  // monk knuckles (a pair, so two-handed)
+  W('wraps', '천 붕대', 'knuckle', 1, [2, 5], 1.85, 'monk', 0, { twoHanded: true }),
+  W('ironKnuckle', '쇠 권갑', 'knuckle', 7, [5, 11], 1.85, 'monk', 1, { twoHanded: true }),
+  W('tigerFist', '호랑이 권갑', 'knuckle', 14, [9, 19], 1.85, 'monk', 2, { twoHanded: true }),
+  W('dragonFist', '용의 권갑', 'knuckle', 21, [14, 29], 1.85, 'monk', 3, { twoHanded: true }),
+  W('heavenFist', '천상의 권갑', 'knuckle', 29, [20, 41], 1.9, 'monk', 4, { twoHanded: true }),
+  // necromancer scythes
+  W('boneScythe', '뼈 낫', 'scythe', 6, [7, 15], 1.2, 'necromancer', 1, { twoHanded: true, caster: true, implicit: [{ k: 'spellDmg', v: 12 }] }),
+  W('graveScythe', '무덤지기의 낫', 'scythe', 16, [13, 27], 1.2, 'necromancer', 3, { twoHanded: true, caster: true, implicit: [{ k: 'spellDmg', v: 22 }] }),
+  W('soulScythe', '영혼 수확자', 'scythe', 26, [21, 43], 1.2, 'necromancer', 4, { twoHanded: true, caster: true, implicit: [{ k: 'spellDmg', v: 32 }] }),
+  // void knight greatswords
+  W('rustblade', '녹슨 대검', 'sword2h', 1, [5, 11], 1.15, 'voidknight', 0, { twoHanded: true }),
+  W('duskblade', '황혼의 대검', 'sword2h', 10, [13, 28], 1.1, 'voidknight', 2, { twoHanded: true }),
+  W('voidblade', '공허의 대검', 'sword2h', 25, [30, 62], 1.1, 'voidknight', 4, { twoHanded: true }),
   // offhands
-  A('buckler', '버클러', 'offhand', 'shield', 1, [3, 6], 0, { cls: 'warrior', block: 15 }),
-  A('kite', '카이트 실드', 'offhand', 'shield', 7, [10, 16], 1, { cls: 'warrior', block: 20 }),
-  A('tower', '탑 실드', 'offhand', 'shield', 14, [20, 30], 2, { cls: 'warrior', block: 24 }),
-  A('gothic', '고딕 방패', 'offhand', 'shield', 22, [32, 46], 3, { cls: 'warrior', block: 27 }),
-  A('aegis', '심연의 방패', 'offhand', 'shield', 30, [48, 64], 4, { cls: 'warrior', block: 30 }),
+  A('buckler', '버클러', 'offhand', 'shield', 1, [3, 6], 0, { cls: ['warrior', 'paladin'], block: 15 }),
+  A('kite', '카이트 실드', 'offhand', 'shield', 7, [10, 16], 1, { cls: ['warrior', 'paladin'], block: 20 }),
+  A('tower', '탑 실드', 'offhand', 'shield', 14, [20, 30], 2, { cls: ['warrior', 'paladin'], block: 24 }),
+  A('gothic', '고딕 방패', 'offhand', 'shield', 22, [32, 46], 3, { cls: ['warrior', 'paladin'], block: 27 }),
+  A('aegis', '심연의 방패', 'offhand', 'shield', 30, [48, 64], 4, { cls: ['warrior', 'paladin'], block: 30 }),
   A('leatherQuiver', '가죽 화살통', 'offhand', 'quiver', 1, [0, 0], 0, { cls: 'rogue', implicit: [{ k: 'ias', v: 5 }] }),
   A('hunterQuiver', '사냥꾼 화살통', 'offhand', 'quiver', 10, [0, 0], 2, { cls: 'rogue', implicit: [{ k: 'ias', v: 8 }, { k: 'crit', v: 2 }] }),
   A('demonQuiver', '악마 화살통', 'offhand', 'quiver', 21, [0, 0], 4, { cls: 'rogue', implicit: [{ k: 'ias', v: 10 }, { k: 'crit', v: 4 }] }),
   A('crystalOrb', '수정 구슬', 'offhand', 'orb', 3, [0, 0], 0, { cls: 'sorcerer', implicit: [{ k: 'spellDmg', v: 8 }] }),
   A('starOrb', '별빛 구슬', 'offhand', 'orb', 12, [0, 0], 2, { cls: 'sorcerer', implicit: [{ k: 'spellDmg', v: 14 }] }),
   A('voidOrb', '공허의 구슬', 'offhand', 'orb', 23, [0, 0], 4, { cls: 'sorcerer', implicit: [{ k: 'spellDmg', v: 20 }] }),
+  A('knifePouch', '투척 단검 주머니', 'offhand', 'pouch', 1, [0, 0], 0, { cls: 'assassin', implicit: [{ k: 'crit', v: 2 }] }),
+  A('venomPouch', '맹독 단검 주머니', 'offhand', 'pouch', 12, [0, 0], 2, { cls: 'assassin', implicit: [{ k: 'crit', v: 4 }, { k: 'ias', v: 5 }] }),
+  A('shadowPouch', '그림자 단검 주머니', 'offhand', 'pouch', 23, [0, 0], 4, { cls: 'assassin', implicit: [{ k: 'crit', v: 6 }, { k: 'ias', v: 8 }] }),
+  A('shrunkenSkull', '말린 해골', 'offhand', 'skull', 1, [2, 4], 0, { cls: 'necromancer', caster: true, implicit: [{ k: 'spellDmg', v: 6 }, { k: 'hp', v: 5 }] }),
+  A('hexSkull', '저주받은 해골', 'offhand', 'skull', 11, [6, 10], 2, { cls: 'necromancer', caster: true, implicit: [{ k: 'spellDmg', v: 12 }, { k: 'hp', v: 12 }] }),
+  A('lichSkull', '리치의 해골', 'offhand', 'skull', 22, [12, 18], 4, { cls: 'necromancer', caster: true, implicit: [{ k: 'spellDmg', v: 18 }, { k: 'hp', v: 20 }] }),
+  A('woodTotem', '나무 토템', 'offhand', 'totem', 1, [1, 3], 0, { cls: 'druid', caster: true, implicit: [{ k: 'spellDmg', v: 6 }, { k: 'hpRegen', v: 0.5 }] }),
+  A('beastTotem', '짐승 토템', 'offhand', 'totem', 11, [5, 9], 2, { cls: 'druid', caster: true, implicit: [{ k: 'spellDmg', v: 12 }, { k: 'hpRegen', v: 1.5 }] }),
+  A('stormTotem', '폭풍 토템', 'offhand', 'totem', 22, [10, 16], 4, { cls: 'druid', caster: true, implicit: [{ k: 'spellDmg', v: 18 }, { k: 'hpRegen', v: 3 }] }),
   // armor
   A('leatherCap', '가죽 모자', 'head', 'helm', 1, [2, 4], 0),
   A('helm', '투구', 'head', 'helm', 6, [6, 10], 1),
@@ -96,9 +136,18 @@ export const BASES: BaseItem[] = [
 ];
 export const BASE_BY_ID: Record<string, BaseItem> = Object.fromEntries(BASES.map((b) => [b.id, b]));
 
+/** Offhands that can be carried alongside a two-handed weapon (worn on the back / belt). */
+export const OFFHAND_WITH_2H = new Set<ItemCat>(['quiver', 'totem']);
+
+/** True when class `cls` may use base `b`. */
+export function baseForClass(b: BaseItem, cls: ClassId): boolean {
+  return !b.cls || (Array.isArray(b.cls) ? b.cls.includes(cls) : b.cls === cls);
+}
+
 export const CAT_NAMES: Record<ItemCat, string> = {
   sword: '한손 검', axe: '한손 도끼', mace: '둔기', sword2h: '양손 검', axe2h: '양손 도끼', bow: '활', staff: '지팡이', wand: '완드',
-  shield: '방패', quiver: '화살통', orb: '마법 구슬', helm: '투구', chest: '갑옷', gloves: '장갑', boots: '신발', belt: '허리띠', ring: '반지', amulet: '목걸이',
+  spear: '창', claw: '발톱', knuckle: '권갑', scythe: '낫',
+  shield: '방패', quiver: '화살통', orb: '마법 구슬', pouch: '단검 주머니', skull: '해골', totem: '토템', helm: '투구', chest: '갑옷', gloves: '장갑', boots: '신발', belt: '허리띠', ring: '반지', amulet: '목걸이',
 };
 
 // ---------------------------------------------------------------- affixes
@@ -156,7 +205,9 @@ export const AFFIXES: AffixDef[] = [
 /** Which affix groups an item base can roll. */
 export function slotGroups(b: BaseItem): SlotGroup[] {
   const g: SlotGroup[] = [];
-  if (b.slot === 'weapon') { g.push('weapon'); if (b.cls === 'sorcerer') g.push('caster'); }
+  if (b.slot === 'weapon') { g.push('weapon'); if (b.caster) g.push('caster'); }
+  if (b.cat === 'skull' || b.cat === 'totem') g.push('orb');
+  if (b.cat === 'pouch') g.push('quiver');
   if (b.cat === 'shield') g.push('shield');
   if (b.cat === 'quiver') g.push('quiver');
   if (b.cat === 'orb') g.push('orb');
@@ -193,6 +244,13 @@ export const UNIQUES: UniqueDef[] = [
   { id: 'guardianWall', name: '수호자의 벽', base: 'tower', req: 15, mods: [U('block', 12), U('resAll', 25), U('armorPct', 120), U('vit', 10)], lore: '무너진 성문에서 뜯어낸 문짝.' },
   { id: 'hunterQuiverU', name: '사냥꾼의 긍지', base: 'hunterQuiver', req: 9, mods: [U('ias', 15), U('crit', 6), U('dex', 10), U('dmgPct', 15)], lore: '빈 화살통은 사냥꾼의 수치다.' },
   { id: 'starfall', name: '별의 낙하', base: 'starOrb', req: 14, mods: [U('spellDmg', 30), U('fireDmg', 4, 6, 10, 16), U('ene', 12), U('mp', 25)], lore: '구슬 속에서 별이 떨어진다.' },
+  { id: 'dawnbringer', name: '새벽을 부르는 자', base: 'morningStar', req: 14, mods: [U('ed', 90, 130), U('lightDmg', 3, 3, 30, 45), U('resAll', 15), U('hpRegen', 3)], lore: '어둠 속에서도 새벽빛이 스며 나온다.' },
+  { id: 'silkThread', name: '비단실', base: 'hookClaw', req: 15, mods: [U('ed', 90, 130), U('crit', 8), U('ias', 20), U('dex', 12)], lore: '베인 줄도 모르고 쓰러진다.' },
+  { id: 'skyPiercer', name: '하늘 꿰뚫기', base: 'dragonLance', req: 21, mods: [U('ed', 110, 150), U('lightDmg', 4, 4, 40, 60), U('str', 12), U('ms', 10)], lore: '용을 떨어뜨린 창.' },
+  { id: 'oldGrove', name: '고목의 심장', base: 'beastTotem', req: 11, mods: [U('spellDmg', 30, 40), U('hpRegen', 3), U('vit', 12), U('resPoison', 30)], lore: '천 년 된 나무의 심장이 아직 뛴다.' },
+  { id: 'lichGrin', name: '리치의 웃음', base: 'hexSkull', req: 12, mods: [U('spellDmg', 30, 45), U('manaKill', 4), U('ene', 15), U('skills', 1)], lore: '밤마다 턱이 딱딱 부딪힌다.' },
+  { id: 'stillWater', name: '고요한 물', base: 'tigerFist', req: 14, mods: [U('ed', 90, 120), U('ias', 20), U('dex', 15), U('lifeSteal', 4)], lore: '흐르지 않으나 모든 것을 삼킨다.' },
+  { id: 'eclipseEdge', name: '일식의 칼날', base: 'duskblade', req: 12, mods: [U('ed', 100, 140), U('lifeSteal', 6), U('str', 12), U('resCold', 25)], lore: '해가 가려지면 칼날이 운다.' },
   { id: 'bloodPact', name: '피의 서약', base: 'gothicPlate', req: 24, mods: [U('hp', 80), U('lifeSteal', 4), U('str', 15), U('armorPct', 80)], lore: '피로 쓴 계약서는 찢을 수 없다.' },
 ];
 export const UNIQUE_BY_ID: Record<string, UniqueDef> = Object.fromEntries(UNIQUES.map((u) => [u.id, u]));
@@ -202,7 +260,8 @@ export const RARE_A = ['파멸', '공포', '해골', '피', '영혼', '악몽', 
 export const RARE_B: Partial<Record<ItemCat, string[]>> & { any: string[] } = {
   sword: ['송곳니', '칼날', '이빨', '가시'], axe: ['쐐기', '도끼날', '부리'], mace: ['망치', '주먹', '분쇄자'], sword2h: ['대검', '처형자', '송곳니'], axe2h: ['절단기', '도끼날'],
   bow: ['활시위', '날개', '깃털', '뿔'], staff: ['지팡이', '막대', '가지'], wand: ['손가락', '뼈', '가시'],
-  shield: ['방벽', '성벽', '비늘'], quiver: ['화살집', '둥지'], orb: ['눈', '구체', '별'],
+  spear: ['창날', '뿔', '침'], claw: ['발톱', '송곳니', '손톱'], knuckle: ['주먹', '손마디', '권'], scythe: ['낫', '수확자', '초승달'],
+  shield: ['방벽', '성벽', '비늘'], quiver: ['화살집', '둥지'], orb: ['눈', '구체', '별'], pouch: ['주머니', '비수'], skull: ['두개골', '해골', '머리'], totem: ['토템', '우상', '뿌리'],
   helm: ['왕관', '가면', '두개골', '관'], chest: ['갑주', '가죽', '껍질', '외투'], gloves: ['손아귀', '발톱', '손'], boots: ['발굽', '걸음', '발자국'], belt: ['사슬', '매듭', '허리띠'],
   ring: ['고리', '매듭', '눈'], amulet: ['부적', '심장', '눈물', '표식'],
   any: ['울부짖음', '속삭임'],

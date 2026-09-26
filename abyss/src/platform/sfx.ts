@@ -2,7 +2,7 @@
 // variants are rendered per sound so rapid repeats (hits, swings) never sound machine-gunned.
 import { Rand, SR, amp, bell, buf, choirNote, crackle, drive, fade, glide, lay, lin, mix, noise, norm, osc, perc, pluck, reverse, ring, svf, swell, upsample, voice, wander, type Fn } from './dsp';
 
-type Recipe = (r: Rand) => Float32Array;
+export type Recipe = (r: Rand) => Float32Array;
 export interface SfxMeta { v: number; g: number; pj: number; cd: number; verb: number; max: number }
 const M = (g: number, o: Partial<SfxMeta> = {}): SfxMeta => ({ v: 1, g, pj: 0.03, cd: 30, verb: 0.15, max: 3, ...o });
 const COMBAT = { v: 4, pj: 0.07, cd: 22, max: 4 };
@@ -277,3 +277,10 @@ export function renderSfx(name: string, variant: number): Float32Array {
 export const WARM_CORE = ['swing', 'hit', 'hitHeavy', 'crit', 'hitArrow', 'hitMagic', 'hitFire', 'hitCold', 'hitLight', 'hitPoison', 'heroHit', 'mswing', 'mswingHeavy', 'gib', 'shatter', 'burnDie', 'block', 'evade',
   'gold', 'itemDrop', 'pickup', 'potPick', 'drop', 'potion', 'equip', 'click', 'open', 'error', 'nomana', 'barrel', 'chest', 'stairs', 'portal', 'waypoint', 'learn', 'rareDrop', 'uniqueDrop', 'levelup', 'eliteKill', 'explode', 'stomp', 'roar', 'die_default'];
 export const ALL_SFX = Object.keys(RECIPES);
+
+// ---------------------------------------------------------------- class modules
+/** Registers a sound for class modules (src/classes/<id>/sfx.ts). Meta defaults: M(gain, { v, pj, cd, verb, max }). */
+export function registerSfx(name: string, recipe: Recipe, meta: SfxMeta): void { RECIPES[name] = [recipe, meta]; }
+/** Plays an existing sound under another name (e.g. 'cast_pl_zeal' → 'swingHeavy'); '' silences it. */
+export function aliasSfx(name: string, to: string): void { ALIAS[name] = to; }
+export { M, COMBAT, click, thud, band, low, high, whoosh, squelch, boom, debris, sparkle, zap, fireRoar, metal, twang, env3, growl, chord, bones, hitBody };

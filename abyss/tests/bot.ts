@@ -12,11 +12,38 @@ import type { ClassId, EquipSlot, Hero, Item, Monster } from '../src/sim/types';
 export interface FloorLog { floor: number; level: number; time: number; deaths: number; kills: number; potUsed: number; gold: number; dps: number; hp: number; armor: number }
 export interface BotResult { cls: ClassId; seed: number; reached: number; level: number; time: number; deaths: number; floors: FloorLog[]; won: boolean; stuck: number; errors: string[] }
 
-const SKILL_PRIORITY: Record<ClassId, number[]> = {
+/** Data-driven choice from SkillDef.ai hints (used for the seven unlockable classes). */
+function genericPick(g: Game, m: Monster, crowd: number, d: number, ok: (s: number) => boolean): number {
+  const h = g.hero;
+  const c = CLASSES[h.cls];
+  const big = m.rank === 'boss' || m.rank === 'unique';
+  let best = -1, bestScore = 0;
+  for (let s = 4; s >= 0; s--) {
+    if (!ok(s)) continue;
+    const def = SKILLS[c.skills[s]];
+    const ai = def.ai ?? {};
+    if (ai.maxDist !== undefined && d > ai.maxDist) continue;
+    if (ai.minDist !== undefined && d < ai.minDist) continue;
+    if (ai.lowHp !== undefined && h.hp > h.st.maxHp * ai.lowHp && !(ai.crowd !== undefined && crowd >= ai.crowd + 1)) continue;
+    if (ai.buff && def.id && h.buffs.length && h.buffs.some((b) => b.id === def.id)) continue;
+    if (def.kind === 'melee' && d > h.st.reach + h.r + m.r + 0.3) continue;
+    if (def.kind !== 'melee' && def.kind !== 'self' && d > def.range + 0.5) continue;
+    if (def.kind === 'self' && def.range > 0 && d > def.range + 0.5 && !ai.buff) continue;
+    const wants = (ai.crowd === undefined || crowd >= ai.crowd) || (ai.boss && big);
+    if (!wants) continue;
+    const score = 1 + s * 0.3 + (ai.boss && big ? 2 : 0) + (ai.crowd !== undefined ? 0.5 : 0);
+    if (score > bestScore) { bestScore = score; best = s; }
+  }
+  return best;
+}
+
+const SKILL_PRIORITY: Partial<Record<ClassId, number[]>> = {
   warrior: [0, 1, 0, 1, 2, 0, 1, 3, 4, 1, 0, 2, 3, 4],
   rogue: [0, 1, 0, 1, 2, 1, 0, 2, 3, 4, 1, 2, 4, 0],
   sorcerer: [0, 1, 0, 2, 1, 2, 0, 2, 3, 4, 2, 0, 4, 1],
 };
+/** Generic learning order for the unlockable classes: main attack first, then everything as it unlocks. */
+const GENERIC_PRIORITY = [0, 1, 0, 1, 2, 0, 1, 2, 3, 4, 0, 1, 2, 4, 3];
 
 function score(h: Hero, diff: number): number {
   const st = computeStats(h, diff);
@@ -53,7 +80,7 @@ function spendPoints(g: Game): void {
   while (h.freePts > 0) { g.allocAttr(order[i % order.length]); i++; }
   let guard = 0;
   while (h.skillPts > 0 && guard++ < 50) {
-    const pri = SKILL_PRIORITY[h.cls];
+    const pri = SKILL_PRIORITY[h.cls] ?? GENERIC_PRIORITY;
     let learned = false;
     for (const s of pri) if (g.learnSkill(s)) { learned = true; break; }
     if (!learned) for (let s = 0; s < 5; s++) if (g.learnSkill(s)) { learned = true; break; }
@@ -121,6 +148,7 @@ function pickSkill(g: Game, m: Monster, crowd: number): number {
     if (ok(1)) return 1;
     return -1;
   }
+  if (h.cls !== 'sorcerer') return genericPick(g, m, crowd, d, ok);
   if (ok(4) && (crowd >= 4 || m.rank === 'boss')) return 4;
   if (ok(1) && d < 3 && crowd >= 2) return 1;
   if (ok(2) && crowd >= 3) return 2;

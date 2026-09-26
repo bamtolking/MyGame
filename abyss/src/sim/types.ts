@@ -1,6 +1,7 @@
 // Core shared types. The simulation (src/sim) is plain TypeScript with no DOM access.
 
-export type ClassId = 'warrior' | 'rogue' | 'sorcerer';
+export type ClassId = 'warrior' | 'rogue' | 'sorcerer' | 'paladin' | 'assassin' | 'lancer' | 'druid' | 'necromancer' | 'monk' | 'voidknight';
+export const CLASS_IDS: ClassId[] = ['warrior', 'rogue', 'sorcerer', 'paladin', 'assassin', 'lancer', 'necromancer', 'druid', 'monk', 'voidknight'];
 export type Elem = 'phys' | 'fire' | 'cold' | 'light' | 'poison';
 export const ELEMS: Elem[] = ['phys', 'fire', 'cold', 'light', 'poison'];
 
@@ -51,6 +52,8 @@ export interface HeroStats {
   lifeSteal: number; manaSteal: number; lifeKill: number; manaKill: number;
   moveSpeed: number; block: number; mf: number; gf: number; light: number; thorns: number;
   skills: number; dmgReduce: number; dodge: number;
+  /** Percent of incoming damage prevented by buffs (bone armor, void shroud…). */
+  dmgTakenPct: number;
   ranged: boolean; reach: number;
 }
 
@@ -69,8 +72,17 @@ export interface Dmg {
   srcX?: number; srcY?: number;
 }
 
-export type BuffId = 'warcry' | 'berserk' | 'evade' | 'shrineDmg' | 'shrineArmor' | 'shrineXp' | 'shrineMf' | 'shrineSpeed';
-export interface Buff { id: BuffId; t: number; dur: number; v: number }
+/** Built-in buffs have hard-coded effects; class skills use any id and describe their effect with `mods`. */
+export type BuffId = 'warcry' | 'berserk' | 'evade' | 'shrineDmg' | 'shrineArmor' | 'shrineXp' | 'shrineMf' | 'shrineSpeed' | (string & {});
+/** Flat stat bonuses a buff grants while active (percentages are in points, e.g. 30 = +30%). */
+export interface BuffMods {
+  dmgPct?: number; ias?: number; armorPct?: number; armor?: number; lifeSteal?: number; manaSteal?: number;
+  dodge?: number; ms?: number; hpRegen?: number; mpRegen?: number; crit?: number; critDmg?: number;
+  resAll?: number; block?: number; thorns?: number;
+  /** Percent less damage taken (capped at 60). */
+  dmgTaken?: number;
+}
+export interface Buff { id: BuffId; t: number; dur: number; v: number; mods?: BuffMods; color?: string; name?: string }
 
 export type HeroActKind = 'attack' | 'skill' | 'leap' | 'dash' | 'channel';
 export interface HeroAct {
@@ -80,6 +92,8 @@ export interface HeroAct {
   tx: number; ty: number; targetId: number;
   fx: number; fy: number; // origin (for leap / dash)
   n?: number;             // channel counter
+  ids?: number[];         // per-act bookkeeping for class skills (e.g. monsters already struck)
+  data?: Record<string, number>;
 }
 
 export type Intent =
@@ -153,21 +167,42 @@ export interface Drop {
   t: number;
 }
 
-export type ProjKind = 'arrow' | 'bolt' | 'fireball' | 'explode' | 'firebolt' | 'coldbolt' | 'bone' | 'spit' | 'blood' | 'lightning' | 'poison' | 'spark' | 'shadow' | 'meteor' | 'frost' | 'skull' | 'orb';
+/** Built-in projectile kinds; class modules add their own (drawn via the render registry). */
+export type ProjKind = 'arrow' | 'bolt' | 'fireball' | 'explode' | 'firebolt' | 'coldbolt' | 'bone' | 'spit' | 'blood' | 'lightning' | 'poison' | 'spark' | 'shadow' | 'meteor' | 'frost' | 'skull' | 'orb' | (string & {});
 export interface Proj {
   id: number; kind: ProjKind; side: 'hero' | 'mon';
   x: number; y: number; vx: number; vy: number; r: number;
   dmg: Dmg; life: number; pierce: number; hit: number[];
   aoe: number; aoeMult: number; homing: number; targetId: number; src: number; age: number;
   bounce?: number;
+  /** Registry key of a custom motion (sim/registry PROJ_MOTION), replacing straight flight. */
+  motion?: string;
+  /** Registry key of an extra on-hit effect (sim/registry PROJ_HIT). */
+  onHit?: string;
+  /** Monsters may be hit again after this many seconds (0 = each monster once). */
+  rehit?: number;
+  /** Does not stop at walls (spirits, waves). */
+  ghost?: boolean;
+  data?: Record<string, number>;
 }
 
-export type AreaKind = 'rain' | 'meteor' | 'burn' | 'nova' | 'poisonCloud' | 'firewave' | 'bossNova' | 'lightningRing' | 'stomp' | 'bonePrison' | 'telegraph' | 'strafe' | 'shock';
+export type AreaKind = 'rain' | 'meteor' | 'burn' | 'nova' | 'poisonCloud' | 'firewave' | 'bossNova' | 'lightningRing' | 'stomp' | 'bonePrison' | 'telegraph' | 'strafe' | 'shock' | (string & {});
+/**
+ * A ground effect. Generic behaviour is driven by fields/data so class skills rarely need code:
+ *  - tick > 0: damages every enemy inside each tick (else once when it triggers)
+ *  - follow: stays centred on the hero
+ *  - proj: sentry — each tick fires this projectile kind at the nearest enemy within data.range (default 7)
+ *  - data.heal: hero heals this much per tick while inside · data.pull: pulls enemies toward the centre (tiles/s)
+ *  - data.chill / data.fear: seconds of chill / flee applied to enemies inside each tick
+ *  - custom per-tick logic: sim/registry AREA_TICK[kind]
+ */
 export interface Area {
   id: number; kind: AreaKind; side: 'hero' | 'mon';
   x: number; y: number; r: number;
   t: number; dur: number; delay: number; tick: number; tickT: number;
   dmg: Dmg; hitIds: number[]; data: Record<string, number>;
+  follow?: boolean;
+  proj?: string;
 }
 
 export interface Decal { x: number; y: number; kind: 'blood' | 'bones' | 'rug' | 'crack' | 'rubble' | 'pentagram' | 'grass' | 'flowers' | 'path' | 'moss' | 'skull' | 'web'; v: number; rot: number; w?: number; h?: number }
