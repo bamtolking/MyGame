@@ -203,6 +203,7 @@ function render(t: string) {
   if (document.activeElement !== $q) $q.value = '';
   $back.hidden = !t;
   scrollToTop();
+  revealActiveTab();
   if (openQa >= 0) {
     const el = document.getElementById(`qa-${openQa}`);
     if (el) scrollToEl(el);
@@ -244,7 +245,16 @@ function selectTab(id: string) {
   // 탭 막대가 화면 위에 붙어 있을 만큼 내려와 있었다면, 새 패널의 처음이 보이게 올린다.
   const tabsTop = tabs.getBoundingClientRect().top - $scroller.getBoundingClientRect().top + $scroller.scrollTop;
   if ($scroller.scrollTop > tabsTop) $scroller.scrollTop = tabsTop;
-  tabs.querySelector<HTMLElement>(`[data-tab="${id}"]`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  revealActiveTab();
+}
+
+/** 탭 막대가 가로로 넘칠 때 선택된 탭이 보이게 (scrollIntoView는 액자 밖까지 움직일 수 있어 쓰지 않음) */
+function revealActiveTab() {
+  const tabs = $view.querySelector<HTMLElement>('.tabs');
+  const btn = tabs?.querySelector<HTMLElement>('[aria-selected="true"]');
+  if (!tabs || !btn) return;
+  const left = btn.offsetLeft - tabs.offsetLeft;
+  if (left < tabs.scrollLeft || left + btn.offsetWidth > tabs.scrollLeft + tabs.clientWidth) tabs.scrollLeft = Math.max(0, left - 16);
 }
 
 // ---------- 검색 입력 ----------

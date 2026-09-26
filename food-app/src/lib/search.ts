@@ -128,8 +128,51 @@ interface FaqEntry extends FaqHit {
   body: string; // 정규화된 답
 }
 
+/** 질문 검색에서 같은 뜻으로 보는 낱말 묶음 (예: "임산부"로 찾으면 "임신 중에…" 질문도 나온다) */
+const SYNONYMS: string[][] = [
+  ['임산부', '임신', '임신부', '임부', '태아', '입덧'],
+  ['수유', '모유', '수유부'],
+  ['아이', '어린이', '아기', '유아', '영아', '영유아', '이유식', '소아', '자녀', '아동', '청소년'],
+  ['노인', '어르신', '고령', '노년'],
+  ['신장', '콩팥', '신부전', '투석'],
+  ['당뇨', '혈당', '당뇨병', '인슐린'],
+  ['고혈압', '혈압'],
+  ['다이어트', '체중', '살', '뱃살', '비만', '감량'],
+  ['공복', '빈속', '아침'],
+  ['자기전', '밤', '저녁', '야식'],
+  ['약', '약물', '복용', '와파린', '항응고제'],
+  ['결석', '요로결석', '신장결석', '담석'],
+  ['콜레스테롤', 'ldl', '고지혈증', '이상지질혈증'],
+  ['위염', '역류', '속쓰림', '위궤양', '위'],
+  ['변비', '배변', '장'],
+  ['설사', '배탈', '가스', '복통', '과민성대장'],
+  ['알레르기', '두드러기', '가려움'],
+  ['암', '항암', '발암'],
+  ['피부', '여드름', '주름', '미백'],
+  ['탈모', '머리카락', '모발'],
+  ['보관', '냉장', '냉동', '유통기한', '소비기한'],
+  ['하루', '적정량', '얼마나', '몇개', '몇잔'],
+  ['생으로', '날것', '날로', '생식'],
+  ['갑상선', '요오드'],
+  ['통풍', '요산', '퓨린'],
+  ['빈혈', '철분', '철'],
+  ['운동', '근육', '단백질'],
+  ['수면', '잠', '불면'],
+];
+const SYN_INDEX = new Map<string, string[]>();
+for (const group of SYNONYMS) {
+  const g = group.map(normalize);
+  for (const w of g) SYN_INDEX.set(w, [...new Set([...(SYN_INDEX.get(w) ?? []), ...g])]);
+}
+/** 낱말 하나를 같은 뜻 낱말들로 넓힌다. 한 글자 낱말은 그대로 둔다(너무 넓게 걸림). */
+function expand(term: string): string[] {
+  const syn = SYN_INDEX.get(term);
+  if (!syn) return [term];
+  return syn.filter((w) => w === term || w.length >= 2);
+}
+
 /**
- * 질문 검색. 검색어를 띄어쓰기로 나눠 모든 낱말이 "항목 이름 + 질문"에 있으면 높은 점수,
+ * 질문 검색. 검색어를 띄어쓰기로 나눠 모든 낱말(또는 같은 뜻 낱말)이 "항목 이름 + 질문"에 있으면 높은 점수,
  * 질문에는 없고 답에만 있으면 낮은 점수로 찾는다.
  */
 export class FaqIndex {
@@ -153,11 +196,13 @@ export class FaqIndex {
   search(raw: string, limit = 40): FaqHit[] {
     const terms = raw.split(/\s+/).map(normalize).filter((t) => t.length >= 1);
     if (!terms.length || terms.join('').length < 2) return [];
+    const groups = terms.map(expand);
+    const inHead = (e: FaqEntry, g: string[]) => g.some((w) => e.head.includes(w));
     const hits: FaqHit[] = [];
     for (const e of this.entries) {
       let score = 0;
-      if (terms.every((t) => e.head.includes(t))) score = 10 + (e.head.includes(normalize(raw)) ? 5 : 0);
-      else if (terms.every((t) => e.head.includes(t) || e.body.includes(t))) score = 3;
+      if (groups.every((g) => inHead(e, g))) score = 10 + (terms.every((t) => e.head.includes(t)) ? 3 : 0) + (e.head.includes(normalize(raw)) ? 2 : 0);
+      else if (groups.every((g) => inHead(e, g) || g.some((w) => e.body.includes(w)))) score = 3;
       if (score) hits.push({ kind: e.kind, id: e.id, index: e.index, q: e.q, score });
     }
     hits.sort((a, b) => b.score - a.score);

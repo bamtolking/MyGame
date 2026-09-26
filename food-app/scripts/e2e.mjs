@@ -67,10 +67,12 @@ await shot('01-food');
 
 // 2. 탭
 await f.locator('.tabs [data-tab="cmp"]').tap();
-check('성분·기전 탭 → 해당 패널만 보임', await f.evaluate(() => !document.getElementById('panel-cmp').hidden && document.getElementById('panel-nut').hidden));
+const shown = (id) => { const el = document.getElementById(id); return !!el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; };
+await f.evaluate(`window.__shown = ${shown.toString()}`);
+check('성분·기전 탭 → 해당 패널만 보임(실제 표시)', await f.evaluate(() => window.__shown('panel-cmp') && !window.__shown('panel-nut') && !window.__shown('panel-eat')));
 await f.evaluate(() => { document.getElementById('scroller').scrollTop = 1500; });
 await f.locator('.tabs [data-tab="warn"]').tap();
-const tabState = await f.evaluate(() => { const sc = document.getElementById('scroller'); const t = document.querySelector('.tabs'); return { visible: !document.getElementById('panel-warn').hidden, tabsVisible: t.getBoundingClientRect().top >= sc.getBoundingClientRect().top - 1 && t.getBoundingClientRect().top < sc.getBoundingClientRect().top + 400 }; });
+const tabState = await f.evaluate(() => { const sc = document.getElementById('scroller'); const t = document.querySelector('.tabs'); return { visible: window.__shown('panel-warn') && !window.__shown('panel-cmp'), tabsVisible: t.getBoundingClientRect().top >= sc.getBoundingClientRect().top - 1 && t.getBoundingClientRect().top < sc.getBoundingClientRect().top + 400 }; });
 check('내려간 상태에서 탭 → 새 패널 처음이 보임', tabState.visible && tabState.tabsVisible, JSON.stringify(tabState));
 check('탭이 주소에 남음', (await state()).hash.endsWith('.warn'));
 await shot('02-tab');
@@ -90,7 +92,7 @@ check('다시 뒤로 → 홈', await f.evaluate(() => !!document.querySelector('
 
 // 4. 홈 추천 카드 → 해당 탭으로 바로
 await f.locator('.feat').first().tap();
-check('추천 카드 → 블루베리 주의·오해 탭', await f.evaluate(() => document.querySelector('#view h1').textContent === '블루베리' && !document.getElementById('panel-warn').hidden));
+check('추천 카드 → 블루베리 주의·오해 탭', await f.evaluate(() => document.querySelector('#view h1').textContent === '블루베리' && window.__shown('panel-warn') && !window.__shown('panel-nut')));
 
 // 5. 근거 배지 → 안내 화면, 브랜드 → 홈
 await f.locator('#panel-warn').evaluate(() => {});
@@ -104,7 +106,7 @@ check('로고 → 홈', await f.evaluate(() => !!document.querySelector('.home')
 const faqCount = await f.evaluate(() => document.querySelectorAll('.home .clist .crow').length);
 if (faqCount) {
   await f.locator('.home .clist .crow').first().tap();
-  const qa = await f.evaluate(() => { const d = document.querySelector('.qa[open]'); const sc = document.getElementById('scroller'); return { open: !!d, panel: !document.getElementById('panel-faq').hidden, inView: d ? d.getBoundingClientRect().top < sc.getBoundingClientRect().bottom && d.getBoundingClientRect().bottom > sc.getBoundingClientRect().top : false }; });
+  const qa = await f.evaluate(() => { const d = document.querySelector('.qa[open]'); const sc = document.getElementById('scroller'); return { open: !!d, panel: window.__shown('panel-faq') && !window.__shown('panel-nut'), inView: d ? d.getBoundingClientRect().top < sc.getBoundingClientRect().bottom && d.getBoundingClientRect().bottom > sc.getBoundingClientRect().top : false }; });
   check('많이 묻는 질문 → 질문 탭에서 그 질문이 펼쳐져 보임', qa.open && qa.panel && qa.inView, JSON.stringify(qa));
   await shot('03-faq');
   await f.fill('#faq-filter', '하루');
@@ -114,6 +116,9 @@ if (faqCount) {
   await f.waitForTimeout(150);
   const n = await f.evaluate(() => [...document.querySelectorAll('#view .sec h2')].some((h) => h.textContent.startsWith('질문')));
   check('검색창에서 질문 검색', n);
+  await f.fill('#q', '시금치 임산부');
+  await f.waitForTimeout(150);
+  check('같은 뜻 낱말로 질문 검색 (임산부 → 임신)', await f.evaluate(() => [...document.querySelectorAll('#view .crow b')].some((b) => b.textContent.includes('임신') && b.textContent.includes('시금치'))));
 } else console.log('skip 질문 점검 (아직 질문 데이터 없음)');
 
 // 7. AI 분석 (DB에 없는 식품)
@@ -126,6 +131,7 @@ check('AI 분석 → 결과 화면', s.h1 === '두리안' && decodeURIComponent(
 const call = await f.evaluate(() => window.__calls[0]);
 check('default 모델·24시간 캐시', call.opts.modelTier === 'default' && call.opts.cache.gcTime === 86400000);
 await f.locator('.tabs [data-tab="faq"]').tap();
+check('AI 결과 질문 탭만 보임', await f.evaluate(() => window.__shown('panel-faq') && !window.__shown('panel-nut')));
 const aiFaq = await f.evaluate(() => ({ n: document.querySelectorAll('#panel-faq .qa').length, badge: !!document.querySelector('#panel-faq .ev'), list: document.querySelectorAll('#panel-faq .qa-a li').length }));
 check('AI 분석에도 질문 탭', aiFaq.n === 2 && aiFaq.badge && aiFaq.list === 2, JSON.stringify(aiFaq));
 await f.locator('.tabs [data-tab="nut"]').tap();

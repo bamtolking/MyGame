@@ -56,12 +56,19 @@ describe('질문 검색', () => {
   it('항목 이름과 질문 낱말이 모두 들어간 질문을 먼저 찾는다', () => {
     const hits = faq.search('시금치 임산부');
     expect(hits[0]).toMatchObject({ kind: 'food', id: 'spinach', index: 0 });
-    expect(hits).toHaveLength(1);
+    expect(hits[0].score).toBeGreaterThanOrEqual(10);
+    // 답에만 "임신"이 나오는 질문은 뒤에, 낮은 점수로
+    expect(hits.slice(1).every((h) => h.score < 10)).toBe(true);
   });
   it('질문에 없고 답에만 있는 낱말은 낮은 점수로 찾는다', () => {
     const hits = faq.search('임신');
-    expect(hits.map((h) => h.index)).toEqual([1]);
-    expect(hits[0].score).toBeLessThan(10);
+    expect(hits.map((h) => h.index)).toEqual([0, 1]);
+    expect(hits[1].score).toBeLessThan(10);
+  });
+  it('같은 뜻 낱말로도 찾는다 (임산부 → 임신)', () => {
+    const syn = new FaqIndex([{ kind: 'food', map: { spinach: [{ q: '임신 중에 먹어도 되나요?', a: '네.' }, { q: '아기 이유식에 넣어도 되나요?', a: '네.' }] }, names: () => ['시금치'] }]);
+    expect(syn.search('시금치 임산부').map((h) => h.index)).toEqual([0]);
+    expect(syn.search('어린이 시금치').map((h) => h.index)).toEqual([1]);
   });
   it('별칭으로도 찾고, 너무 짧은 검색어는 무시한다', () => {
     expect(faq.search('계란 몇 개')[0]).toMatchObject({ id: 'egg' });
