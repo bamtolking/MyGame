@@ -19,7 +19,7 @@ import type { RunState, Level, PlacedChunk, PowerKind, Pickup, GenState } from '
 
 export const PARSED: ParsedChunk[] = CHUNKS.map(parseChunk);
 export const PARSED_BY_ID = new Map(PARSED.map(p => [p.def.id, p]));
-const EXCLUDE = ['sky', 'tutorial', 'tutorial-extra', 'special', 'setpiece'];
+const EXCLUDE = ['sky', 'tutorial', 'tutorial-extra', 'special', 'setpiece', 'stageonly'];   // never drawn by the random picker
 const isGameplay = (p: ParsedChunk) => !p.def.tags?.some(t => EXCLUDE.includes(t));
 const FAMILIES = ['jump', 'double', 'slide', 'pit', 'platform', 'combo', 'rhythm', 'choice', 'tunnel', 'stairs'];
 
@@ -203,7 +203,9 @@ export function ensureLevel(s: RunState): void {
       if (g.courseIdx < lv.course.length) {
         const p = PARSED_BY_ID.get(lv.course[g.courseIdx])!;
         const t = Math.max(p.def.tiers[0], Math.min(p.def.tiers[1], tier));   // a course chunk runs at a tier it is proven for
-        placeChunk(s, p, t, biome, { main: true }); g.courseIdx++; continue;
+        const pc = placeChunk(s, p, t, biome, { main: true });
+        if (s.mode === 'stage' && s.stageId) placeStagePouches(s, pc, g.courseIdx);
+        g.courseIdx++; continue;
       }
       lv.finishX = lv.genX; placeChunk(s, PARSED_BY_ID.get('finish_runout')!, tier, biome, { finish: true }); continue;
     }
@@ -218,6 +220,22 @@ export function ensureLevel(s: RunState): void {
     lv.hazards = lv.hazards.filter(o => o.x1 >= cut);
     lv.pickups = lv.pickups.filter(o => o.x >= cut && !o.taken);
   }
+}
+
+/** Stage-defined golden pouches for course slot `slot` (a stage may also use 'B' glyphs inside chunks). */
+function placeStagePouches(s: RunState, pc: PlacedChunk, slot: number): void {
+  const st = STAGES.find(x => x.id === s.stageId); if (!st?.pouches) return;
+  const lv = s.level; const chunkX = pc.x;
+  st.pouches.forEach((pp, i) => {
+    if (pp.slot !== slot) return;
+    const p: Pickup = { id: lv.nextId++, type: 'pouch', pouch: i, x: chunkX + pp.col * TILE + TILE / 2, y: pp.row * TILE + TILE / 2, taken: false, pulled: false };
+    // replace a pickup sitting in that very cell (e.g. a star candy), keep x order
+    lv.pickups = lv.pickups.filter(q => !(Math.abs(q.x - p.x) < 1 && Math.abs(q.y - p.y) < 1));
+    let k = lv.pickups.length; while (k > 0 && lv.pickups[k - 1].x > p.x) k--;
+    lv.pickups.splice(k, 0, p);
+  });
+  pc.jellyTotal = lv.pickups.filter(q => q.chunk === pc.serial && (q.type === 'jelly' || q.type === 'big')).length;
+  pc.line = pc.jellyTotal >= LINE_MIN_JELLIES ? 1 : 0;
 }
 
 function pickSky(s: RunState): ParsedChunk {

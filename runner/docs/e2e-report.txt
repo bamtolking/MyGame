@@ -8,10 +8,10 @@
   ✓ resume continues
   ✓ tutorial completion is saved
   ✓ results → endless run
-  endless after 9 s: {"dist":99,"hp":82,"hits":1,"jellies":89,"fps":60}
+  endless after 9 s: {"dist":97,"hp":91,"hits":0,"jellies":94,"fps":60}
   ✓ the runner makes progress
   ✓ jellies get collected
-  results: {"why":"마지막 한 방: 매달린 장애물 (슬라이드!)충돌 1회 (-15) · 시간에 따른 체력 감소 (-9) · 물약 회복 (+6)","score":"2,021","coins":3,"runs":2}
+  results: {"why":"체력이 다 닳았어요시간에 따른 체력 감소 (-9) · 거의 안 부딪혔어요! 물약(초록 하트)을 더 챙기면 더 멀리 가요","score":"1,519","coins":0,"runs":2}
   ✓ results explain why the run ended
   ✓ run was booked into the save
   ✓ progress survives a reload
@@ -36,10 +36,10 @@
   ✓ resume continues
   ✓ tutorial completion is saved
   ✓ results → endless run
-  endless after 9 s: {"dist":98,"hp":90,"hits":1,"jellies":94,"fps":60}
+  endless after 9 s: {"dist":98,"hp":76,"hits":1,"jellies":97,"fps":60}
   ✓ the runner makes progress
   ✓ jellies get collected
-  results: {"why":"마지막 한 방: 매달린 장애물 (슬라이드!)충돌 1회 (-15) · 시간에 따른 체력 감소 (-9) · 물약 회복 (+14)","score":"1,910","coins":5,"runs":2}
+  results: {"why":"체력이 다 닳았어요충돌 1회 (-15) · 시간에 따른 체력 감소 (-9) · 거의 안 부딪혔어요! 물약(초록 하트)을 더 챙기면 더 멀리 가요","score":"1,330","coins":1,"runs":2}
   ✓ results explain why the run ended
   ✓ run was booked into the save
   ✓ progress survives a reload
@@ -64,10 +64,10 @@
   ✓ resume continues
   ✓ tutorial completion is saved
   ✓ results → endless run
-  endless after 9 s: {"dist":99,"hp":81,"hits":1,"jellies":85,"fps":45}
+  endless after 9 s: {"dist":98,"hp":60,"hits":3,"jellies":93,"fps":47}
   ✓ the runner makes progress
   ✓ jellies get collected
-  results: {"why":"체력이 다 닳았어요충돌 1회 (-15) · 시간에 따른 체력 감소 (-9) · 물약 회복 (+5) · 거의 안 부딪혔어요! 물약(초록 하트)을 더 챙기면 더 멀리 가요","score":"1,893","coins":1,"runs":2}
+  results: {"why":"마지막 한 방: 매달린 장애물 (슬라이드!)충돌 3회 (-45) · 시간에 따른 체력 감소 (-9) · 물약 회복 (+14) · 가장 많이 부딪힌 것: 매달린 장애물 (슬라이드!) ×3","score":"1,461","coins":1,"runs":2}
   ✓ results explain why the run ended
   ✓ run was booked into the save
   ✓ progress survives a reload

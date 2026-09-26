@@ -12,6 +12,8 @@ export interface StageDef {
   tiers: [number, number];
   length: number;        // m (used when there is no course; otherwise informational)
   course?: CourseSlot[];
+  /** golden pouches: placed at (col,row) of course slot `slot` (proven reachable hit-free by tests/stages.test.ts) */
+  pouches?: { slot: number; col: number; row: number }[];
   remix?: boolean;
   stars: { jellyPct: number };
 }
