@@ -1,62 +1,72 @@
 
-[offline] phone-390x844 390x844, graphics high
+[offline] landscape-844x390 844x390, graphics high
+  ✓ layout is landscape
+  ✓ create screen: 10 classes, only 검객·궁사 selectable (8 locked)
   ✓ entered town as Lv1 with 6 AI companions (roster 7)
-  ✓ renderer: WebGL (high), 286 sprites in 30 draw calls, art scale 1.5
-  ✓ touch-drag joystick moved the player (+178px)
-  ✓ hunting works: Lv2, 38 kills, quest 1, 143 monsters in view, 14 fps
-  ✓ combat effects: up to 234 particles, combo 72, 2 shockwaves at once
+  ✓ renderer: WebGL (high), 184 sprites in 28 draw calls, art scale 1.5
+  ✓ touch-drag joystick moved the player right on screen (+179px, Δy 0)
+  ✓ hunting works: Lv3, 72 kills, quest 3, 82 monsters in view, 13 fps
+  ✓ combat effects: up to 409 particles, combo 90, 3 shockwaves at once
   ✓ sheet bag opens/closes
   ✓ sheet tal opens/closes
   ✓ sheet quest opens/closes
   ✓ sheet map opens/closes
   ✓ sheet settings opens/closes
   ✓ chat message comes back from the server into the chat log
-  ✓ AUTO mode drives the character (walked 923px in 8s)
+  ✓ AUTO mode drives the character (walked 733px in 8s)
   ✓ touching the joystick turns AUTO off
+  ✓ new-class unlock shows a card and a menu badge (card true, badge true)
+  ✓ 직업 sheet lists 10 classes, 6 still locked at Lv8 (taoist,guardian,assassin,gunner,musician,painter)
+  ✓ class change to 창술사 in town (me spear, ult 槍, roster spear)
+  ✓ the new class fights (+40 kills in 9 s)
   ✓ title offers 이어하기 after reload
-  ✓ resumed Lv3 (was Lv3), kills 149
+  ✓ resumed Lv8 (was Lv8), kills 162
   ✓ no console/page errors
 
-[offline] small-360x640 360x640, graphics low
+[offline] small-667x375 667x375, graphics low
+  ✓ layout is landscape
+  ✓ create screen: 10 classes, only 검객·궁사 selectable (8 locked)
   ✓ entered town as Lv1 with 6 AI companions (roster 7)
-  ✓ renderer: Canvas2D (low), 157 sprites in 170 draw calls, art scale 0.75
-  ✓ touch-drag joystick moved the player (+175px)
-  ✓ hunting works: Lv3, 54 kills, quest 1, 69 monsters in view, 26 fps
-  ✓ combat effects: up to 58 particles, combo 90, 0 shockwaves at once
+  ✓ renderer: Canvas2D (low), 101 sprites in 115 draw calls, art scale 0.75
+  ✓ touch-drag joystick moved the player right on screen (+177px, Δy 0)
+  ✓ hunting works: Lv3, 62 kills, quest 3, 120 monsters in view, 24 fps
+  ✓ combat effects: up to 125 particles, combo 55, 0 shockwaves at once
   ✓ sheet bag opens/closes
   ✓ sheet tal opens/closes
   ✓ sheet quest opens/closes
   ✓ sheet map opens/closes
   ✓ sheet settings opens/closes
   ✓ chat message comes back from the server into the chat log
-  ✓ AUTO mode drives the character (walked 441px in 8s)
+  ✓ AUTO mode drives the character (walked 379px in 8s)
   ✓ touching the joystick turns AUTO off
   ✓ title offers 이어하기 after reload
-  ✓ resumed Lv3 (was Lv3), kills 132
+  ✓ resumed Lv3 (was Lv3), kills 151
   ✓ no console/page errors
 
-[offline] landscape-844x390 844x390, graphics mid
+[offline] portrait-390x844 390x844, graphics mid
+  ✓ layout is landscape (portrait screen: rotated 90°)
+  ✓ create screen: 10 classes, only 검객·궁사 selectable (8 locked)
   ✓ entered town as Lv1 with 6 AI companions (roster 7)
-  ✓ renderer: WebGL (mid), 181 sprites in 25 draw calls, art scale 1.25
-  ✓ touch-drag joystick moved the player (+175px)
-  ✓ hunting works: Lv3, 101 kills, quest 3, 73 monsters in view, 17 fps
-  ✓ combat effects: up to 284 particles, combo 133, 2 shockwaves at once
+  ✓ renderer: WebGL (mid), 182 sprites in 25 draw calls, art scale 1.25
+  ✓ touch-drag joystick moved the player right on screen (+177px, Δy 0)
+  ✓ hunting works: Lv3, 97 kills, quest 3, 90 monsters in view, 13 fps
+  ✓ combat effects: up to 487 particles, combo 114, 2 shockwaves at once
   ✓ sheet bag opens/closes
   ✓ sheet tal opens/closes
   ✓ sheet quest opens/closes
   ✓ sheet map opens/closes
   ✓ sheet settings opens/closes
   ✓ chat message comes back from the server into the chat log
-  ✓ AUTO mode drives the character (walked 698px in 8s)
+  ✓ AUTO mode drives the character (walked 806px in 8s)
   ✓ touching the joystick turns AUTO off
   ✓ title offers 이어하기 after reload
-  ✓ resumed Lv3 (was Lv3), kills 177
+  ✓ resumed Lv3 (was Lv3), kills 231
   ✓ no console/page errors
 
 [online] two players through the real server
   ✓ both players see each other (humans 2/2, entities 2/2)
   ✓ chat crosses between the two browsers
-  ✓ player 2 sees player 1 where player 1 is (Δ 7px, interpolation delay included)
+  ✓ player 2 sees player 1 where player 1 is (Δ 1px, interpolation delay included)
   ✓ online client without errors
   ✓ online client without errors
 
