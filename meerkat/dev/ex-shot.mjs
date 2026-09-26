@@ -1,5 +1,5 @@
 // 개발용: 부위 파일의 운동 키 자세 시트를 PNG로 저장
-// node dev/ex-shot.mjs <file> [--ids a,b] [--out path.png] [--dark] [--base http://localhost:5190/]
+// node dev/ex-shot.mjs <file> [--ids a,b] [--out path.png] [--dark] [--size 320] [--base http://localhost:5190/]
 import { chromium } from 'playwright-core';
 const args = process.argv.slice(2);
 const file = args[0];
@@ -10,7 +10,8 @@ const opt = (k, d) => {
 const base = opt('--base', process.env.BASE ?? 'http://localhost:5190/');
 const out = opt('--out', `e2e-out/ex-${file}.png`);
 const ids = opt('--ids', '');
-const url = `${base}dev/ex.html?file=${file}${ids ? `&ids=${ids}` : ''}${args.includes('--dark') ? '&dark=1' : ''}`;
+const size = opt('--size', '');
+const url = `${base}dev/ex.html?file=${file}${ids ? `&ids=${ids}` : ''}${args.includes('--dark') ? '&dark=1' : ''}${size ? `&size=${size}` : ''}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium', headless: true });
 const page = await browser.newPage({ viewport: { width: 1180, height: 900 }, deviceScaleFactor: 1 });
 const errors = [];

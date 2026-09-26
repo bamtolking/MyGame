@@ -1891,3 +1891,24 @@ input[type='range'].slider {
   background: var(--brand);
   display: inline-block;
 }
+
+/* 홈: 새로 추가된 동작 */
+.new-move {
+  width: 138px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+}
+.new-move .h3 {
+  font-size: 14px;
+  line-height: 1.35;
+}
+.clamp2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

@@ -5,7 +5,7 @@ import { Chip, TopBar } from '../components/ui';
 import { doseText } from '../content/format';
 import { EXERCISES, NEW_IDS, PHASE_LABEL, PHASE_ORDER, REGION_LABEL, type Phase, type Region } from '../content/exercises';
 import { L, tr } from '../i18n';
-import { nav } from '../lib/router';
+import { nav, route } from '../lib/router';
 import { activeRoutine, focusRoutine } from '../state/derived';
 import { progression } from '../state/store';
 
@@ -13,7 +13,7 @@ const REGIONS: Region[] = ['neck', 'shoulder', 'upperBack', 'chest', 'lowBack', 
 
 export function Library() {
   const [q, setQ] = useState('');
-  const [region, setRegion] = useState<Region | 'fav' | 'desk' | 'ai' | 'new' | null>(null);
+  const [region, setRegion] = useState<Region | 'fav' | 'desk' | 'ai' | 'new' | null>(route.value.query.f === 'new' ? 'new' : null);
   const [phase, setPhase] = useState<Phase | null>(null);
   const favs = progression.value.favorites;
   const list = useMemo(() => {

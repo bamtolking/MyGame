@@ -14,6 +14,7 @@ import { LOWBACK_PLUS } from './ex/lowback-plus';
 import { HIP_PLUS } from './ex/hip-plus';
 import { LEGS_PLUS } from './ex/legs-plus';
 import { ANKLE_PLUS } from './ex/ankle-plus';
+import { RELEASE_PLUS } from './ex/release-plus';
 import type { Exercise } from './exercise-types';
 
 /** 부위별 운동 파일 (파일 이름 → 목록). 순서가 라이브러리 표시 순서 */
@@ -34,6 +35,7 @@ export const REGION_FILES: Record<string, Exercise[]> = {
   'legs-plus': LEGS_PLUS,
   ankle: ANKLE,
   'ankle-plus': ANKLE_PLUS,
+  'release-plus': RELEASE_PLUS,
 };
 
 export const EXERCISES: Exercise[] = Object.values(REGION_FILES).flat();

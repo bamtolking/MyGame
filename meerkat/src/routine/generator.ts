@@ -8,6 +8,7 @@ import type { IssueId, PostureReport } from '../analysis/report';
 import { EXERCISES, estimateSeconds, PHASE_ORDER, type AvoidFlag, type Dose, type Exercise, type Phase, type Position, type Region } from '../content/exercises';
 import type { Text } from '../i18n';
 import type { Equipment, Goal, PainArea, Profile } from '../state/store';
+import { familyOf } from './families';
 
 export type Issues = Partial<Record<IssueId, number>>;
 
@@ -178,6 +179,9 @@ const POSITION_RANK: Record<Position, number> = {
   supine: 7,
 };
 
+/** 고르는 순서 (진행 순서는 PHASE_ORDER) — 시간이 빠듯하면 뒤쪽 단계부터 빠져요 */
+const PICK_ORDER: Phase[] = ['stretch', 'activate', 'mobility', 'integrate', 'breath', 'release'];
+
 /** 시간별 단계 구성 (슬롯 수) */
 function quotas(minutes: number, week: number): Record<Phase, number> {
   const late = week >= 3;
@@ -266,16 +270,19 @@ export function buildRoutine(input: RoutineInput): Routine {
   const tops = topIssues(input.issues, 3);
   const top = tops[0] ?? 'stiffness';
 
+  const hasHistory = !!input.lastDone && Object.keys(input.lastDone).length > 0;
   const pool = EXERCISES.filter((e) => eligible(e, input)).map((e) => {
     let score = relevance(e, input.issues);
     if (e.targets[top]) score += 0.15 * (e.targets[top] ?? 0);
     if (input.favorites?.includes(e.id)) score += 0.15;
     const last = input.lastDone?.[e.id];
     if (last) {
+      // 최근에 한 동작은 잠시 쉬게 해서 날마다 조합이 바뀌도록
       const h = (now - last) / 3.6e6;
-      if (h < 20) score -= 0.25;
-      else if (h < 44) score -= 0.1;
-    }
+      if (h < 20) score -= 0.3;
+      else if (h < 44) score -= 0.18;
+      else if (h < 68) score -= 0.06;
+    } else if (hasHistory) score += 0.04; // 아직 안 해 본 동작은 살짝 우대
     score += (rand() - 0.5) * 0.24;
     return { e, score };
   });
@@ -285,24 +292,35 @@ export function buildRoutine(input: RoutineInput): Routine {
     q.breath = 0;
     q.release = Math.min(q.release, 1);
   }
-  const chosen: { e: Exercise; score: number }[] = [];
+  const isTop = (e: Exercise) => (e.targets[top] ?? 0) >= 0.7;
+  // 실제로 처방될 양(짧은 루틴은 세트 줄임)으로 시간 계산
+  const cost = (e: Exercise) => estimateSeconds({ ...e, dose: adjustDose(e, input.minutes, isTop(e)) });
+  type Cand = (typeof pool)[number];
+  const chosen: Cand[] = [];
+  const families = new Set<string>();
   let used = 0;
-  const take = (c: { e: Exercise; score: number }) => {
+  // 아직 안 골랐고, 비슷한 동작도 안 들어간 후보
+  const open = (c: Cand) => !chosen.includes(c) && !families.has(familyOf(c.e.id));
+  const take = (c: Cand) => {
     chosen.push(c);
-    used += estimateSeconds(c.e);
+    families.add(familyOf(c.e.id));
+    used += cost(c.e);
   };
-  for (const phase of PHASE_ORDER) {
-    const cands = pool.filter((c) => c.e.phase === phase && !chosen.includes(c)).sort((a, b) => b.score - a.score);
-    for (let i = 0; i < q[phase] && i < cands.length; i++) {
-      const c = cands[i];
-      if (c.score <= 0.05 && phase !== 'breath') continue;
-      if (used + estimateSeconds(c.e) > budget * 1.12) continue;
-      take(c);
+  // 단계마다 번갈아 하나씩 고르기 — 늘리기가 시간을 다 써서 근력 운동이 빠지는 일이 없도록
+  const rounds = Math.max(...Object.values(q));
+  for (let round = 0; round < rounds; round++) {
+    for (const phase of PICK_ORDER) {
+      if (round >= q[phase]) continue;
+      const c = pool
+        .filter((c) => c.e.phase === phase && open(c) && (c.score > 0.05 || phase === 'breath'))
+        .sort((a, b) => b.score - a.score)
+        .find((c) => used + cost(c.e) <= budget * 1.12);
+      if (c) take(c);
     }
   }
   // 가장 중요한 문제를 직접 겨냥하는 운동이 없으면 추가
-  if (!chosen.some((c) => (c.e.targets[top] ?? 0) >= 0.7)) {
-    const best = pool.filter((c) => !chosen.includes(c) && (c.e.targets[top] ?? 0) >= 0.7).sort((a, b) => b.score - a.score)[0];
+  if (!chosen.some((c) => isTop(c.e))) {
+    const best = pool.filter((c) => open(c) && isTop(c.e)).sort((a, b) => b.score - a.score)[0];
     if (best) take(best);
   }
   // 남은 시간 채우기
@@ -310,13 +328,13 @@ export function buildRoutine(input: RoutineInput): Routine {
   for (const c of rest) {
     if (used >= budget * 0.9) break;
     if (c.score <= 0.15) break;
-    if (used + estimateSeconds(c.e) <= budget * 1.1) take(c);
+    if (open(c) && used + cost(c.e) <= budget * 1.1) take(c);
   }
   // 너무 넘치면 점수 낮은 것부터 제거 (최소 2개 유지)
   while (used > budget * 1.2 && chosen.length > 2) {
     const worst = [...chosen].sort((a, b) => a.score - b.score)[0];
     chosen.splice(chosen.indexOf(worst), 1);
-    used -= estimateSeconds(worst.e);
+    used -= cost(worst.e);
   }
 
   chosen.sort((a, b) => {

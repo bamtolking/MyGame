@@ -8,7 +8,7 @@ import { PHASE_ORDER } from '../src/content/exercise-types';
 import { cycleLength, holdKeyOf, keyTime, mirrorSpec, place, poseAt, type AnimSpec } from '../src/figure/render';
 import { solve } from '../src/figure/rig';
 
-const ALL = ['neck', 'shoulder', 'thoracic', 'core', 'lowback', 'hip', 'legs', 'ankle'].flatMap((r) => [r, `${r}-plus`]);
+const ALL = [...['neck', 'shoulder', 'thoracic', 'core', 'lowback', 'hip', 'legs', 'ankle'].flatMap((r) => [r, `${r}-plus`]), 'release-plus'];
 const only = process.env.REGION?.split(',').filter(Boolean);
 const files = only?.length ? only : ALL;
 

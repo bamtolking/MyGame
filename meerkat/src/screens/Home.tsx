@@ -2,13 +2,14 @@ import { ChevronRight, Flame, HeartPulse, Lightbulb, Play, RefreshCw, ScanLine }
 import { Animal, Meerkat } from '../components/animals';
 import { Ring, scoreColor } from '../components/ui';
 import { ExerciseThumb } from '../components/ExerciseThumb';
+import { EXERCISES, NEW_IDS, PHASE_LABEL } from '../content/exercises';
 import { tipOfDay } from '../content/tips';
 import { ANIMALS, typeName } from '../content/types';
 import { L, num, tr } from '../i18n';
 import { nav } from '../lib/router';
-import { DESK_PRESETS, deskRoutine, hasEmergency, ISSUE_THEME } from '../routine/generator';
-import { activeRoutine, program, rescanIn, shuffle, todayRoutine } from '../state/derived';
-import { activeDays, dayKey, doneToday, latestScan, profile, streak } from '../state/store';
+import { DESK_PRESETS, deskRoutine, hasEmergency, ISSUE_THEME, relevance } from '../routine/generator';
+import { activeRoutine, avoid, issues, program, rescanIn, shuffle, todayRoutine } from '../state/derived';
+import { activeDays, dayKey, doneToday, latestScan, profile, progression, streak } from '../state/store';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -180,6 +181,36 @@ function RoutineCard() {
   );
 }
 
+/** 아직 안 해 본 새 동작 중 내 몸 상태에 맞는 것부터 */
+function NewMoves() {
+  const prog = progression.value;
+  const list = EXERCISES.filter((e) => NEW_IDS.has(e.id) && !prog.lastDone[e.id] && e.level <= prog.level && !e.avoid?.some((a) => avoid.value.has(a)))
+    .map((e) => ({ e, s: relevance(e, issues.value) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 6)
+    .map((x) => x.e);
+  if (list.length < 3) return null;
+  return (
+    <>
+      <div class="section-title">
+        <h2 class="h2">{tr('새로 추가된 동작', 'New moves')}</h2>
+        <button class="link-btn" onClick={() => nav('/exercises?f=new')}>
+          {tr('전체', 'All')}
+        </button>
+      </div>
+      <div class="row" style={{ gap: 10, overflowX: 'auto', margin: '0 -20px', padding: '0 20px 4px', alignItems: 'stretch' }}>
+        {list.map((e) => (
+          <button key={e.id} class="card tap tight new-move" onClick={() => nav(`/exercise/${e.id}`)}>
+            <ExerciseThumb ex={e} size={56} still />
+            <div class="h3 clamp2">{L(e.name)}</div>
+            <div class="caption">{L(PHASE_LABEL[e.phase])}</div>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export function Home() {
   const tip = tipOfDay();
   return (
@@ -232,6 +263,8 @@ export function Home() {
           </button>
         ))}
       </div>
+
+      <NewMoves />
 
       <div class="section-title">
         <h2 class="h2">{tr('통증 체크', 'Pain check')}</h2>

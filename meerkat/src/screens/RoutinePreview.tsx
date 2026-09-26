@@ -3,7 +3,7 @@ import { Camera, ChevronRight, Play, RefreshCw } from 'lucide-preact';
 import { ExerciseThumb } from '../components/ExerciseThumb';
 import { Seg, TopBar } from '../components/ui';
 import { doseText } from '../content/format';
-import { PHASE_LABEL, type Region } from '../content/exercises';
+import { NEW_IDS, PHASE_LABEL, type Region } from '../content/exercises';
 import { L, tr } from '../i18n';
 import { nav, replace, route } from '../lib/router';
 import { DESK_PRESETS, deskRoutine, ISSUE_THEME } from '../routine/generator';
@@ -99,6 +99,7 @@ export function RoutinePreview() {
               </div>
               <div class="h3" style={{ marginTop: 4 }}>
                 {L(it.exercise.name)}
+                {NEW_IDS.has(it.exercise.id) && <span class="badge-new">NEW</span>}
               </div>
               <div class="caption">{doseText(it.dose)}</div>
               {it.note && (

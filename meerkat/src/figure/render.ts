@@ -345,12 +345,18 @@ export function drawScene(g: CanvasRenderingContext2D, placed: Placed, prep: Pre
 
   // ── 배경 소품 ──
   drawFloor(g, P, S, pal, props, sk, cam);
+  // 의자를 뒤에서 보면 등받이는 몸 앞에 그림
+  const chairBehind = props.some((p) => p.kind === 'chair') && toCamera(cam)[2] < -0.15;
   props.forEach((pr, i) => {
     if (pr.kind === 'wall' || pr.kind === 'door') drawWall(g, P, S, pal, pr, sk, cam);
-    if (pr.kind === 'chair') drawChair(g, P, S, pal, chairSk ?? sk, cam);
+    if (pr.kind === 'chair') drawChair(g, P, S, pal, chairSk ?? sk, cam, chairBehind ? 'base' : 'all');
     const at = prep.propAt[i];
     if ((pr.kind === 'step' || pr.kind === 'table') && at) drawPlatform(g, P, S, pal, pr, at, cam);
   });
+
+  // 몸 뒤쪽(카메라 반대쪽) 근육 강조는 몸보다 먼저 그려 가려지게
+  const glows = opts.overlays ? focusGlows(sk, spec.focus ?? [], toCamera(cam)) : [];
+  if (opts.overlays) drawGlows(g, P, S, glows.filter((x) => x.away), opts.now ?? 0);
 
   // ── 몸 ──
   const list: Draw[] = [];
@@ -458,9 +464,10 @@ export function drawScene(g: CanvasRenderingContext2D, placed: Placed, prep: Pre
   list.sort((a, b) => a.d - b.d);
   for (const it of list) it.fn(g);
 
+  if (chairBehind) drawChair(g, P, S, pal, chairSk ?? sk, cam, 'back');
   if (opts.overlays) {
     drawTraces(g, P, S, prep.traces);
-    drawFocus(g, P, S, sk, spec.focus ?? [], opts.now ?? 0);
+    drawGlows(g, P, S, glows.filter((x) => !x.away), opts.now ?? 0);
   }
 }
 
@@ -477,17 +484,25 @@ function frameFor(sk: Skeleton, a: JointName, b: JointName): number[] | undefine
   return undefined;
 }
 
-/** 근육 강조: 두 관절 사이를 따라 은은하게 빛나는 띠 */
-function drawFocus(g: CanvasRenderingContext2D, P: ToScreen, S: number, sk: Skeleton, focus: FocusSpec[], now: number) {
-  if (!focus.length) return;
+interface Glow {
+  p0: V3;
+  p1: V3;
+  r: number;
+  kind: FocusSpec['kind'];
+  /** 카메라 반대쪽(몸 뒤)을 향한 근육 → 몸에 가려지게 먼저 그림 */
+  away: boolean;
+}
+
+/** 근육 강조 위치 계산: 두 관절 사이 구간을 몸 기준 방향으로 살짝 옮김 */
+function focusGlows(sk: Skeleton, focus: FocusSpec[], toCam: V3): Glow[] {
   const legJoint = /^(hip|kn|an|heel|toe|sit)/;
-  const pulse = 0.5 + 0.5 * Math.sin((now * Math.PI * 2) / 1.6);
-  for (const f of focus) {
+  return focus.map((f) => {
     const A = sk.p[f.a], B = sk.p[f.b];
     const t0 = f.from ?? 0.12, t1 = f.to ?? 0.88;
     const lerp = (t: number): V3 => [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t];
     let p0 = lerp(t0), p1 = lerp(t1);
     const r = f.r ?? 3.2;
+    let away = false;
     if (f.side) {
       const M = frameFor(sk, f.a, f.b) ?? (legJoint.test(f.a) || legJoint.test(f.b) ? sk.axes.pelvis : sk.axes.chest);
       const fwd: V3 = [M[2], M[5], M[8]], lat: V3 = [M[0], M[3], M[6]];
@@ -498,12 +513,27 @@ function drawFocus(g: CanvasRenderingContext2D, P: ToScreen, S: number, sk: Skel
       const ud = (d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) / ul;
       d = [d[0] - (ud * u[0]) / ul, d[1] - (ud * u[1]) / ul, d[2] - (ud * u[2]) / ul];
       const dl = Math.hypot(d[0], d[1], d[2]) || 1;
+      away = (d[0] * toCam[0] + d[1] * toCam[1] + d[2] * toCam[2]) / dl < -0.35;
       const k = (r * 0.55) / dl;
       p0 = [p0[0] + d[0] * k, p0[1] + d[1] * k, p0[2] + d[2] * k];
       p1 = [p1[0] + d[0] * k, p1[1] + d[1] * k, p1[2] + d[2] * k];
+    } else {
+      // 방향 지정이 없으면: 몸통 중심보다 카메라 반대쪽에 있으면 몸 뒤로
+      const m: V3 = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2];
+      const c = [sk.p.chest, sk.p.waist, sk.p.pelvis].reduce((best, q) => (Math.hypot(q[0] - m[0], q[1] - m[1], q[2] - m[2]) < Math.hypot(best[0] - m[0], best[1] - m[1], best[2] - m[2]) ? q : best));
+      away = (m[0] - c[0]) * toCam[0] + (m[1] - c[1]) * toCam[1] + (m[2] - c[2]) * toCam[2] < -3;
     }
-    const a = P(p0), b = P(p1);
-    const rgb = FOCUS_COLOR[f.kind];
+    return { p0, p1, r, kind: f.kind, away };
+  });
+}
+
+/** 근육 강조: 두 관절 사이를 따라 은은하게 빛나는 띠 */
+function drawGlows(g: CanvasRenderingContext2D, P: ToScreen, S: number, glows: Glow[], now: number) {
+  const pulse = 0.5 + 0.5 * Math.sin((now * Math.PI * 2) / 1.6);
+  for (const gl of glows) {
+    const a = P(gl.p0), b = P(gl.p1);
+    const r = gl.r;
+    const rgb = FOCUS_COLOR[gl.kind];
     g.save();
     g.lineCap = 'round';
     g.shadowColor = `rgba(${rgb}, 0.9)`;
@@ -535,7 +565,7 @@ function drawTraces(g: CanvasRenderingContext2D, P: ToScreen, S: number, traces:
     g.save();
     g.lineCap = 'round';
     g.lineJoin = 'round';
-    g.strokeStyle = 'rgba(255, 107, 44, 0.85)';
+    g.strokeStyle = 'rgba(124, 77, 255, 0.9)';
     g.lineWidth = 1.1 * S;
     g.setLineDash([2.2 * S, 2 * S]);
     g.beginPath();
@@ -549,7 +579,7 @@ function drawTraces(g: CanvasRenderingContext2D, P: ToScreen, S: number, traces:
     while (k > 0 && Math.hypot(e.x - pts[k].x, e.y - pts[k].y) < 2.5 * S) k--;
     const ang = Math.atan2(e.y - pts[k].y, e.x - pts[k].x);
     const h = 3.2 * S;
-    g.fillStyle = 'rgba(255, 107, 44, 0.95)';
+    g.fillStyle = 'rgba(124, 77, 255, 0.95)';
     g.beginPath();
     g.moveTo(e.x + Math.cos(ang) * h * 0.4, e.y + Math.sin(ang) * h * 0.4);
     g.lineTo(e.x - Math.cos(ang - 0.5) * h, e.y - Math.sin(ang - 0.5) * h);
@@ -827,7 +857,7 @@ function drawBox(g: CanvasRenderingContext2D, P: ToScreen, cam: Cam, c: V3, h: V
   }
 }
 
-function drawChair(g: CanvasRenderingContext2D, P: ToScreen, S: number, pal: Palette, sk: Skeleton, cam: Cam) {
+function drawChair(g: CanvasRenderingContext2D, P: ToScreen, S: number, pal: Palette, sk: Skeleton, cam: Cam, part: 'all' | 'base' | 'back' = 'all') {
   const seatY = (sk.p.sitL[1] + sk.p.sitR[1]) / 2 - 1;
   const cz = (sk.p.sitL[2] + sk.p.sitR[2]) / 2 + 3;
   const cx = (sk.p.sitL[0] + sk.p.sitR[0]) / 2;
@@ -859,13 +889,17 @@ function drawChair(g: CanvasRenderingContext2D, P: ToScreen, S: number, pal: Pal
     for (const x of [cx - hw + 3, cx + hw - 3]) leg(x, back + 0.5, seatY, backTop - 6, back - 1.5);
     drawBox(g, P, cam, [cx, backTop - 7, back - 1.6], [hw, 7, 1.3], pal.seat.f, pal.seatSide, pal.seat.l, lw);
   };
+  if (part === 'back') {
+    drawBack();
+    return;
+  }
   leg(...legs[0], 0, seatY - TH);
   leg(...legs[1], 0, seatY - TH);
-  if (backFirst) drawBack();
+  if (backFirst && part === 'all') drawBack();
   drawBox(g, P, cam, [cx, seatY - TH / 2, (front + back) / 2], [hw, TH / 2, (front - back) / 2], pal.seat.f, pal.seatSide, pal.seat.l, lw);
   leg(...legs[2], 0, seatY - TH);
   leg(...legs[3], 0, seatY - TH);
-  if (!backFirst) drawBack();
+  if (!backFirst && part === 'all') drawBack();
 }
 
 function drawBall(g: CanvasRenderingContext2D, c: { x: number; y: number }, S: number, pal: Palette) {

@@ -5,6 +5,7 @@ import { METRIC_INFO } from '../src/content/metrics';
 import { NORMS } from '../src/analysis/norms';
 import { place, poseAt, cycleLength } from '../src/figure/render';
 import { buildRoutine, combineIssues, avoidFlags, DESK_PRESETS, deskRoutine, eligible, programWeek, type RoutineInput } from '../src/routine/generator';
+import { FAMILY_GROUPS, familyOf } from '../src/routine/families';
 import type { Profile } from '../src/state/store';
 
 const ISSUE_IDS = new Set([
@@ -186,6 +187,39 @@ describe('routine generator', () => {
   it('every exercise is reachable by some profile', () => {
     const all = input({ level: 3, equipment: ['wall', 'chair', 'towel', 'mat', 'band', 'ball', 'foamRoller'] });
     for (const e of EXERCISES) expect(eligible(e, all), e.id).toBe(true);
+  });
+
+  it('movement families only name real exercises', () => {
+    const ids = new Set(EXERCISES.map((e) => e.id));
+    for (const [family, list] of Object.entries(FAMILY_GROUPS)) {
+      for (const id of list) expect(ids.has(id), `${family}: ${id}`).toBe(true);
+    }
+  });
+
+  it('rotates moves day to day without near-duplicates or losing strength work', () => {
+    const profiles: Partial<RoutineInput>[] = [
+      {},
+      { issues: { hipPain: 0.7, kneeValgus: 0.7, pelvicTilt: 0.4 }, minutes: 15, level: 2 },
+      { issues: { lowBackPain: 0.9, lordosis: 0.6, stiffness: 0.3 } },
+      { issues: { kyphosis: 0.8, roundShoulder: 0.6, upperBackPain: 0.5 }, minutes: 15, level: 3 },
+    ];
+    for (const over of profiles) {
+      const lastDone: Record<string, number> = {};
+      const seen = new Set<string>();
+      const day0 = Date.UTC(2026, 8, 1, 9);
+      for (let d = 0; d < 7; d++) {
+        const now = day0 + d * 864e5;
+        const r = buildRoutine(input({ ...over, seed: `d${d}`, lastDone, now }));
+        const fams = r.items.map((it) => familyOf(it.exercise.id));
+        expect(new Set(fams).size, fams.join()).toBe(fams.length);
+        expect(r.items.some((it) => it.exercise.phase === 'activate' || it.exercise.phase === 'integrate'), JSON.stringify(over)).toBe(true);
+        for (const it of r.items) {
+          seen.add(it.exercise.id);
+          lastDone[it.exercise.id] = now;
+        }
+      }
+      expect(seen.size, JSON.stringify(over)).toBeGreaterThanOrEqual(12);
+    }
   });
 
   it('computes program week', () => {

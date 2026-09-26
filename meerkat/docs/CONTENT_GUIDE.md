@@ -39,7 +39,7 @@ headForward: { view: 'side', unit: 'deg', pos: [12, 18, 25], weight: 1.4 },
 ## 2. 운동 추가·수정
 
 운동은 부위별 파일에 있어요: `src/content/ex/<부위>.ts`(기본 동작)와 `src/content/ex/<부위>-plus.ts`(추가 동작).
-부위: `neck` `shoulder` `thoracic`(가슴·흉추) `core`(호흡·코어) `lowback` `hip` `legs`(무릎·하체) `ankle`(발목·발·균형·손목).
+부위: `neck` `shoulder` `thoracic`(가슴·흉추) `core`(호흡·코어) `lowback` `hip` `legs`(무릎·하체) `ankle`(발목·발·균형·손목), 그리고 풀기 동작 모음 `release-plus`.
 등록은 `src/content/exercises.ts` 의 `REGION_FILES` 가 자동으로 해요.
 
 운동 하나는 아래처럼 한 덩어리예요. **가장 좋은 예시는 `src/content/ex/neck.ts` 의 `chin-tuck`** 이에요 — 새로 쓸 때 그대로 따라 하세요.
@@ -86,6 +86,8 @@ headForward: { view: 'side', unit: 'deg', pos: [12, 18, 25], weight: 1.4 },
 - 모든 목록은 `ko`, `en` 줄 수가 같아야 해요. 한국어는 해요체, 친근하고 구체적으로. “진단·치료·완치” 같은 의료 표현 금지.
 - 처방 용량 기준: 스트레칭 버티기 20~45초 × 2세트(한쪽씩이면 `perSide: true`), 깨우기 8~15회 × 2~3세트(`holdSec` 2~5초),
   움직이기 8~12회 또는 45~60초, 호흡 60~120초(`kind: 'time'`), 통합 8~12회 × 2~3세트. 휴식 `rest` 10~30초.
+- **비슷한 동작 묶음** (`src/routine/families.ts`): 이미 있는 동작과 같은 근육을 거의 같은 방식으로 쓰는 변형(예: 4자 스트레칭 ↔ 누워서 엉덩이 늘리기,
+  Y·T·W 들기)을 추가했다면 같은 묶음에 id를 넣어 주세요. 한 루틴에는 묶음마다 하나만 들어가고, 날마다 묶음 안에서 돌아가며 골라져요.
 
 ## 3. 시범 애니메이션 만들기
 
